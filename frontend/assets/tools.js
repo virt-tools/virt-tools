@@ -107,6 +107,13 @@ window.VIRTUAL_TOOLS = [
     icon: "🔍",
   },
   {
+    slug: "markdown-previewer",
+    name: "Markdown Previewer",
+    description: "Write Markdown and see it rendered live — headings, bold/italic, code, lists and links, all in-browser.",
+    category: "Text",
+    icon: "📝",
+  },
+  {
     slug: "jwt-decoder",
     name: "JWT Decoder",
     description: "Decode a JSON Web Token's header and payload claims locally — inspect iat/exp/nbf without sending it anywhere.",
