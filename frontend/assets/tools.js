@@ -64,4 +64,11 @@ window.VIRTUAL_TOOLS = [
     category: "Text",
     icon: "🧩",
   },
+  {
+    slug: "timestamp-converter",
+    name: "Unix Timestamp Converter",
+    description: "Convert between Unix epoch timestamps and human-readable UTC / local dates.",
+    category: "Time",
+    icon: "⏱️",
+  },
 ];
