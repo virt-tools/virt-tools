@@ -250,4 +250,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔗",
     added: "2026-07-03T12:20:00Z",
   },
+  {
+    slug: "lorem-ipsum",
+    name: "Lorem Ipsum Generator",
+    description: "Generate placeholder Lorem Ipsum text by paragraphs, sentences or words — optional seed for reproducible output. Runs in your browser.",
+    category: "Text",
+    icon: "📄",
+    added: "2026-07-03T13:00:00Z",
+  },
 ];
