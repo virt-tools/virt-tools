@@ -490,4 +490,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🐞",
     added: "2026-07-04T08:20:00Z",
   },
+  {
+    slug: "barcode-generator",
+    name: "EAN / UPC Barcode Generator",
+    description: "Validate or compute the mod-10 check digit for EAN-13, EAN-8 and UPC-A (GTIN) codes, and render the actual bar pattern — start/center/end guards and A/B/C parity patterns per the GS1 standard — to a canvas you can download as a PNG. Generated entirely in your browser.",
+    category: "Encoding",
+    icon: "📶",
+    added: "2026-07-04T09:00:00Z",
+  },
 ];
