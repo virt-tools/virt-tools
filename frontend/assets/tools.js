@@ -562,4 +562,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🗺️",
     added: "2026-07-04T14:20:00Z",
   },
+  {
+    slug: "nato-phonetic",
+    name: "NATO Phonetic Alphabet Converter",
+    description: "Spell text out using the NATO (ICAO) phonetic alphabet — Alpha, Bravo, Charlie… Zulu, and Zero… Nine — the standard way to read letters and digits over the phone or radio. Choose a format (words, lines, numbered list or table), handle unknown characters, and decode code words back to text. Official NATO spellings (Juliett, X-ray, Whiskey). All local, no network requests.",
+    category: "Text",
+    icon: "📻",
+    added: "2026-07-04T15:00:00Z",
+  },
 ];
