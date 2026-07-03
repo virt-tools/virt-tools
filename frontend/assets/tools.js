@@ -170,4 +170,12 @@ window.VIRTUAL_TOOLS = [
     icon: "✍️",
     added: "2026-07-03T06:43:16Z",
   },
+  {
+    slug: "image-converter",
+    name: "Image Converter & Resizer",
+    description: "Convert an image between PNG, JPEG and WebP and resize it — all in your browser, the image never leaves your device.",
+    category: "Image",
+    icon: "🖼️",
+    added: "2026-07-03T07:08:00Z",
+  },
 ];
