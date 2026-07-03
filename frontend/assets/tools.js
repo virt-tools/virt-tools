@@ -93,6 +93,13 @@ window.VIRTUAL_TOOLS = [
     icon: "🌈",
   },
   {
+    slug: "contrast-checker",
+    name: "Color Contrast Checker",
+    description: "Measure the WCAG contrast ratio between two colors and check AA / AAA pass for normal and large text.",
+    category: "Design",
+    icon: "🅰️",
+  },
+  {
     slug: "regex-tester",
     name: "Regex Tester",
     description: "Build and test JavaScript regular expressions — live matches, capture groups and flags, in-browser.",
