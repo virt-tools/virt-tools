@@ -378,4 +378,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🏦",
     added: "2026-07-03T23:00:00Z",
   },
+  {
+    slug: "color-blindness-simulator",
+    name: "Color Blindness Simulator",
+    description: "Preview an image as it appears with protanopia, deuteranopia, tritanopia or achromatopsia — for accessibility checks. Processed locally with a canvas; your image never leaves your browser.",
+    category: "Design",
+    icon: "👁️",
+    added: "2026-07-03T23:40:00Z",
+  },
 ];

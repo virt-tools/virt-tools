@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Color Blindness Simulator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Color Blindness Simulator</h1>
+      <p>Preview an image as it appears with protanopia, deuteranopia, tritanopia or achromatopsia (total color blindness). Useful for accessibility checks. Everything is processed locally with a canvas — your image never leaves your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="file">Image</label>
+        <div id="drop" class="dropzone">
+          <input type="file" id="file" accept="image/*" hidden>
+          <p class="dropzone-hint">Click to choose, or drag &amp; drop an image here</p>
+          <p class="dropzone-name" id="drop-name" hidden></p>
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="row" style="align-items:flex-end;">
+        <div>
+          <label for="mode">Simulated deficiency</label>
+          <select id="mode">
+            <option value="deuteranopia" selected>Deuteranopia (no green — most common)</option>
+            <option value="protanopia">Protanopia (no red)</option>
+            <option value="tritanopia">Tritanopia (no blue — rare)</option>
+            <option value="achromatopsia">Achromatopsia (total / grayscale)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="image-split">
+        <div class="field">
+          <label>Original</label>
+          <div class="image-preview" id="orig-preview"><span class="muted">No image yet</span></div>
+        </div>
+        <div class="field">
+          <label>Simulated</label>
+          <div class="image-preview" id="out-preview"><span class="muted">Load an image to simulate</span></div>
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="row" style="justify-content:space-between; align-items:center;">
+        <span></span>
+        <div>
+          <button id="download" class="secondary" disabled style="padding:6px 14px;">Download PNG</button>
+        </div>
+      </div>
+      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+      <p class="note" id="info" hidden></p>
+      <p class="note">Conversion uses the Brettel/Viénot linear-RGB matrices. Large images are scaled down for processing. Nothing is uploaded.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    // Simulation matrices applied in linear sRGB space.
+    var MATS = {
+      protanopia:   [[0.567,0.433,0.000],[0.558,0.442,0.000],[0.000,0.242,0.758]],
+      deuteranopia: [[0.625,0.375,0.000],[0.700,0.300,0.000],[0.000,0.300,0.700]],
+      tritanopia:   [[1.000,0.000,0.000],[0.000,0.433,0.567],[0.000,0.475,0.525]],
+      achromatopsia:[[0.299,0.587,0.114],[0.299,0.587,0.114],[0.299,0.587,0.114]]
+    };
+    var MAX = 2000; // longest side cap for processing performance
+
+    function srgbToLinear(c) { // c: 0..1
+      return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    }
+    function linearToSrgb(c) {
+      var v = c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055;
+      return v < 0 ? 0 : v > 1 ? 1 : v;
+    }
+
+    var fileEl = document.getElementById("file");
+    var drop = document.getElementById("drop");
+    var dropName = document.getElementById("drop-name");
+    var mode = document.getElementById("mode");
+    var origPreview = document.getElementById("orig-preview");
+    var outPreview = document.getElementById("out-preview");
+    var info = document.getElementById("info");
+    var err = document.getElementById("err");
+    var dlBtn = document.getElementById("download");
+
+    var img = null;        // loaded HTMLImageElement
+    var baseName = "image";
+    var workCanvas = null; // processed canvas (for download)
+    var dlUrl = null;
+
+    function showErr(m) { err.textContent = m; err.hidden = false; }
+    function clearErr() { err.hidden = true; err.textContent = ""; }
+
+    function loadFile(file) {
+      clearErr();
+      if (!file || !/^image\//.test(file.type)) { showErr("Please choose an image file."); return; }
+      dropName.textContent = file.name;
+      dropName.hidden = false;
+      baseName = file.name.replace(/\.[^.]+$/, "") || "image";
+      if (dlUrl) { URL.revokeObjectURL(dlUrl); dlUrl = null; }
+      var url = URL.createObjectURL(file);
+      var image = new Image();
+      image.onload = function () {
+        img = image;
+        URL.revokeObjectURL(url);
+        origPreview.innerHTML = "";
+        var preview = image.cloneNode();
+        preview.style.maxWidth = "100%";
+        origPreview.appendChild(preview);
+        render();
+      };
+      image.onerror = function () { showErr("Could not read that image. Try a different file."); URL.revokeObjectURL(url); };
+      image.src = url;
+    }
+
+    function drawDims() {
+      var w = img.naturalWidth, h = img.naturalHeight;
+      var longest = Math.max(w, h);
+      if (longest > MAX) {
+        var s = MAX / longest;
+        w = Math.max(1, Math.round(w * s));
+        h = Math.max(1, Math.round(h * s));
+      }
+      return { w: w, h: h, scaled: longest > MAX };
+    }
+
+    function render() {
+      if (!img) return;
+      var d = drawDims();
+      var canvas = document.createElement("canvas");
+      canvas.width = d.w; canvas.height = d.h;
+      var ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, d.w, d.h);
+      var data = ctx.getImageData(0, 0, d.w, d.h);
+      var px = data.data;
+      var m = MATS[mode.value];
+      for (var i = 0; i < px.length; i += 4) {
+        var lr = srgbToLinear(px[i] / 255);
+        var lg = srgbToLinear(px[i + 1] / 255);
+        var lb = srgbToLinear(px[i + 2] / 255);
+        var nr = m[0][0] * lr + m[0][1] * lg + m[0][2] * lb;
+        var ng = m[1][0] * lr + m[1][1] * lg + m[1][2] * lb;
+        var nb = m[2][0] * lr + m[2][1] * lg + m[2][2] * lb;
+        px[i]     = Math.round(linearToSrgb(nr) * 255);
+        px[i + 1] = Math.round(linearToSrgb(ng) * 255);
+        px[i + 2] = Math.round(linearToSrgb(nb) * 255);
+        // alpha untouched
+      }
+      ctx.putImageData(data, 0, 0);
+      workCanvas = canvas;
+      // preview
+      outPreview.innerHTML = "";
+      var preview = new Image();
+      preview.src = canvas.toDataURL();
+      preview.style.maxWidth = "100%";
+      outPreview.appendChild(preview);
+      dlBtn.disabled = false;
+      var label = { protanopia: "Protanopia", deuteranopia: "Deuteranopia", tritanopia: "Tritanopia", achromatopsia: "Achromatopsia" }[mode.value];
+      info.textContent = label + " · " + d.w + "×" + d.h + (d.scaled ? " (scaled from " + img.naturalWidth + "×" + img.naturalHeight + ")" : "") + " · " + img.naturalWidth + "×" + img.naturalHeight + " source.";
+      info.hidden = false;
+    }
+
+    function download() {
+      if (!workCanvas) return;
+      if (dlUrl) URL.revokeObjectURL(dlUrl);
+      workCanvas.toBlob(function (blob) {
+        if (!blob) { showErr("Your browser couldn't encode the PNG."); return; }
+        dlUrl = URL.createObjectURL(blob);
+        var a = document.createElement("a");
+        a.href = dlUrl;
+        a.download = baseName + "-" + mode.value + ".png";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }, "image/png");
+    }
+
+    // ---- wiring ----
+    drop.addEventListener("click", function () { fileEl.click(); });
+    fileEl.addEventListener("change", function () { if (fileEl.files[0]) loadFile(fileEl.files[0]); });
+    ["dragenter", "dragover"].forEach(function (ev) {
+      drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add("drag"); });
+    });
+    ["dragleave", "drop"].forEach(function (ev) {
+      drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove("drag"); });
+    });
+    drop.addEventListener("drop", function (e) {
+      if (e.dataTransfer && e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+    });
+    mode.addEventListener("change", function () { if (img) render(); });
+    dlBtn.addEventListener("click", download);
+  })();
+  </script>
+</body>
+</html>
