@@ -226,4 +226,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🧾",
     added: "2026-07-03T10:35:00Z",
   },
+  {
+    slug: "line-sorter",
+    name: "Line Sorter & Deduper",
+    description: "Clean up a list — sort A→Z / Z→A (numeric-aware, case-insensitive), remove duplicates, trim whitespace and drop blank lines. Runs in your browser.",
+    category: "Text",
+    icon: "↕️",
+    added: "2026-07-03T11:10:00Z",
+  },
 ];
