@@ -354,4 +354,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔏",
     added: "2026-07-03T21:00:00Z",
   },
+  {
+    slug: "number-to-words",
+    name: "Number to Words",
+    description: "Convert a number to English words — up to 999 trillion, with optional cents mode for check-writing. Negative numbers and decimals supported. Runs in your browser.",
+    category: "Math",
+    icon: "💯",
+    added: "2026-07-03T21:40:00Z",
+  },
 ];
