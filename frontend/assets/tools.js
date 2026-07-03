@@ -120,4 +120,11 @@ window.VIRTUAL_TOOLS = [
     category: "Security",
     icon: "🔑",
   },
+  {
+    slug: "emoji-generator",
+    name: "Emoji String Generator",
+    description: "Generate a string of a given length made entirely of random emojis — choose which families to draw from.",
+    category: "Text",
+    icon: "🎲",
+  },
 ];
