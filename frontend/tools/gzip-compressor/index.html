@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Gzip &amp; Deflate Compressor — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Gzip &amp; Deflate Compressor</h1>
+      <p>Compress text to gzip, deflate or raw deflate and back — using the browser's native CompressionStream / DecompressionStream APIs. Output as Base64 or hex. Everything runs in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="align-items:flex-end;">
+        <div>
+          <label for="mode">Mode</label>
+          <select id="mode">
+            <option value="compress" selected>Compress</option>
+            <option value="decompress">Decompress</option>
+          </select>
+        </div>
+        <div>
+          <label for="fmt">Algorithm</label>
+          <select id="fmt">
+            <option value="gzip" selected>gzip</option>
+            <option value="deflate">deflate (zlib)</option>
+            <option value="deflate-raw">deflate-raw</option>
+          </select>
+        </div>
+        <div>
+          <label for="enc">Encoding</label>
+          <select id="enc">
+            <option value="base64" selected>Base64</option>
+            <option value="hex">Hex</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+
+      <div id="compressPane">
+        <div class="field">
+          <label for="textIn">Text to compress</label>
+          <textarea id="textIn" placeholder="Type or paste text…" style="min-height:120px;">Hello world! The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog.</textarea>
+        </div>
+        <div class="row" style="justify-content:space-between;">
+          <label for="compOut">Compressed output</label>
+          <button id="copyC" class="secondary" style="padding:4px 10px;">Copy</button>
+        </div>
+        <div class="output" id="compOut" style="word-break:break-all; min-height:1.6em;"></div>
+        <p class="note" id="cStats">—</p>
+      </div>
+
+      <div id="decompressPane" style="display:none;">
+        <div class="field">
+          <label for="compIn">Compressed input (Base64 or hex)</label>
+          <textarea id="compIn" placeholder="Paste the Base64 or hex produced above…" style="min-height:120px;"></textarea>
+        </div>
+        <div class="row" style="justify-content:space-between;">
+          <label for="decOut">Decompressed text</label>
+          <button id="copyD" class="secondary" style="padding:4px 10px;">Copy</button>
+        </div>
+        <div class="output" id="decOut" style="word-break:break-all; min-height:1.6em;"></div>
+        <p class="note" id="dStats">—</p>
+      </div>
+
+      <p class="note" id="supportNote">Uses the native CompressionStream / DecompressionStream APIs.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var mode = document.getElementById("mode");
+    var fmt = document.getElementById("fmt");
+    var enc = document.getElementById("enc");
+    var compressPane = document.getElementById("compressPane");
+    var decompressPane = document.getElementById("decompressPane");
+    var textIn = document.getElementById("textIn");
+    var compOut = document.getElementById("compOut");
+    var cStats = document.getElementById("cStats");
+    var compIn = document.getElementById("compIn");
+    var decOut = document.getElementById("decOut");
+    var dStats = document.getElementById("dStats");
+    var copyC = document.getElementById("copyC");
+    var copyD = document.getElementById("copyD");
+    var supportNote = document.getElementById("supportNote");
+
+    var supported = typeof CompressionStream !== "undefined" && typeof DecompressionStream !== "undefined";
+
+    function bytesToHex(bytes) {
+      var h = [];
+      for (var i = 0; i < bytes.length; i++) { var x = bytes[i].toString(16); if (x.length < 2) x = "0" + x; h.push(x); }
+      return h.join("");
+    }
+    function hexToBytes(hex) {
+      hex = hex.replace(/\s+/g, "");
+      if (hex.length % 2 !== 0) throw new Error("Hex string has an odd length.");
+      var out = new Uint8Array(hex.length / 2);
+      for (var i = 0; i < out.length; i++) out[i] = parseInt(hex.substr(i * 2, 2), 16);
+      return out;
+    }
+    function bytesToB64(bytes) {
+      var bin = "";
+      for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+      return btoa(bin);
+    }
+    function b64ToBytes(b64) {
+      b64 = b64.replace(/\s+/g, "");
+      var bin = atob(b64);
+      var out = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+      return out;
+    }
+    function encodeBytes(bytes) { return enc.value === "hex" ? bytesToHex(bytes) : bytesToB64(bytes); }
+    function decodeBytes(str) {
+      str = str.trim();
+      // Auto-detect if the select says base64 but the string looks like hex.
+      if (enc.value === "base64" && /^[0-9a-fA-F]+$/.test(str) && str.length % 2 === 0) {
+        try { return hexToBytes(str); } catch (e) {}
+      }
+      return b64ToBytes(str);
+    }
+
+    async function streamThrough(input, kind, algorithm) {
+      var stream = new Blob([input]).stream().pipeThrough(new (kind === "compress" ? CompressionStream : DecompressionStream)(algorithm));
+      var buf = await new Response(stream).arrayBuffer();
+      return new Uint8Array(buf);
+    }
+
+    async function compress() {
+      var text = textIn.value;
+      try {
+        var inBytes = new TextEncoder().encode(text);
+        var out = await streamThrough(inBytes, "compress", fmt.value);
+        compOut.textContent = encodeBytes(out);
+        var ratio = inBytes.length ? (100 * (1 - out.length / inBytes.length)).toFixed(1) : "0";
+        cStats.textContent = inBytes.length + " input bytes → " + out.length + " compressed bytes (" + ratio + "% smaller)";
+        cStats.style.color = "";
+      } catch (e) {
+        compOut.textContent = "Error: " + (e && e.message ? e.message : e);
+        cStats.textContent = "";
+        compOut.style.color = "var(--bad)";
+      }
+    }
+    async function decompress() {
+      var raw = compIn.value.trim();
+      if (!raw) { decOut.textContent = "—"; dStats.textContent = "—"; return; }
+      try {
+        var inBytes = decodeBytes(raw);
+        var out = await streamThrough(inBytes, "decompress", fmt.value);
+        var text = new TextDecoder("utf-8", { fatal: false }).decode(out);
+        decOut.textContent = text;
+        dStats.textContent = inBytes.length + " input bytes → " + out.length + " decompressed bytes";
+        decOut.style.color = "";
+      } catch (e) {
+        decOut.textContent = "Error: " + (e && e.message ? e.message : e);
+        dStats.textContent = "";
+        decOut.style.color = "var(--bad)";
+      }
+    }
+
+    function run() {
+      if (!supported) {
+        supportNote.textContent = "Error: CompressionStream is not available in this browser. Try a recent Chrome, Firefox or Safari.";
+        supportNote.style.color = "var(--bad)";
+        return;
+      }
+      if (mode.value === "compress") { compress(); }
+      else { decompress(); }
+    }
+
+    function syncPanes() {
+      compressPane.style.display = mode.value === "compress" ? "" : "none";
+      decompressPane.style.display = mode.value === "decompress" ? "" : "none";
+    }
+
+    function copyFrom(el, btn) {
+      var t = el.textContent;
+      if (!t || t === "—" || t.indexOf("Error") === 0) return;
+      function done() { btn.textContent = "Copied!"; setTimeout(function () { btn.textContent = "Copy"; }, 1200); }
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done);
+      else { var ta = document.createElement("textarea"); ta.value = t; document.body.appendChild(ta); ta.select(); try { document.execCommand("copy"); done(); } catch (e) {} ta.remove(); }
+    }
+
+    [mode, fmt, enc].forEach(function (el) { el.addEventListener("change", function () { syncPanes(); run(); }); });
+    textIn.addEventListener("input", function () { if (mode.value === "compress") compress(); });
+    compIn.addEventListener("input", function () { if (mode.value === "decompress") decompress(); });
+    copyC.addEventListener("click", function () { copyFrom(compOut, copyC); });
+    copyD.addEventListener("click", function () { copyFrom(decOut, copyD); });
+
+    syncPanes();
+    run();
+  })();
+  </script>
+</body>
+</html>

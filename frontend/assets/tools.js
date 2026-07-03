@@ -274,4 +274,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔠",
     added: "2026-07-03T14:20:00Z",
   },
+  {
+    slug: "gzip-compressor",
+    name: "Gzip & Deflate Compressor",
+    description: "Compress text to gzip, deflate or raw deflate and decompress it back — using the browser's native CompressionStream APIs. Output as Base64 or hex, in your browser.",
+    category: "Encoding",
+    icon: "🗜️",
+    added: "2026-07-03T15:00:00Z",
+  },
 ];
