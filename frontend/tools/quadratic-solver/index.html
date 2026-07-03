@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Quadratic Equation Solver — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    input.coef { font-family: ui-monospace, monospace; font-size: 18px; width: 90px; text-align: center; }
+    .equation { font-family: ui-monospace, monospace; font-size: 20px; margin: 8px 0; }
+    .roots { font-family: ui-monospace, monospace; font-size: 22px; font-weight: 700; word-break: break-all; }
+    .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-top: 8px; }
+    .summary .stat { padding: 8px 10px; border: 1px solid var(--border,#444); border-radius: 6px; word-break: break-all; }
+    .summary .stat-value { display:block; font-size: 17px; font-weight: 700; font-family: ui-monospace, monospace; }
+    .summary .stat-label { font-size: 12px; opacity: .8; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Quadratic Equation Solver</h1>
+      <p>Solve a quadratic equation of the form <em>ax² + bx + c = 0</em>. Enter the three coefficients and the solver computes the discriminant, the roots (two distinct real, one repeated real, or a complex-conjugate pair), the vertex and axis of symmetry of the parabola, and the factored form when the roots are real. A built-in check evaluates the polynomial at each root so you can confirm the result is correct. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="flex-wrap:wrap; gap:14px; align-items:center;">
+        <div>
+          <label for="a">a</label><br>
+          <input class="coef" id="a" type="text" inputmode="decimal" value="1">
+        </div>
+        <span class="note" style="font-size:18px;">x² +</span>
+        <div>
+          <label for="b">b</label><br>
+          <input class="coef" id="b" type="text" inputmode="decimal" value="-3">
+        </div>
+        <span class="note" style="font-size:18px;">x +</span>
+        <div>
+          <label for="c">c</label><br>
+          <input class="coef" id="c" type="text" inputmode="decimal" value="2">
+        </div>
+        <span class="note" style="font-size:18px;">= 0</span>
+      </div>
+      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+
+      <div class="spacer"></div>
+      <label>Equation</label>
+      <div class="equation" id="equation"></div>
+
+      <div class="spacer"></div>
+      <label>Roots</label>
+      <div class="roots" id="roots">—</div>
+      <p class="note" id="check"></p>
+
+      <div class="spacer"></div>
+      <label>Properties</label>
+      <div class="summary" id="summary"></div>
+      <p class="note" id="form"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var aEl = document.getElementById("a");
+    var bEl = document.getElementById("b");
+    var cEl = document.getElementById("c");
+    var errEl = document.getElementById("err");
+    var eqEl = document.getElementById("equation");
+    var rootsEl = document.getElementById("roots");
+    var checkEl = document.getElementById("check");
+    var summaryEl = document.getElementById("summary");
+    var formEl = document.getElementById("form");
+
+    function showErr(m) { errEl.textContent = m; errEl.hidden = !m; }
+    function clear(t) { t.innerHTML = ""; t.textContent = ""; }
+
+    function parseNum(s) {
+      s = String(s).trim();
+      if (s === "" || s === "-" || s === "+") return null;
+      if (!/^[+-]?(\d+\.?\d*|\.\d+)$/.test(s)) return null;
+      var v = parseFloat(s);
+      if (!isFinite(v)) return null;
+      return v;
+    }
+
+    // Format a number: integers without decimals, otherwise ~6 sig figs trimmed.
+    function fmt(x) {
+      if (!isFinite(x)) return "—";
+      if (Object.is(x, -0)) x = 0;
+      if (Math.abs(x) < 1e-12) x = 0;          // treat near-zero as zero
+      if (x === Math.round(x) && Math.abs(x) < 1e15) return String(Math.round(x));
+      var a = Math.abs(x);
+      var dp = a >= 100 ? 4 : a >= 1 ? 6 : 10;
+      var s = x.toFixed(dp);
+      s = s.replace(/0+$/, "").replace(/\.$/, "");
+      return s;
+    }
+    function fmtC(real, imag) {
+      // a +/- bi  (imag > 0). If imag is 0, just real. Real can be 0.
+      if (Math.abs(imag) < 1e-12) return fmt(real);
+      var r = fmt(real);
+      var im = fmt(Math.abs(imag)) + "i";
+      if (Math.abs(real) < 1e-12) return (imag < 0 ? "−" : "") + im;
+      return r + (imag < 0 ? " − " : " + ") + im;
+    }
+
+    function evalPoly(a, b, c, x) { return a * x * x + b * x + c; }
+
+    function stat(parent, val, label) {
+      var d = document.createElement("div"); d.className = "stat";
+      var v = document.createElement("span"); v.className = "stat-value"; v.textContent = val;
+      var l = document.createElement("span"); l.className = "stat-label"; l.textContent = label;
+      d.appendChild(v); d.appendChild(l); parent.appendChild(d);
+    }
+
+    // Format the equation ax^2 + bx + c = 0 with sign-aware terms.
+    function fmtEquation(a, b, c) {
+      function term(coef, varStr) {
+        var s = "";
+        if (coef === 0) return "";
+        var ac = Math.abs(coef);
+        if (varStr === "") {
+          s = fmt(coef);
+        } else {
+          if (ac === 1) s = varStr; else s = fmt(ac) + varStr;
+          if (coef < 0) s = "−" + s; else s = "+" + s;
+        }
+        return s;
+      }
+      var parts = [];
+      var t1 = term(a, "x²"); if (t1) parts.push(t1);
+      var t2 = term(b, "x"); if (t2) parts.push(t2);
+      var t3 = term(c, ""); if (t3) parts.push(t3);
+      if (parts.length === 0) return "0 = 0";
+      var out = parts[0];
+      // strip leading + on first term
+      if (out[0] === "+") out = out.slice(1).replace(/^/, "");
+      for (var i = 1; i < parts.length; i++) out += " " + parts[i].replace("+", "+ ").replace("−", "− ");
+      // fix spacing of leading + stripped already; normalize
+      return out.replace(/^\+\s*/, "") + " = 0";
+    }
+
+    function compute() {
+      clear(eqEl); clear(rootsEl); clear(checkEl); clear(summaryEl); clear(formEl); showErr("");
+      var a = parseNum(aEl.value);
+      var b = parseNum(bEl.value);
+      var c = parseNum(cEl.value);
+      if (a === null) { showErr("Enter a numeric value for a."); window.__quad = null; return; }
+      if (b === null) { showErr("Enter a numeric value for b."); window.__quad = null; return; }
+      if (c === null) { showErr("Enter a numeric value for c."); window.__quad = null; return; }
+
+      eqEl.textContent = fmtEquation(a, b, c);
+
+      if (a === 0) {
+        // linear: bx + c = 0
+        if (b === 0) {
+          rootsEl.textContent = c === 0 ? "All real numbers (identity)" : "No solution (contradiction)";
+          stat(summaryEl, "—", "Discriminant");
+          stat(summaryEl, "linear", "Equation type");
+          window.__quad = { a: a, b: b, c: c, kind: (c === 0 ? "identity" : "contradiction") };
+          return;
+        }
+        var x = -c / b;
+        rootsEl.textContent = "x = " + fmt(x) + "  (linear: a = 0)";
+        checkEl.textContent = "Check: " + fmt(b) + "·(" + fmt(x) + ") + " + fmt(c) + " = " + fmt(evalPoly(0, b, c, x));
+        stat(summaryEl, "—", "Discriminant (n/a)");
+        stat(summaryEl, "linear", "Equation type");
+        window.__quad = { a: a, b: b, c: c, kind: "linear", x: x };
+        return;
+      }
+
+      var disc = b * b - 4 * a * c;
+      var twoA = 2 * a;
+      var h = -b / twoA;
+      var k = evalPoly(a, b, c, h);   // vertex y = c - b^2/(4a)
+
+      stat(summaryEl, fmt(disc), "Discriminant (b²−4ac)");
+      stat(summaryEl, fmt(h), "Axis of symmetry (x)");
+      stat(summaryEl, "(" + fmt(h) + ", " + fmt(k) + ")", "Vertex (h, k)");
+
+      if (disc > 0) {
+        var s = Math.sqrt(disc);
+        var r1 = h + s / twoA;
+        var r2 = h - s / twoA;
+        rootsEl.textContent = "x = " + fmt(r1) + "   or   x = " + fmt(r2);
+        checkEl.textContent = "Check: f(" + fmt(r1) + ") = " + fmt(evalPoly(a, b, c, r1)) +
+          ",  f(" + fmt(r2) + ") = " + fmt(evalPoly(a, b, c, r2));
+        formEl.textContent = "Factored form: " + fmt(a) + "(x − " + fmt(r1) + ")(x − " + fmt(r2) + ")";
+        stat(summaryEl, "two real distinct", "Roots");
+        window.__quad = { a: a, b: b, c: c, kind: "two-real", r1: r1, r2: r2, disc: disc, h: h, k: k };
+      } else if (Math.abs(disc) < 1e-12) {
+        rootsEl.textContent = "x = " + fmt(h) + "  (repeated root)";
+        checkEl.textContent = "Check: f(" + fmt(h) + ") = " + fmt(evalPoly(a, b, c, h));
+        formEl.textContent = "Factored form: " + fmt(a) + "(x − " + fmt(h) + ")²";
+        stat(summaryEl, "one real (repeated)", "Roots");
+        window.__quad = { a: a, b: b, c: c, kind: "one-real", r: h, disc: disc, h: h, k: k };
+      } else {
+        var s2 = Math.sqrt(-disc);
+        var imag = s2 / twoA;
+        rootsEl.textContent = "x = " + fmtC(h, imag) + "   or   x = " + fmtC(h, -imag);
+        // complex plug-back: f(re+i*im) real and imag parts ~0
+        var x2r = h * h - imag * imag, x2i = 2 * h * imag;
+        var vr = a * x2r + b * h + c;
+        var vi = a * x2i + b * imag;
+        checkEl.textContent = "Check (complex): Re f = " + fmt(vr) + ",  Im f = " + fmt(vi);
+        formEl.textContent = "No real factored form (complex roots).";
+        stat(summaryEl, "complex conjugate", "Roots");
+        window.__quad = { a: a, b: b, c: c, kind: "complex", real: h, imag: imag, disc: disc, h: h, k: k };
+      }
+    }
+
+    [aEl, bEl, cEl].forEach(function (el) { el.addEventListener("input", compute); });
+    compute();
+  })();
+  </script>
+</body>
+</html>
