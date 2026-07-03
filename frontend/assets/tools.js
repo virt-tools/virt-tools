@@ -546,4 +546,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎭",
     added: "2026-07-04T13:00:00Z",
   },
+  {
+    slug: "loan-calculator",
+    name: "Loan & Amortization Calculator",
+    description: "Compute the monthly payment on a fixed-rate loan and explore the full amortization schedule — how each payment splits between interest and principal, month by month, until the balance hits zero. Add a down payment and an extra monthly principal payment to see the interest you save. All math runs locally in your browser, in integer cents for exact cents.",
+    category: "Finance",
+    icon: "💰",
+    added: "2026-07-04T13:40:00Z",
+  },
 ];

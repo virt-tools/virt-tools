@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Loan &amp; Amortization Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+    .summary .stat { padding: 10px 12px; border: 1px solid var(--border,#444); border-radius: 6px; }
+    .summary .stat-value { display:block; font-size: 20px; font-weight: 700; font-family: ui-monospace, monospace; }
+    .summary .stat-label { font-size: 12px; opacity: .8; }
+    .amort { max-height: 420px; overflow-y: auto; }
+    .base-table th, .base-table td { padding: 4px 10px; white-space: nowrap; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Loan &amp; Amortization Calculator</h1>
+      <p>Compute the monthly payment on a fixed-rate loan and see the full amortization schedule — how each payment splits between interest and principal, month by month, until the balance hits zero. Optionally add a down payment and an extra monthly principal payment to see how much interest you save. Everything is calculated locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="flex-wrap:wrap; gap:16px; align-items:flex-end;">
+        <div>
+          <label for="price">Purchase price</label>
+          <input type="number" id="price" value="250000" min="0" step="any" style="width:130px;">
+        </div>
+        <div>
+          <label for="down">Down payment</label>
+          <input type="number" id="down" value="50000" min="0" step="any" style="width:110px;">
+        </div>
+        <div>
+          <label for="rate">Interest rate (%)</label>
+          <input type="number" id="rate" value="6" min="0" step="0.01" style="width:90px;">
+        </div>
+        <div>
+          <label for="years">Term (years)</label>
+          <input type="number" id="years" value="30" min="1" step="1" style="width:70px;">
+        </div>
+        <div>
+          <label for="extra">Extra monthly payment</label>
+          <input type="number" id="extra" value="0" min="0" step="any" style="width:110px;">
+        </div>
+      </div>
+      <p class="note">Loan amount = purchase price − down payment. Term may also be entered as months by switching the unit.</p>
+      <div class="row" style="gap:16px; align-items:center;">
+        <label class="check"><input type="radio" name="unit" value="years" checked> years</label>
+        <label class="check"><input type="radio" name="unit" value="months"> months</label>
+        <button id="show" class="secondary" style="padding:4px 12px;">Show amortization schedule</button>
+      </div>
+
+      <div class="spacer"></div>
+      <label>Summary</label>
+      <div class="summary" id="summary"></div>
+      <p class="note" id="note"></p>
+      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+
+      <div class="spacer"></div>
+      <div id="sched-wrap" hidden>
+        <div class="row" style="justify-content:space-between; align-items:center;">
+          <label>Amortization schedule</label>
+          <button id="dl" class="secondary" style="padding:4px 10px;">Download .csv</button>
+        </div>
+        <table class="base-table amort" id="sched">
+          <thead><tr><th>#</th><th>Payment</th><th>Principal</th><th>Interest</th><th>Balance</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var priceEl = document.getElementById("price");
+    var downEl = document.getElementById("down");
+    var rateEl = document.getElementById("rate");
+    var yearsEl = document.getElementById("years");
+    var extraEl = document.getElementById("extra");
+    var unitEls = document.querySelectorAll('input[name="unit"]');
+    var showBtn = document.getElementById("show");
+    var dlBtn = document.getElementById("dl");
+    var summaryEl = document.getElementById("summary");
+    var noteEl = document.getElementById("note");
+    var errEl = document.getElementById("err");
+    var schedWrap = document.getElementById("sched-wrap");
+    var schedBody = document.querySelector("#sched tbody");
+    var yearsLabel = document.querySelector('label[for="years"]');
+
+    function fmt(cents) {
+      // cents is an integer; render as currency with 2 decimals, thousands separators.
+      var neg = cents < 0; var c = Math.abs(cents);
+      var s = (Math.floor(c / 100)) + "." + ("0" + (c % 100)).slice(-2);
+      // thousands separators
+      var parts = s.split("."); parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+      return (neg ? "-" : "") + "$" + parts.join(".");
+    }
+
+    function monthlyPaymentCents(P, annualPct, n) {
+      var rate = annualPct / 100 / 12;
+      if (rate === 0) return (P / n) * 100;
+      var f = Math.pow(1 + rate, n);
+      return (P * rate * f / (f - 1)) * 100;
+    }
+
+    function schedule(P, annualPct, n, extra) {
+      var rate = annualPct / 100 / 12;
+      var pmtCents = Math.round(monthlyPaymentCents(P, annualPct, n));
+      var balCents = Math.round(P * 100);
+      var extraCents = Math.round(extra * 100);
+      var rows = [];
+      var m = 0;
+      var tooLow = false;
+      while (balCents > 0 && m < n) {
+        m++;
+        var interestCents = Math.round(balCents * rate);
+        var principalCents = pmtCents - interestCents + extraCents;
+        if (m === 1 && principalCents <= 0) tooLow = true;
+        if (principalCents < 0) principalCents = 0;
+        if (principalCents > balCents || m === n) principalCents = balCents;
+        var paymentCents = interestCents + principalCents;
+        balCents -= principalCents;
+        rows.push({ m: m, payment: paymentCents, principal: principalCents, interest: interestCents, balance: balCents });
+      }
+      return { rows: rows, pmtCents: pmtCents, tooLow: tooLow };
+    }
+
+    function readNum(el) { var v = parseFloat(el.value); return isNaN(v) || v < 0 ? 0 : v; }
+
+    function compute() {
+      errEl.hidden = true; errEl.textContent = "";
+      schedWrap.hidden = true;
+      var price = readNum(priceEl);
+      var down = Math.min(readNum(downEl), price);
+      var rate = readNum(rateEl);
+      var years = readNum(yearsEl);
+      var extra = readNum(extraEl);
+      var unit = document.querySelector('input[name="unit"]:checked').value;
+      var n = unit === "months" ? Math.round(years) : Math.round(years * 12);
+      var P = price - down;
+      if (P <= 0) { errEl.textContent = "Loan amount must be greater than zero (down payment can’t equal the full price)."; errEl.hidden = false; summaryEl.innerHTML = ""; noteEl.textContent = ""; return; }
+      if (n < 1) { errEl.textContent = "Term must be at least one month."; errEl.hidden = false; return; }
+      if (rate < 0) { errEl.textContent = "Interest rate can’t be negative."; errEl.hidden = false; return; }
+
+      var res = schedule(P, rate, n, extra);
+      if (res.tooLow) { errEl.textContent = "The monthly payment doesn’t cover the first month’s interest — increase the term or lower the rate."; errEl.hidden = false; summaryEl.innerHTML = ""; noteEl.textContent = ""; return; }
+      var rows = res.rows;
+      var sumPay = 0, sumPrin = 0, sumInt = 0;
+      rows.forEach(function (r) { sumPay += r.payment; sumPrin += r.principal; sumInt += r.interest; });
+
+      summaryEl.innerHTML = "";
+      function stat(val, label) {
+        var d = document.createElement("div"); d.className = "stat";
+        var v = document.createElement("span"); v.className = "stat-value"; v.textContent = val;
+        var l = document.createElement("span"); l.className = "stat-label"; l.textContent = label;
+        d.appendChild(v); d.appendChild(l); summaryEl.appendChild(d);
+      }
+      stat(fmt(res.pmtCents), "Monthly payment");
+      stat(fmt(P * 100), "Loan amount");
+      stat(fmt(sumPay), "Total paid");
+      stat(fmt(sumPrin), "Total principal");
+      stat(fmt(sumInt), "Total interest");
+      stat(String(rows.length), "Payments");
+
+      var saved = "";
+      if (extra > 0) {
+        var base = schedule(P, rate, n, 0);
+        var baseInt = base.rows.reduce(function (a, r) { return a + r.interest; }, 0);
+        saved = "  Extra payment saves " + fmt(baseInt - sumInt) + " in interest and shortens the term by " + (base.rows.length - rows.length) + " month(s).";
+      }
+      noteEl.textContent = "Payoff in " + rows.length + " month" + (rows.length === 1 ? "" : "s") + " (" + (rows.length / 12).toFixed(1) + " years)." + saved;
+
+      schedBody.innerHTML = "";
+      rows.forEach(function (r) {
+        var tr = document.createElement("tr");
+        tr.innerHTML = "<td>" + r.m + "</td><td>" + fmt(r.payment) + "</td><td>" + fmt(r.principal) +
+          "</td><td>" + fmt(r.interest) + "</td><td>" + fmt(r.balance) + "</td>";
+        schedBody.appendChild(tr);
+      });
+      window.__loanRows = rows;     // exposed for verification
+      window.__loanPmt = res.pmtCents;
+    }
+
+    function refreshUnit() {
+      yearsLabel.textContent = document.querySelector('input[name="unit"]:checked').value === "months" ? "Term (months)" : "Term (years)";
+      compute();
+    }
+
+    function inputs() { return [priceEl, downEl, rateEl, yearsEl, extraEl]; }
+    inputs().forEach(function (el) { el.addEventListener("input", compute); });
+    unitEls.forEach(function (el) { el.addEventListener("change", refreshUnit); });
+    showBtn.addEventListener("click", function () { compute(); schedWrap.hidden = false; });
+    dlBtn.addEventListener("click", function () {
+      if (!window.__loanRows) return;
+      var csv = "Month,Payment,Principal,Interest,Balance\n";
+      window.__loanRows.forEach(function (r) {
+        csv += r.m + "," + (r.payment / 100) + "," + (r.principal / 100) + "," + (r.interest / 100) + "," + (r.balance / 100) + "\n";
+      });
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+      a.download = "amortization.csv"; a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+    });
+
+    refreshUnit();
+  })();
+  </script>
+</body>
+</html>
