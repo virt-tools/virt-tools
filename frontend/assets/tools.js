@@ -642,4 +642,12 @@ window.VIRTUAL_TOOLS = [
     icon: "⊞",
     added: "2026-07-04T21:00:00Z",
   },
+  {
+    slug: "fraction-calculator",
+    name: "Fraction Calculator",
+    description: "Add, subtract, multiply, and divide fractions exactly with no floating-point rounding. Enter each value as a fraction (3/4), a mixed number (1 1/2), a decimal (0.125), or a whole number, and the result is shown as a simplified improper fraction, a mixed number, and an exact decimal with repeating digits marked (e.g. 1/3 = 0.(3)). Arithmetic uses big integers, so results stay exact however large the numbers grow. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "½",
+    added: "2026-07-04T21:40:00Z",
+  },
 ];

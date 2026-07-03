@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Fraction Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .frac-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    .frac-input { font-family: ui-monospace, monospace; font-size: 18px; width: 150px; }
+    .seg { display: inline-flex; border: 1px solid var(--border,#444); border-radius: 4px; overflow: hidden; }
+    .seg button { padding: 4px 12px; border: none; background: transparent; color: inherit; cursor: pointer; font-size: 16px; min-width: 38px; }
+    .seg button.on { background: var(--accent,#ffd54a); color: #000; }
+    .results { font-family: ui-monospace, monospace; }
+    .results .big { font-size: 22px; font-weight: 700; }
+    .steps { font-family: ui-monospace, monospace; font-size: 13px; white-space: pre; opacity: .85; }
+    .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-top: 6px; }
+    .summary .stat { padding: 8px 10px; border: 1px solid var(--border,#444); border-radius: 6px; }
+    .summary .stat-value { display:block; font-size: 18px; font-weight: 700; font-family: ui-monospace, monospace; }
+    .summary .stat-label { font-size: 12px; opacity: .8; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Fraction Calculator</h1>
+      <p>Add, subtract, multiply, and divide fractions exactly — no floating-point rounding. Enter each value as a fraction (<code>3/4</code>), a mixed number (<code>1 1/2</code>), a decimal (<code>0.125</code>), or a whole number (<code>5</code>), and the result is shown as a simplified improper fraction, a mixed number, and an exact decimal (with repeating digits marked, e.g. <code>1/3 = 0.(3)</code>). Arithmetic uses big integers, so denominators and results stay exact however large they grow. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="frac-row">
+        <input class="frac-input" id="a" type="text" inputmode="text" value="1 1/2" placeholder="3/4 or 1 1/2 or 0.5">
+        <div class="seg" id="ops">
+          <button data-op="add" class="on">+</button>
+          <button data-op="sub">−</button>
+          <button data-op="mul">×</button>
+          <button data-op="div">÷</button>
+        </div>
+        <input class="frac-input" id="b" type="text" inputmode="text" value="2 3/4" placeholder="3/4 or 1 1/2 or 0.5">
+      </div>
+      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+
+      <div class="spacer"></div>
+      <label>Result</label>
+      <div class="summary" id="summary"></div>
+      <p class="note" id="note"></p>
+
+      <div class="spacer"></div>
+      <label>Steps</label>
+      <div class="steps" id="steps"></div>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    // All arithmetic in BigInt for exactness.
+    function gcdBig(a, b) {
+      a = a < 0n ? -a : a; b = b < 0n ? -b : b;
+      while (b) { var t = a % b; a = b; b = t; }
+      return a === 0n ? 1n : a;
+    }
+    function norm(num, den) {
+      if (den === 0n) return null;                 // invalid
+      if (den < 0n) { num = -num; den = -den; }
+      var g = gcdBig(num, den); if (g === 0n) g = 1n;
+      return { num: num / g, den: den / g };
+    }
+    function parseFrac(s) {
+      s = String(s).trim();
+      if (s === "") return null;
+      // mixed "1 1/2" or "-1 1/2" (single whitespace run)
+      if (/\s/.test(s) && s.indexOf("/") !== -1) {
+        var parts = s.split(/\s+/);
+        if (parts.length === 2 && parts[1].indexOf("/") !== -1) {
+          var w = tryInt(parts[0]); if (w === null) return null;
+          var ff = parts[1].split("/"); if (ff.length !== 2) return null;
+          var n = tryInt(ff[0]), d = tryInt(ff[1]); if (n === null || d === null) return null;
+          if (d === 0n) return null;
+          var num = w < 0n ? w * d - n : w * d + n;
+          return norm(num, d);
+        }
+        return null;
+      }
+      if (s.indexOf("/") !== -1) {
+        var ab = s.split("/"); if (ab.length !== 2) return null;
+        var an = tryInt(ab[0]), bd = tryInt(ab[1]); if (an === null || bd === null) return null;
+        return norm(an, bd);
+      }
+      // decimal or integer
+      if (/[.eE]/.test(s)) {
+        // exponent notation -> approximate via Number then to BigInt fraction (rare path)
+        if (/[eE]/.test(s)) {
+          var fn = Number(s); if (!isFinite(fn)) return null;
+          return decToFraction(fn);
+        }
+        // plain decimal: split on '.'
+        var sign = "";
+        if (s[0] === "+" || s[0] === "-") { sign = s[0]; s = s.slice(1); }
+        var pp = s.split("."); if (pp.length !== 2) return null;
+        var ip = pp[0] || "0", fp = pp[1] || "";
+        if (!/^\d*$/.test(ip) || !/^\d*$/.test(fp)) return null;
+        var den = pow10(fp.length);
+        var digits = (ip + fp) === "" ? "0" : (ip + fp);
+        var num = BigInt((sign === "-" ? "-" : "") + digits);
+        return norm(num, den);
+      }
+      var v = tryInt(s); if (v === null) return null;
+      return norm(v, 1n);
+    }
+    function tryInt(t) {
+      t = t.trim();
+      if (/^[+-]?\d+$/.test(t)) return BigInt(t);
+      return null;
+    }
+    function pow10(n) { var r = 1n; while (n-- > 0) r *= 10n; return r; }
+    function decToFraction(x) {
+      // best exact from a finite double: use the decimal string of the double
+      if (!isFinite(x)) return null;
+      var s = String(x);
+      return parseFrac(s);   // String(Number) yields plain decimal -> exact-ish (double precision)
+    }
+
+    function opFrac(a, b, kind) {
+      var an = a.num, ad = a.den, bn = b.num, bd = b.den;
+      if (kind === "add") return norm(an * bd + bn * ad, ad * bd);
+      if (kind === "sub") return norm(an * bd - bn * ad, ad * bd);
+      if (kind === "mul") return norm(an * bn, ad * bd);
+      if (kind === "div") { if (bn === 0n) return null; return norm(an * bd, ad * bn); }
+      return null;
+    }
+    function fmtImproper(f) { return f.num + (f.den === 1n ? "" : "/" + f.den); }
+    function truncDiv(a, b) {
+      // trunc toward zero, b > 0
+      var q = (a < 0n ? -((-a) / b) : a / b);
+      return q;
+    }
+    function fmtMixed(f) {
+      var w = truncDiv(f.num, f.den);
+      var r = f.num - w * f.den;
+      if (w === 0n) return r === 0n ? "0" : (r + "/" + f.den);
+      if (r === 0n) return String(w);
+      return w + " " + (r < 0n ? -r : r) + "/" + f.den;
+    }
+    function decimalExpand(f, limit) {
+      limit = limit || 2000;
+      var neg = f.num < 0n;
+      var n = neg ? -f.num : f.num, d = f.den;
+      var ip = n / d, rem = n % d;
+      if (rem === 0n) return (neg && ip !== 0n ? "-" : "") + ip.toString();
+      var frac = "", seen = new Map(), repStart = null, pos = 0;
+      while (rem !== 0n && pos < limit) {
+        if (seen.has(rem.toString())) { repStart = seen.get(rem.toString()); break; }
+        seen.set(rem.toString(), pos);
+        rem *= 10n;
+        frac += (rem / d).toString();
+        rem = rem % d;
+        pos++;
+      }
+      var sign = neg ? "-" : "";
+      if (rem === 0n) return sign + ip.toString() + "." + frac;
+      return sign + ip.toString() + "." + frac.slice(0, repStart) + "(" + frac.slice(repStart) + ")";
+    }
+
+    var aEl = document.getElementById("a");
+    var bEl = document.getElementById("b");
+    var opsEl = document.getElementById("ops");
+    var errEl = document.getElementById("err");
+    var summaryEl = document.getElementById("summary");
+    var noteEl = document.getElementById("note");
+    var stepsEl = document.getElementById("steps");
+    var curOp = "add";
+
+    function showErr(m) { errEl.textContent = m; errEl.hidden = !m; }
+    function clear(t) { t.innerHTML = ""; t.textContent = ""; }
+    function stat(parent, val, label) {
+      var d = document.createElement("div"); d.className = "stat";
+      var v = document.createElement("span"); v.className = "stat-value"; v.textContent = val;
+      var l = document.createElement("span"); l.className = "stat-label"; l.textContent = label;
+      d.appendChild(v); d.appendChild(l); parent.appendChild(d);
+    }
+    function describe(f) {
+      if (!f) return "invalid";
+      return fmtImproper(f) + "  (= " + fmtMixed(f) + ",  " + decimalExpand(f) + ")";
+    }
+    function stepLine(label, f) { return label + " " + fmtImproper(f) + "   [mixed " + fmtMixed(f) + ",  decimal " + decimalExpand(f) + "]"; }
+
+    function compute() {
+      clear(summaryEl); clear(noteEl); clear(stepsEl);
+      showErr("");
+      var a = parseFrac(aEl.value), b = parseFrac(bEl.value);
+      if (!a) { showErr("Enter A as a fraction (3/4), mixed number (1 1/2), decimal (0.5), or integer."); return; }
+      if (!b) { showErr("Enter B as a fraction (3/4), mixed number (1 1/2), decimal (0.5), or integer."); return; }
+      var r = opFrac(a, b, curOp);
+      if (!r) {
+        if (curOp === "div" && b.num === 0n) showErr("Cannot divide by zero.");
+        else showErr("Invalid operation.");
+        return;
+      }
+      stat(summaryEl, fmtImproper(r), "Simplified fraction");
+      stat(summaryEl, fmtMixed(r), "Mixed number");
+      stat(summaryEl, decimalExpand(r), "Decimal");
+      stat(summaryEl, fmtImproper(a) + " " + opSym(curOp) + " " + fmtImproper(b), "Calculation");
+
+      noteEl.textContent = describe(a) + "\n" + opSym(curOp) + "\n" + describe(b) + "\n= " + describe(r);
+      stepsEl.textContent =
+        "A = " + step0(a) + "\n" +
+        "B = " + step0(b) + "\n" +
+        stepExplain(a, b, curOp, r) +
+        "= " + fmtImproper(r) + "\n" +
+        "  = " + fmtMixed(r) + "\n" +
+        "  = " + decimalExpand(r);
+      window.__frac = { a: a, b: b, op: curOp, r: r };
+    }
+    function step0(f) { return fmtImproper(f) + "  (" + decimalExpand(f) + ")"; }
+    function opSym(k) { return k === "add" ? "+" : k === "sub" ? "−" : k === "mul" ? "×" : "÷"; }
+    function stepExplain(a, b, k, r) {
+      var an = a.num, ad = a.den, bn = b.num, bd = b.den;
+      if (k === "add" || k === "sub") {
+        var sym = k === "add" ? "+" : "-";
+        return "(" + an + "×" + bd + " " + sym + " " + bn + "×" + ad + ") / (" + ad + "×" + bd + ")\n" +
+               "= " + (an * bd + (k === "add" ? bn * ad : -bn * ad)) + " / " + (ad * bd) + "\n";
+      }
+      if (k === "mul") return "(" + an + "×" + bn + ") / (" + ad + "×" + bd + ")\n= " + (an * bn) + " / " + (ad * bd) + "\n";
+      if (k === "div") return "(" + an + "×" + bd + ") / (" + ad + "×" + bn + ")\n= " + (an * bd) + " / " + (ad * bn) + "\n";
+      return "";
+    }
+
+    opsEl.querySelectorAll("button").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        opsEl.querySelectorAll("button").forEach(function (x) { x.classList.remove("on"); });
+        btn.classList.add("on"); curOp = btn.dataset.op; compute();
+      });
+    });
+    [aEl, bEl].forEach(function (el) { el.addEventListener("input", compute); });
+    compute();
+  })();
+  </script>
+</body>
+</html>
