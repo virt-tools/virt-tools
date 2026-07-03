@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Statistics Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    textarea { width: 100%; box-sizing: border-box; font-family: ui-monospace, monospace; font-size: 13px; }
+    .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+    .summary .stat { padding: 8px 10px; border: 1px solid var(--border,#444); border-radius: 6px; }
+    .summary .stat-value { display:block; font-size: 18px; font-weight: 700; font-family: ui-monospace, monospace; }
+    .summary .stat-label { font-size: 12px; opacity: .8; }
+    .base-table td, .base-table th { font-family: ui-monospace, monospace; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Statistics Calculator</h1>
+      <p>Compute summary statistics for a list of numbers — count, sum, mean, median, mode, minimum, maximum, range, quartiles (Q1, median, Q3) with interquartile range, and both population and sample variance and standard deviation. Paste values separated by commas, spaces, or new lines; the data is sorted and analysed in your browser. Quartiles use Tukey's hinges (the median of the lower and upper halves, excluding the middle element for odd counts), and mode reports every most-frequent value when there are ties. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="input">Numbers</label>
+        <textarea id="input" rows="6" spellcheck="false" placeholder="1, 2, 3, 4, 5">2, 4, 4, 4, 5, 5, 7, 9</textarea>
+      </div>
+      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+
+      <div class="spacer"></div>
+      <label>Summary</label>
+      <div class="summary" id="summary"></div>
+      <p class="note" id="mode"></p>
+
+      <div class="spacer"></div>
+      <label>Sorted data</label>
+      <div class="note" id="sorted" style="font-family:ui-monospace,monospace; max-height:120px; overflow:auto; white-space:pre-wrap;"></div>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var inputEl = document.getElementById("input");
+    var errEl = document.getElementById("err");
+    var summaryEl = document.getElementById("summary");
+    var modeEl = document.getElementById("mode");
+    var sortedEl = document.getElementById("sorted");
+
+    function showErr(m) { errEl.textContent = m; errEl.hidden = !m; }
+    function clear(t) { t.innerHTML = ""; t.textContent = ""; }
+
+    function parseList(s) {
+      var out = [];
+      String(s).trim().split(/[,\s]+/).forEach(function (tok) {
+        if (tok === "") return;
+        var v = parseFloat(tok);
+        if (!isNaN(v)) out.push(v);
+      });
+      return out;
+    }
+    function medianSorted(xs) {
+      var n = xs.length;
+      if (n === 0) return NaN;
+      var m = (n / 2) | 0;
+      if (n % 2 === 1) return xs[m];
+      return (xs[m - 1] + xs[m]) / 2;
+    }
+    function quartiles(xs) {
+      var n = xs.length;
+      if (n === 0) return { q1: NaN, q2: NaN, q3: NaN, iqr: NaN };
+      if (n === 1) return { q1: xs[0], q2: xs[0], q3: xs[0], iqr: 0 };
+      var q2 = medianSorted(xs);
+      var lower, upper;
+      if (n % 2 === 1) { lower = xs.slice(0, (n / 2) | 0); upper = xs.slice(((n / 2) | 0) + 1); }
+      else            { lower = xs.slice(0, (n / 2) | 0); upper = xs.slice((n / 2) | 0); }
+      var q1 = medianSorted(lower), q3 = medianSorted(upper);
+      return { q1: q1, q2: q2, q3: q3, iqr: q3 - q1 };
+    }
+    function meanOf(xs) { return xs.reduce(function (a, b) { return a + b; }, 0) / xs.length; }
+    function pvariance(xs) {
+      var n = xs.length; if (n === 0) return NaN;
+      var m = meanOf(xs); var s = 0;
+      for (var i = 0; i < n; i++) { var d = xs[i] - m; s += d * d; }
+      return s / n;
+    }
+    function svariance(xs) {
+      var n = xs.length; if (n < 2) return NaN;
+      var m = meanOf(xs); var s = 0;
+      for (var i = 0; i < n; i++) { var d = xs[i] - m; s += d * d; }
+      return s / (n - 1);
+    }
+    function modeOf(xs) {
+      if (!xs.length) return [];
+      var counts = {}, order = [];
+      for (var i = 0; i < xs.length; i++) {
+        var k = String(xs[i]);
+        if (counts[k] === undefined) { counts[k] = 0; order.push(k); }
+        counts[k]++;
+      }
+      var mx = 0;
+      for (var kk in counts) mx = Math.max(mx, counts[kk]);
+      if (mx === 1) return [];
+      var res = [];
+      order.forEach(function (k) { if (counts[k] === mx) res.push(parseFloat(k)); });
+      return res;
+    }
+    function fmt(x) {
+      if (!isFinite(x)) return "—";
+      if (x === Math.round(x) && Math.abs(x) < 1e15) return String(Math.round(x));
+      var a = Math.abs(x);
+      var dp = a >= 100 ? 4 : a >= 1 ? 6 : 10;
+      var s = x.toFixed(dp);
+      // trim trailing zeros but keep at least one decimal if not integer
+      s = s.replace(/0+$/, "").replace(/\.$/, "");
+      return s;
+    }
+
+    function stat(parent, val, label) {
+      var d = document.createElement("div"); d.className = "stat";
+      var v = document.createElement("span"); v.className = "stat-value"; v.textContent = val;
+      var l = document.createElement("span"); l.className = "stat-label"; l.textContent = label;
+      d.appendChild(v); d.appendChild(l); parent.appendChild(d);
+    }
+
+    function compute() {
+      clear(summaryEl); clear(modeEl); clear(sortedEl); showErr("");
+      var raw = parseList(inputEl.value);
+      if (raw.length === 0) { showErr("Enter at least one number."); window.__stats = null; return; }
+      showErr("");
+      var xs = raw.slice().sort(function (a, b) { return a - b; });
+      var n = xs.length;
+      var sum = xs.reduce(function (a, b) { return a + b; }, 0);
+      var mean = sum / n;
+      var q = quartiles(xs);
+      var pv = pvariance(xs), sv = svariance(xs);
+      var pst = Math.sqrt(pv), sst = isFinite(sv) ? Math.sqrt(sv) : NaN;
+
+      stat(summaryEl, String(n), "Count");
+      stat(summaryEl, fmt(sum), "Sum");
+      stat(summaryEl, fmt(mean), "Mean");
+      stat(summaryEl, fmt(q.q2), "Median");
+      stat(summaryEl, fmt(xs[0]), "Minimum");
+      stat(summaryEl, fmt(xs[n - 1]), "Maximum");
+      stat(summaryEl, fmt(xs[n - 1] - xs[0]), "Range");
+      stat(summaryEl, fmt(q.q1), "Q1");
+      stat(summaryEl, fmt(q.q3), "Q3");
+      stat(summaryEl, fmt(q.iqr), "IQR");
+      stat(summaryEl, fmt(pv), "Population variance");
+      stat(summaryEl, fmt(sv), "Sample variance");
+      stat(summaryEl, fmt(pst), "Population std dev");
+      stat(summaryEl, fmt(sst), "Sample std dev");
+
+      var md = modeOf(xs);
+      modeEl.textContent = "Mode: " + (md.length === 0 ? "none (all values unique)" : md.map(fmt).join(", "));
+
+      sortedEl.textContent = "[" + n + "]  " + xs.map(fmt).join(",  ");
+
+      window.__stats = { n: n, sum: sum, mean: mean, median: q.q2, q1: q.q1, q3: q.q3, iqr: q.iqr,
+                         pvar: pv, svar: sv, pstdev: pst, sstdev: sst, min: xs[0], max: xs[n - 1], mode: md };
+    }
+
+    inputEl.addEventListener("input", compute);
+    compute();
+  })();
+  </script>
+</body>
+</html>

@@ -650,4 +650,12 @@ window.VIRTUAL_TOOLS = [
     icon: "½",
     added: "2026-07-04T21:40:00Z",
   },
+  {
+    slug: "statistics-calculator",
+    name: "Statistics Calculator",
+    description: "Compute summary statistics for a list of numbers — count, sum, mean, median, mode, minimum, maximum, range, quartiles (Q1, median, Q3) with interquartile range, and both population and sample variance and standard deviation. Paste values separated by commas, spaces, or new lines; the data is sorted and analysed in your browser. Quartiles use Tukey's hinges and the mode reports every most-frequent value when there are ties. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "σ",
+    added: "2026-07-04T22:20:00Z",
+  },
 ];
