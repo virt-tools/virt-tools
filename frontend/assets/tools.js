@@ -71,4 +71,11 @@ window.VIRTUAL_TOOLS = [
     category: "Time",
     icon: "⏱️",
   },
+  {
+    slug: "case-converter",
+    name: "Case & Text Transform",
+    description: "Convert text between cases (camelCase, snake_case, kebab, Title…) and clean up whitespace.",
+    category: "Text",
+    icon: "🔤",
+  },
 ];
