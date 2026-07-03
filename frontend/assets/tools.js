@@ -314,4 +314,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🧮",
     added: "2026-07-03T17:40:00Z",
   },
+  {
+    slug: "query-parser",
+    name: "URL Query String Parser",
+    description: "Parse a URL or query string into ordered key-value pairs (repeated keys preserved, values decoded), or build a query string from a list of pairs. Runs in your browser.",
+    category: "Encoding",
+    icon: "🌐",
+    added: "2026-07-03T18:20:00Z",
+  },
 ];
