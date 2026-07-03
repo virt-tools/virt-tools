@@ -418,4 +418,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🗝️",
     added: "2026-07-04T02:20:00Z",
   },
+  {
+    slug: "binary-text",
+    name: "Text & Binary / Hex / Octal Converter",
+    description: "Convert text to its raw byte representation as binary, hex, octal or decimal — and decode it back. Handles multibyte UTF-8. Runs entirely in your browser.",
+    category: "Encoding",
+    icon: "1️⃣",
+    added: "2026-07-04T03:00:00Z",
+  },
 ];
