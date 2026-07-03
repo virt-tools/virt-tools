@@ -362,4 +362,12 @@ window.VIRTUAL_TOOLS = [
     icon: "💯",
     added: "2026-07-03T21:40:00Z",
   },
+  {
+    slug: "punycode",
+    name: "Punycode & IDN Converter",
+    description: "Convert internationalized domain names to and from Punycode ACE form (xn--) per RFC 3492/3490 — each label handled independently, in your browser.",
+    category: "Encoding",
+    icon: "🌍",
+    added: "2026-07-03T22:20:00Z",
+  },
 ];

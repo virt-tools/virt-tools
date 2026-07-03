@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Punycode &amp; IDN Converter — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Punycode &amp; IDN Converter</h1>
+      <p>Convert internationalized domain names to and from Punycode ACE form (xn--) per RFC 3492/3490. Each label is encoded or decoded independently. Runs entirely in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="align-items:flex-end;">
+        <div>
+          <label for="mode">Mode</label>
+          <select id="mode">
+            <option value="encode" selected>Unicode → Punycode (ACE)</option>
+            <option value="decode">Punycode (ACE) → Unicode</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="field">
+        <label for="in">Input (domain or label)</label>
+        <input type="text" id="in" value="münchen.de" style="font-family:ui-monospace,monospace;">
+      </div>
+
+      <div class="spacer"></div>
+      <div class="row" style="justify-content:space-between;">
+        <label for="out">Output</label>
+        <button id="copy" class="secondary" style="padding:4px 10px;">Copy</button>
+      </div>
+      <div class="output" id="out" style="word-break:break-all; min-height:1.6em;"></div>
+      <p class="note" id="note">Each dot-separated label is handled on its own. Labels with no non-ASCII characters are left untouched; labels starting with <code>xn--</code> are decoded.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var BASE = 36, TMIN = 1, TMAX = 26, SKEW = 38, N0 = 128, B0 = 72, DAMP = 700;
+
+    function adapt(delta, numpoints, firsttime) {
+      delta = Math.floor(delta / (firsttime ? DAMP : 2));
+      delta += Math.floor(delta / numpoints);
+      var k = 0;
+      while (delta > Math.floor((BASE - TMIN) * TMAX / 2)) {
+        delta = Math.floor(delta / (BASE - TMIN));
+        k += BASE;
+      }
+      return k + Math.floor((BASE - TMIN + 1) * delta / (delta + SKEW));
+    }
+    function digitToChar(d) { return d < 26 ? String.fromCharCode(97 + d) : String.fromCharCode(48 + (d - 26)); }
+    function charToDigit(c) {
+      var o = c.charCodeAt(0);
+      if (o >= 97 && o <= 122) return o - 97;
+      if (o >= 48 && o <= 57) return o - 48 + 26;
+      throw new Error("Invalid Punycode character: " + c);
+    }
+
+    function encode(input) {
+      var output = "";
+      var basic = 0;
+      for (var i = 0; i < input.length; i++) if (input.charCodeAt(i) < 128) { output += input.charAt(i); basic++; }
+      if (basic) output += "-";
+      var n = N0, bias = B0, delta = 0, h = basic, b = basic, numpoints = input.length;
+      while (h < numpoints) {
+        var m = Infinity;
+        for (var j = 0; j < numpoints; j++) {
+          var c = input.charCodeAt(j);
+          if (c >= n && c < m) m = c;
+        }
+        delta += (m - n) * (h + 1);
+        n = m;
+        for (var j = 0; j < numpoints; j++) {
+          var c = input.charCodeAt(j);
+          if (c < n) { delta++; }
+          else if (c === n) {
+            var q = delta, k = BASE;
+            for (;;) {
+              var t = k <= bias ? TMIN : (k >= bias + TMAX ? TMAX : k - bias);
+              if (q < t) break;
+              output += digitToChar(t + (q - t) % (BASE - t));
+              q = Math.floor((q - t) / (BASE - t));
+              k += BASE;
+            }
+            output += digitToChar(q);
+            bias = adapt(delta, h + 1, h === b);
+            delta = 0; h++;
+          }
+        }
+        delta++; n++;
+      }
+      return output;
+    }
+
+    function decode(input) {
+      var lastDelim = input.lastIndexOf("-");
+      var basic = lastDelim < 0 ? "" : input.slice(0, lastDelim);
+      var extended = lastDelim < 0 ? input : input.slice(lastDelim + 1);
+      var output = basic.split("");
+      var n = N0, bias = B0, i = 0, pos = 0;
+      while (pos < extended.length) {
+        var oldi = i, w = 1, k = BASE;
+        for (;;) {
+          if (pos >= extended.length) throw new Error("Bad Punycode input.");
+          var digit = charToDigit(extended.charAt(pos)); pos++;
+          var t = k <= bias ? TMIN : (k >= bias + TMAX ? TMAX : k - bias);
+          i += digit * w;
+          if (digit < t) break;
+          w *= (BASE - t);
+          k += BASE;
+        }
+        bias = adapt(i - oldi, output.length + 1, oldi === 0);
+        n += Math.floor(i / (output.length + 1));
+        i = i % (output.length + 1);
+        output.splice(i, 0, String.fromCharCode(n));
+        i++;
+      }
+      return output.join("");
+    }
+
+    function hasNonAscii(s) { for (var i = 0; i < s.length; i++) if (s.charCodeAt(i) >= 128) return true; return false; }
+    function toAce(domain) {
+      return domain.split(".").map(function (label) {
+        return hasNonAscii(label) ? "xn--" + encode(label.toLowerCase()) : label;
+      }).join(".");
+    }
+    function fromAce(domain) {
+      return domain.split(".").map(function (label) {
+        return label.toLowerCase().indexOf("xn--") === 0 ? decode(label.slice(4)) : label;
+      }).join(".");
+    }
+
+    var mode = document.getElementById("mode");
+    var inEl = document.getElementById("in");
+    var out = document.getElementById("out");
+    var copy = document.getElementById("copy");
+    var note = document.getElementById("note");
+
+    function run() {
+      try {
+        var v = inEl.value.trim();
+        if (mode.value === "encode") out.textContent = toAce(v) || "—";
+        else out.textContent = fromAce(v) || "—";
+        out.style.color = "";
+        note.textContent = "Per-label " + (mode.value === "encode" ? "encoding" : "decoding") + " per RFC 3492/3490.";
+        note.style.color = "";
+      } catch (e) {
+        out.textContent = "—";
+        note.textContent = "Error: " + (e && e.message ? e.message : e);
+        note.style.color = "var(--bad)";
+      }
+    }
+
+    function copyText() {
+      var t = out.textContent;
+      if (!t || t === "—") return;
+      function done() { copy.textContent = "Copied!"; setTimeout(function () { copy.textContent = "Copy"; }, 1200); }
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done);
+      else { var ta = document.createElement("textarea"); ta.value = t; document.body.appendChild(ta); ta.select(); try { document.execCommand("copy"); done(); } catch (e) {} ta.remove(); }
+    }
+
+    mode.addEventListener("change", run);
+    inEl.addEventListener("input", run);
+    copy.addEventListener("click", copyText);
+    run();
+  })();
+  </script>
+</body>
+</html>
