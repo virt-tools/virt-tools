@@ -458,4 +458,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📡",
     added: "2026-07-04T05:40:00Z",
   },
+  {
+    slug: "luhn-validator",
+    name: "Luhn Credit Card Validator",
+    description: "Validate a card number with the Luhn mod-10 checksum and detect the card network (Visa, Mastercard, Amex, Discover, JCB, UnionPay, Diners, Maestro) from the IIN/BIN prefix — or compute the Luhn check digit for a number body. Runs entirely in your browser; your card number never leaves your device.",
+    category: "Security",
+    icon: "💳",
+    added: "2026-07-04T06:20:00Z",
+  },
 ];
