@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Savings Goal Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+    .summary .stat { padding: 10px 12px; border: 1px solid var(--border,#444); border-radius: 6px; }
+    .summary .stat-value { display:block; font-size: 20px; font-weight: 700; font-family: ui-monospace, monospace; }
+    .summary .stat-label { font-size: 12px; opacity: .8; }
+    .summary .stat.good .stat-value { color: var(--good,#3fa); }
+    .summary .stat.bad .stat-value { color: var(--bad,#f66); }
+    .eq { font-family: ui-monospace, monospace; font-size: 13px; }
+    .growth { max-height: 460px; overflow-y: auto; }
+    .base-table th, .base-table td { padding: 4px 10px; white-space: nowrap; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Savings Goal Calculator</h1>
+      <p>Work out how much to save each period to reach a target amount by a chosen date. Enter your goal, what you've already saved, the annual interest rate, how often it compounds (yearly to daily), the time horizon, and whether you contribute at the start or end of each period. The required contribution is solved in closed form, then stepped period-by-period in integer cents — interest rounded to the cent each period, the way a real bank credits it — to show the projected balance and exactly when you cross the goal. All math runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="flex-wrap:wrap; gap:16px; align-items:flex-end;">
+        <div>
+          <label for="goal">Savings goal</label>
+          <input type="number" id="goal" value="100000" min="0" step="any" style="width:140px;">
+        </div>
+        <div>
+          <label for="principal">Already saved</label>
+          <input type="number" id="principal" value="0" min="0" step="any" style="width:130px;">
+        </div>
+        <div>
+          <label for="rate">Annual rate (%)</label>
+          <input type="number" id="rate" value="7" min="0" step="0.01" style="width:90px;">
+        </div>
+        <div>
+          <label for="freq">Compounding</label>
+          <select id="freq">
+            <option value="1">Annually (1×/yr)</option>
+            <option value="2">Semi-annually (2×/yr)</option>
+            <option value="4">Quarterly (4×/yr)</option>
+            <option value="12" selected>Monthly (12×/yr)</option>
+            <option value="365">Daily (365×/yr)</option>
+          </select>
+        </div>
+        <div>
+          <label for="years">Years</label>
+          <input type="number" id="years" value="30" min="1" max="100" step="1" style="width:70px;">
+        </div>
+        <div>
+          <label for="timing">Contribution timing</label>
+          <select id="timing">
+            <option value="end" selected>End of period</option>
+            <option value="begin">Beginning of period</option>
+          </select>
+        </div>
+      </div>
+      <p class="note" id="freq-note"></p>
+
+      <div class="spacer"></div>
+      <label>Summary</label>
+      <div class="summary" id="summary"></div>
+      <p class="note" id="eq-note"></p>
+      <p class="note" id="note"></p>
+      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+
+      <div class="spacer"></div>
+      <div id="grow-wrap" hidden>
+        <div class="row" style="justify-content:space-between; align-items:center;">
+          <label>Growth to goal</label>
+          <button id="dl" class="secondary" style="padding:4px 10px;">Download .csv</button>
+        </div>
+        <table class="base-table growth" id="grow">
+          <thead><tr><th>Year</th><th>Contributions</th><th>Interest</th><th>Balance</th><th>% of goal</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var goalEl = document.getElementById("goal");
+    var principalEl = document.getElementById("principal");
+    var rateEl = document.getElementById("rate");
+    var freqEl = document.getElementById("freq");
+    var yearsEl = document.getElementById("years");
+    var timingEl = document.getElementById("timing");
+    var dlBtn = document.getElementById("dl");
+    var summaryEl = document.getElementById("summary");
+    var noteEl = document.getElementById("note");
+    var freqNoteEl = document.getElementById("freq-note");
+    var eqNoteEl = document.getElementById("eq-note");
+    var errEl = document.getElementById("err");
+    var growWrap = document.getElementById("grow-wrap");
+    var growBody = document.querySelector("#grow tbody");
+
+    function fmt(cents) {
+      var neg = cents < 0; var c = Math.abs(Math.round(cents));
+      var s = (Math.floor(c / 100)) + "." + ("0" + (c % 100)).slice(-2);
+      var parts = s.split("."); parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+      return (neg ? "-" : "") + "$" + parts.join(".");
+    }
+    // Display a possibly-fractional-cents value (for equivalent monthly/annual figures).
+    function fmtF(cents) {
+      var neg = cents < 0; var c = Math.abs(cents);
+      var s = (c / 100).toFixed(2);
+      var parts = s.split("."); parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+      return (neg ? "-" : "") + "$" + parts.join(".");
+    }
+
+    // Closed-form required contribution per period, in cents.
+    function requiredPmtCents(goalC, PC, annualPct, n, years, timing) {
+      var rate = annualPct / 100 / n;
+      var N = n * years;
+      var fvP = PC * Math.pow(1 + rate, N);
+      var factor;
+      if (rate !== 0) {
+        factor = (Math.pow(1 + rate, N) - 1) / rate;
+        if (timing === "begin") factor *= (1 + rate);
+      } else {
+        factor = N;
+      }
+      var need = goalC - fvP;
+      if (need <= 0 || factor === 0) return 0;
+      return need / factor;            // cents (possibly fractional)
+    }
+
+    // Step period-by-period in integer cents; returns rows + final + monthsToGoal.
+    function grow(PC, annualPct, n, years, PMTc, timing, goalC) {
+      var rate = annualPct / 100 / n;
+      var N = n * years;
+      var pmtC = Math.round(PMTc);
+      var bal = PC;                    // already in cents
+      var contrib = PC;
+      var rows = [];
+      var monthsToGoal = (PC >= goalC) ? 0 : -1;
+      for (var period = 1; period <= N; period++) {
+        if (timing === "begin") { bal += pmtC; contrib += pmtC; }
+        var interestCents = Math.round(bal * rate);
+        bal += interestCents;
+        if (timing === "end") { bal += pmtC; contrib += pmtC; }
+        if (monthsToGoal === -1 && bal >= goalC) monthsToGoal = period;
+        if (period % n === 0) {
+          var yr = period / n;
+          rows.push({ yr: yr, contributions: contrib, interest: bal - contrib, balance: bal, pct: goalC > 0 ? bal / goalC : 0 });
+        }
+      }
+      if (monthsToGoal === -1) monthsToGoal = N;   // reaches (≈) at the end
+      return { finalBalance: bal, totalContrib: contrib, totalInterest: bal - contrib, rows: rows, monthsToGoal: monthsToGoal, pmtC: pmtC };
+    }
+
+    function readNum(el) { var v = parseFloat(el.value); return isNaN(v) || v < 0 ? 0 : v; }
+
+    var FREQ_LABEL = { "1": "annually", "2": "semi-annually", "4": "quarterly", "12": "monthly", "365": "daily" };
+
+    function compute() {
+      errEl.hidden = true; errEl.textContent = "";
+      growWrap.hidden = true;
+      var goal = readNum(goalEl);
+      var P = readNum(principalEl);
+      var rate = readNum(rateEl);
+      var n = parseInt(freqEl.value, 10);
+      var years = Math.round(readNum(yearsEl));
+      var timing = timingEl.value;
+
+      if (goal <= 0) { errEl.textContent = "Enter a savings goal greater than zero."; errEl.hidden = false; summaryEl.innerHTML = ""; noteEl.textContent = ""; freqNoteEl.textContent = ""; eqNoteEl.textContent = ""; return; }
+      if (years < 1) { errEl.textContent = "Years must be at least 1."; errEl.hidden = false; return; }
+      if (years > 100) { errEl.textContent = "Years can’t exceed 100."; errEl.hidden = false; return; }
+      if (rate < 0) { errEl.textContent = "Interest rate can’t be negative."; errEl.hidden = false; return; }
+
+      var goalC = Math.round(goal * 100);
+      var PC = Math.round(P * 100);
+      var pmtCfrac = requiredPmtCents(goalC, PC, rate, n, years, timing);
+      var res = grow(PC, rate, n, years, pmtCfrac, timing, goalC);
+      var pmtC = res.pmtC;
+
+      freqNoteEl.textContent = "Compounding " + FREQ_LABEL[String(n)] + " — " + (n * years) + " period" + (n * years === 1 ? "" : "s") + " over " + years + " year" + (years === 1 ? "" : "s") + ".";
+
+      // Equivalent contributions.
+      var perMonthC = pmtC * n / 12;
+      var perYearC = pmtC * n;
+      if (pmtC > 0) {
+        eqNoteEl.innerHTML = "Equivalent: <span class='eq'>" + fmtF(perMonthC) + "/month</span> · <span class='eq'>" + fmtF(perYearC) + "/year</span>.";
+      } else {
+        eqNoteEl.textContent = "Your current savings already grow to meet the goal — no further contributions are needed.";
+      }
+
+      var surplus = res.finalBalance - goalC;
+      summaryEl.innerHTML = "";
+      function stat(val, label, cls) {
+        var d = document.createElement("div"); d.className = "stat" + (cls ? " " + cls : "");
+        var v = document.createElement("span"); v.className = "stat-value"; v.textContent = val;
+        var l = document.createElement("span"); l.className = "stat-label"; l.textContent = label;
+        d.appendChild(v); d.appendChild(l); summaryEl.appendChild(d);
+      }
+      stat(fmt(pmtC), "Contribution / period");
+      stat(fmt(res.finalBalance), "Projected balance");
+      stat(fmt(res.totalContrib), "Total contributions");
+      stat(fmt(res.totalInterest), "Total interest");
+      stat(fmt(surplus), surplus >= 0 ? "Surplus" : "Shortfall", surplus >= 0 ? "good" : "bad");
+      var months = res.monthsToGoal;
+      var monthsLabel = n === 12 ? months + " month" + (months === 1 ? "" : "s") : months + " period" + (months === 1 ? "" : "s");
+      stat(monthsLabel, "To reach goal");
+
+      if (pmtC === 0) {
+        noteEl.textContent = "You've already saved enough to reach the goal within the time horizon. Projected balance shown assumes you let it grow with interest and add nothing more.";
+      } else if (surplus >= 0) {
+        noteEl.textContent = "Save " + fmt(pmtC) + " per period and you'll reach your goal in " + monthsLabel + ", ending at " + fmt(res.finalBalance) + " — " + fmt(surplus) + " over the target.";
+      } else {
+        noteEl.textContent = "Save " + fmt(pmtC) + " per period. Because interest is credited and rounded to the cent each period, the projected balance lands " + fmt(-surplus) + " short of the exact goal — round the contribution up a cent or two to be safe.";
+      }
+
+      growBody.innerHTML = "";
+      res.rows.forEach(function (r) {
+        var tr = document.createElement("tr");
+        tr.innerHTML = "<td>" + r.yr + "</td><td>" + fmt(r.contributions) + "</td><td>" + fmt(r.interest) +
+          "</td><td>" + fmt(r.balance) + "</td><td>" + (r.pct * 100).toFixed(1) + "%</td>";
+        growBody.appendChild(tr);
+      });
+      growWrap.hidden = false;      // show the growth table once computed
+      window.__savingsGoal = res;    // exposed for verification
+      window.__savingsGoalPmtFrac = pmtCfrac;
+    }
+
+    var inputs = [goalEl, principalEl, rateEl, freqEl, yearsEl, timingEl];
+    inputs.forEach(function (el) { el.addEventListener("input", compute); el.addEventListener("change", compute); });
+    dlBtn.addEventListener("click", function () {
+      if (!window.__savingsGoal) return;
+      var csv = "Year,Contributions,Interest,Balance,% of goal\n";
+      window.__savingsGoal.rows.forEach(function (r) {
+        csv += r.yr + "," + (r.contributions / 100) + "," + (r.interest / 100) + "," + (r.balance / 100) + "," + (r.pct * 100).toFixed(1) + "\n";
+      });
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+      a.download = "savings-goal.csv"; a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+    });
+
+    compute();
+  })();
+  </script>
+</body>
+</html>

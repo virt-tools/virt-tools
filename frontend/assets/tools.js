@@ -578,4 +578,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🪴",
     added: "2026-07-04T15:40:00Z",
   },
+  {
+    slug: "savings-goal",
+    name: "Savings Goal Calculator",
+    description: "Work out how much to save each period to reach a target amount by a chosen date. Enter your goal, what you've already saved, the annual rate, compounding frequency (yearly to daily), time horizon, and whether you contribute at the start or end of each period. The required contribution is solved in closed form, then stepped period-by-period in integer cents — interest rounded to the cent each period, the way a real bank credits it — to show the projected balance and exactly when you cross the goal. The inverse of the compound-interest calculator. All math runs locally in your browser.",
+    category: "Finance",
+    icon: "🎯",
+    added: "2026-07-04T16:20:00Z",
+  },
 ];
