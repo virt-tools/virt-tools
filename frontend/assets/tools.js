@@ -722,4 +722,12 @@ window.VIRTUAL_TOOLS = [
     icon: "²",
     added: "2026-07-05T03:40:00Z",
   },
+  {
+    slug: "day-of-year",
+    name: "Day of Year & ISO Week Number",
+    description: "Enter a date (YYYY-MM-DD) to see its weekday, day of the year (1–365 or 1–366 in a leap year), the ISO 8601 week number and ISO year (where week 1 contains the year's first Thursday), days remaining in the year, and whether the year is a leap year. All date arithmetic uses UTC midnight to avoid timezone drift. Everything runs locally in your browser.",
+    category: "Time",
+    icon: "🗓",
+    added: "2026-07-05T04:20:00Z",
+  },
 ];

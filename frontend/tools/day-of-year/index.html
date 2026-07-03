@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Day of Year &amp; ISO Week — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    input.date { font-family: ui-monospace, monospace; font-size: 18px; width: 160px; }
+    .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-top: 8px; }
+    .summary .stat { padding: 8px 10px; border: 1px solid var(--border,#444); border-radius: 6px; }
+    .summary .stat-value { display:block; font-size: 18px; font-weight: 700; font-family: ui-monospace, monospace; }
+    .summary .stat-label { font-size: 12px; opacity: .8; }
+    .big { font-size: 22px; font-weight: 700; font-family: ui-monospace, monospace; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Day of Year &amp; ISO Week Number</h1>
+      <p>Enter a date (YYYY-MM-DD) to see its weekday, the day of the year (1–365 or 1–366 in a leap year), the ISO 8601 week number and ISO year (the week numbering used in most of the world, where week 1 is the week containing the year's first Thursday), how many days remain in the year, and whether the year is a leap year. All date arithmetic uses UTC midnight to avoid timezone drift. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="d">Date</label><br>
+        <input class="date" id="d" type="text" placeholder="YYYY-MM-DD" inputmode="numeric">
+      </div>
+      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+
+      <div class="spacer"></div>
+      <label>Weekday</label>
+      <div class="big" id="weekday">—</div>
+
+      <div class="spacer"></div>
+      <label>Properties</label>
+      <div class="summary" id="summary"></div>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var dEl = document.getElementById("d");
+    var errEl = document.getElementById("err");
+    var wdEl = document.getElementById("weekday");
+    var summaryEl = document.getElementById("summary");
+
+    function showErr(m) { errEl.textContent = m; errEl.hidden = !m; }
+    function clear(t) { t.innerHTML = ""; t.textContent = ""; }
+
+    // Default to today (UTC) for convenience.
+    function todayUTC() {
+      var now = new Date();
+      var y = now.getUTCFullYear();
+      var m = now.getUTCMonth() + 1;
+      var d = now.getUTCDate();
+      return y + "-" + (m < 10 ? "0" + m : m) + "-" + (d < 10 ? "0" + d : d);
+    }
+    dEl.value = todayUTC();
+
+    // Parse YYYY-MM-DD strictly. Returns [y, m, d] ints or null. Validates ranges and calendar.
+    function parseDate(s) {
+      s = String(s).trim();
+      var m = s.match(/^(\d{1,4})-(\d{1,2})-(\d{1,2})$/);
+      if (!m) return null;
+      var y = parseInt(m[1], 10), mo = parseInt(m[2], 10), d = parseInt(m[3], 10);
+      if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+      var dim = daysInMonth(y, mo);
+      if (d > dim) return null;
+      return [y, mo, d];
+    }
+    function isLeap(y) { return (y % 4 === 0 && y % 100 !== 0) || (y % 400 === 0); }
+    function daysInMonth(y, mo) {
+      var dim = [31, 0, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+      dim[1] = isLeap(y) ? 29 : 28;
+      return dim[mo - 1];
+    }
+    function daysInYear(y) { return isLeap(y) ? 366 : 365; }
+
+    function dayOfYear(y, mo, d) {
+      var t = Date.UTC(y, mo - 1, d);
+      var jan1 = Date.UTC(y, 0, 1);
+      return Math.floor((t - jan1) / 86400000) + 1;
+    }
+
+    function weekdayDow(y, mo, d) {   // Sun=0..Sat=6 (getUTCDay)
+      return new Date(Date.UTC(y, mo - 1, d)).getUTCDay();
+    }
+    function isoWeekday(dow) { return dow === 0 ? 7 : dow; }   // Mon=1..Sun=7
+
+    // ISO 8601 calendar: returns [isoYear, isoWeek, isoWeekday].
+    function isoCalendar(y, mo, d) {
+      var dow = weekdayDow(y, mo, d);
+      var isoDow = isoWeekday(dow);
+      // Thursday of this week = shift to (isoDow -> 4): d - isoDow + 4
+      var thuDate = new Date(Date.UTC(y, mo - 1, d));
+      thuDate.setUTCDate(d - isoDow + 4);
+      var isoYear = thuDate.getUTCFullYear();
+      // First Thursday of isoYear = Jan 4 shifted to Thursday
+      var jan4 = new Date(Date.UTC(isoYear, 0, 4));
+      var jan4Dow = jan4.getUTCDay();
+      var jan4IsoDow = jan4Dow === 0 ? 7 : jan4Dow;
+      var firstThursday = new Date(Date.UTC(isoYear, 0, 4));
+      firstThursday.setUTCDate(4 - jan4IsoDow + 4);
+      var week = Math.round((thuDate - firstThursday) / (7 * 86400000)) + 1;
+      return [isoYear, week, isoDow];
+    }
+
+    var WD = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+    function stat(parent, val, label) {
+      var d = document.createElement("div"); d.className = "stat";
+      var v = document.createElement("span"); v.className = "stat-value"; v.textContent = val;
+      var l = document.createElement("span"); l.className = "stat-label"; l.textContent = label;
+      d.appendChild(v); d.appendChild(l); parent.appendChild(d);
+    }
+
+    function compute() {
+      clear(summaryEl); clear(wdEl); showErr("");
+      var p = parseDate(dEl.value);
+      if (p === null) { showErr("Enter a valid date as YYYY-MM-DD."); window.__doy = null; return; }
+      var y = p[0], mo = p[1], d = p[2];
+
+      var dow = weekdayDow(y, mo, d);
+      var wdName = WD[dow];
+      wdEl.textContent = wdName + ", " + y + "-" + (mo < 10 ? "0" + mo : mo) + "-" + (d < 10 ? "0" + d : d);
+
+      var doy = dayOfYear(y, mo, d);
+      var diy = daysInYear(y);
+      var ic = isoCalendar(y, mo, d);
+      var remaining = diy - doy;
+
+      stat(summaryEl, String(doy), "Day of year");
+      stat(summaryEl, String(diy), "Days in year");
+      stat(summaryEl, String(remaining), "Days remaining in year");
+      stat(summaryEl, ic[0] + "-W" + (ic[1] < 10 ? "0" + ic[1] : ic[1]) + "-" + ic[2], "ISO 8601 week");
+      stat(summaryEl, String(ic[1]), "ISO week number");
+      stat(summaryEl, String(ic[0]), "ISO year");
+      stat(summaryEl, isLeap(y) ? "Yes" : "No", "Leap year");
+
+      window.__doy = { y: y, m: mo, d: d, dow: dow, weekday: wdName, doy: doy, diy: diy,
+                       isoYear: ic[0], isoWeek: ic[1], isoWeekday: ic[2], remaining: remaining, leap: isLeap(y) };
+    }
+
+    dEl.addEventListener("input", compute);
+    compute();
+  })();
+  </script>
+</body>
+</html>
