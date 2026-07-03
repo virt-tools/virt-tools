@@ -33,8 +33,38 @@
       el("a", { href: ROOT }, ["Tools"]),
       el("a", { href: ROOT + "feedback/" }, ["Feedback"]),
     ]);
+    var themeBtn = el("button", {
+      class: "theme-toggle",
+      type: "button",
+      "aria-label": "Toggle color theme",
+      title: "Toggle dark / light theme"
+    }, [themeIcon()]);
+    themeBtn.addEventListener("click", function () {
+      var next = currentTheme() === "dark" ? "light" : "dark";
+      applyTheme(next);
+    });
     mount.appendChild(brand);
     mount.appendChild(nav);
+    mount.appendChild(themeBtn);
+  }
+
+  /* ---- Theme toggle ----------------------------------------------------- */
+  function inferredTheme() {
+    return window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches
+      ? "light" : "dark";
+  }
+  function currentTheme() {
+    return document.documentElement.getAttribute("data-theme") || inferredTheme();
+  }
+  function themeIcon() {
+    // Show the icon for the theme the user will switch to.
+    return currentTheme() === "dark" ? "☀️" : "🌙";
+  }
+  function applyTheme(t) {
+    document.documentElement.setAttribute("data-theme", t);
+    try { localStorage.setItem("vt-theme", t); } catch (e) {}
+    var btn = document.querySelector(".theme-toggle");
+    if (btn) btn.textContent = themeIcon();
   }
 
   function renderCatalog() {

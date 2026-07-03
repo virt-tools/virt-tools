@@ -14,8 +14,9 @@ frontend/              Static site (served by nginx)
   index.html           Homepage — renders the catalog from assets/tools.js
   assets/
     tools.js           ★ Tool registry — add new tools here
-    app.js             Shared header + catalog rendering
-    style.css          Shared styles (dark/light)
+    app.js             Shared header + catalog rendering + theme toggle
+    theme-init.js      Early theme bootstrap (applies saved theme before paint)
+    style.css          Shared styles (dark/light, with manual override)
   vendor/              Locally vendored libraries (e.g. qrcode.min.js) — no runtime CDNs
   tools/<slug>/        One folder per tool, each with an index.html
   feedback/            Submit + status lookup page
