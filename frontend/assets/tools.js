@@ -698,4 +698,12 @@ window.VIRTUAL_TOOLS = [
     icon: "ℙ",
     added: "2026-07-05T01:40:00Z",
   },
+  {
+    slug: "gcd-lcm",
+    name: "GCD & LCM Calculator",
+    description: "Compute the greatest common divisor (GCD) and least common multiple (LCM) of two or more integers, separated by commas, spaces, or new lines. The GCD is the largest integer dividing all of them evenly; the LCM is the smallest integer they all divide evenly. All arithmetic uses big integers, so results are exact even for large inputs, and for the first two numbers the Euclidean algorithm's division steps are shown. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "∩",
+    added: "2026-07-05T02:20:00Z",
+  },
 ];
