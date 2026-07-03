@@ -127,4 +127,11 @@ window.VIRTUAL_TOOLS = [
     category: "Text",
     icon: "🎲",
   },
+  {
+    slug: "base-converter",
+    name: "Number Base Converter",
+    description: "Convert integers between binary, octal, decimal, hexadecimal and any base from 2 to 36 — live, in-browser.",
+    category: "Math",
+    icon: "🔢",
+  },
 ];
