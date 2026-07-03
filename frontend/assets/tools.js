@@ -57,4 +57,11 @@ window.VIRTUAL_TOOLS = [
     category: "Security",
     icon: "#️⃣",
   },
+  {
+    slug: "json-formatter",
+    name: "JSON Formatter",
+    description: "Pretty-print, minify and validate JSON — parsed locally, nothing uploaded.",
+    category: "Text",
+    icon: "🧩",
+  },
 ];
