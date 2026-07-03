@@ -202,4 +202,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🕒",
     added: "2026-07-03T08:50:00Z",
   },
+  {
+    slug: "box-shadow-generator",
+    name: "CSS Box-Shadow Generator",
+    description: "Build layered CSS box-shadows with per-layer offset, blur, spread, color and inset, a live preview, and copy-ready CSS — in your browser.",
+    category: "Design",
+    icon: "🧊",
+    added: "2026-07-03T09:25:00Z",
+  },
 ];
