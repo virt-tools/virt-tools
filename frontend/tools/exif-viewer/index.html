@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>EXIF / Image Metadata Viewer — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .exif-thumb { max-width: 100%; max-height: 240px; border-radius: 6px; border: 1px solid var(--border,#333); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>EXIF / Image Metadata Viewer</h1>
+      <p>Open a JPEG or TIFF and read the EXIF metadata embedded in it — camera make &amp; model, orientation, date taken, exposure (shutter speed, aperture, ISO, focal length), pixel dimensions and GPS coordinates. The file is read locally with FileReader; nothing is uploaded, and the parser makes no network requests.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="file">Image file</label>
+        <div id="drop" class="dropzone">
+          <input type="file" id="file" accept="image/jpeg,image/tiff,image/*" hidden>
+          <p class="dropzone-hint">Click to choose, or drag &amp; drop a JPEG / TIFF here</p>
+          <p class="dropzone-name" id="drop-name" hidden></p>
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+      <div id="ui" hidden>
+        <div class="row" style="align-items:flex-start; flex-wrap:wrap; gap:16px;">
+          <div>
+            <label>Preview</label><br>
+            <img id="thumb" class="exif-thumb" alt="">
+          </div>
+          <div style="flex:1; min-width:240px;">
+            <label>Metadata</label>
+            <table class="base-table" id="tbl" style="width:100%;"></table>
+            <p class="note" id="gps-note"></p>
+          </div>
+        </div>
+      </div>
+      <p class="note" id="info"></p>
+      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var fileEl = document.getElementById("file");
+    var drop = document.getElementById("drop");
+    var dropName = document.getElementById("drop-name");
+    var ui = document.getElementById("ui");
+    var thumb = document.getElementById("thumb");
+    var tbl = document.getElementById("tbl");
+    var gpsNote = document.getElementById("gps-note");
+    var info = document.getElementById("info");
+    var err = document.getElementById("err");
+
+    var TYPE_SIZE = {1:1, 2:1, 3:2, 4:4, 5:8, 7:1, 9:4, 10:8};
+    var ORIENTATION = {1:"Normal (0°)", 2:"Mirrored horizontal", 3:"Rotated 180°",
+      4:"Mirrored vertical", 5:"Mirrored + rotated 90° CCW", 6:"Rotated 90° CW",
+      7:"Mirrored + rotated 90° CW", 8:"Rotated 90° CCW"};
+
+    // Find the offset where the TIFF block begins (after "Exif\0\0"), or 0 for a bare TIFF.
+    function findTiffStart(bytes) {
+      if (bytes.length < 8) return -1;
+      if (bytes[0] === 0x49 && bytes[1] === 0x49) return 0;  // II
+      if (bytes[0] === 0x4D && bytes[1] === 0x4D) return 0;  // MM
+      if (bytes[0] === 0x45 && bytes[1] === 0x78 && bytes[2] === 0x69 &&
+          bytes[3] === 0x66 && bytes[4] === 0 && bytes[5] === 0) return 6; // bare "Exif\0\0"+TIFF
+      if (bytes[0] === 0xFF && bytes[1] === 0xD8) {          // JPEG SOI
+        var i = 2;
+        while (i + 4 < bytes.length) {
+          if (bytes[i] !== 0xFF) break;
+          var marker = bytes[i + 1];
+          if (marker === 0xFF) { i++; continue; }
+          if (marker === 0xD8 || marker === 0xD9) { i += 2; continue; }
+          var len = (bytes[i + 2] << 8) | bytes[i + 3];        // includes the 2 length bytes
+          if (marker === 0xE1 && i + 10 < bytes.length &&
+              bytes[i + 4] === 0x45 && bytes[i + 5] === 0x78 &&
+              bytes[i + 6] === 0x69 && bytes[i + 7] === 0x66 &&
+              bytes[i + 8] === 0 && bytes[i + 9] === 0) {
+            return i + 10;                                    // TIFF block right after "Exif\0\0"
+          }
+          i += 2 + len;
+        }
+      }
+      return -1;
+    }
+
+    function ratFloat(r) { return r[1] !== 0 ? r[0] / r[1] : 0; }
+    function dms(rats) {
+      var d = ratFloat(rats[0]), m = ratFloat(rats[1]), s = ratFloat(rats[2]);
+      return d + m / 60 + s / 3600;
+    }
+    function asRats(v) {
+      // A single RATIONAL is itself a 2-array [num,den]; a list of rationals is an
+      // array of 2-arrays. Wrap a lone rat so callers always see a list of rats.
+      return Array.isArray(v) && Array.isArray(v[0]) ? v : [v];
+    }
+
+    function readIfd(dv, off, le) {
+      var n = dv.getUint16(off, le);
+      var entries = {};
+      var base = off + 2;
+      for (var i = 0; i < n; i++) {
+        var e = base + 12 * i;
+        var tag = dv.getUint16(e, le), type = dv.getUint16(e + 2, le), count = dv.getUint32(e + 4, le);
+        var size = (TYPE_SIZE[type] || 1) * count;
+        var start = (size <= 4) ? (e + 8) : dv.getUint32(e + 8, le);
+        entries[tag] = { type: type, count: count, start: start, size: size };
+      }
+      return entries;
+    }
+    function decode(dv, le, ent) {
+      var t = ent.type, c = ent.count, s = ent.start;
+      if (t === 2) {                                         // ASCII
+        var bytes = new Uint8Array(dv.buffer, dv.byteOffset + s, ent.size);
+        var str = "";
+        for (var i = 0; i < bytes.length; i++) { if (bytes[i] === 0) break; str += String.fromCharCode(bytes[i]); }
+        return str;
+      }
+      if (t === 3) {                                         // SHORT
+        var v = []; for (var j = 0; j < c; j++) v.push(dv.getUint16(s + 2 * j, le)); return c === 1 ? v[0] : v;
+      }
+      if (t === 4) {                                         // LONG
+        var v = []; for (var j = 0; j < c; j++) v.push(dv.getUint32(s + 4 * j, le)); return c === 1 ? v[0] : v;
+      }
+      if (t === 1 || t === 7) {                              // BYTE / UNDEFINED
+        var bytes = new Uint8Array(dv.buffer, dv.byteOffset + s, ent.size);
+        if (t === 7) { var h = ""; for (var k = 0; k < bytes.length; k++) h += ("0" + bytes[k].toString(16)).slice(-2); return h; }
+        return c === 1 ? bytes[0] : Array.from(bytes);
+      }
+      if (t === 5 || t === 10) {                            // RATIONAL / SRATIONAL
+        var rats = [];
+        for (var j = 0; j < c; j++) {
+          var num = (t === 5) ? dv.getUint32(s + 8 * j, le) : dv.getInt32(s + 8 * j, le);
+          var den = (t === 5) ? dv.getUint32(s + 8 * j + 4, le) : dv.getInt32(s + 8 * j + 4, le);
+          rats.push([num, den]);
+        }
+        return c === 1 ? rats[0] : rats;
+      }
+      return null;
+    }
+    function get(dv, le, ifd, tag) { return tag in ifd ? decode(dv, le, ifd[tag]) : null; }
+
+    function parse(bytes) {
+      var start = findTiffStart(bytes);
+      if (start < 0) throw new Error("No EXIF data found (not a JPEG with an Exif APP1 segment, nor a TIFF file).");
+      var dv = new DataView(bytes.buffer, start, bytes.length - start);
+      var bo = dv.getUint16(0, false);                       // raw two bytes
+      var le;
+      if (bo === 0x4949) le = true;
+      else if (bo === 0x4D4D) le = false;
+      else throw new Error("Bad TIFF byte-order marker.");
+      if (dv.getUint16(2, le) !== 0x002A) throw new Error("Bad TIFF magic (0x002A expected).");
+      var ifd0 = readIfd(dv, dv.getUint32(4, le), le);
+      var out = {};
+      out["Make"] = get(dv, le, ifd0, 0x010F);
+      out["Model"] = get(dv, le, ifd0, 0x0110);
+      var orient = get(dv, le, ifd0, 0x0112);
+      out["Orientation"] = orient != null ? (orient + " — " + (ORIENTATION[orient] || "unknown")) : null;
+      out["DateTime"] = get(dv, le, ifd0, 0x0132);
+      out["Image width"] = get(dv, le, ifd0, 0x0100);
+      out["Image height"] = get(dv, le, ifd0, 0x0101);
+
+      var exifOff = get(dv, le, ifd0, 0x8769);
+      if (exifOff != null) {
+        var exifd = readIfd(dv, exifOff, le);
+        out["Date taken"] = get(dv, le, exifd, 0x9003);
+        out["Date digitized"] = get(dv, le, exifd, 0x9004);
+        var et = get(dv, le, exifd, 0x829A);
+        if (et) { var r = asRats(et)[0]; out["Exposure time"] = (r[0] === 1 ? "1/" + r[1] : r[0] + "/" + r[1]) + " s"; }
+        var fn = get(dv, le, exifd, 0x829D);
+        if (fn) { out["Aperture"] = "f/" + (ratFloat(asRats(fn)[0])).toFixed(1); }
+        out["ISO"] = get(dv, le, exifd, 0x8827);
+        var fl = get(dv, le, exifd, 0x920A);
+        if (fl) { out["Focal length"] = ratFloat(asRats(fl)[0]).toFixed(1) + " mm"; }
+        var exifVer = get(dv, le, exifd, 0x9000);
+        if (exifVer) out["Exif version"] = exifVer.replace(/^0+/, "0");
+        var px = get(dv, le, exifd, 0xA002), py = get(dv, le, exifd, 0xA003);
+        if (px != null && py != null) out["Pixel dimensions"] = px + " × " + py;
+        var cs = get(dv, le, exifd, 0xA001);
+        if (cs != null) out["Color space"] = cs === 1 ? "sRGB" : (cs === 65535 ? "Uncalibrated" : String(cs));
+      }
+
+      var gpsOff = get(dv, le, ifd0, 0x8825);
+      if (gpsOff != null) {
+        var gps = readIfd(dv, gpsOff, le);
+        var latRef = get(dv, le, gps, 0x0001), lat = get(dv, le, gps, 0x0002);
+        var lonRef = get(dv, le, gps, 0x0003), lon = get(dv, le, gps, 0x0004);
+        var altRef = get(dv, le, gps, 0x0005), alt = get(dv, le, gps, 0x0006);
+        var t = get(dv, le, gps, 0x0007), date = get(dv, le, gps, 0x001D);
+        if (lat != null && latRef != null) {
+          var lv = dms(asRats(lat)); if (latRef === "S") lv = -lv;
+          out["GPS latitude"] = lv.toFixed(6) + "° (" + latRef + ")";
+          out["_lat"] = lv;
+        }
+        if (lon != null && lonRef != null) {
+          var lvg = dms(asRats(lon)); if (lonRef === "W") lvg = -lvg;
+          out["GPS longitude"] = lvg.toFixed(6) + "° (" + lonRef + ")";
+          out["_lon"] = lvg;
+        }
+        if (alt != null) {
+          var a = ratFloat(asRats(alt)[0]); if (altRef === 1) a = -a;
+          out["GPS altitude"] = a.toFixed(1) + " m " + (altRef === 1 ? "below" : "above") + " sea level";
+        }
+        if (t != null) {
+          var ts = asRats(t);
+          out["GPS time"] = fmt2(ratFloat(ts[0])) + ":" + fmt2(ratFloat(ts[1])) + ":" + fmt2(ratFloat(ts[2])) + " UTC";
+        }
+        if (date != null) out["GPS date"] = date;
+      }
+      return out;
+    }
+    function fmt2(n) { n = Math.round(n); return ("0" + n).slice(-2); }
+
+    function row(name, val) {
+      var tr = document.createElement("tr");
+      var td1 = document.createElement("td"); td1.style.fontWeight = "600"; td1.textContent = name;
+      var td2 = document.createElement("td"); td2.style.fontFamily = "ui-monospace,monospace";
+      td2.textContent = (val === null || val === undefined || val === "") ? "—" : String(val);
+      tr.appendChild(td1); tr.appendChild(td2); tbl.appendChild(tr);
+    }
+
+    function loadFile(file) {
+      err.hidden = true; err.textContent = "";
+      tbl.innerHTML = ""; gpsNote.textContent = "";
+      if (!file) return;
+      if (!/^image\//.test(file.type) && !/\.(jpe?g|tiff?)$/i.test(file.name)) {
+        err.textContent = "Please choose a JPEG or TIFF image."; err.hidden = false; return;
+      }
+      dropName.textContent = file.name; dropName.hidden = false;
+      var reader = new FileReader();
+      reader.onload = function () {
+        var bytes = new Uint8Array(reader.result);
+        try {
+          var meta = parse(bytes);
+          // preview
+          thumb.src = URL.createObjectURL(file); thumb.onload = function () {};
+          ui.hidden = false;
+          var order = [];
+          ["Make","Model","Orientation","Image width","Image height","DateTime","Date taken",
+           "Date digitized","Exposure time","Aperture","ISO","Focal length","Exif version",
+           "Pixel dimensions","Color space","GPS latitude","GPS longitude","GPS altitude",
+           "GPS time","GPS date"].forEach(function (k) { if (meta[k] != null) order.push(k); });
+          order.forEach(function (k) { row(k, meta[k]); });
+          if (meta._lat != null && meta._lon != null) {
+            gpsNote.textContent = "GPS: " + meta._lat.toFixed(6) + ", " + meta._lon.toFixed(6) + " (decimal degrees; no map loaded — privacy-first)";
+          } else {
+            gpsNote.textContent = "Parsed " + (tbl.children.length) + " field(s).";
+          }
+          info.textContent = file.name + " · " + file.type + " · " + file.size + " bytes";
+        } catch (e) {
+          ui.hidden = true;
+          err.textContent = "✗ " + (e && e.message ? e.message : e); err.hidden = false;
+        }
+      };
+      reader.onerror = function () { err.textContent = "Could not read that file."; err.hidden = false; };
+      reader.readAsArrayBuffer(file);
+    }
+
+    drop.addEventListener("click", function () { fileEl.click(); });
+    fileEl.addEventListener("change", function () { if (fileEl.files[0]) loadFile(fileEl.files[0]); });
+    ["dragenter", "dragover"].forEach(function (ev) {
+      drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add("drag"); });
+    });
+    ["dragleave", "drop"].forEach(function (ev) {
+      drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove("drag"); });
+    });
+    drop.addEventListener("drop", function (e) { if (e.dataTransfer && e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]); });
+  })();
+  </script>
+</body>
+</html>

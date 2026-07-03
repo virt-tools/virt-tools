@@ -530,4 +530,12 @@ window.VIRTUAL_TOOLS = [
     icon: "✍️",
     added: "2026-07-04T11:40:00Z",
   },
+  {
+    slug: "exif-viewer",
+    name: "EXIF / Image Metadata Viewer",
+    description: "Open a JPEG or TIFF and read the EXIF metadata embedded in it — camera make & model, orientation, date taken, exposure (shutter speed, aperture, ISO, focal length), pixel dimensions and GPS coordinates. Parses the TIFF IFD structure with byte-order detection and converts GPS DMS to decimal, all locally with FileReader; nothing is uploaded.",
+    category: "Image",
+    icon: "📷",
+    added: "2026-07-04T12:20:00Z",
+  },
 ];
