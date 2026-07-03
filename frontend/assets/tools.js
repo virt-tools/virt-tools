@@ -410,4 +410,12 @@ window.VIRTUAL_TOOLS = [
     icon: "✔️",
     added: "2026-07-04T01:40:00Z",
   },
+  {
+    slug: "vigenere-cipher",
+    name: "Vigenère Cipher",
+    description: "Encode and decode text with the classic Vigenère polyalphabetic cipher — a repeating key shifts each letter, preserving case, numbers and punctuation. Runs entirely in your browser.",
+    category: "Text",
+    icon: "🗝️",
+    added: "2026-07-04T02:20:00Z",
+  },
 ];
