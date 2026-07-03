@@ -306,4 +306,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔡",
     added: "2026-07-03T17:00:00Z",
   },
+  {
+    slug: "random-number",
+    name: "Random Number Generator",
+    description: "Generate random integers or floats in a range — optionally unique and sorted. Secure mode uses Web Crypto with rejection sampling. Runs in your browser.",
+    category: "Math",
+    icon: "🧮",
+    added: "2026-07-03T17:40:00Z",
+  },
 ];
