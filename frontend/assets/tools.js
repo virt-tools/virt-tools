@@ -258,4 +258,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📄",
     added: "2026-07-03T13:00:00Z",
   },
+  {
+    slug: "hmac-generator",
+    name: "HMAC Generator",
+    description: "Compute an HMAC signature (SHA-1 / SHA-256 / SHA-384 / SHA-512) from a message and secret via the Web Crypto API — hex or Base64, in your browser.",
+    category: "Security",
+    icon: "🛡️",
+    added: "2026-07-03T13:40:00Z",
+  },
 ];

@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>HMAC Generator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>HMAC Generator</h1>
+      <p>Compute an HMAC signature (SHA-1 / SHA-256 / SHA-384 / SHA-512) from a message and secret — via the Web Crypto API, entirely in your browser. Nothing is sent anywhere.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="secret">Secret key</label>
+        <textarea id="secret" placeholder="your shared secret…" style="min-height:70px;"></textarea>
+      </div>
+
+      <div class="field">
+        <label for="message">Message</label>
+        <textarea id="message" placeholder="the payload to sign…" style="min-height:100px;">The quick brown fox jumps over the lazy dog</textarea>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="row" style="align-items:flex-end;">
+        <div>
+          <label for="alg">Algorithm</label>
+          <select id="alg">
+            <option value="SHA-256" selected>SHA-256</option>
+            <option value="SHA-1">SHA-1</option>
+            <option value="SHA-384">SHA-384</option>
+            <option value="SHA-512">SHA-512</option>
+          </select>
+        </div>
+        <div>
+          <label for="outfmt">Output</label>
+          <select id="outfmt">
+            <option value="hex" selected>Hex (lowercase)</option>
+            <option value="hex-upper">Hex (uppercase)</option>
+            <option value="base64">Base64</option>
+          </select>
+        </div>
+        <div>
+          <label for="enc">Encoding</label>
+          <select id="enc">
+            <option value="utf8" selected>UTF-8</option>
+            <option value="utf16le">UTF-16LE</option>
+            <option value="ascii">ASCII (byte per char)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="row" style="justify-content:space-between;">
+        <label for="out">HMAC</label>
+        <button id="copy" class="secondary" style="padding:4px 10px;">Copy</button>
+      </div>
+      <div class="output" id="out" style="word-break:break-all; min-height:1.6em;"></div>
+      <p class="note" id="note">Computed locally with the Web Crypto API. UTF-8 is the right choice for almost all use cases.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var secretEl = document.getElementById("secret");
+    var messageEl = document.getElementById("message");
+    var algEl = document.getElementById("alg");
+    var outfmtEl = document.getElementById("outfmt");
+    var encEl = document.getElementById("enc");
+    var out = document.getElementById("out");
+    var copy = document.getElementById("copy");
+    var note = document.getElementById("note");
+
+    function encodeBytes(text, enc) {
+      if (enc === "utf8") return new TextEncoder().encode(text);
+      if (enc === "utf16le") {
+        var bytes = [];
+        for (var i = 0; i < text.length; i++) {
+          var c = text.charCodeAt(i);
+          bytes.push(c & 0xff, (c >> 8) & 0xff);
+        }
+        return new Uint8Array(bytes);
+      }
+      // ascii: one byte per char, non-ASCII replaced with '?'
+      var bytes = [];
+      for (var j = 0; j < text.length; j++) {
+        var ch = text.charCodeAt(j);
+        bytes.push(ch < 128 ? ch : 0x3f);
+      }
+      return new Uint8Array(bytes);
+    }
+
+    function toHex(buf, upper) {
+      var hex = [];
+      var view = new Uint8Array(buf);
+      for (var i = 0; i < view.length; i++) {
+        var h = view[i].toString(16);
+        if (h.length < 2) h = "0" + h;
+        hex.push(upper ? h.toUpperCase() : h);
+      }
+      return hex.join("");
+    }
+    function toBase64(buf) {
+      var view = new Uint8Array(buf);
+      var bin = "";
+      for (var i = 0; i < view.length; i++) bin += String.fromCharCode(view[i]);
+      return btoa(bin);
+    }
+
+    function fmt(buf) {
+      var f = outfmtEl.value;
+      if (f === "base64") return toBase64(buf);
+      return toHex(buf, f === "hex-upper");
+    }
+
+    function setOut(text, err) {
+      out.textContent = text;
+      out.style.color = err ? "var(--bad)" : "";
+      note.textContent = err || "Computed locally with the Web Crypto API. UTF-8 is the right choice for almost all use cases.";
+    }
+
+    async function run() {
+      var alg = algEl.value;
+      var enc = encEl.value;
+      try {
+        var keyBytes = encodeBytes(secretEl.value, enc);
+        var msgBytes = encodeBytes(messageEl.value, enc);
+        var key = await crypto.subtle.importKey("raw", keyBytes, { name: "HMAC", hash: { name: alg } }, false, ["sign"]);
+        var sig = await crypto.subtle.sign("HMAC", key, msgBytes);
+        setOut(fmt(sig));
+      } catch (e) {
+        setOut("Error: " + (e && e.message ? e.message : e), true);
+      }
+    }
+
+    function copyText() {
+      var t = out.textContent;
+      if (!t || t.indexOf("Error") === 0) return;
+      function done() { copy.textContent = "Copied!"; setTimeout(function () { copy.textContent = "Copy"; }, 1200); }
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done);
+      else { var ta = document.createElement("textarea"); ta.value = t; document.body.appendChild(ta); ta.select(); try { document.execCommand("copy"); done(); } catch (e) {} ta.remove(); }
+    }
+
+    [secretEl, messageEl, algEl, outfmtEl, encEl].forEach(function (el) {
+      el.addEventListener("input", run);
+      el.addEventListener("change", run);
+    });
+    copy.addEventListener("click", copyText);
+
+    if (!window.crypto || !crypto.subtle) {
+      setOut("Error: Web Crypto (crypto.subtle) is not available. This tool needs a secure context (https).", true);
+      return;
+    }
+    run();
+  })();
+  </script>
+</body>
+</html>
