@@ -554,4 +554,12 @@ window.VIRTUAL_TOOLS = [
     icon: "💰",
     added: "2026-07-04T13:40:00Z",
   },
+  {
+    slug: "time-zone-converter",
+    name: "Time Zone Converter",
+    description: "Pick a date, time and source time zone and see that same instant in cities around the world — with the UTC offset, weekday and day-shift for each. Add custom IANA zones on the fly. Conversion uses the browser's built-in Intl support with the standard IANA time-zone database (DST-aware via fixed-point offset resolution), all locally with no network requests.",
+    category: "Time",
+    icon: "🗺️",
+    added: "2026-07-04T14:20:00Z",
+  },
 ];

@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Time Zone Converter — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .tz-table th, .tz-table td { padding: 5px 10px; white-space: nowrap; }
+    .tz-table td.time { font-family: ui-monospace, monospace; }
+    .tz-table .dayshift { font-size: 11px; opacity: .75; padding-left: 6px; }
+    .tz-add { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    select, input[type="text"], input[type="datetime-local"] { box-sizing: border-box; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Time Zone Converter</h1>
+      <p>Pick a date, time and source time zone, then see that same instant in cities around the world — with the UTC offset, weekday and day-shift for each. Useful for scheduling calls and meetings across time zones. Conversion uses the browser's built-in <code>Intl</code> support with the standard IANA time-zone database; everything runs locally and no data leaves your device.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="flex-wrap:wrap; gap:16px; align-items:flex-end;">
+        <div>
+          <label for="dt">Date &amp; time</label><br>
+          <input type="datetime-local" id="dt" step="60" style="width:200px;">
+        </div>
+        <div>
+          <label for="src">Source time zone</label><br>
+          <select id="src" style="width:240px;"></select>
+        </div>
+        <div>
+          <label for="src-custom">…or custom IANA zone</label><br>
+          <input type="text" id="src-custom" placeholder="e.g. America/Chicago" spellcheck="false" style="width:200px; font-family:ui-monospace,monospace;">
+        </div>
+        <button id="now" class="secondary" style="padding:6px 12px;">Now</button>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="tz-add">
+        <label for="add">Add a target zone</label>
+        <input type="text" id="add" placeholder="IANA zone, e.g. Asia/Kolkata" spellcheck="false" style="width:200px; font-family:ui-monospace,monospace;">
+        <button id="add-btn" class="secondary" style="padding:4px 12px;">Add</button>
+        <button id="reset" class="secondary" style="padding:4px 12px;">Reset list</button>
+      </div>
+
+      <div class="spacer"></div>
+      <table class="base-table tz-table" id="tbl">
+        <thead><tr><th>Location</th><th>Time zone</th><th>Date &amp; time</th><th>Day</th><th>UTC offset</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <p class="note" id="note"></p>
+      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var dtEl = document.getElementById("dt");
+    var srcEl = document.getElementById("src");
+    var srcCustomEl = document.getElementById("src-custom");
+    var nowBtn = document.getElementById("now");
+    var addEl = document.getElementById("add");
+    var addBtn = document.getElementById("add-btn");
+    var resetBtn = document.getElementById("reset");
+    var tblBody = document.querySelector("#tbl tbody");
+    var noteEl = document.getElementById("note");
+    var errEl = document.getElementById("err");
+
+    // Common zones: [IANA, friendly label].
+    var COMMON = [
+      ["UTC", "UTC"],
+      ["America/Los_Angeles", "Los Angeles"],
+      ["America/Denver", "Denver"],
+      ["America/Chicago", "Chicago"],
+      ["America/New_York", "New York"],
+      ["America/Sao_Paulo", "São Paulo"],
+      ["Europe/London", "London"],
+      ["Europe/Berlin", "Berlin"],
+      ["Europe/Moscow", "Moscow"],
+      ["Asia/Dubai", "Dubai"],
+      ["Asia/Kolkata", "Mumbai"],
+      ["Asia/Dhaka", "Dhaka"],
+      ["Asia/Bangkok", "Bangkok"],
+      ["Asia/Singapore", "Singapore"],
+      ["Asia/Hong_Kong", "Hong Kong"],
+      ["Asia/Tokyo", "Tokyo"],
+      ["Australia/Sydney", "Sydney"],
+      ["Pacific/Auckland", "Auckland"]
+    ];
+    var SRC_ZONES = [
+      ["UTC","UTC"],["America/Los_Angeles","Los Angeles"],["America/New_York","New York"],
+      ["Europe/London","London"],["Europe/Berlin","Berlin"],["Europe/Moscow","Moscow"],
+      ["Asia/Dubai","Dubai"],["Asia/Kolkata","Mumbai"],["Asia/Singapore","Singapore"],
+      ["Asia/Tokyo","Tokyo"],["Australia/Sydney","Sydney"],["Pacific/Auckland","Auckland"]
+    ];
+    var targets = COMMON.slice();
+
+    // Build source dropdown.
+    SRC_ZONES.forEach(function (z) {
+      var o = document.createElement("option"); o.value = z[0]; o.textContent = z[1] + " (" + z[0] + ")"; srcEl.appendChild(o);
+    });
+    srcEl.value = "America/New_York";
+
+    // ---- Core conversion (Intl-based, DST-safe) ----
+    function parts(ms, zone, opts) {
+      return new Intl.DateTimeFormat("en-GB", Object.assign({ timeZone: zone, hour12: false }, opts))
+        .formatToParts(new Date(ms));
+    }
+    function field(map, type) { return map[type]; }
+    function wallFields(ms, zone) {
+      var p = parts(ms, zone, { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      var m = {}; p.forEach(function (x) { m[x.type] = x.value; });
+      var H = parseInt(m.hour, 10); if (m.hour === "24") H = 0;   // guard against the "24" midnight quirk
+      return { y: parseInt(m.year, 10), mo: parseInt(m.month, 10), d: parseInt(m.day, 10), h: H, mi: parseInt(m.minute, 10), s: parseInt(m.second, 10) };
+    }
+    // UTC offset (minutes east of UTC) of `zone` at instant `ms`. Bulletproof: build the
+    // zone's wall-clock at ms, interpret it as UTC, and subtract the true instant.
+    function offsetMinutes(ms, zone) {
+      var w = wallFields(ms, zone);
+      var zMs = Date.UTC(w.y, w.mo - 1, w.d, w.h, w.mi, w.s);
+      return (zMs - ms) / 60000;
+    }
+    // Resolve the instant whose wall-clock in `zone` is the entered y/m/d/h/mi.
+    // Fixed-point iteration handles DST (the offset depends on the instant we're solving for).
+    function toInstant(y, mo, d, h, mi, zone) {
+      var i0 = Date.UTC(y, mo - 1, d, h, mi);
+      var instant = i0;
+      for (var i = 0; i < 4; i++) {
+        var off = offsetMinutes(instant, zone);
+        instant = i0 - off * 60000;
+      }
+      return instant;
+    }
+    function pad2(n) { return ("0" + n).slice(-2); }
+    function fmtOffset(min) {
+      var sign = min < 0 ? "-" : "+"; min = Math.abs(min);
+      var h = Math.floor(min / 60), m = min % 60;
+      return "UTC" + sign + pad2(h) + ":" + pad2(m);
+    }
+    function fmtTime(ms, zone) {
+      var w = wallFields(ms, zone);
+      return w.y + "-" + pad2(w.mo) + "-" + pad2(w.d) + " " + pad2(w.h) + ":" + pad2(w.mi);
+    }
+    function fmtWeekday(ms, zone) {
+      var p = parts(ms, zone, { weekday: "short" });
+      return p.length ? p[0].value : "";
+    }
+    function dayShift(srcDate, dstDate) {
+      var a = Date.UTC(srcDate.y, srcDate.mo - 1, srcDate.d);
+      var b = Date.UTC(dstDate.y, dstDate.mo - 1, dstDate.d);
+      return Math.round((b - a) / 86400000);
+    }
+
+    function validZone(zone) {
+      if (!zone) return false;
+      try { new Intl.DateTimeFormat("en-GB", { timeZone: zone }); return true; } catch (e) { return false; }
+    }
+
+    function render() {
+      errEl.hidden = true; errEl.textContent = "";
+      tblBody.innerHTML = "";
+      var srcZone = srcCustomEl.value.trim() || srcEl.value;
+      if (!validZone(srcZone)) {
+        errEl.textContent = "Unknown source time zone: " + JSON.stringify(srcZone) + " (use an IANA name like America/Chicago)."; errEl.hidden = false; return;
+      }
+      var v = dtEl.value;          // "YYYY-MM-DDTHH:MM"
+      if (!v) { errEl.textContent = "Please choose a date and time."; errEl.hidden = false; return; }
+      var m = v.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+      if (!m) { errEl.textContent = "Bad date/time format."; errEl.hidden = false; return; }
+      var y = +m[1], mo = +m[2], d = +m[3], h = +m[4], mi = +m[5];
+      var instant = toInstant(y, mo, d, h, mi, srcZone);
+      var srcWall = wallFields(instant, srcZone);
+
+      targets.forEach(function (t) {
+        var zone = t[0], label = t[1];
+        if (!validZone(zone)) return;
+        var w = wallFields(instant, zone);
+        var shift = dayShift(srcWall, w);
+        var shiftTxt = shift === 0 ? "" : (shift > 0 ? "(+" + shift + " day)" : "(" + shift + " day)");
+        var tr = document.createElement("tr");
+        tr.innerHTML = "<td>" + label + "</td><td>" + zone + "</td><td class='time'>" + fmtTime(instant, zone) +
+          "</td><td>" + fmtWeekday(instant, zone) + "</td><td class='time'>" + fmtOffset(offsetMinutes(instant, zone)) +
+          "</td><td class='dayshift'>" + shiftTxt + "</td>";
+        tblBody.appendChild(tr);
+      });
+
+      // Epoch for reference + a sanity echo of the source wall-clock.
+      noteEl.textContent = "Source " + srcZone + ": " + fmtTime(instant, srcZone) + "  ·  Unix epoch " + Math.floor(instant / 1000);
+      window.__tzInstant = instant;
+      window.__tzFmtTime = fmtTime;
+      window.__tzOffset = offsetMinutes;
+    }
+
+    function fillNow() {
+      // Set the datetime-local to "now" expressed in the source zone, so the entered
+      // wall-clock matches what the user expects to see.
+      var srcZone = srcCustomEl.value.trim() || srcEl.value;
+      if (!validZone(srcZone)) srcZone = "UTC";
+      var now = Date.now();
+      var w = wallFields(now, srcZone);
+      dtEl.value = w.y + "-" + pad2(w.mo) + "-" + pad2(w.d) + "T" + pad2(w.h) + ":" + pad2(w.mi);
+      render();
+    }
+
+    dtEl.addEventListener("input", render);
+    srcEl.addEventListener("change", render);
+    srcCustomEl.addEventListener("input", render);
+    nowBtn.addEventListener("click", fillNow);
+    addBtn.addEventListener("click", function () {
+      var z = addEl.value.trim();
+      if (!z) return;
+      if (!validZone(z)) { errEl.textContent = "Unknown time zone: " + JSON.stringify(z); errEl.hidden = false; return; }
+      if (!targets.some(function (t) { return t[0] === z; })) {
+        var label = z.split("/").pop().replace(/_/g, " ");
+        targets.push([z, label]);
+      }
+      addEl.value = "";
+      render();
+    });
+    resetBtn.addEventListener("click", function () { targets = COMMON.slice(); render(); });
+
+    fillNow();
+  })();
+  </script>
+</body>
+</html>
