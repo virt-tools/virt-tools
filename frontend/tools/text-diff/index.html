@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Text Diff — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Text Diff</h1>
+      <p>Compare two blocks of text and see what was added, removed and changed — line by line, with word-level highlights. Runs entirely in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="md-split">
+        <div class="field">
+          <label for="a">Original</label>
+          <textarea id="a" placeholder="Paste the original text…" style="min-height:200px;">The quick brown fox
+jumps over the lazy dog.
+This line is unchanged.
+Old line to remove.</textarea>
+        </div>
+        <div class="field">
+          <label for="b">Changed</label>
+          <textarea id="b" placeholder="Paste the changed text…" style="min-height:200px;">The quick brown FOX
+jumps over the lazy dog.
+This line is unchanged.
+A new line appears.</textarea>
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="row">
+        <div>
+          <label for="view">View</label>
+          <select id="view">
+            <option value="inline" selected>Inline</option>
+            <option value="sbs">Side by side</option>
+          </select>
+        </div>
+        <label class="check" style="margin-top:18px;"><input type="checkbox" id="ignorecase"> Ignore case</label>
+        <label class="check" style="margin-top:18px;"><input type="checkbox" id="ignorews"> Ignore trailing whitespace</label>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="row">
+        <button id="compare">Compare</button>
+        <button id="swap" class="secondary">Swap</button>
+        <button id="clear" class="secondary">Clear</button>
+      </div>
+      <p class="diff-stats" id="stats"></p>
+      <div class="diff-view" id="diff"></div>
+      <p class="note" id="note">Tip: Ctrl/Cmd+Enter compares. Lines are diffed with a longest-common-subsequence algorithm; changed lines also show word-level highlights.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var aEl = document.getElementById("a");
+    var bEl = document.getElementById("b");
+    var view = document.getElementById("view");
+    var ignoreCase = document.getElementById("ignorecase");
+    var ignoreWS = document.getElementById("ignorews");
+    var compareBtn = document.getElementById("compare");
+    var swap = document.getElementById("swap");
+    var clear = document.getElementById("clear");
+    var stats = document.getElementById("stats");
+    var diff = document.getElementById("diff");
+
+    function esc(s) {
+      return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    function linesOf(text) {
+      return text.split("\n");
+    }
+    function lineKey(line, opts) {
+      var k = line;
+      if (opts.ignoreCase) k = k.toLowerCase();
+      if (opts.ignoreWS) k = k.replace(/\s+$/, "");
+      return k;
+    }
+    function tokenize(line) {
+      // Keep whitespace runs as tokens so spacing is preserved in the render.
+      return line.split(/(\s+)/).filter(function (t) { return t.length > 0; });
+    }
+
+    // Generic LCS diff. a and b are arrays of items; keyOf(item) is the
+    // comparison key (normalized). Returns ops with .t in {eq,del,add} and
+    // .a/.b carrying the original items.
+    function lcsOps(a, b, keyOf) {
+      var n = a.length, m = b.length;
+      var dp = [];
+      for (var i = 0; i <= n; i++) dp.push(new Array(m + 1).fill(0));
+      for (i = n - 1; i >= 0; i--) {
+        for (var j = m - 1; j >= 0; j--) {
+          dp[i][j] = keyOf(a[i]) === keyOf(b[j])
+            ? dp[i + 1][j + 1] + 1
+            : Math.max(dp[i + 1][j], dp[i][j + 1]);
+        }
+      }
+      var ops = [];
+      i = 0; j = 0;
+      while (i < n && j < m) {
+        if (keyOf(a[i]) === keyOf(b[j])) { ops.push({ t: "eq", a: a[i], b: b[j] }); i++; j++; }
+        else if (dp[i + 1][j] >= dp[i][j + 1]) { ops.push({ t: "del", a: a[i] }); i++; }
+        else { ops.push({ t: "add", b: b[j] }); j++; }
+      }
+      while (i < n) { ops.push({ t: "del", a: a[i] }); i++; }
+      while (j < m) { ops.push({ t: "add", b: b[j] }); j++; }
+      return ops;
+    }
+
+    // Group a line-op stream into aligned rows for side-by-side rendering.
+    // Each row: { left: {kind, text}|null, right: {kind, text}|null }.
+    function groupRows(ops) {
+      var rows = [];
+      var k = 0;
+      while (k < ops.length) {
+        if (ops[k].t === "eq") {
+          rows.push({ left: { kind: "eq", text: ops[k].a.text }, right: { kind: "eq", text: ops[k].b.text } });
+          k++;
+        } else {
+          var block = [];
+          while (k < ops.length && ops[k].t !== "eq") { block.push(ops[k]); k++; }
+          var dels = block.filter(function (o) { return o.t === "del"; }).map(function (o) { return o.a.text; });
+          var adds = block.filter(function (o) { return o.t === "add"; }).map(function (o) { return o.b.text; });
+          var p = 0;
+          while (p < dels.length && p < adds.length) {
+            rows.push({ left: { kind: "del", text: dels[p] }, right: { kind: "add", text: adds[p] }, mod: true });
+            p++;
+          }
+          for (; p < dels.length; p++) rows.push({ left: { kind: "del", text: dels[p] }, right: null });
+          for (; p < adds.length; p++) rows.push({ left: null, right: { kind: "add", text: adds[p] } });
+        }
+      }
+      return rows;
+    }
+
+    // Word-level highlight HTML for one side of a modified line pair.
+    // side = "del" shows shared + removed words (removed highlighted);
+    // side = "add" shows shared + inserted words (inserted highlighted).
+    function wordHtml(delLine, addLine, opts, side) {
+      var k = function (t) { return opts.ignoreCase ? t.toLowerCase() : t; };
+      var a = tokenize(delLine).map(function (t) { return { key: k(t), text: t }; });
+      var b = tokenize(addLine).map(function (t) { return { key: k(t), text: t }; });
+      var ops = lcsOps(a, b, function (x) { return x.key; });
+      var html = "";
+      ops.forEach(function (op) {
+        if (side === "del") {
+          if (op.t === "add") return;
+          if (op.t === "del") html += '<span class="diff-w-del">' + esc(op.a.text) + "</span>";
+          else html += esc(op.a.text);
+        } else {
+          if (op.t === "del") return;
+          if (op.t === "add") html += '<span class="diff-w-add">' + esc(op.b.text) + "</span>";
+          else html += esc(op.b.text);
+        }
+      });
+      return html || "&nbsp;";
+    }
+
+    function plainLineHtml(text) { return esc(text) || "&nbsp;"; }
+
+    function renderInline(ops) {
+      var rows = groupRows(ops);
+      var opts = { ignoreCase: ignoreCase.checked, ignoreWS: ignoreWS.checked };
+      var html = "";
+      rows.forEach(function (r) {
+        if (r.left && r.right && r.mod) {
+          html += diffLineHtml("del", "−", wordHtml(r.left.text, r.right.text, opts, "del"));
+          html += diffLineHtml("add", "+", wordHtml(r.left.text, r.right.text, opts, "add"));
+        } else if (r.left && r.right) { // eq
+          html += diffLineHtml("eq", " ", plainLineHtml(r.left.text));
+        } else if (r.left) { // pure del
+          html += diffLineHtml("del", "−", plainLineHtml(r.left.text));
+        } else { // pure add
+          html += diffLineHtml("add", "+", plainLineHtml(r.right.text));
+        }
+      });
+      return html;
+    }
+
+    function diffLineHtml(cls, mark, content) {
+      return '<div class="diff-line ' + cls + '"><span class="mark">' + mark + "</span><span class=\"content\">" + content + "</span></div>";
+    }
+
+    function renderSbs(ops) {
+      var rows = groupRows(ops);
+      var opts = { ignoreCase: ignoreCase.checked, ignoreWS: ignoreWS.checked };
+      var html = '<div class="diff-sbs"><div class="sbs-head"><div class="cell">Original</div><div class="cell">Changed</div></div>';
+      rows.forEach(function (r) {
+        var lc, rc;
+        if (r.left && r.right && r.mod) {
+          lc = '<div class="cell del">' + wordHtml(r.left.text, r.right.text, opts, "del") + "</div>";
+          rc = '<div class="cell add">' + wordHtml(r.left.text, r.right.text, opts, "add") + "</div>";
+        } else if (r.left && r.right) {
+          lc = '<div class="cell eq">' + plainLineHtml(r.left.text) + "</div>";
+          rc = '<div class="cell eq">' + plainLineHtml(r.right.text) + "</div>";
+        } else if (r.left) {
+          lc = '<div class="cell del">' + plainLineHtml(r.left.text) + "</div>";
+          rc = '<div class="cell empty"></div>';
+        } else {
+          lc = '<div class="cell empty"></div>';
+          rc = '<div class="cell add">' + plainLineHtml(r.right.text) + "</div>";
+        }
+        html += '<div class="sbs-row">' + lc + rc + "</div>";
+      });
+      return html + "</div>";
+    }
+
+    function compare() {
+      var opts = { ignoreCase: ignoreCase.checked, ignoreWS: ignoreWS.checked };
+      var a = linesOf(aEl.value).map(function (l) { return { key: lineKey(l, opts), text: l }; });
+      var b = linesOf(bEl.value).map(function (l) { return { key: lineKey(l, opts), text: l }; });
+      var ops = lcsOps(a, b, function (x) { return x.key; });
+      var adds = ops.filter(function (o) { return o.t === "add"; }).length;
+      var dels = ops.filter(function (o) { return o.t === "del"; }).length;
+      var eqs = ops.filter(function (o) { return o.t === "eq"; }).length;
+      stats.innerHTML = '<span class="added">+' + adds + " added</span>  <span class=\"removed\">−" + dels + " removed</span>  " + eqs + " unchanged";
+      diff.innerHTML = view.value === "sbs" ? renderSbs(ops) : renderInline(ops);
+    }
+
+    // ---- wiring ----
+    compareBtn.addEventListener("click", compare);
+    view.addEventListener("change", compare);
+    [ignoreCase, ignoreWS].forEach(function (el) { el.addEventListener("change", compare); });
+    swap.addEventListener("click", function () {
+      var t = aEl.value; aEl.value = bEl.value; bEl.value = t; compare();
+    });
+    clear.addEventListener("click", function () { aEl.value = ""; bEl.value = ""; diff.innerHTML = ""; stats.textContent = ""; aEl.focus(); });
+    function onKey(e) { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); compare(); } }
+    aEl.addEventListener("keydown", onKey);
+    bEl.addEventListener("keydown", onKey);
+
+    compare();
+  })();
+  </script>
+</body>
+</html>

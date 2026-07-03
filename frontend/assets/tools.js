@@ -186,4 +186,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📊",
     added: "2026-07-03T07:40:00Z",
   },
+  {
+    slug: "text-diff",
+    name: "Text Diff",
+    description: "Compare two blocks of text and see added, removed and changed lines with word-level highlights — inline or side by side, in your browser.",
+    category: "Text",
+    icon: "🔎",
+    added: "2026-07-03T08:15:00Z",
+  },
 ];
