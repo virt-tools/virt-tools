@@ -586,4 +586,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎯",
     added: "2026-07-04T16:20:00Z",
   },
+  {
+    slug: "bitwise-calc",
+    name: "Bitwise Calculator",
+    description: "Perform bitwise operations — AND, OR, XOR, NOT, shifts, and two's-complement add/subtract — on integers entered in binary, octal, decimal or hexadecimal, at a chosen bit width (8, 16, 32 or 64). Results are shown in all four bases plus signed decimal, with operands and results masked to the selected width so the behaviour matches real fixed-width hardware. Accepts 0b/0o/0x prefixes, underscores and spaces. Uses BigInt for exact 64-bit math. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "⊕",
+    added: "2026-07-04T17:00:00Z",
+  },
 ];

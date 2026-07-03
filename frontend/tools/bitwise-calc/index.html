@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Bitwise Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .bw-op { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+    .bw-op .stat { padding: 8px 12px; border: 1px solid var(--border,#444); border-radius: 6px; }
+    .bw-op .stat-value { display:block; font-family: ui-monospace, monospace; font-size: 14px; word-break: break-all; }
+    .bw-op .stat-label { font-size: 12px; opacity: .8; }
+    .bw-field label { display:block; font-size:12px; }
+    .bw-field input, .bw-field select { box-sizing:border-box; }
+    .bw-mono { font-family: ui-monospace, monospace; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Bitwise Calculator</h1>
+      <p>Perform bitwise operations — AND, OR, XOR, NOT, shifts, and two's-complement add/subtract — on integers entered in binary, octal, decimal or hexadecimal, at a chosen bit width (8, 16, 32 or 64). Results are shown in all four bases plus signed decimal. Operands and the result are masked to the selected width so the behaviour matches real fixed-width hardware. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="flex-wrap:wrap; gap:24px; align-items:flex-end;">
+        <div class="bw-field">
+          <label for="a">Operand A</label>
+          <input id="a" value="0xDEADBEEF" spellcheck="false" style="width:200px; font-family:ui-monospace,monospace;">
+          <select id="abase" style="margin-top:4px;">
+            <option value="16">hex</option>
+            <option value="10">dec</option>
+            <option value="8">oct</option>
+            <option value="2">bin</option>
+          </select>
+        </div>
+        <div class="bw-field">
+          <label for="b">Operand B</label>
+          <input id="b" value="0x2A" spellcheck="false" style="width:200px; font-family:ui-monospace,monospace;">
+          <select id="bbase" style="margin-top:4px;">
+            <option value="16">hex</option>
+            <option value="10">dec</option>
+            <option value="8">oct</option>
+            <option value="2">bin</option>
+          </select>
+        </div>
+        <div class="bw-field">
+          <label for="width">Bit width</label>
+          <select id="width">
+            <option value="8">8</option>
+            <option value="16">16</option>
+            <option value="32" selected>32</option>
+            <option value="64">64</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="row" style="flex-wrap:wrap; gap:16px; align-items:flex-end;">
+        <div class="bw-field">
+          <label for="op">Operation</label>
+          <select id="op">
+            <option value="AND">A &amp; B (AND)</option>
+            <option value="OR">A | B (OR)</option>
+            <option value="XOR">A ^ B (XOR)</option>
+            <option value="NOTA">~A (NOT)</option>
+            <option value="NOTB">~B (NOT)</option>
+            <option value="SHL">A &lt;&lt; n</option>
+            <option value="SHR">A &gt;&gt; n (logical)</option>
+            <option value="ADD">A + B (wrap)</option>
+            <option value="SUB">A − B (wrap)</option>
+          </select>
+        </div>
+        <div class="bw-field" id="shift-field">
+          <label for="shift">Shift amount n</label>
+          <input type="number" id="shift" value="4" min="0" step="1" style="width:80px;">
+        </div>
+      </div>
+      <p class="note" id="note"></p>
+      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+
+      <div class="spacer"></div>
+      <label>Result</label>
+      <div class="bw-op" id="result"></div>
+
+      <div class="spacer"></div>
+      <details>
+        <summary>Operand values in every base (at selected width)</summary>
+        <div class="spacer"></div>
+        <div class="bw-op" id="abases"></div>
+        <div class="spacer"></div>
+        <div class="bw-op" id="bbases"></div>
+      </details>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var aEl = document.getElementById("a");
+    var bEl = document.getElementById("b");
+    var abaseEl = document.getElementById("abase");
+    var bbaseEl = document.getElementById("bbase");
+    var widthEl = document.getElementById("width");
+    var opEl = document.getElementById("op");
+    var shiftEl = document.getElementById("shift");
+    var shiftField = document.getElementById("shift-field");
+    var noteEl = document.getElementById("note");
+    var errEl = document.getElementById("err");
+    var resultEl = document.getElementById("result");
+    var abasesEl = document.getElementById("abases");
+    var bbasesEl = document.getElementById("bbases");
+
+    var DIGITS = { 2: "01", 8: "01234567", 10: "0123456789", 16: "0123456789abcdef" };
+    var PREFIX = { 2: "0b", 8: "0o", 16: "0x" };
+
+    // Parse a typed value in the given base. Returns {v: int} or {err: msg}.
+    // Tolerates leading +/-, 0b/0o/0x prefixes, underscores and spaces.
+    function parseInput(s, base) {
+      s = String(s).trim().toLowerCase();
+      if (s === "") return { err: "empty" };
+      var neg = false;
+      if (s[0] === "-") { neg = true; s = s.slice(1); }
+      if (s[0] === "+") s = s.slice(1);
+      if (base in PREFIX && s.slice(0, PREFIX[base].length) === PREFIX[base]) s = s.slice(PREFIX[base].length);
+      s = s.replace(/[_ ]/g, "");
+      if (s === "") return { err: "empty" };
+      if (s[0] === "-") return { err: "bad sign position" };
+      var allowed = DIGITS[base];
+      for (var i = 0; i < s.length; i++) {
+        if (allowed.indexOf(s[i]) === -1) return { err: "bad digit '" + s[i] + "' for base " + base };
+      }
+      var v = parseInt(s, base);
+      if (isNaN(v)) return { err: "unparseable" };
+      return { v: neg ? -v : v };
+    }
+
+    function bigMask(v, w) {
+      var m = (1n << BigInt(w)) - 1n;
+      return BigInt(v) & m;
+    }
+    function bigToSigned(v, w) {
+      v = bigMask(v, w);
+      if (v & (1n << BigInt(w - 1))) return v - (1n << BigInt(w));
+      return v;
+    }
+    function bigRenderBin(v, w) {
+      v = bigMask(v, w);
+      var s = v.toString(2);
+      while (s.length < w) s = "0" + s;
+      var out = "";
+      for (var i = 0; i < s.length; i++) {
+        if (i > 0 && (w - i) % 4 === 0) out += " ";
+        out += s[i];
+      }
+      return out;
+    }
+    function bigRenderOct(v, w) {
+      v = bigMask(v, w);
+      var digits = Math.ceil(w / 3);
+      var s = v.toString(8);
+      while (s.length < digits) s = "0" + s;
+      return s;
+    }
+    function bigRenderDec(v, w) { return bigMask(v, w).toString(10); }
+    function bigRenderHex(v, w) {
+      v = bigMask(v, w);
+      var digits = Math.ceil(w / 4);
+      var s = v.toString(16);
+      while (s.length < digits) s = "0" + s;
+      return s;
+    }
+    function bigRenderSigned(v, w) { return bigToSigned(v, w).toString(10); }
+
+    // Parse to BigInt (kept as a plain BigInt; masking applied per op/render).
+    function parseBigInt(s, base) {
+      s = String(s).trim().toLowerCase();
+      if (s === "") return { err: "empty" };
+      var neg = false;
+      if (s[0] === "-") { neg = true; s = s.slice(1); }
+      if (s[0] === "+") s = s.slice(1);
+      if (base in PREFIX && s.slice(0, PREFIX[base].length) === PREFIX[base]) s = s.slice(PREFIX[base].length);
+      s = s.replace(/[_ ]/g, "");
+      if (s === "") return { err: "empty" };
+      if (s[0] === "-") return { err: "bad sign position" };
+      var allowed = DIGITS[base];
+      for (var i = 0; i < s.length; i++) {
+        if (allowed.indexOf(s[i]) === -1) return { err: "bad digit '" + s[i] + "' for base " + base };
+      }
+      // BigInt construction with explicit base (ES2020): BigInt("0x..") only for prefix;
+      // for arbitrary base strings build manually.
+      var v = 0n;
+      for (var j = 0; j < s.length; j++) v = v * BigInt(base) + BigInt(allowed.indexOf(s[j]));
+      return { v: neg ? -v : v };
+    }
+
+    function applyOp(op, a, b, n, w) {
+      var m = (1n << BigInt(w)) - 1n;
+      a = BigInt(a) & m; b = BigInt(b) & m;
+      var r;
+      if (op === "AND") r = a & b;
+      else if (op === "OR") r = a | b;
+      else if (op === "XOR") r = a ^ b;
+      else if (op === "NOTA") r = (~a) & m;
+      else if (op === "NOTB") r = (~b) & m;
+      else if (op === "SHL") r = (a << BigInt(n)) & m;
+      else if (op === "SHR") r = (a & m) >> BigInt(n);   // logical (a is non-negative after mask)
+      else if (op === "ADD") r = (a + b) & m;
+      else if (op === "SUB") r = (a - b) & m;
+      else return 0n;
+      return r & m;
+    }
+
+    function fmtBaseBox(label, bin, oct, dec, hex, sgn) {
+      var d = document.createElement("div"); d.className = "stat";
+      var l = document.createElement("span"); l.className = "stat-label"; l.textContent = label;
+      var v = document.createElement("span"); v.className = "stat-value";
+      v.innerHTML = "bin&nbsp;" + esc(bin) + "<br>oct&nbsp;" + esc(oct) + "<br>dec&nbsp;" + esc(dec) +
+        "<br>hex&nbsp;" + esc(hex) + "<br>signed&nbsp;" + esc(sgn);
+      d.appendChild(l); d.appendChild(v); return d;
+    }
+    function esc(s) { return String(s).replace(/[&<>]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]; }); }
+
+    function basesBoxes(targetEl, label, big) {
+      var w = parseInt(widthEl.value, 10);
+      targetEl.innerHTML = "";
+      var cap = document.createElement("label");
+      cap.textContent = label;
+      targetEl.appendChild(cap);
+      targetEl.appendChild(fmtBaseBox("", bigRenderBin(big, w), bigRenderOct(big, w), bigRenderDec(big, w), bigRenderHex(big, w), bigRenderSigned(big, w)));
+    }
+
+    function compute() {
+      errEl.hidden = true; errEl.textContent = "";
+      var w = parseInt(widthEl.value, 10);
+      var op = opEl.value;
+      shiftField.style.visibility = (op === "SHL" || op === "SHR") ? "visible" : "hidden";
+
+      var pa = parseBigInt(aEl.value, parseInt(abaseEl.value, 10));
+      var pb = parseBigInt(bEl.value, parseInt(bbaseEl.value, 10));
+      if (pa.err) { errEl.textContent = "Operand A: " + pa.err + "."; errEl.hidden = false; resultEl.innerHTML = ""; abasesEl.innerHTML = ""; bbasesEl.innerHTML = ""; noteEl.textContent = ""; return; }
+      if (op !== "NOTA" && pb.err) { errEl.textContent = "Operand B: " + pb.err + "."; errEl.hidden = false; resultEl.innerHTML = ""; abasesEl.innerHTML = ""; bbasesEl.innerHTML = ""; noteEl.textContent = ""; return; }
+
+      var n = 0;
+      if (op === "SHL" || op === "SHR") {
+        n = parseInt(shiftEl.value, 10);
+        if (isNaN(n) || n < 0) { errEl.textContent = "Shift amount must be a non-negative integer."; errEl.hidden = false; return; }
+      }
+
+      var r = applyOp(op, pa.v, pb.v, n, w);
+      resultEl.innerHTML = "";
+      resultEl.appendChild(fmtBaseBox("Result", bigRenderBin(r, w), bigRenderOct(r, w), bigRenderDec(r, w), bigRenderHex(r, w), bigRenderSigned(r, w)));
+
+      // Operand reference values.
+      var wa = applyOp("OR", pa.v, 0n, 0, w);   // mask A to width for display
+      var wb = applyOp("OR", pb.v, 0n, 0, w);
+      abasesEl.innerHTML = "";
+      abasesEl.appendChild((function () { var l = document.createElement("label"); l.textContent = "A"; return l; })());
+      abasesEl.appendChild(fmtBaseBox("", bigRenderBin(wa, w), bigRenderOct(wa, w), bigRenderDec(wa, w), bigRenderHex(wa, w), bigRenderSigned(wa, w)));
+      bbasesEl.innerHTML = "";
+      bbasesEl.appendChild((function () { var l = document.createElement("label"); l.textContent = "B"; return l; })());
+      bbasesEl.appendChild(fmtBaseBox("", bigRenderBin(wb, w), bigRenderOct(wb, w), bigRenderDec(wb, w), bigRenderHex(wb, w), bigRenderSigned(wb, w)));
+
+      window.__bitwise = { r: r, a: wa, b: wb, op: op, w: w, n: n };   // exposed for verification
+    }
+
+    var inputs = [aEl, bEl, abaseEl, bbaseEl, widthEl, opEl, shiftEl];
+    inputs.forEach(function (el) { el.addEventListener("input", compute); el.addEventListener("change", compute); });
+
+    compute();
+  })();
+  </script>
+</body>
+</html>
