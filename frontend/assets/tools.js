@@ -386,4 +386,12 @@ window.VIRTUAL_TOOLS = [
     icon: "👁️",
     added: "2026-07-03T23:40:00Z",
   },
+  {
+    slug: "base58",
+    name: "Base58 Encoder / Decoder",
+    description: "Encode text or bytes to Base58 and back (Bitcoin, Ripple and Flickr alphabets). Leading zero bytes become leading 1s; decoded bytes preview as UTF-8 and hex. Runs entirely in your browser.",
+    category: "Encoding",
+    icon: "🪙",
+    added: "2026-07-04T00:20:00Z",
+  },
 ];
