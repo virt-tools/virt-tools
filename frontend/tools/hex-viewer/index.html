@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Hex Viewer / File Inspector — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .hexdump { font-family: ui-monospace, monospace; font-size: 13px; line-height: 1.5; white-space: pre; overflow-x: auto; }
+    .hexdump .off { color: var(--muted, #888); margin-right: 14px; }
+    .hexdump .b { padding: 0 1px; }
+    .hexdump .b.hi { background: var(--accent, #ffd54a); color: #000; border-radius: 2px; }
+    .hexdump .gut { margin-left: 14px; }
+    .hexdump .c { color: var(--muted, #888); }
+    .hexdump .c.hi { color: #000; background: var(--accent, #ffd54a); border-radius: 2px; }
+    .hexdump .c.p { color: inherit; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Hex Viewer / File Inspector</h1>
+      <p>Open any file and view its bytes as a classic hex dump — offset, 16 hex bytes per line, and an ASCII gutter. Jump to a byte offset, or search for text or hex bytes with match highlighting. Everything is read locally with FileReader; your file never leaves your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="file">File</label>
+        <div id="drop" class="dropzone">
+          <input type="file" id="file" hidden>
+          <p class="dropzone-hint">Click to choose, or drag &amp; drop a file here</p>
+          <p class="dropzone-name" id="drop-name" hidden></p>
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+      <p class="note" id="info"></p>
+
+      <div id="controls" hidden>
+        <div class="row" style="align-items:flex-end; flex-wrap:wrap; gap:12px;">
+          <div>
+            <label for="offset">Jump to offset</label>
+            <input type="text" id="offset" size="12" spellcheck="false" placeholder="0x1f0 or 496" style="font-family:ui-monospace,monospace;">
+          </div>
+          <button id="jump" class="secondary">Jump</button>
+          <button id="prev" class="secondary">◀ Prev</button>
+          <button id="next" class="secondary">Next ▶</button>
+          <div>
+            <label for="search">Search</label>
+            <input type="text" id="search" size="18" spellcheck="false" style="font-family:ui-monospace,monospace;" placeholder="text or hex…">
+          </div>
+          <label class="check"><input type="checkbox" id="ashex"> as hex (e.g. <code>ff d8</code>)</label>
+          <button id="sprev" class="secondary">◀</button>
+          <button id="snext" class="secondary">▶</button>
+          <span class="note" id="matchinfo"></span>
+        </div>
+        <div class="spacer"></div>
+        <div class="hexdump" id="dump"></div>
+        <p class="note" id="pagenote"></p>
+      </div>
+      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var fileEl = document.getElementById("file");
+    var drop = document.getElementById("drop");
+    var dropName = document.getElementById("drop-name");
+    var info = document.getElementById("info");
+    var err = document.getElementById("err");
+    var controls = document.getElementById("controls");
+    var dump = document.getElementById("dump");
+    var offsetEl = document.getElementById("offset");
+    var jumpBtn = document.getElementById("jump");
+    var prevBtn = document.getElementById("prev");
+    var nextBtn = document.getElementById("next");
+    var searchEl = document.getElementById("search");
+    var asHex = document.getElementById("ashex");
+    var sprev = document.getElementById("sprev");
+    var snext = document.getElementById("snext");
+    var matchinfo = document.getElementById("matchinfo");
+    var pagenote = document.getElementById("pagenote");
+
+    var BPL = 16;
+    var PAGE_LINES = 256;
+    var PAGE_SIZE = BPL * PAGE_LINES; // 4096 bytes per page
+
+    var bytes = null;       // Uint8Array of whole file
+    var fileSize = 0;
+    var fileName = "";
+    var pageOffset = 0;
+    var matches = [];       // byte offsets of search matches
+    var matchIdx = -1;
+
+    function human(n) {
+      if (n < 1024) return n + " B";
+      if (n < 1048576) return (n / 1024).toFixed(1) + " KB";
+      if (n < 1073741824) return (n / 1048576).toFixed(2) + " MB";
+      return (n / 1073741824).toFixed(2) + " GB";
+    }
+
+    function clampOffset(o) {
+      if (fileSize === 0) return 0;
+      if (o < 0) o = 0;
+      if (o > fileSize - 1) o = ((fileSize - 1) / BPL | 0) * BPL;
+      o = (o / BPL | 0) * BPL;
+      return o;
+    }
+
+    function isPrintable(b) { return b >= 32 && b < 127; }
+
+    function renderPage() {
+      dump.innerHTML = "";
+      if (!bytes) return;
+      var start = pageOffset;
+      var end = Math.min(pageOffset + PAGE_SIZE, fileSize);
+      var frag = document.createDocumentFragment();
+      // build a quick lookup of matched byte indices within this page
+      var matchSet = {};
+      for (var m = 0; m < matches.length; m++) {
+        var s = matches[m];
+        var ne = searchNeedleLen();
+        if (s + ne <= start || s >= end) continue;
+        for (var k = 0; k < ne; k++) {
+          var idx = s + k;
+          if (idx >= start && idx < end) matchSet[idx - start] = true;
+        }
+      }
+      for (var i = start; i < end; i += BPL) {
+        var line = document.createElement("div");
+        var off = document.createElement("span");
+        off.className = "off";
+        off.textContent = ("00000000" + i.toString(16)).slice(-8);
+        line.appendChild(off);
+        var hex = document.createElement("span");
+        for (var j = 0; j < BPL; j++) {
+          if (j) hex.appendChild(document.createTextNode(" "));
+          var bspan = document.createElement("span");
+          bspan.className = "b" + (matchSet[(i - start) + j] ? " hi" : "");
+          if (i + j < end) bspan.textContent = ("0" + bytes[i + j].toString(16)).slice(-2);
+          else bspan.textContent = "  ";
+          hex.appendChild(bspan);
+        }
+        line.appendChild(hex);
+        var gut = document.createElement("span");
+        gut.className = "gut";
+        for (var j = 0; j < BPL; j++) {
+          var cspan = document.createElement("span");
+          cspan.className = "c" + (matchSet[(i - start) + j] ? " hi" : "") + (i + j < end && isPrintable(bytes[i + j]) ? " p" : "");
+          if (i + j < end) cspan.textContent = String.fromCharCode(bytes[i + j]);
+          else cspan.textContent = " ";
+          if (i + j < end && !isPrintable(bytes[i + j])) cspan.textContent = ".";
+          gut.appendChild(cspan);
+        }
+        line.appendChild(gut);
+        frag.appendChild(line);
+      }
+      dump.appendChild(frag);
+      prevBtn.disabled = pageOffset <= 0;
+      nextBtn.disabled = end >= fileSize;
+      pagenote.textContent = "bytes " + start + "–" + (end - 1) + " of " + fileSize + " (offset 0x" + start.toString(16) + " – 0x" + (end - 1).toString(16) + ")";
+    }
+
+    function searchNeedleLen() {
+      return (window._needle && window._needle.length) || 0;
+    }
+
+    function parseOffset(s) {
+      s = (s || "").trim();
+      if (!s) return 0;
+      if (/^0x[0-9a-fA-F]+$/.test(s)) return parseInt(s.slice(2), 16);
+      if (/^[0-9]+$/.test(s)) return parseInt(s, 10);
+      throw new Error("Offset must be decimal or 0x-prefixed hex (e.g. 496 or 0x1f0).");
+    }
+
+    function runSearch() {
+      matches = []; matchIdx = -1; window._needle = null;
+      var q = searchEl.value;
+      var needle = null;
+      if (asHex.checked) {
+        var clean = q.replace(/\s+/g, "");
+        if (!/^[0-9a-fA-F]*$/.test(clean) || clean.length % 2 !== 0) {
+          matchinfo.textContent = "invalid hex"; renderPage(); return;
+        }
+        if (clean) {
+          needle = new Uint8Array(clean.length / 2);
+          for (var i = 0; i < needle.length; i++) needle[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
+        }
+      } else {
+        if (q) needle = new TextEncoder().encode(q);
+      }
+      window._needle = needle;
+      if (!needle || !needle.length) { matchinfo.textContent = ""; renderPage(); return; }
+      matches = findBytes(bytes, needle);
+      if (matches.length) { matchIdx = 0; pageOffset = clampOffset(matches[0]); }
+      matchinfo.textContent = matches.length ? (matches.length + " match" + (matches.length === 1 ? "" : "es")) : "no matches";
+      renderPage();
+    }
+
+    function findBytes(hay, needle) {
+      var res = [];
+      if (!needle || !needle.length || !hay) return res;
+      var first = needle[0], n = needle.length;
+      for (var i = 0; i <= hay.length - n; i++) {
+        if (hay[i] === first) {
+          var ok = true;
+          for (var j = 1; j < n; j++) { if (hay[i + j] !== needle[j]) { ok = false; break; } }
+          if (ok) { res.push(i); if (res.length > 100000) break; }
+        }
+      }
+      return res;
+    }
+
+    function gotoMatch(dir) {
+      if (!matches.length) return;
+      // find match nearest in direction from current pageOffset
+      if (dir > 0) {
+        var found = -1;
+        for (var i = 0; i < matches.length; i++) { if (matches[i] > pageOffset) { found = i; break; } }
+        if (found < 0) found = 0;
+        matchIdx = found;
+      } else {
+        var found = matches.length - 1;
+        for (var i = matches.length - 1; i >= 0; i--) { if (matches[i] < pageOffset) { found = i; break; } }
+        matchIdx = found;
+      }
+      pageOffset = clampOffset(matches[matchIdx]);
+      matchinfo.textContent = "match " + (matchIdx + 1) + "/" + matches.length + " @ 0x" + matches[matchIdx].toString(16);
+      renderPage();
+    }
+
+    function loadFile(file) {
+      err.hidden = true; err.textContent = "";
+      if (!file) return;
+      if (file.size > 268435456) { // 256 MB safety cap
+        err.textContent = "File is too large to load fully (" + human(file.size) + "); please use a file under 256 MB.";
+        err.hidden = false; return;
+      }
+      dropName.textContent = file.name; dropName.hidden = false;
+      fileName = file.name;
+      var reader = new FileReader();
+      reader.onload = function () {
+        bytes = new Uint8Array(reader.result);
+        fileSize = bytes.length;
+        pageOffset = 0;
+        info.textContent = file.name + " · " + (file.type || "unknown type") + " · " + human(file.size) + " (" + fileSize + " bytes)";
+        controls.hidden = false;
+        offsetEl.value = "";
+        searchEl.value = ""; asHex.checked = false; matches = []; matchIdx = -1; window._needle = null;
+        matchinfo.textContent = "";
+        renderPage();
+      };
+      reader.onerror = function () { err.textContent = "Could not read that file."; err.hidden = false; };
+      reader.readAsArrayBuffer(file);
+    }
+
+    // wiring
+    drop.addEventListener("click", function () { fileEl.click(); });
+    fileEl.addEventListener("change", function () { if (fileEl.files[0]) loadFile(fileEl.files[0]); });
+    ["dragenter", "dragover"].forEach(function (ev) {
+      drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add("drag"); });
+    });
+    ["dragleave", "drop"].forEach(function (ev) {
+      drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove("drag"); });
+    });
+    drop.addEventListener("drop", function (e) { if (e.dataTransfer && e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]); });
+
+    jumpBtn.addEventListener("click", function () {
+      if (!bytes) return;
+      try { var o = parseOffset(offsetEl.value); } catch (e) { err.textContent = e.message; err.hidden = false; return; }
+      err.hidden = true;
+      pageOffset = clampOffset(o); renderPage();
+    });
+    offsetEl.addEventListener("keydown", function (e) { if (e.key === "Enter") jumpBtn.click(); });
+    prevBtn.addEventListener("click", function () { pageOffset = clampOffset(pageOffset - PAGE_SIZE); renderPage(); });
+    nextBtn.addEventListener("click", function () { pageOffset = clampOffset(pageOffset + PAGE_SIZE); renderPage(); });
+    searchEl.addEventListener("input", runSearch);
+    asHex.addEventListener("change", runSearch);
+    sprev.addEventListener("click", function () { gotoMatch(-1); });
+    snext.addEventListener("click", function () { gotoMatch(1); });
+  })();
+  </script>
+</body>
+</html>

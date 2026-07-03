@@ -482,4 +482,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📁",
     added: "2026-07-04T07:40:00Z",
   },
+  {
+    slug: "hex-viewer",
+    name: "Hex Viewer / File Inspector",
+    description: "Open any file and view its bytes as a classic hex dump — offset, 16 hex bytes per line, and an ASCII gutter. Jump to a byte offset, or search for text or hex bytes with match highlighting. Read locally with FileReader; your file never leaves your browser.",
+    category: "System",
+    icon: "🐞",
+    added: "2026-07-04T08:20:00Z",
+  },
 ];
