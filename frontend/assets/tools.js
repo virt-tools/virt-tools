@@ -85,4 +85,11 @@ window.VIRTUAL_TOOLS = [
     category: "Security",
     icon: "🆔",
   },
+  {
+    slug: "gradient-generator",
+    name: "CSS Gradient Generator",
+    description: "Build linear and radial CSS gradients with a live preview and copy-ready CSS.",
+    category: "Design",
+    icon: "🌈",
+  },
 ];
