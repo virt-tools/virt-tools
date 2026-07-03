@@ -100,6 +100,13 @@ window.VIRTUAL_TOOLS = [
     icon: "🅰️",
   },
   {
+    slug: "css-unit-converter",
+    name: "CSS Unit Converter",
+    description: "Convert a length between px, rem, em, pt, in, cm, %, vw and vh with configurable font-size and viewport references.",
+    category: "Design",
+    icon: "📐",
+  },
+  {
     slug: "regex-tester",
     name: "Regex Tester",
     description: "Build and test JavaScript regular expressions — live matches, capture groups and flags, in-browser.",
