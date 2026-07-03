@@ -522,4 +522,12 @@ window.VIRTUAL_TOOLS = [
     icon: "💠",
     added: "2026-07-04T11:00:00Z",
   },
+  {
+    slug: "jwt-signer",
+    name: "JWT Signer & Verifier",
+    description: "Sign a JSON Web Token with HMAC (HS256 / HS384 / HS512) from a header, payload and secret, or verify an existing token's signature and inspect its claims — with a constant-time signature compare and exp / nbf checks. Signatures use the Web Crypto API; the secret and token stay in your browser.",
+    category: "Security",
+    icon: "✍️",
+    added: "2026-07-04T11:40:00Z",
+  },
 ];
