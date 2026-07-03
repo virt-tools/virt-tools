@@ -290,4 +290,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🏷️",
     added: "2026-07-03T15:40:00Z",
   },
+  {
+    slug: "date-duration",
+    name: "Date Duration Calculator",
+    description: "Measure the calendar duration between two dates (years, months, days) with totals, or add / subtract days, weeks, months or years to a date. Runs in your browser.",
+    category: "Time",
+    icon: "📆",
+    added: "2026-07-03T16:20:00Z",
+  },
 ];

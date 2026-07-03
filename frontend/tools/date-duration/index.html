@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Date Duration Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Date Duration Calculator</h1>
+      <p>Measure the calendar duration between two dates (years, months, days) with totals, or add / subtract a span to a date. Runs entirely in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="align-items:flex-end;">
+        <div>
+          <label for="mode">Mode</label>
+          <select id="mode">
+            <option value="duration" selected>Duration between dates</option>
+            <option value="add">Add / subtract</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+
+      <div id="durPane">
+        <div class="row">
+          <div>
+            <label for="from">From</label>
+            <input type="date" id="from" value="2023-01-01">
+          </div>
+          <div>
+            <label for="to">To</label>
+            <input type="date" id="to" value="2026-07-03">
+          </div>
+          <label class="check"><input type="checkbox" id="inclusive"> Include end day (+1)</label>
+        </div>
+        <div class="spacer"></div>
+        <label>Calendar breakdown</label>
+        <div class="stat-grid" id="breakdown"></div>
+        <div class="spacer"></div>
+        <label>Totals</label>
+        <div class="stat-grid" id="totals"></div>
+      </div>
+
+      <div id="addPane" style="display:none;">
+        <div class="row">
+          <div>
+            <label for="start">Start date</label>
+            <input type="date" id="start" value="2026-07-03">
+          </div>
+          <div>
+            <label for="amount">Amount</label>
+            <input type="number" id="amount" value="90" style="width:110px;">
+          </div>
+          <div>
+            <label for="unit">Unit</label>
+            <select id="unit">
+              <option value="days" selected>days</option>
+              <option value="weeks">weeks</option>
+              <option value="months">months</option>
+              <option value="years">years</option>
+            </select>
+          </div>
+        </div>
+        <div class="spacer"></div>
+        <label>Result</label>
+        <div class="output" id="result" style="font-size:1.1rem; min-height:1.6em;"></div>
+        <p class="note" id="addNote">Months and years use calendar arithmetic with month-end clamping (e.g. Jan 31 + 1 month = Feb 28/29).</p>
+      </div>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var mode = document.getElementById("mode");
+    var durPane = document.getElementById("durPane");
+    var addPane = document.getElementById("addPane");
+    var fromEl = document.getElementById("from");
+    var toEl = document.getElementById("to");
+    var inclusive = document.getElementById("inclusive");
+    var breakdown = document.getElementById("breakdown");
+    var totals = document.getElementById("totals");
+    var startEl = document.getElementById("start");
+    var amountEl = document.getElementById("amount");
+    var unitEl = document.getElementById("unit");
+    var result = document.getElementById("result");
+
+    var DOW = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    var MON = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+    function daysInMonth(y, m) { return new Date(Date.UTC(y, m, 0)).getUTCDate(); }
+
+    function parseYMD(str) {
+      if (!str) return null;
+      var p = str.split("-");
+      if (p.length !== 3) return null;
+      return { y: +p[0], m: +p[1], d: +p[2] };
+    }
+    function toUTC(a) { return Date.UTC(a.y, a.m - 1, a.d); }
+    function fmtDate(a) {
+      return DOW[new Date(toUTC(a)).getUTCDay()] + ", " + MON[a.m - 1] + " " + a.d + ", " + a.y;
+    }
+
+    function addMonths(a, n) {
+      var idx = a.y * 12 + (a.m - 1) + n;
+      var ny = Math.floor(idx / 12), nm = (idx % 12) + 1;
+      var nd = Math.min(a.d, daysInMonth(ny, nm));
+      return { y: ny, m: nm, d: nd };
+    }
+
+    function calendarDiff(d1, d2) {
+      // d2 >= d1: largest M with d1 + M months <= d2.
+      var months = (d2.y - d1.y) * 12 + (d2.m - d1.m);
+      while (months > 0 && addMonths(d1, months).y * 10000 + addMonths(d1, months).m * 100 + addMonths(d1, months).d >
+        d2.y * 10000 + d2.m * 100 + d2.d) months--;
+      while (true) {
+        var nx = addMonths(d1, months + 1);
+        if (nx.y * 10000 + nx.m * 100 + nx.d <= d2.y * 10000 + d2.m * 100 + d2.d) months++;
+        else break;
+      }
+      var base = addMonths(d1, months);
+      var days = Math.round((toUTC(d2) - toUTC(base)) / 86400000);
+      return { years: Math.floor(months / 12), months: months % 12, days: days };
+    }
+
+    function stat(label, value) {
+      var d = document.createElement("div"); d.className = "stat";
+      var v = document.createElement("span"); v.className = "stat-value"; v.textContent = value;
+      var l = document.createElement("span"); l.className = "stat-label"; l.textContent = label;
+      d.appendChild(v); d.appendChild(l); return d;
+    }
+
+    function businessDays(d1, d2) {
+      var count = 0, t = toUTC(d1);
+      var end = toUTC(d2);
+      while (t < end) {
+        var dow = new Date(t).getUTCDay();
+        if (dow !== 0 && dow !== 6) count++;
+        t += 86400000;
+      }
+      return count;
+    }
+
+    function runDuration() {
+      breakdown.innerHTML = ""; totals.innerHTML = "";
+      var a = parseYMD(fromEl.value), b = parseYMD(toEl.value);
+      if (!a || !b) { breakdown.appendChild(stat("—", "Enter two dates")); return; }
+      var swapped = false;
+      if (toUTC(a) > toUTC(b)) { var t = a; a = b; b = t; swapped = true; }
+      var inc = inclusive.checked ? 1 : 0;
+      var totalDays = Math.round((toUTC(b) - toUTC(a)) / 86400000) + inc;
+      var diff = calendarDiff(a, b);
+      if (inc) diff.days += 1;
+      var parts = [];
+      if (diff.years) parts.push(diff.years + (diff.years === 1 ? " year" : " years"));
+      if (diff.months) parts.push(diff.months + (diff.months === 1 ? " month" : " months"));
+      if (diff.days) parts.push(diff.days + (diff.days === 1 ? " day" : " days"));
+      if (!parts.length) parts.push("0 days");
+      breakdown.appendChild(stat("Duration", parts.join(" ")));
+      breakdown.appendChild(stat("From", fmtDate(a)));
+      breakdown.appendChild(stat("To", fmtDate(b)));
+      if (swapped) breakdown.appendChild(stat("Order", "swapped to earliest"));
+      totals.appendChild(stat("Total days", totalDays.toLocaleString()));
+      totals.appendChild(stat("Weeks", (Math.floor(totalDays / 7)).toLocaleString() + "w " + (totalDays % 7) + "d"));
+      totals.appendChild(stat("Hours", (totalDays * 24).toLocaleString()));
+      totals.appendChild(stat("Minutes", (totalDays * 1440).toLocaleString()));
+      totals.appendChild(stat("Business days", businessDays(a, b).toLocaleString()));
+    }
+
+    function runAdd() {
+      var a = parseYMD(startEl.value);
+      if (!a) { result.textContent = "—"; return; }
+      var n = parseInt(amountEl.value, 10) || 0;
+      var res, unit = unitEl.value;
+      if (unit === "days") res = { y: a.y, m: a.m, d: a.d + n };
+      else if (unit === "weeks") res = { y: a.y, m: a.m, d: a.d + n * 7 };
+      else if (unit === "months") res = addMonths(a, n);
+      else res = addMonths(a, n * 12);
+      // normalize days/weeks overflow via Date UTC
+      var ms = Date.UTC(res.y, res.m - 1, res.d);
+      var dt = new Date(ms);
+      var out = { y: dt.getUTCFullYear(), m: dt.getUTCMonth() + 1, d: dt.getUTCDate() };
+      result.textContent = fmtDate(out) + "   (" + out.y + "-" + String(out.m).padStart(2, "0") + "-" + String(out.d).padStart(2, "0") + ")";
+    }
+
+    function syncPanes() {
+      durPane.style.display = mode.value === "duration" ? "" : "none";
+      addPane.style.display = mode.value === "add" ? "" : "none";
+    }
+    function run() { if (mode.value === "duration") runDuration(); else runAdd(); }
+
+    [mode, fromEl, toEl, inclusive, startEl, amountEl, unitEl].forEach(function (el) {
+      el.addEventListener("input", function () { syncPanes(); run(); });
+      el.addEventListener("change", function () { syncPanes(); run(); });
+    });
+
+    syncPanes();
+    run();
+  })();
+  </script>
+</body>
+</html>
