@@ -618,4 +618,12 @@ window.VIRTUAL_TOOLS = [
     icon: "⛽",
     added: "2026-07-04T19:00:00Z",
   },
+  {
+    slug: "business-days",
+    name: "Business Day Calculator",
+    description: "Count working days between two dates or add and subtract business days from a date, skipping weekends and any holidays you list. Choose the weekend definition (Saturday–Sunday, Friday–Saturday, or Sunday-only), enter holidays one per line, and decide whether the end date is included. Date arithmetic runs in UTC at midnight so daylight-saving shifts never skew the count. Everything runs locally in your browser.",
+    category: "Time",
+    icon: "📅",
+    added: "2026-07-04T19:40:00Z",
+  },
 ];

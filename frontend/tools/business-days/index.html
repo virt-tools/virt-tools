@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Business Day Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+    .summary .stat { padding: 10px 12px; border: 1px solid var(--border,#444); border-radius: 6px; }
+    .summary .stat-value { display:block; font-size: 20px; font-weight: 700; font-family: ui-monospace, monospace; }
+    .summary .stat-label { font-size: 12px; opacity: .8; }
+    .nt-tab { padding: 4px 12px; border: 1px solid var(--border,#444); background: transparent; color: inherit; border-radius: 4px; cursor: pointer; font-size: 13px; }
+    .nt-tab.on { background: var(--accent,#ffd54a); color: #000; border-color: var(--accent,#ffd54a); }
+    textarea { width: 100%; box-sizing: border-box; font-family: ui-monospace, monospace; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Business Day Calculator</h1>
+      <p>Count working days between two dates or add and subtract business days from a date — skipping weekends and any holidays you list. Pick the weekend definition (Saturday–Sunday, Friday–Saturday, or Sunday-only), enter holidays one per line, and choose whether the end date is included. Date arithmetic is done in UTC at midnight so daylight-saving shifts never throw the count off. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="align-items:flex-end;">
+        <div>
+          <label>Mode</label><br>
+          <span id="tabs">
+            <button class="nt-tab on" data-m="count">Count working days</button>
+            <button class="nt-tab" data-m="add">Add / subtract days</button>
+          </span>
+        </div>
+      </div>
+
+      <!-- COUNT -->
+      <div id="count-pane">
+        <div class="spacer"></div>
+        <div class="row" style="flex-wrap:wrap; gap:16px; align-items:flex-end;">
+          <div>
+            <label for="cstart">Start date</label>
+            <input type="date" id="cstart" value="2026-01-05" style="width:160px;">
+          </div>
+          <div>
+            <label for="cend">End date</label>
+            <input type="date" id="cend" value="2026-01-30" style="width:160px;">
+          </div>
+        </div>
+        <div class="spacer"></div>
+        <div class="row" style="flex-wrap:wrap; gap:16px; align-items:flex-end;">
+          <div>
+            <label for="wkend">Weekend</label>
+            <select id="wkend">
+              <option value="sat_sun" selected>Saturday &amp; Sunday</option>
+              <option value="fri_sat">Friday &amp; Saturday</option>
+              <option value="sun_only">Sunday only</option>
+            </select>
+          </div>
+          <label class="check"><input type="checkbox" id="incl" checked> Include end date</label>
+        </div>
+        <div class="spacer"></div>
+        <div class="field">
+          <label for="chol">Holidays (one date per line, YYYY-MM-DD or M/D/YYYY)</label>
+          <textarea id="chol" rows="3" spellcheck="false" placeholder="2026-01-01&#10;2026-07-04"></textarea>
+        </div>
+        <div class="spacer"></div>
+        <label>Result</label>
+        <div class="summary" id="csummary"></div>
+        <p class="note" id="cnote"></p>
+      </div>
+
+      <!-- ADD -->
+      <div id="add-pane" hidden>
+        <div class="spacer"></div>
+        <div class="row" style="flex-wrap:wrap; gap:16px; align-items:flex-end;">
+          <div>
+            <label for="astart">Start date</label>
+            <input type="date" id="astart" value="2026-01-05" style="width:160px;">
+          </div>
+          <div>
+            <label for="n">Business days</label>
+            <input type="number" id="n" value="10" step="1" style="width:90px;">
+          </div>
+          <div>
+            <label for="awkend">Weekend</label>
+            <select id="awkend">
+              <option value="sat_sun" selected>Saturday &amp; Sunday</option>
+              <option value="fri_sat">Friday &amp; Saturday</option>
+              <option value="sun_only">Sunday only</option>
+            </select>
+          </div>
+        </div>
+        <div class="spacer"></div>
+        <div class="field">
+          <label for="ahol">Holidays (one date per line, YYYY-MM-DD or M/D/YYYY)</label>
+          <textarea id="ahol" rows="3" spellcheck="false" placeholder="2026-01-01"></textarea>
+        </div>
+        <div class="spacer"></div>
+        <label>Result</label>
+        <div class="summary" id="asummary"></div>
+        <p class="note" id="anote"></p>
+      </div>
+
+      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    // Weekend definitions as JS getUTCDay sets (Sun=0, Mon=1, ..., Sat=6).
+    var WEEKENDS = { sat_sun: [6, 0], fri_sat: [5, 6], sun_only: [0] };
+    var DOW = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+    function parseDate(s) {
+      s = String(s).trim();
+      if (!s) return NaN;
+      var m;
+      if ((m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/))) return Date.UTC(+m[1], +m[2] - 1, +m[3]);
+      if ((m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/))) return Date.UTC(+m[3], +m[1] - 1, +m[2]);
+      return NaN;
+    }
+    function toISO(ms) {
+      var d = new Date(ms);
+      function p(x) { return x < 10 ? "0" + x : "" + x; }
+      return d.getUTCFullYear() + "-" + p(d.getUTCMonth() + 1) + "-" + p(d.getUTCDate());
+    }
+    function weekdayMs(ms) { return new Date(ms).getUTCDay(); }
+    var DAY = 86400000;
+
+    function weekendSet(wk) { var a = WEEKENDS[wk]; return new Set(a); }
+    function parseHolidays(text) {
+      var set = new Set();
+      String(text).split(/\r?\n/).forEach(function (line) {
+        var ms = parseDate(line);
+        if (!isNaN(ms)) set.add(ms);
+      });
+      return set;
+    }
+    function isWorkday(ms, wkSet, holSet) {
+      return !wkSet.has(weekdayMs(ms)) && !holSet.has(ms);
+    }
+
+    // Closed-form working-day count, inclusive [start, end] (start <= end).
+    function countClosed(startMs, endMs, inclusive, wkSet, holSet) {
+      if (!inclusive) {
+        if (endMs <= startMs) return 0;                 // exclusive end: [start, end)
+        endMs -= DAY;                                   // count [start, end-1] inclusive
+        return countClosed(startMs, endMs, true, wkSet, holSet);
+      }
+      var total = Math.round((endMs - startMs) / DAY) + 1;
+      var full = Math.floor(total / 7), rem = total % 7;
+      var working = full * (7 - wkSet.size);
+      var baseWd = weekdayMs(startMs);
+      for (var i = 0; i < rem; i++) if (!wkSet.has((baseWd + i) % 7)) working++;
+      // subtract holidays that fall on a workday within the range
+      holSet.forEach(function (h) {
+        if (h >= startMs && h <= endMs && !wkSet.has(weekdayMs(h))) working--;
+      });
+      return working;
+    }
+
+    // Single brute-force pass over [start, end] inclusive for the breakdown.
+    function breakdown(startMs, endMs, inclusive, wkSet, holSet) {
+      if (endMs < startMs) { var t = startMs; startMs = endMs; endMs = t; }
+      var work = 0, weekend = 0, holOnWork = 0, calDays = 0;
+      var cur = startMs;
+      while (cur < endMs) {
+        calDays++;
+        var isHol = holSet.has(cur), isWknd = wkSet.has(weekdayMs(cur));
+        if (isWknd) weekend++; else if (isHol) holOnWork++; else work++;
+        cur += DAY;
+      }
+      if (cur === endMs) {
+        calDays++;
+        var isHol2 = holSet.has(cur), isWknd2 = wkSet.has(weekdayMs(cur));
+        if (inclusive) { if (isWknd2) weekend++; else if (isHol2) holOnWork++; else work++; }
+      } else {
+        // endMs < startMs handled by swap; if not inclusive and end not landed on, calDays already counts [start,end)
+        calDays--; // adjust: we counted up to but not including end for the non-landing case
+      }
+      return { work: work, weekend: weekend, holOnWork: holOnWork, calDays: calDays };
+    }
+
+    function addBusinessDays(startMs, n, wkSet, holSet) {
+      if (n === 0) return startMs;
+      var step = n > 0 ? DAY : -DAY;
+      var remaining = Math.abs(n);
+      var cur = startMs;
+      while (remaining > 0) { cur += step; if (isWorkday(cur, wkSet, holSet)) remaining--; }
+      return cur;
+    }
+
+    function fmt(cents) { return ""; }  // unused; keep lint quiet
+    var tabs = document.querySelectorAll(".nt-tab");
+    var countPane = document.getElementById("count-pane");
+    var addPane = document.getElementById("add-pane");
+    var errEl = document.getElementById("err");
+    var csummary = document.getElementById("csummary");
+    var cnote = document.getElementById("cnote");
+    var asummary = document.getElementById("asummary");
+    var anote = document.getElementById("anote");
+
+    function stat(target, val, label) {
+      var d = document.createElement("div"); d.className = "stat";
+      var v = document.createElement("span"); v.className = "stat-value"; v.textContent = val;
+      var l = document.createElement("span"); l.className = "stat-label"; l.textContent = label;
+      d.appendChild(v); d.appendChild(l); target.appendChild(d);
+    }
+    function showErr(msg) { errEl.textContent = msg; errEl.hidden = !msg; }
+    function clear(t) { t.innerHTML = ""; }
+
+    function computeCount() {
+      clear(csummary); cnote.textContent = "";
+      var s = parseDate(document.getElementById("cstart").value);
+      var e = parseDate(document.getElementById("cend").value);
+      var wk = document.getElementById("wkend").value;
+      var incl = document.getElementById("incl").checked;
+      var holSet = parseHolidays(document.getElementById("chol").value);
+      if (isNaN(s) || isNaN(e)) { showErr("Enter valid start and end dates."); return; }
+      showErr("");
+      var wkSet = weekendSet(wk);
+      var startMs = s, endMs = e, swapped = false;
+      if (endMs < startMs) { swapped = true; }
+      var cf = countClosed(Math.min(s, e), Math.max(s, e), incl, wkSet, holSet);
+      var bd = breakdown(s, e, incl, wkSet, holSet);
+      // self-check: closed-form working must equal breakdown working
+      if (cf !== bd.work) { showErr("Internal count mismatch (" + cf + " vs " + bd.work + ")."); }
+      stat(csummary, String(cf), "Working days");
+      stat(csummary, String(bd.calDays), "Calendar days");
+      stat(csummary, String(bd.weekend), "Weekend days excluded");
+      stat(csummary, String(bd.holOnWork), "Holidays excluded");
+      var dir = swapped ? "(end is before start — order ignored)" : "";
+      cnote.textContent = bd.calDays + " calendar day" + (bd.calDays === 1 ? "" : "s") + " → " + cf + " working day" +
+        (cf === 1 ? "" : "s") + " (" + bd.weekend + " weekend, " + bd.holOnWork + " holiday" + (bd.holOnWork === 1 ? "" : "s") +
+        (incl ? ", end included" : ", end excluded") + "). " + dir;
+      window.__bdcount = { cf: cf, work: bd.work, calDays: bd.calDays, weekend: bd.weekend, holOnWork: bd.holOnWork };
+    }
+
+    function computeAdd() {
+      clear(asummary); anote.textContent = "";
+      var s = parseDate(document.getElementById("astart").value);
+      var n = parseInt(document.getElementById("n").value, 10);
+      var wk = document.getElementById("awkend").value;
+      var holSet = parseHolidays(document.getElementById("ahol").value);
+      if (isNaN(s)) { showErr("Enter a valid start date."); return; }
+      if (isNaN(n)) { showErr("Enter an integer number of business days."); return; }
+      showErr("");
+      var wkSet = weekendSet(wk);
+      var res = addBusinessDays(s, n, wkSet, holSet);
+      var calSpan = Math.round((res - s) / DAY);
+      stat(asummary, toISO(res), "Result date");
+      stat(asummary, DOW[weekdayMs(res)], "Day of week");
+      stat(asummary, (n > 0 ? "+" : "") + n, "Business days added");
+      stat(asummary, String(Math.abs(calSpan)), "Calendar days span");
+      anote.textContent = toISO(s) + " (" + DOW[weekdayMs(s)] + ") " + (n >= 0 ? "plus " : "minus ") +
+        Math.abs(n) + " business day" + (Math.abs(n) === 1 ? "" : "s") + " = " + toISO(res) + " (" + DOW[weekdayMs(res)] +
+        "), spanning " + Math.abs(calSpan) + " calendar day" + (Math.abs(calSpan) === 1 ? "" : "s") + ".";
+      window.__bdadd = { res: res, start: s, n: n, calSpan: calSpan };
+    }
+
+    function setMode(m) {
+      tabs.forEach(function (b) { b.className = "nt-tab" + (b.dataset.m === m ? " on" : ""); });
+      countPane.hidden = m !== "count";
+      addPane.hidden = m !== "add";
+      showErr("");
+      if (m === "count") computeCount(); else computeAdd();
+    }
+    tabs.forEach(function (b) { b.addEventListener("click", function () { setMode(b.dataset.m); }); });
+    ["cstart", "cend", "wkend", "incl", "chol"].forEach(function (id) {
+      var el = document.getElementById(id);
+      el.addEventListener("input", computeCount); el.addEventListener("change", computeCount);
+    });
+    ["astart", "n", "awkend", "ahol"].forEach(function (id) {
+      var el = document.getElementById(id);
+      el.addEventListener("input", computeAdd); el.addEventListener("change", computeAdd);
+    });
+
+    setMode("count");
+  })();
+  </script>
+</body>
+</html>
