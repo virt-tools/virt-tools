@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Markdown Table Generator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    textarea { width: 100%; box-sizing: border-box; font-family: ui-monospace, monospace; font-size: 13px; }
+    .align-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .align-row select { width: 92px; }
+    .align-chip { font-size: 12px; opacity: .7; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Markdown Table Generator</h1>
+      <p>Turn delimited data — comma, tab, pipe, or semicolon — into a clean, GitHub-flavoured Markdown table. Quoted fields (with embedded delimiters, escaped <code>""</code> quotes, or newlines) are parsed properly, cells containing pipes are escaped, and you can set per-column alignment (left, centre, right, or none). Ragged rows are padded to the widest row, and column widths are computed so everything lines up. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="flex-wrap:wrap; gap:14px; align-items:flex-end;">
+        <div>
+          <label for="delim">Delimiter</label>
+          <select id="delim">
+            <option value="," selected>Comma (CSV)</option>
+            <option value="\t">Tab (TSV)</option>
+            <option value="|">Pipe</option>
+            <option value=";">Semicolon</option>
+          </select>
+        </div>
+        <label class="check"><input type="checkbox" id="header" checked> First row is a header</label>
+      </div>
+      <div class="spacer"></div>
+      <div class="field">
+        <label for="input">Data</label>
+        <textarea id="input" rows="7" spellcheck="false" placeholder="Name,Age,City&#10;Alice,30,NYC&#10;Bob,25,LA">Name,Age,City
+Alice,30,NYC
+Bob,25,LA</textarea>
+      </div>
+      <div class="spacer"></div>
+      <label>Column alignment</label>
+      <div class="align-row" id="aligns"><span class="align-chip">enter data to choose alignment per column</span></div>
+
+      <div class="spacer"></div>
+      <label>Markdown table</label>
+      <textarea id="output" rows="8" readonly spellcheck="false"></textarea>
+      <div class="spacer"></div>
+      <button class="secondary" id="copy">Copy to clipboard</button>
+      <span class="note" id="copied" hidden>Copied.</span>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var delimEl = document.getElementById("delim");
+    var headerEl = document.getElementById("header");
+    var inputEl = document.getElementById("input");
+    var alignsEl = document.getElementById("aligns");
+    var outputEl = document.getElementById("output");
+    var copyEl = document.getElementById("copy");
+    var copiedEl = document.getElementById("copied");
+    var ALIGNS = [["none", "—"], ["left", "Left"], ["center", "Center"], ["right", "Right"]];
+
+    function actualDelim() {
+      var d = delimEl.value;
+      return d === "\\t" ? "\t" : d;
+    }
+
+    // RFC-4180-ish parser (mirror of the Python reference).
+    function parseDelimited(text, delim) {
+      var rows = [], row = [], field = "", inq = false, started = false;
+      var i = 0, n = text.length;
+      while (i < n) {
+        var c = text[i];
+        if (inq) {
+          if (c === '"') {
+            if (i + 1 < n && text[i + 1] === '"') { field += '"'; i += 2; continue; }
+            inq = false; i += 1; continue;
+          }
+          field += c; i += 1; continue;
+        }
+        if (c === '"') { inq = true; started = true; i += 1; continue; }
+        if (c === delim) { row.push(field); field = ""; started = true; i += 1; continue; }
+        if (c === '\n') { row.push(field); rows.push(row); row = []; field = ""; started = false; i += 1; continue; }
+        if (c === '\r') { i += 1; continue; }
+        field += c; started = true; i += 1;
+      }
+      if (field !== "" || row.length || started) { row.push(field); rows.push(row); }
+      return rows;
+    }
+    function normalize(rows) {
+      var ncols = 0;
+      for (var i = 0; i < rows.length; i++) ncols = Math.max(ncols, rows[i].length);
+      var out = [];
+      for (var r = 0; r < rows.length; r++) {
+        var rr = [];
+        for (var c = 0; c < ncols; c++) rr.push(c < rows[r].length ? rows[r][c] : "");
+        out.push(rr);
+      }
+      return { rows: out, ncols: ncols };
+    }
+    function colWidths(rows, ncols) {
+      var w = new Array(ncols).fill(0);
+      for (var r = 0; r < rows.length; r++)
+        for (var c = 0; c < ncols; c++)
+          if (rows[r][c].length > w[c]) w[c] = rows[r][c].length;
+      for (var c = 0; c < ncols; c++) if (w[c] < 1) w[c] = 1;
+      return w;
+    }
+    function esc(cell) { return cell.replace(/\|/g, "\\|").replace(/\n/g, " "); }
+    function alignCell(content, width, align) {
+      var e = width - content.length; if (e < 0) e = 0;
+      if (align === "right") return repeat(" ", e) + content;
+      if (align === "center") { var left = Math.floor(e / 2); return repeat(" ", left) + content + repeat(" ", e - left); }
+      return content + repeat(" ", e);   // none / left
+    }
+    function repeat(s, n) { var r = ""; while (n-- > 0) r += s; return r; }
+    function separator(width, align) {
+      var fw = width + 2;
+      if (align === "right") return repeat("-", fw - 1) + ":";
+      if (align === "center") return ":" + repeat("-", fw - 2) + ":";
+      if (align === "left") return ":" + repeat("-", fw - 1);
+      return repeat("-", fw);
+    }
+    function renderRow(r, widths, aligns, ncols) {
+      var cells = [];
+      for (var c = 0; c < ncols; c++) cells.push(" " + alignCell(esc(r[c]), widths[c], aligns[c]) + " ");
+      return "|" + cells.join("|") + "|";
+    }
+    function render(text, delim, header, aligns) {
+      var parsed = parseDelimited(text, delim);
+      if (!parsed.length) return "";
+      var nr = normalize(parsed);
+      var rows = nr.rows, ncols = nr.ncols;
+      var widths = colWidths(rows, ncols);
+      var al = (aligns && aligns.slice ? aligns.slice() : []);
+      while (al.length < ncols) al.push("none");
+      if (al.length > ncols) al = al.slice(0, ncols);
+      var lines = [];
+      var sep = "|" + (function () { var s = []; for (var c = 0; c < ncols; c++) s.push(separator(widths[c], al[c])); return s; })().join("|") + "|";
+      if (header) {
+        lines.push(renderRow(rows[0], widths, al, ncols));
+        lines.push(sep);
+        for (var r = 1; r < rows.length; r++) lines.push(renderRow(rows[r], widths, al, ncols));
+      } else {
+        lines.push(renderRow(new Array(ncols).fill(""), widths, al, ncols));
+        lines.push(sep);
+        for (var r = 0; r < rows.length; r++) lines.push(renderRow(rows[r], widths, al, ncols));
+      }
+      return lines.join("\n");
+    }
+
+    var currentAligns = [];
+    function rebuildAlignPicker(ncols) {
+      // preserve existing choices where possible
+      var prev = currentAligns;
+      currentAligns = [];
+      for (var c = 0; c < ncols; c++) currentAligns.push(c < prev.length ? prev[c] : "none");
+      alignsEl.innerHTML = "";
+      if (ncols === 0) {
+        var span = document.createElement("span"); span.className = "align-chip";
+        span.textContent = "enter data to choose alignment per column";
+        alignsEl.appendChild(span); return;
+      }
+      for (var c = 0; c < ncols; c++) {
+        (function (idx) {
+          var sel = document.createElement("select");
+          ALIGNS.forEach(function (a) {
+            var o = document.createElement("option"); o.value = a[0]; o.textContent = a[1];
+            if (a[0] === currentAligns[idx]) o.selected = true;
+            sel.appendChild(o);
+          });
+          sel.addEventListener("change", function () { currentAligns[idx] = sel.value; compute(); });
+          var chip = document.createElement("span"); chip.className = "align-chip";
+          chip.textContent = "col " + (idx + 1);
+          alignsEl.appendChild(chip);
+          alignsEl.appendChild(sel);
+        })(c);
+      }
+    }
+
+    function compute() {
+      var text = inputEl.value;
+      var delim = actualDelim();
+      var parsed = parseDelimited(text, delim);
+      var nr = normalize(parsed);
+      var ncols = nr.ncols;
+      if (ncols !== currentAligns.length) rebuildAlignPicker(ncols);
+      var out = render(text, delim, headerEl.checked, currentAligns);
+      outputEl.value = out;
+      window.__mdtable = { out: out, ncols: ncols };
+    }
+
+    copyEl.addEventListener("click", function () {
+      var t = outputEl.value;
+      if (!t) return;
+      var done = function () { copiedEl.hidden = false; setTimeout(function () { copiedEl.hidden = true; }, 1200); };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(t).then(done, function () { fallback(); });
+      } else fallback();
+      function fallback() {
+        outputEl.removeAttribute("readonly"); outputEl.select();
+        try { document.execCommand("copy"); } catch (e) {}
+        outputEl.setAttribute("readonly", ""); outputEl.blur(); done();
+      }
+    });
+
+    [delimEl, headerEl].forEach(function (el) { el.addEventListener("change", compute); });
+    inputEl.addEventListener("input", compute);
+    compute();
+  })();
+  </script>
+</body>
+</html>

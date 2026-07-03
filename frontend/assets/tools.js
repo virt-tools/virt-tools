@@ -634,4 +634,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🏃",
     added: "2026-07-04T20:20:00Z",
   },
+  {
+    slug: "markdown-table",
+    name: "Markdown Table Generator",
+    description: "Turn delimited data — comma, tab, pipe, or semicolon — into a clean, GitHub-flavoured Markdown table. Quoted fields (with embedded delimiters, escaped quotes, or newlines) are parsed properly, cells containing pipes are escaped, and you can set per-column alignment (left, centre, right, or none). Ragged rows are padded to the widest row and column widths are computed so everything lines up. Everything runs locally in your browser.",
+    category: "Text",
+    icon: "⊞",
+    added: "2026-07-04T21:00:00Z",
+  },
 ];
