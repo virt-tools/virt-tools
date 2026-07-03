@@ -498,4 +498,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📶",
     added: "2026-07-04T09:00:00Z",
   },
+  {
+    slug: "image-cropper",
+    name: "Image Cropper",
+    description: "Crop an image by dragging a selection on the canvas — choose an aspect ratio (free, 1:1, 4:3, 16:9, 3:2, 9:16), move or resize it with corner handles, then download the cropped result as PNG, JPEG or WebP. Processed locally with a canvas; your image never leaves your browser.",
+    category: "Image",
+    icon: "✂️",
+    added: "2026-07-04T09:40:00Z",
+  },
 ];

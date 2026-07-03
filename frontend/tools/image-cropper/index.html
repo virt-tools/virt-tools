@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Image Cropper — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Image Cropper</h1>
+      <p>Crop an image by dragging a selection on the canvas — choose an aspect ratio (free, 1:1, 4:3, 16:9, 3:2, 9:16), move or resize it with the corner handles, and download the cropped result as PNG, JPEG or WebP. Everything is processed locally with a canvas; your image never leaves your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="file">Image</label>
+        <div id="drop" class="dropzone">
+          <input type="file" id="file" accept="image/*" hidden>
+          <p class="dropzone-hint">Click to choose, or drag &amp; drop an image here</p>
+          <p class="dropzone-name" id="drop-name" hidden></p>
+        </div>
+      </div>
+
+      <div id="ui" hidden>
+        <div class="spacer"></div>
+        <div class="row" style="align-items:flex-end; flex-wrap:wrap; gap:12px;">
+          <div>
+            <label for="ar">Aspect ratio</label>
+            <select id="ar">
+              <option value="0" selected>Free</option>
+              <option value="1">1:1</option>
+              <option value="1.3333">4:3</option>
+              <option value="1.7778">16:9</option>
+              <option value="1.5">3:2</option>
+              <option value="0.5625">9:16</option>
+            </select>
+          </div>
+          <div>
+            <label for="fmt">Output format</label>
+            <select id="fmt">
+              <option value="image/png" selected>PNG</option>
+              <option value="image/jpeg">JPEG</option>
+              <option value="image/webp">WebP</option>
+            </select>
+          </div>
+          <label class="check"><input type="checkbox" id="qrow" checked> Quality</label>
+          <div style="display:none;" id="qwrap">
+            <label for="q">Quality: <span id="qv">0.9</span></label>
+            <input type="range" id="q" min="0.1" max="1" step="0.05" value="0.9">
+          </div>
+        </div>
+
+        <div class="spacer"></div>
+        <div class="field">
+          <label>Crop — drag on the image to select, drag inside to move, drag a corner to resize</label>
+          <div id="stage" style="position:relative; display:inline-block; max-width:100%; line-height:0; border:1px solid var(--border,#333); border-radius:6px; overflow:hidden;">
+            <canvas id="cv" style="display:block; max-width:100%; cursor:crosshair;"></canvas>
+          </div>
+        </div>
+
+        <p class="note" id="info"></p>
+
+        <div class="spacer"></div>
+        <div class="row" style="align-items:flex-end; flex-wrap:wrap; gap:12px;">
+          <div>
+            <label>Preview</label>
+            <canvas id="preview" style="display:block; max-width:100%; max-height:240px; border:1px solid var(--border,#333); border-radius:6px;"></canvas>
+          </div>
+          <div>
+            <button id="reset" class="secondary">Reset selection</button>
+            <button id="download" style="margin-top:8px;">Download cropped</button>
+          </div>
+        </div>
+        <p class="note" id="err" hidden style="color:var(--bad);"></p>
+      </div>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var fileEl = document.getElementById("file");
+    var drop = document.getElementById("drop");
+    var dropName = document.getElementById("drop-name");
+    var ui = document.getElementById("ui");
+    var arEl = document.getElementById("ar");
+    var fmtEl = document.getElementById("fmt");
+    var qRow = document.getElementById("qrow");
+    var qWrap = document.getElementById("qwrap");
+    var qEl = document.getElementById("q");
+    var qVal = document.getElementById("qv");
+    var cv = document.getElementById("cv");
+    var ctx = cv.getContext("2d");
+    var info = document.getElementById("info");
+    var preview = document.getElementById("preview");
+    var pctx = preview.getContext("2d");
+    var resetBtn = document.getElementById("reset");
+    var downloadBtn = document.getElementById("download");
+    var err = document.getElementById("err");
+
+    var MAXW = 620, MAXH = 460;
+    var HANDLE = 10;
+    var img = null;
+    var scale = 1;          // display -> natural
+    var sel = null;         // {x,y,w,h} in display coords
+    var op = null;          // {type, ...}
+
+    function clamp(v, lo, hi) { if (hi < lo) return lo; if (v < lo) return lo; if (v > hi) return hi; return v; }
+
+    function aspect() { var v = parseFloat(arEl.value); return v > 0 ? v : null; }
+
+    function fitSize(nw, nh) {
+      var w = nw, h = nh;
+      if (w > MAXW) { h = h * (MAXW / w); w = MAXW; }
+      if (h > MAXH) { w = w * (MAXH / h); h = MAXH; }
+      return { w: Math.max(1, Math.round(w)), h: Math.max(1, Math.round(h)) };
+    }
+
+    function applyAspect(x, y, w, h) {
+      var a = aspect();
+      if (a !== null) { h = w / a; }
+      if (w > cv.width) { w = cv.width; if (a !== null) h = w / a; }
+      if (h > cv.height) { h = cv.height; if (a !== null) w = h * a; }
+      if (w < 1) w = 1; if (h < 1) h = 1;
+      x = clamp(x, 0, cv.width - w);
+      y = clamp(y, 0, cv.height - h);
+      return { x: x, y: y, w: w, h: h };
+    }
+
+    function normalize(x1, y1, x2, y2) {
+      var x = Math.min(x1, x2), y = Math.min(y1, y2);
+      var w = Math.abs(x2 - x1), h = Math.abs(y2 - y1);
+      return applyAspect(x, y, w, h);
+    }
+
+    function hitTest(mx, my) {
+      if (!sel) return "create";
+      var c = HANDLE / 2 + 2;
+      var near = function (hx, hy) { return Math.abs(mx - hx) <= c && Math.abs(my - hy) <= c; };
+      if (near(sel.x, sel.y)) return "resize-nw";
+      if (near(sel.x + sel.w, sel.y)) return "resize-ne";
+      if (near(sel.x, sel.y + sel.h)) return "resize-sw";
+      if (near(sel.x + sel.w, sel.y + sel.h)) return "resize-se";
+      if (mx > sel.x && mx < sel.x + sel.w && my > sel.y && my < sel.y + sel.h) return "move";
+      return "create";
+    }
+
+    function toCanvasCoords(e) {
+      var r = cv.getBoundingClientRect();
+      var x = (e.clientX - r.left) * (cv.width / r.width);
+      var y = (e.clientY - r.top) * (cv.height / r.height);
+      return { x: clamp(x, 0, cv.width), y: clamp(y, 0, cv.height) };
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, cv.width, cv.height);
+      ctx.drawImage(img, 0, 0, cv.width, cv.height);
+      if (sel) {
+        // dim outside
+        ctx.fillStyle = "rgba(0,0,0,0.45)";
+        ctx.fillRect(0, 0, cv.width, sel.y);                                       // top
+        ctx.fillRect(0, sel.y + sel.h, cv.width, cv.height - (sel.y + sel.h));     // bottom
+        ctx.fillRect(0, sel.y, sel.x, sel.h);                                     // left
+        ctx.fillRect(sel.x + sel.w, sel.y, cv.width - (sel.x + sel.w), sel.h);     // right
+        // border
+        ctx.strokeStyle = "#fff";
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(sel.x + 0.5, sel.y + 0.5, sel.w - 1, sel.h - 1);
+        // handles
+        ctx.fillStyle = "#fff";
+        var hs = HANDLE;
+        var corners = [[sel.x, sel.y], [sel.x + sel.w, sel.y], [sel.x, sel.y + sel.h], [sel.x + sel.w, sel.y + sel.h]];
+        corners.forEach(function (c) {
+          ctx.fillRect(c[0] - hs / 2, c[1] - hs / 2, hs, hs);
+        });
+      }
+    }
+
+    function renderPreview() {
+      if (!sel || !img) { preview.width = 1; preview.height = 1; return; }
+      var nx = Math.round(sel.x / scale), ny = Math.round(sel.y / scale);
+      var nw = Math.max(1, Math.round(sel.w / scale)), nh = Math.max(1, Math.round(sel.h / scale));
+      // fit preview to ~240px on the long side
+      var pmax = 240;
+      var pw = nw, ph = nh;
+      if (Math.max(pw, ph) > pmax) { var s = pmax / Math.max(pw, ph); pw = Math.round(pw * s); ph = Math.round(ph * s); }
+      preview.width = pw; preview.height = ph;
+      pctx.clearRect(0, 0, pw, ph);
+      pctx.imageSmoothingEnabled = true;
+      pctx.drawImage(img, nx, ny, nw, nh, 0, 0, pw, ph);
+      var fmt = fmtEl.value;
+      var q = (fmt === "image/png") ? null : parseFloat(qEl.value);
+      info.textContent = "Crop: " + nw + " × " + nh + " px (natural) at (" + nx + ", " + ny + ") · preview " + pw + "×" + ph + " · " + fmt.replace("image/", "").toUpperCase() + (q !== null ? (" q" + q) : "");
+    }
+
+    function refresh() { draw(); renderPreview(); }
+
+    function loadImage(file) {
+      err.hidden = true; err.textContent = "";
+      if (!file || !/^image\//.test(file.type)) { err.textContent = "Please choose an image file."; err.hidden = false; return; }
+      dropName.textContent = file.name; dropName.hidden = false;
+      var url = URL.createObjectURL(file);
+      var image = new Image();
+      image.onload = function () {
+        img = image;
+        URL.revokeObjectURL(url);
+        var f = fitSize(image.naturalWidth, image.naturalHeight);
+        cv.width = f.w; cv.height = f.h;
+        scale = f.w / image.naturalWidth;
+        sel = applyAspect(0, 0, cv.width, cv.height); // start with full image
+        ui.hidden = false;
+        refresh();
+      };
+      image.onerror = function () { err.textContent = "Could not read that image."; err.hidden = false; };
+      image.src = url;
+    }
+
+    // pointer interaction
+    function onDown(e) {
+      if (!img) return;
+      e.preventDefault();
+      var p = toCanvasCoords(e);
+      var mode = hitTest(p.x, p.y);
+      op = { type: mode, start: p };
+      if (mode === "create") {
+        op.anchor = p;
+        sel = { x: p.x, y: p.y, w: 1, h: 1 };
+      } else if (mode === "move") {
+        op.off = { x: p.x - sel.x, y: p.y - sel.y };
+      } else { // resize-*
+        var fixed;
+        if (mode === "resize-nw") fixed = { x: sel.x + sel.w, y: sel.y + sel.h };
+        else if (mode === "resize-ne") fixed = { x: sel.x, y: sel.y + sel.h };
+        else if (mode === "resize-sw") fixed = { x: sel.x + sel.w, y: sel.y };
+        else fixed = { x: sel.x, y: sel.y };
+        op.fixed = fixed;
+      }
+      refresh();
+    }
+    function onMove(e) {
+      if (!op || !img) return;
+      var p = toCanvasCoords(e);
+      if (op.type === "create") {
+        sel = normalize(op.anchor.x, op.anchor.y, p.x, p.y);
+      } else if (op.type === "move") {
+        var nw = sel.w, nh = sel.h;
+        var nx = clamp(p.x - op.off.x, 0, cv.width - nw);
+        var ny = clamp(p.y - op.off.y, 0, cv.height - nh);
+        sel = { x: nx, y: ny, w: nw, h: nh };
+      } else { // resize
+        var f = op.fixed;
+        var x1 = Math.min(f.x, p.x), y1 = Math.min(f.y, p.y);
+        var x2 = Math.max(f.x, p.x), y2 = Math.max(f.y, p.y);
+        var w = Math.max(1, x2 - x1), h = Math.max(1, y2 - y1);
+        sel = applyAspect(x1, y1, w, h);
+      }
+      refresh();
+    }
+    function onUp() { op = null; }
+    cv.addEventListener("mousedown", onDown);
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    // touch
+    function touchPt(t) { var r = cv.getBoundingClientRect(); return { x: (t.clientX - r.left) * (cv.width / r.width), y: (t.clientY - r.top) * (cv.height / r.height) }; }
+    cv.addEventListener("touchstart", function (e) { if (e.touches[0]) { onDown({ preventDefault: function(){}, clientX: e.touches[0].clientX, clientY: e.touches[0].clientY }); e.preventDefault(); } }, { passive: false });
+    window.addEventListener("touchmove", function (e) { if (op && e.touches[0]) { onMove({ clientX: e.touches[0].clientX, clientY: e.touches[0].clientY }); e.preventDefault(); } }, { passive: false });
+    window.addEventListener("touchend", onUp);
+
+    // aspect change: re-fit current selection
+    arEl.addEventListener("change", function () {
+      if (sel) { sel = applyAspect(sel.x, sel.y, sel.w, sel.h); refresh(); }
+    });
+    fmtEl.addEventListener("change", function () { qWrap.style.display = (fmtEl.value === "image/png") ? "none" : "block"; refresh(); });
+    qEl.addEventListener("input", function () { qVal.textContent = qEl.value; renderPreview(); });
+    qRow.addEventListener("change", function () { qWrap.style.display = (qRow.checked && fmtEl.value !== "image/png") ? "block" : "none"; });
+    resetBtn.addEventListener("click", function () { if (img) { sel = applyAspect(0, 0, cv.width, cv.height); refresh(); } });
+
+    downloadBtn.addEventListener("click", function () {
+      if (!img || !sel) return;
+      var nx = Math.round(sel.x / scale), ny = Math.round(sel.y / scale);
+      var nw = Math.max(1, Math.round(sel.w / scale)), nh = Math.max(1, Math.round(sel.h / scale));
+      var c = document.createElement("canvas");
+      c.width = nw; c.height = nh;
+      c.getContext("2d").drawImage(img, nx, ny, nw, nh, 0, 0, nw, nh);
+      var fmt = fmtEl.value;
+      var q = (fmt === "image/png") ? undefined : parseFloat(qEl.value);
+      var ext = ({ "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp" })[fmt];
+      c.toBlob(function (blob) {
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement("a"); a.href = url; a.download = "cropped." + ext;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      }, fmt, q);
+    });
+
+    // wiring
+    drop.addEventListener("click", function () { fileEl.click(); });
+    fileEl.addEventListener("change", function () { if (fileEl.files[0]) loadImage(fileEl.files[0]); });
+    ["dragenter", "dragover"].forEach(function (ev) {
+      drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add("drag"); });
+    });
+    ["dragleave", "drop"].forEach(function (ev) {
+      drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove("drag"); });
+    });
+    drop.addEventListener("drop", function (e) { if (e.dataTransfer && e.dataTransfer.files[0]) loadImage(e.dataTransfer.files[0]); });
+  })();
+  </script>
+</body>
+</html>
