@@ -514,4 +514,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📏",
     added: "2026-07-04T10:20:00Z",
   },
+  {
+    slug: "oklch-converter",
+    name: "OKLCH & Color Space Converter",
+    description: "Convert a color between HEX, RGB, HSL, OKLab and OKLCH (the perceptual color space from CSS Color Level 4) with a live swatch and CSS oklch() output. Uses the published OKLab matrices with exact-computed inverses, and flags colors outside the sRGB gamut. Runs entirely in your browser.",
+    category: "Design",
+    icon: "💠",
+    added: "2026-07-04T11:00:00Z",
+  },
 ];
