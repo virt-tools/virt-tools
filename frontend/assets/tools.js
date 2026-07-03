@@ -210,4 +210,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🧊",
     added: "2026-07-03T09:25:00Z",
   },
+  {
+    slug: "palette-generator",
+    name: "Color Palette Generator",
+    description: "Generate harmonious color palettes from a base color — complementary, analogous, triadic, tetradic, split-complementary, monochromatic and shades. Runs in your browser.",
+    category: "Design",
+    icon: "🎨",
+    added: "2026-07-03T10:00:00Z",
+  },
 ];
