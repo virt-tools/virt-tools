@@ -218,4 +218,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎨",
     added: "2026-07-03T10:00:00Z",
   },
+  {
+    slug: "file-hash",
+    name: "File Hash & Checksum",
+    description: "Compute SHA-1 / SHA-256 / SHA-384 / SHA-512 checksums of files locally with Web Crypto — your files never leave your browser. Compare against an expected checksum.",
+    category: "Security",
+    icon: "🧾",
+    added: "2026-07-03T10:35:00Z",
+  },
 ];

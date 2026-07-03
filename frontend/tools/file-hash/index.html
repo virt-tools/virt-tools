@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>File Hash &amp; Checksum — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>File Hash &amp; Checksum</h1>
+      <p>Compute SHA-1 / SHA-256 / SHA-384 / SHA-512 checksums of one or more files — entirely in your browser. Files are read locally and never uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="file">Files</label>
+        <div id="drop" class="dropzone">
+          <input type="file" id="file" multiple hidden>
+          <p class="dropzone-hint">Click to choose, or drag &amp; drop files here</p>
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="row">
+        <div>
+          <label for="algo">Algorithm</label>
+          <select id="algo">
+            <option value="SHA-256" selected>SHA-256</option>
+            <option value="SHA-1">SHA-1</option>
+            <option value="SHA-384">SHA-384</option>
+            <option value="SHA-512">SHA-512</option>
+          </select>
+        </div>
+        <div style="flex:1 1 auto;">
+          <label for="expected">Expected checksum (optional)</label>
+          <input type="text" id="expected" placeholder="paste a checksum to compare…" spellcheck="false" autocomplete="off">
+        </div>
+      </div>
+
+      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+      <table class="base-table" id="results" style="margin-top:12px;"></table>
+      <p class="note" id="match"></p>
+      <p class="note">Files are hashed locally with the Web Crypto API — nothing is uploaded. Expected checksums ignore case, spaces and colons when comparing.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var fileEl = document.getElementById("file");
+    var drop = document.getElementById("drop");
+    var algo = document.getElementById("algo");
+    var expected = document.getElementById("expected");
+    var err = document.getElementById("err");
+    var results = document.getElementById("results");
+    var matchNote = document.getElementById("match");
+
+    var lastHashes = {}; // name -> hex (for live comparison)
+
+    function human(bytes) {
+      if (bytes < 1024) return bytes + " B";
+      if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB";
+      if (bytes < 1073741824) return (bytes / 1048576).toFixed(2) + " MB";
+      return (bytes / 1073741824).toFixed(2) + " GB";
+    }
+    function toHex(buf) {
+      var bytes = new Uint8Array(buf), s = "";
+      for (var i = 0; i < bytes.length; i++) s += ("0" + bytes[i].toString(16)).slice(-2);
+      return s;
+    }
+    function normHash(s) { return (s || "").toLowerCase().replace(/[\s:.-]/g, ""); }
+    function setErr(msg) { err.textContent = msg || ""; err.hidden = !msg; }
+
+    function clearTable() {
+      results.innerHTML = "";
+      matchNote.textContent = "";
+    }
+
+    function headerRow() {
+      var tr = document.createElement("tr");
+      ["File", "Size", "Checksum", ""].forEach(function (h) {
+        var th = document.createElement("th");
+        th.textContent = h;
+        if (h === "Checksum") th.style.width = "auto";
+        tr.appendChild(th);
+      });
+      // Override base-table th width for this layout.
+      results.appendChild(tr);
+    }
+
+    function addRow(file) {
+      var tr = document.createElement("tr");
+      var nameTd = document.createElement("td"); nameTd.className = "mono"; nameTd.textContent = file.name;
+      var sizeTd = document.createElement("td"); sizeTd.textContent = human(file.size);
+      var hashTd = document.createElement("td"); hashTd.className = "mono"; hashTd.textContent = "hashing…";
+      var copyTd = document.createElement("td"); copyTd.style.textAlign = "right";
+      var copyBtn = document.createElement("button"); copyBtn.className = "link-btn"; copyBtn.textContent = "copy"; copyBtn.style.visibility = "hidden";
+      copyTd.appendChild(copyBtn);
+      tr.appendChild(nameTd); tr.appendChild(sizeTd); tr.appendChild(hashTd); tr.appendChild(copyTd);
+      results.appendChild(tr);
+      return { hashTd: hashTd, copyBtn: copyBtn, tr: tr };
+    }
+
+    function compute(file, cells) {
+      if (!window.crypto || !crypto.subtle || !crypto.subtle.digest) {
+        cells.hashTd.textContent = "Web Crypto unavailable in this browser.";
+        return;
+      }
+      var reader = new FileReader();
+      reader.onload = function () {
+        crypto.subtle.digest(algo.value, reader.result).then(function (buf) {
+          var hex = toHex(buf);
+          lastHashes[file.name] = hex;
+          cells.hashTd.textContent = hex;
+          cells.copyBtn.style.visibility = "visible";
+          cells.copyBtn.onclick = function () {
+            function done() { cells.copyBtn.textContent = "copied!"; setTimeout(function () { cells.copyBtn.textContent = "copy"; }, 1200); }
+            if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(hex).then(done);
+            else { var ta = document.createElement("textarea"); ta.value = hex; document.body.appendChild(ta); ta.select(); try { document.execCommand("copy"); done(); } catch (e) {} ta.remove(); }
+          };
+          compare();
+        }).catch(function (e) { cells.hashTd.textContent = "Error: " + (e && e.message ? e.message : "digest failed"); });
+      };
+      reader.onerror = function () { cells.hashTd.textContent = "Could not read file."; };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function compare() {
+      var want = normHash(expected.value);
+      if (!want) { matchNote.textContent = ""; return; }
+      var names = Object.keys(lastHashes);
+      if (!names.length) { matchNote.textContent = ""; return; }
+      // Compare against every computed hash; report per-file result.
+      var parts = names.map(function (n) {
+        var ok = lastHashes[n].toLowerCase() === want;
+        return n + ": " + (ok ? "✓ match" : "✗ mismatch");
+      });
+      var allOk = names.every(function (n) { return lastHashes[n].toLowerCase() === want; });
+      matchNote.style.color = allOk ? "var(--ok)" : "var(--bad)";
+      matchNote.textContent = parts.join("   ");
+    }
+
+    function handleFiles(files) {
+      setErr("");
+      if (!files || !files.length) return;
+      clearTable();
+      lastHashes = {};
+      headerRow();
+      for (var i = 0; i < files.length; i++) {
+        var file = files[i];
+        var cells = addRow(file);
+        compute(file, cells);
+      }
+    }
+
+    var currentFiles = [];
+    drop.addEventListener("click", function () { fileEl.click(); });
+    fileEl.addEventListener("change", function () {
+      currentFiles = Array.prototype.slice.call(fileEl.files);
+      handleFiles(currentFiles);
+      fileEl.value = ""; // allow re-selecting the same file
+    });
+    ["dragenter", "dragover"].forEach(function (ev) {
+      drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add("drag"); });
+    });
+    ["dragleave", "drop"].forEach(function (ev) {
+      drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove("drag"); });
+    });
+    drop.addEventListener("drop", function (e) {
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+        currentFiles = Array.prototype.slice.call(e.dataTransfer.files);
+        handleFiles(currentFiles);
+      }
+    });
+
+    // Re-hash the current files when the algorithm changes.
+    algo.addEventListener("change", function () { if (currentFiles.length) handleFiles(currentFiles); });
+    expected.addEventListener("input", compare);
+  })();
+  </script>
+</body>
+</html>
