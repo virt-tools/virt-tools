@@ -92,4 +92,11 @@ window.VIRTUAL_TOOLS = [
     category: "Design",
     icon: "🌈",
   },
+  {
+    slug: "regex-tester",
+    name: "Regex Tester",
+    description: "Build and test JavaScript regular expressions — live matches, capture groups and flags, in-browser.",
+    category: "Text",
+    icon: "🔍",
+  },
 ];

@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Regex Tester — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Regex Tester</h1>
+      <p>Build and test JavaScript regular expressions against your own text — matches, capture groups and flags, all evaluated locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="pattern">Pattern</label>
+        <div class="row" style="align-items:center;">
+          <span class="regex-delim">/</span>
+          <input type="text" id="pattern" placeholder="e.g. \b(\w+)@(\w+)\b" style="flex:1 1 auto;">
+          <span class="regex-delim">/</span>
+          <input type="text" id="flags-text" value="g" maxlength="6" style="flex:0 0 70px;" aria-label="flags">
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:6px;">
+        <label class="check"><input type="checkbox" data-flag="g" checked> g · global</label>
+        <label class="check"><input type="checkbox" data-flag="i"> i · case-insensitive</label>
+        <label class="check"><input type="checkbox" data-flag="m"> m · multiline</label>
+        <label class="check"><input type="checkbox" data-flag="s"> s · dotAll</label>
+        <label class="check"><input type="checkbox" data-flag="u"> u · unicode</label>
+        <label class="check"><input type="checkbox" data-flag="y"> y · sticky</label>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="field">
+        <label for="test">Test string</label>
+        <textarea id="test" placeholder="Paste the text you want to search…">Contact me at hello@virt.tools or admin@virt.tools.</textarea>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="row">
+        <button id="copy" class="secondary">Copy matches</button>
+        <span class="note" id="status" style="margin:0;"></span>
+      </div>
+
+      <div class="spacer"></div>
+      <div id="err" class="note" style="color:var(--bad);"></div>
+
+      <label>Highlighted matches</label>
+      <div class="output" id="highlighted" style="white-space:pre-wrap; word-break:break-word;"></div>
+
+      <div class="spacer"></div>
+      <label>Match list</label>
+      <div class="output" id="matches" style="white-space:pre-wrap; word-break:break-word;"></div>
+      <p class="note">Evaluated locally with the browser's native RegExp engine — no network requests.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var pattern = document.getElementById("pattern");
+    var flagsText = document.getElementById("flags-text");
+    var testEl = document.getElementById("test");
+    var checkboxes = document.querySelectorAll("input[data-flag]");
+    var err = document.getElementById("err");
+    var status = document.getElementById("status");
+    var highlighted = document.getElementById("highlighted");
+    var matchesOut = document.getElementById("matches");
+    var lastMatches = [];
+
+    function activeFlags() {
+      var f = "";
+      checkboxes.forEach(function (cb) { if (cb.checked) f += cb.getAttribute("data-flag"); });
+      return f;
+    }
+
+    function syncFlagsText() { flagsText.value = activeFlags(); }
+    function syncCheckboxes() {
+      var set = {};
+      flagsText.value.split("").forEach(function (c) { set[c] = true; });
+      checkboxes.forEach(function (cb) {
+        cb.checked = !!set[cb.getAttribute("data-flag")];
+      });
+    }
+
+    function escapeHtml(s) {
+      return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    function run() {
+      err.textContent = "";
+      var src = pattern.value;
+      var text = testEl.value;
+
+      if (!src) {
+        highlighted.textContent = text;
+        matchesOut.textContent = "";
+        lastMatches = [];
+        status.textContent = "";
+        return;
+      }
+
+      var flags = activeFlags();
+      var re;
+      try {
+        re = new RegExp(src, flags);
+      } catch (e) {
+        err.textContent = "Invalid pattern: " + e.message;
+        highlighted.textContent = text;
+        matchesOut.textContent = "";
+        lastMatches = [];
+        status.textContent = "";
+        return;
+      }
+
+      // Collect matches. With the global flag, use exec in a loop so we get
+      // each match's index and groups. Without it, only the first match exists.
+      var matches = [];
+      if (flags.indexOf("g") !== -1) {
+        var m;
+        var guard = 0;
+        while ((m = re.exec(text)) !== null && guard++ < 10000) {
+          matches.push({ index: m.index, match: m[0], groups: m.slice(1) });
+          if (m[0] === "") re.lastIndex++; // avoid zero-width infinite loop
+        }
+      } else {
+        var one = re.exec(text);
+        if (one) matches.push({ index: one.index, match: one[0], groups: one.slice(1) });
+      }
+      lastMatches = matches;
+
+      // Highlight: walk matches in order, escape everything, wrap matches in <mark>.
+      var html = "";
+      var cursor = 0;
+      matches.forEach(function (mt) {
+        html += escapeHtml(text.slice(cursor, mt.index));
+        html += '<mark>' + escapeHtml(mt.match) + '</mark>';
+        cursor = mt.index + mt.match.length;
+      });
+      html += escapeHtml(text.slice(cursor));
+      if (!text) highlighted.textContent = "";
+      else highlighted.innerHTML = html;
+
+      // Match list text.
+      if (!matches.length) {
+        matchesOut.textContent = "No matches.";
+        status.textContent = "0 matches";
+        return;
+      }
+
+      var lines = matches.map(function (mt, i) {
+        var g = mt.groups.length
+          ? "   groups: [" + mt.groups.map(function (x) { return JSON.stringify(x); }).join(", ") + "]"
+          : "";
+        return "#" + (i + 1) + "  @index " + mt.index + "  " + JSON.stringify(mt.match) + g;
+      });
+      matchesOut.textContent = lines.join("\n");
+      status.textContent = matches.length + (matches.length === 1 ? " match" : " matches");
+    }
+
+    pattern.addEventListener("input", run);
+    testEl.addEventListener("input", run);
+    flagsText.addEventListener("input", function () { syncCheckboxes(); run(); });
+    checkboxes.forEach(function (cb) {
+      cb.addEventListener("change", function () { syncFlagsText(); run(); });
+    });
+
+    document.getElementById("copy").addEventListener("click", function () {
+      if (!lastMatches.length) return;
+      var text = lastMatches.map(function (mt) { return mt.match; }).join("\n");
+      var btn = this;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () {
+          btn.textContent = "Copied!"; setTimeout(function () { btn.textContent = "Copy matches"; }, 1200);
+        });
+      } else {
+        var ta = document.createElement("textarea");
+        ta.value = text; document.body.appendChild(ta); ta.select();
+        try { document.execCommand("copy"); btn.textContent = "Copied!"; setTimeout(function () { btn.textContent = "Copy matches"; }, 1200); }
+        catch (e) {}
+        ta.remove();
+      }
+    });
+
+    run();
+  })();
+  </script>
+</body>
+</html>
