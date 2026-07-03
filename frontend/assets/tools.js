@@ -50,4 +50,11 @@ window.VIRTUAL_TOOLS = [
     category: "Security",
     icon: "🔐",
   },
+  {
+    slug: "hash-generator",
+    name: "Hash Generator",
+    description: "Compute SHA-1 / SHA-256 / SHA-384 / SHA-512 hashes of text, in-browser via Web Crypto.",
+    category: "Security",
+    icon: "#️⃣",
+  },
 ];
