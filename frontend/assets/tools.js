@@ -346,4 +346,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🏛️",
     added: "2026-07-03T20:20:00Z",
   },
+  {
+    slug: "caesar-cipher",
+    name: "ROT13 / Caesar Cipher",
+    description: "Shift the letters in your text by a fixed amount (ROT13 by default), preserving case, numbers and punctuation. ROT13 is its own inverse. Runs in your browser.",
+    category: "Text",
+    icon: "🔏",
+    added: "2026-07-03T21:00:00Z",
+  },
 ];
