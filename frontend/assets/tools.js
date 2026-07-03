@@ -466,4 +466,12 @@ window.VIRTUAL_TOOLS = [
     icon: "💳",
     added: "2026-07-04T06:20:00Z",
   },
+  {
+    slug: "coordinate-converter",
+    name: "Geographic Coordinate Converter",
+    description: "Convert between decimal degrees (e.g. 48.85822) and degrees/minutes/seconds (e.g. 48° 51′ 29.6″ N) for latitude and longitude — with hemisphere handling and range validation. Pure arithmetic, in your browser.",
+    category: "Geography",
+    icon: "📍",
+    added: "2026-07-04T07:00:00Z",
+  },
 ];
