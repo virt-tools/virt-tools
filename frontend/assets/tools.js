@@ -282,4 +282,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🗜️",
     added: "2026-07-03T15:00:00Z",
   },
+  {
+    slug: "html-entities",
+    name: "HTML Entity Encoder / Decoder",
+    description: "Escape text to HTML entities (named, decimal or hex) and decode entities back to text — handles &amp;, &lt;, numeric and named entities. Runs in your browser.",
+    category: "Encoding",
+    icon: "🏷️",
+    added: "2026-07-03T15:40:00Z",
+  },
 ];
