@@ -450,4 +450,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📚",
     added: "2026-07-04T05:00:00Z",
   },
+  {
+    slug: "cidr-calculator",
+    name: "IPv4 Subnet / CIDR Calculator",
+    description: "Enter an IPv4 address in CIDR notation to get the network address, broadcast, usable host range, subnet mask, wildcard, host counts, address class and private-range flag. Pure 32-bit integer math, in your browser.",
+    category: "Networking",
+    icon: "📡",
+    added: "2026-07-04T05:40:00Z",
+  },
 ];

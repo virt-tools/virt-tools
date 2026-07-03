@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>IPv4 Subnet / CIDR Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>IPv4 Subnet / CIDR Calculator</h1>
+      <p>Enter an IPv4 address in CIDR notation (e.g. <code>192.168.1.0/24</code>) to get the network address, broadcast, usable host range, subnet mask, wildcard, host counts, address class and private-range flag. Pure 32-bit integer math — runs entirely in your browser, nothing is sent anywhere.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="in">CIDR</label>
+        <input type="text" id="in" value="192.168.1.0/24" spellcheck="false" style="font-family:ui-monospace,monospace;" placeholder="192.168.1.0/24">
+      </div>
+
+      <div class="spacer"></div>
+      <table class="base-table" id="tbl" style="width:100%;"></table>
+      <p class="note" id="note"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var inEl = document.getElementById("in");
+    var tbl = document.getElementById("tbl");
+    var note = document.getElementById("note");
+
+    function ipToInt(s) {
+      var parts = s.split(".");
+      if (parts.length !== 4) throw new Error("An IPv4 address needs 4 octets.");
+      var n = 0;
+      for (var i = 0; i < 4; i++) {
+        var p = parts[i];
+        if (!/^\d+$/.test(p)) throw new Error("Octet '" + p + "' is not a number.");
+        var v = parseInt(p, 10);
+        if (v > 255) throw new Error("Octet out of range (0–255): " + p);
+        n = (n << 8) | v;
+      }
+      return n >>> 0;
+    }
+    function intToIp(n) {
+      n = n >>> 0;
+      return ((n >>> 24) & 0xFF) + "." + ((n >>> 16) & 0xFF) + "." + ((n >>> 8) & 0xFF) + "." + (n & 0xFF);
+    }
+
+    function parseCidr(s) {
+      s = s.trim();
+      if (!s) throw new Error("Enter an IPv4 address in CIDR notation, e.g. 192.168.1.0/24");
+      var prefix = 32;
+      var ipStr = s;
+      if (s.indexOf("/") >= 0) {
+        var idx = s.indexOf("/");
+        ipStr = s.slice(0, idx);
+        var pStr = s.slice(idx + 1);
+        if (!/^\d+$/.test(pStr)) throw new Error("Prefix must be numeric: " + pStr);
+        prefix = parseInt(pStr, 10);
+        if (prefix > 32) throw new Error("Prefix out of range (0–32): " + prefix);
+      }
+      if (!/^\d+\.\d+\.\d+\.\d+$/.test(ipStr)) throw new Error("Invalid IPv4 address: " + ipStr);
+      var ip = ipToInt(ipStr);
+      return { ip: ip, prefix: prefix, ipStr: ipStr };
+    }
+
+    function fmtNum(n) {
+      return n.toLocaleString("en-US");
+    }
+
+    function compute(s) {
+      var r = parseCidr(s);
+      var ip = r.ip, prefix = r.prefix;
+      var mask = prefix > 0 ? ((0xFFFFFFFF << (32 - prefix)) >>> 0) : 0;
+      var network = (ip & mask) >>> 0;
+      var broadcast = (network | (~mask & 0xFFFFFFFF)) >>> 0;
+      var wildcard = (~mask & 0xFFFFFFFF) >>> 0;
+      var total = prefix < 32 ? Math.pow(2, 32 - prefix) : 1;
+      var usable, firstHost, lastHost;
+      if (prefix >= 31) { usable = total; firstHost = network; lastHost = broadcast; }
+      else { usable = total - 2; firstHost = network + 1; lastHost = broadcast - 1; }
+      var fo = (ip >>> 24) & 0xFF;
+      var cls;
+      if (fo < 128) cls = "A";
+      else if (fo < 192) cls = "B";
+      else if (fo < 224) cls = "C";
+      else if (fo < 240) cls = "D (multicast)";
+      else cls = "E (reserved)";
+      var priv = (fo === 10) || ((ip >>> 20) === 0xAC1) || ((ip >>> 16) === 0xC0A8) || (fo === 127);
+      return {
+        ip: intToIp(ip), prefix: prefix, mask: intToIp(mask), wildcard: intToIp(wildcard),
+        network: intToIp(network), broadcast: intToIp(broadcast), total: total, usable: usable,
+        firstHost: intToIp(firstHost >>> 0), lastHost: intToIp(lastHost >>> 0),
+        cls: cls, private: priv
+      };
+    }
+
+    function row(label, value, hint) {
+      var tr = document.createElement("tr");
+      var td1 = document.createElement("td"); td1.style.fontWeight = "600"; td1.textContent = label;
+      var td2 = document.createElement("td"); td2.style.fontFamily = "ui-monospace,monospace";
+      if (typeof value === "string") td2.textContent = value; else { td2.textContent = ""; td2.appendChild(value); }
+      td2.style.width = "55%";
+      tr.appendChild(td1); tr.appendChild(td2);
+      if (hint !== undefined) { var td3 = document.createElement("td"); td3.className = "muted"; td3.textContent = hint; tr.appendChild(td3); }
+      return tr;
+    }
+
+    function copyable(text) {
+      var span = document.createElement("span");
+      span.textContent = text;
+      span.style.cursor = "pointer";
+      span.title = "Click to copy";
+      span.addEventListener("click", function () {
+        function done() { note.textContent = "Copied " + text; setTimeout(function () { note.textContent = ""; }, 1200); }
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done);
+        else { var ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select(); try { document.execCommand("copy"); done(); } catch (e) {} ta.remove(); }
+      });
+      return span;
+    }
+
+    function run() {
+      tbl.innerHTML = "";
+      try {
+        var c = compute(inEl.value);
+        var rangeText = c.firstHost + " – " + c.lastHost;
+        tbl.appendChild(row("IP address", copyable(c.ip)));
+        tbl.appendChild(row("Prefix", String(c.prefix), "bits"));
+        tbl.appendChild(row("Subnet mask", copyable(c.mask), "/" + c.prefix));
+        tbl.appendChild(row("Wildcard", copyable(c.wildcard), "inverted mask"));
+        tbl.appendChild(row("Network", copyable(c.network)));
+        tbl.appendChild(row("Broadcast", copyable(c.broadcast)));
+        tbl.appendChild(row("Usable hosts", copyable(rangeText), fmtNum(c.usable) + " usable / " + fmtNum(c.total) + " total"));
+        tbl.appendChild(row("Host count", fmtNum(c.usable) + " usable · " + fmtNum(c.total) + " total", c.prefix >= 31 ? (c.prefix === 32 ? "single host" : "point-to-point (RFC 3021)") : "excluding network & broadcast"));
+        tbl.appendChild(row("Address class", c.cls));
+        tbl.appendChild(row("Private / reserved", c.private ? "yes (private)" : "no (public)", c.cls.indexOf("D") === 0 || c.cls.indexOf("E") === 0 ? "special-use range" : ""));
+        note.textContent = c.prefix >= 31
+          ? "Note: /31 is a point-to-point link (RFC 3021, both addresses are usable) and /32 is a single host."
+          : "Usable hosts exclude the network and broadcast addresses.";
+        note.style.color = "";
+      } catch (e) {
+        note.textContent = "✗ " + (e && e.message ? e.message : e);
+        note.style.color = "var(--bad)";
+      }
+    }
+
+    inEl.addEventListener("input", run);
+    run();
+  })();
+  </script>
+</body>
+</html>
