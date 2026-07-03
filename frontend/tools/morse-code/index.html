@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Morse Code Translator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Morse Code Translator</h1>
+      <p>Translate text to International Morse Code and back, with optional audio playback. Letters are separated by a space, words by a slash. Runs entirely in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="align-items:flex-end;">
+        <div>
+          <label for="mode">Mode</label>
+          <select id="mode">
+            <option value="encode" selected>Text → Morse</option>
+            <option value="decode">Morse → Text</option>
+          </select>
+        </div>
+        <div>
+          <label for="wpm">Playback speed (WPM)</label>
+          <input type="number" id="wpm" value="15" min="1" step="1" style="width:90px;">
+        </div>
+        <button id="play" class="secondary" style="padding:9px 14px;">▶ Play</button>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="field">
+        <label for="in">Input</label>
+        <textarea id="in" placeholder="Type text or Morse…" style="min-height:120px;">SOS HELLO WORLD</textarea>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="row" style="justify-content:space-between;">
+        <label for="out">Output</label>
+        <button id="copy" class="secondary" style="padding:4px 10px;">Copy</button>
+      </div>
+      <div class="output" id="out" style="word-break:break-all; min-height:1.6em;"></div>
+      <p class="note" id="note">ITU Morse code. Untranslatable characters are shown as <code>?</code>. Playback uses the Web Audio API at the standard PARIS timing (dot = 1200/WPM ms).</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var MORSE = {
+      A:".-", B:"-...", C:"-.-.", D:"-..", E:".", F:"..-.", G:"--.", H:"....",
+      I:"..", J:".---", K:"-.-", L:".-..", M:"--", N:"-.", O:"---", P:".--.",
+      Q:"--.-", R:".-.", S:"...", T:"-", U:"..-", V:"...-", W:".--", X:"-..-",
+      Y:"-.--", Z:"--..",
+      "0":"-----","1":".----","2":"..---","3":"...--","4":"....-","5":".....",
+      "6":"-....","7":"--...","8":"---..","9":"----.",
+      ".":".-.-.-", ",":"--..--", "?":"..--..", "'":".----.", "!":"-.-.--", "/":"-..-.",
+      "(":"-.--.", ")":"-.--.-", "&":".-...", ":":"---...", ";":"-.-.-.", "=":"-...-",
+      "+":".-.-.", "-":"-....-", "_":"..--.-", '"':".-..-", "$":"...-..-", "@":".--.-."
+    };
+    var REV = {}; for (var k in MORSE) REV[MORSE[k]] = k;
+
+    var mode = document.getElementById("mode");
+    var wpmEl = document.getElementById("wpm");
+    var play = document.getElementById("play");
+    var inEl = document.getElementById("in");
+    var out = document.getElementById("out");
+    var copy = document.getElementById("copy");
+    var note = document.getElementById("note");
+    var audioCtx = null;
+
+    function encode(text) {
+      var res = [];
+      for (var i = 0; i < text.length; i++) {
+        var ch = text.charAt(i).toUpperCase();
+        if (ch === " ") res.push("/");
+        else if (MORSE[ch]) res.push(MORSE[ch]);
+        else res.push("?" + ch);
+      }
+      return res.join(" ");
+    }
+    function decode(morse) {
+      var words = morse.trim().split("/");
+      var outWords = [];
+      for (var w = 0; w < words.length; w++) {
+        var letters = words[w].trim().split(/\s+/).filter(Boolean);
+        var s = "";
+        for (var l = 0; l < letters.length; l++) {
+          var code = letters[l];
+          s += REV[code] !== undefined ? REV[code] : "?";
+        }
+        outWords.push(s);
+      }
+      return outWords.join(" ").trim();
+    }
+
+    function run() {
+      var v = inEl.value;
+      if (mode.value === "encode") out.textContent = encode(v) || "—";
+      else out.textContent = decode(v) || "—";
+      out.style.color = "";
+    }
+
+    function playMorse(morse) {
+      if (!morse || morse === "—") return;
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === "suspended") audioCtx.resume();
+        var wpm = Math.max(1, parseInt(wpmEl.value, 10) || 15);
+        var unit = 1.2 / wpm; // seconds
+        var osc = audioCtx.createOscillator();
+        var g = audioCtx.createGain();
+        osc.type = "sine"; osc.frequency.value = 650;
+        osc.connect(g); g.connect(audioCtx.destination);
+        var t0 = audioCtx.currentTime + 0.05;
+        var t = 0;
+        g.gain.setValueAtTime(0, t0);
+        var words = morse.split("/");
+        for (var wi = 0; wi < words.length; wi++) {
+          if (wi > 0) t += 7 * unit;
+          var letters = words[wi].trim().split(/\s+/).filter(Boolean);
+          for (var li = 0; li < letters.length; li++) {
+            if (li > 0) t += 3 * unit;
+            var code = letters[li];
+            for (var ei = 0; ei < code.length; ei++) {
+              var c = code.charAt(ei);
+              if (c !== "." && c !== "-") continue;
+              var dur = (c === "." ? 1 : 3) * unit;
+              g.gain.setValueAtTime(0, t0 + t);
+              g.gain.linearRampToValueAtTime(0.7, t0 + t + 0.004);
+              g.gain.setValueAtTime(0.7, t0 + t + dur - 0.004);
+              g.gain.linearRampToValueAtTime(0, t0 + t + dur);
+              t += dur;
+              if (ei + 1 < code.length) t += unit;
+            }
+          }
+        }
+        osc.start(t0);
+        osc.stop(t0 + t + 0.05);
+      } catch (e) {
+        note.textContent = "Audio playback unavailable: " + (e && e.message ? e.message : e);
+        note.style.color = "var(--bad)";
+      }
+    }
+
+    function copyText() {
+      var t = out.textContent;
+      if (!t || t === "—") return;
+      function done() { copy.textContent = "Copied!"; setTimeout(function () { copy.textContent = "Copy"; }, 1200); }
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done);
+      else { var ta = document.createElement("textarea"); ta.value = t; document.body.appendChild(ta); ta.select(); try { document.execCommand("copy"); done(); } catch (e) {} ta.remove(); }
+    }
+
+    mode.addEventListener("change", run);
+    inEl.addEventListener("input", run);
+    copy.addEventListener("click", copyText);
+    play.addEventListener("click", function () { playMorse(out.textContent); });
+
+    run();
+  })();
+  </script>
+</body>
+</html>

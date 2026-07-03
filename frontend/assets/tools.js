@@ -330,4 +330,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📈",
     added: "2026-07-03T19:00:00Z",
   },
+  {
+    slug: "morse-code",
+    name: "Morse Code Translator",
+    description: "Translate text to International Morse Code and back — letters separated by a space, words by a slash, with optional audio playback at standard PARIS timing. Runs in your browser.",
+    category: "Text",
+    icon: "📟",
+    added: "2026-07-03T19:40:00Z",
+  },
 ];
