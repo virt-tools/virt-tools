@@ -266,4 +266,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🛡️",
     added: "2026-07-03T13:40:00Z",
   },
+  {
+    slug: "char-inspector",
+    name: "Character & Unicode Inspector",
+    description: "Inspect every character in your text — code point, UTF-8 bytes, UTF-16 units and JavaScript escape. Great for debugging encoding issues. Runs in your browser.",
+    category: "Text",
+    icon: "🔠",
+    added: "2026-07-03T14:20:00Z",
+  },
 ];
