@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Cron Expression Explainer — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Cron Expression Explainer</h1>
+      <p>Parse a 5-field cron expression into plain English and list its next fire times. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="expr">Cron expression</label>
+        <input type="text" id="expr" placeholder="*/5 * * * *" value="*/5 * * * *" spellcheck="false" autocomplete="off">
+      </div>
+      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+      <p class="note">Five fields: <code>minute hour day-of-month month day-of-week</code>. Supports <code>*</code>, <code>a</code>, <code>a-b</code>, <code>a-b/n</code>, <code>*/n</code>, <code>a,b,c</code>, and <code>JAN</code>–<code>DEC</code> / <code>SUN</code>–<code>SAT</code>.</p>
+
+      <div class="spacer"></div>
+      <div class="row">
+        <div>
+          <label for="from">From</label>
+          <input type="datetime-local" id="from" step="60">
+        </div>
+        <div>
+          <label for="count">Next fire count</label>
+          <input type="number" id="count" min="1" max="50" value="5">
+        </div>
+        <div>
+          <label for="tz">Times shown in</label>
+          <select id="tz">
+            <option value="local" selected>Your local time</option>
+            <option value="utc">UTC</option>
+          </select>
+        </div>
+        <button id="now" class="secondary" style="align-self:flex-end;">Set to now</button>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="output" id="summary" style="white-space:normal;"></div>
+      <div class="spacer"></div>
+      <label>Next fire times</label>
+      <div class="output" id="fires" style="white-space:pre;"></div>
+      <div class="spacer"></div>
+      <label>Field breakdown</label>
+      <table class="base-table" id="fields"></table>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var exprEl = document.getElementById("expr");
+    var fromEl = document.getElementById("from");
+    var countEl = document.getElementById("count");
+    var tzEl = document.getElementById("tz");
+    var nowBtn = document.getElementById("now");
+    var err = document.getElementById("err");
+    var summary = document.getElementById("summary");
+    var fires = document.getElementById("fires");
+    var fields = document.getElementById("fields");
+
+    var MONTHS = { JAN:1,FEB:2,MAR:3,APR:4,MAY:5,JUN:6,JUL:7,AUG:8,SEP:9,OCT:10,NOV:11,DEC:12 };
+    var DOWS = { SUN:0,MON:1,TUE:2,WED:3,THU:4,FRI:5,SAT:6 };
+    var DOW_NAMES = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+    var DOW_SHORT = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+    var MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+    var MONTH_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+    function numSort(a, b) { return a - b; }
+    function range(lo, hi) { var a = []; for (var i = lo; i <= hi; i++) a.push(i); return a; }
+    function pad2(n) { return (n < 10 ? "0" : "") + n; }
+
+    function resolve(token, names) {
+      if (names && Object.prototype.hasOwnProperty.call(names, token)) return names[token];
+      var t = parseInt(token, 10);
+      if (isNaN(t)) throw new Error("Invalid value '" + token + "'");
+      return t;
+    }
+
+    function parseField(spec, lo, hi, names) {
+      spec = spec.trim().toUpperCase();
+      if (spec === "*") return { vals: range(lo, hi), wild: true };
+      var out = {}, parts = spec.split(",");
+      for (var pi = 0; pi < parts.length; pi++) {
+        var p = parts[pi].trim();
+        if (!p) continue;
+        var step = 1, base = p;
+        if (p.indexOf("/") !== -1) {
+          var sp = p.split("/");
+          if (sp.length !== 2) throw new Error("Invalid step '" + p + "'");
+          base = sp[0]; step = parseInt(sp[1], 10);
+          if (!(step > 0)) throw new Error("Step must be > 0 in '" + p + "'");
+        }
+        var a, b;
+        if (base === "*") { a = lo; b = hi; }
+        else if (base.indexOf("-") !== -1) {
+          var r = base.split("-");
+          if (r.length !== 2) throw new Error("Invalid range '" + base + "'");
+          a = resolve(r[0], names); b = resolve(r[1], names);
+        } else {
+          a = resolve(base, names);
+          b = (p.indexOf("/") !== -1) ? hi : a;
+        }
+        if (a > b) throw new Error("Range start > end in '" + p + "'");
+        for (var v = a; v <= b; v += step) out[v] = true;
+      }
+      var vals = Object.keys(out).map(Number);
+      if (!vals.length) throw new Error("Empty field '" + spec + "'");
+      vals.forEach(function (v) { if (v < lo || v > hi) throw new Error("Value " + v + " out of range [" + lo + "," + hi + "]"); });
+      return { vals: vals.sort(numSort), wild: false };
+    }
+
+    function parseCron(expr) {
+      var parts = expr.trim().split(/\s+/);
+      if (parts.length !== 5) throw new Error("Expected 5 fields, got " + parts.length + ". Format: minute hour day-of-month month day-of-week");
+      var min = parseField(parts[0], 0, 59);
+      var hour = parseField(parts[1], 0, 23);
+      var dom = parseField(parts[2], 1, 31);
+      var month = parseField(parts[3], 1, 12, MONTHS);
+      var dow = parseField(parts[4], 0, 7, DOWS);
+      var dowVals = dow.vals.slice();
+      if (dowVals.indexOf(7) !== -1) { dowVals = dowVals.filter(function (v) { return v !== 7; }); if (dowVals.indexOf(0) === -1) dowVals.push(0); }
+      dowVals.sort(numSort);
+      return {
+        min: min.vals, hour: hour.vals, dom: dom.vals, month: month.vals, dow: dowVals,
+        domW: dom.wild, dowW: dow.wild,
+        specs: { min: parts[0], hour: parts[1], dom: parts[2], month: parts[3], dow: parts[4] }
+      };
+    }
+
+    function dayMatch(d, c) {
+      var dow = d.getDay(); // 0=Sun..6=Sat — matches cron numbering
+      if (c.domW && c.dowW) return true;
+      if (c.domW) return c.dow.indexOf(dow) !== -1;
+      if (c.dowW) return c.dom.indexOf(d.getDate()) !== -1;
+      return c.dom.indexOf(d.getDate()) !== -1 || c.dow.indexOf(dow) !== -1;
+    }
+
+    function nextFire(c, start) {
+      var d = new Date(start.getTime());
+      d.setSeconds(0, 0);
+      d = new Date(d.getTime() + 60000); // start from next minute
+      var iters = 0;
+      while (iters < 600000) {
+        iters++;
+        if (c.month.indexOf(d.getMonth() + 1) === -1) {
+          var y = d.getFullYear(), mi = d.getMonth();
+          d = (mi === 11) ? new Date(y + 1, 0, 1, 0, 0) : new Date(y, mi + 1, 1, 0, 0);
+          continue;
+        }
+        if (!dayMatch(d, c)) { d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, 0, 0); continue; }
+        if (c.hour.indexOf(d.getHours()) === -1) {
+          var nh = c.hour.filter(function (h) { return h > d.getHours(); }).sort(numSort);
+          if (nh.length) d = new Date(d.getFullYear(), d.getMonth(), d.getDate(), nh[0], 0);
+          else d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, 0, 0);
+          continue;
+        }
+        if (c.min.indexOf(d.getMinutes()) === -1) {
+          var nm = c.min.filter(function (m) { return m > d.getMinutes(); }).sort(numSort);
+          if (nm.length) d = new Date(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), nm[0]);
+          else d = new Date(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours() + 1, 0);
+          continue;
+        }
+        return d;
+      }
+      return null;
+    }
+
+    /* ---- human-readable description (best-effort; field breakdown is the
+            authoritative source of truth) ---- */
+    function joinAnd(arr) {
+      if (arr.length === 1) return arr[0];
+      if (arr.length === 2) return arr[0] + " and " + arr[1];
+      return arr.slice(0, -1).join(", ") + ", and " + arr[arr.length - 1];
+    }
+    function joinNums(vals, mapper) { return joinAnd(vals.map(mapper || String)); }
+    function dayClause(c, s) {
+      if (c.domW && c.dowW) return "every day";
+      if (c.domW && !c.dowW) return "on " + joinAnd(c.dow.map(function (v) { return DOW_NAMES[v]; }));
+      if (c.dowW && !c.domW) return "on day-of-month " + joinNums(c.dom);
+      return "on day-of-month " + joinNums(c.dom) + " or on " + joinAnd(c.dow.map(function (v) { return DOW_NAMES[v]; }));
+    }
+    function monthClause(c, s) {
+      if (s.month === "*") return "";
+      return "in " + joinAnd(c.month.map(function (v) { return MONTH_NAMES[v - 1]; }));
+    }
+    function timeClause(c, s) {
+      if (s.min === "*" && s.hour === "*") return "every minute";
+      var stepM = s.min.match(/^\*\/(\d+)$/);
+      if (stepM && s.hour === "*") return "every " + stepM[1] + " minutes";
+      if (s.hour === "*" && s.min !== "*") return "at minute " + joinNums(c.min) + " of every hour";
+      if (s.hour === "*") return "every minute";
+      var combos = c.hour.length * c.min.length;
+      if (combos <= 8) {
+        var times = [];
+        c.hour.forEach(function (h) { c.min.forEach(function (m) { times.push(pad2(h) + ":" + pad2(m)); }); });
+        return "at " + joinAnd(times);
+      }
+      var hp = (c.hour.length <= 6) ? joinNums(c.hour, function (h) { return "hour " + h; }) : "hours " + c.hour[0] + "–" + c.hour[c.hour.length - 1];
+      var mp = (s.min === "*") ? "every minute" : "at minute " + joinNums(c.min);
+      return mp + " during " + hp;
+    }
+    function describe(c) {
+      var s = c.specs;
+      var t = timeClause(c, s);
+      var d = dayClause(c, s);
+      var m = monthClause(c, s);
+      var sentence = t + ", " + d + (m ? ", " + m : "");
+      return sentence.charAt(0).toUpperCase() + sentence.slice(1) + ".";
+    }
+
+    function fieldText(spec, vals, names) {
+      if (spec.trim().toUpperCase() === "*") return "every";
+      // detect a single clean step
+      var stepM = spec.match(/^\*\/(\d+)$/);
+      if (stepM) return "every " + stepM[1] + " (values " + vals.join(", ") + ")";
+      return vals.map(function (v) { return names ? names(v) : v; }).join(", ");
+    }
+
+    function fmtFire(d, utc) {
+      if (utc) return d.toISOString().replace("T", " ").replace(/\.\d+Z$/, "Z");
+      return d.toLocaleString();
+    }
+
+    function setErr(msg) { err.textContent = msg || ""; err.hidden = !msg; }
+
+    function render() {
+      setErr("");
+      summary.textContent = ""; fires.textContent = ""; fields.innerHTML = "";
+      var c;
+      try { c = parseCron(exprEl.value); }
+      catch (e) { setErr(e.message); return; }
+
+      summary.textContent = describe(c);
+
+      var start = new Date(fromEl.value);
+      if (isNaN(start.getTime())) { setErr("Invalid 'From' date."); return; }
+      var count = Math.max(1, Math.min(50, parseInt(countEl.value, 10) || 5));
+      var utc = tzEl.value === "utc";
+
+      var lines = [], s = start, n;
+      for (var i = 0; i < count; i++) {
+        n = nextFire(c, s);
+        if (!n) { lines.push("— no further fire found (this expression may never match) —"); break; }
+        lines.push(pad2(i + 1) + ".  " + fmtFire(n, utc));
+        s = n;
+      }
+      fires.textContent = lines.join("\n") || "—";
+
+      var rows = [
+        ["Minute", c.specs.min, c.min, null],
+        ["Hour", c.specs.hour, c.hour, null],
+        ["Day of month", c.specs.dom, c.dom, null],
+        ["Month", c.specs.month, c.month, function (v) { return MONTH_SHORT[v - 1]; }],
+        ["Day of week", c.specs.dow, c.dow, function (v) { return DOW_SHORT[v]; }]
+      ];
+      rows.forEach(function (r) {
+        var tr = document.createElement("tr");
+        tr.innerHTML = "<th>" + r[0] + "</th><td class=\"mono\">" + fieldText(r[1], r[2], r[3]) + "</td>";
+        fields.appendChild(tr);
+      });
+    }
+
+    function padForInput(d) {
+      return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()) + "T" + pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+    }
+    function setFromNow() { fromEl.value = padForInput(new Date()); }
+
+    exprEl.addEventListener("input", render);
+    countEl.addEventListener("input", render);
+    tzEl.addEventListener("change", render);
+    fromEl.addEventListener("change", render);
+    nowBtn.addEventListener("click", function () { setFromNow(); render(); });
+
+    setFromNow();
+    render();
+  })();
+  </script>
+</body>
+</html>

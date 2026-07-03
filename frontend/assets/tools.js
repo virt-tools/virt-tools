@@ -194,4 +194,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔎",
     added: "2026-07-03T08:15:00Z",
   },
+  {
+    slug: "cron-explainer",
+    name: "Cron Expression Explainer",
+    description: "Parse a 5-field cron expression into plain English and list its next fire times — ranges, steps, lists and day names, all in your browser.",
+    category: "Time",
+    icon: "🕒",
+    added: "2026-07-03T08:50:00Z",
+  },
 ];
