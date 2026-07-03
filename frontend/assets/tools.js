@@ -690,4 +690,12 @@ window.VIRTUAL_TOOLS = [
     icon: "⚖",
     added: "2026-07-05T01:00:00Z",
   },
+  {
+    slug: "prime-factorization",
+    name: "Prime Factorization",
+    description: "Factor a positive integer into its prime factors and explore its number-theoretic properties: whether it is prime, the number of divisors (τ), their sum (σ), Euler's totient (φ), and the full list of divisors. All arithmetic uses big integers with exact integer division, so values stay precise even for large inputs (up to 10 trillion). Everything runs locally in your browser.",
+    category: "Math",
+    icon: "ℙ",
+    added: "2026-07-05T01:40:00Z",
+  },
 ];
