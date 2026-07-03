@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>BMI Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .seg { display: inline-flex; border: 1px solid var(--border,#444); border-radius: 4px; overflow: hidden; }
+    .seg button { padding: 5px 14px; border: none; background: transparent; color: inherit; cursor: pointer; font-size: 13px; }
+    .seg button.on { background: var(--accent,#ffd54a); color: #000; }
+    input.num { font-family: ui-monospace, monospace; font-size: 18px; width: 90px; }
+    .bmi-value { font-size: 44px; font-weight: 800; font-family: ui-monospace, monospace; line-height: 1; }
+    .cat { font-size: 17px; font-weight: 700; margin-top: 4px; }
+    .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-top: 10px; }
+    .summary .stat { padding: 8px 10px; border: 1px solid var(--border,#444); border-radius: 6px; }
+    .summary .stat-value { display:block; font-size: 18px; font-weight: 700; font-family: ui-monospace, monospace; }
+    .summary .stat-label { font-size: 12px; opacity: .8; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>BMI Calculator</h1>
+      <p>Compute Body Mass Index from your weight and height, in either metric (kilograms and centimetres) or imperial (pounds and feet/inches) units. The result is shown with its WHO adult category (underweight through obesity classes I–III) and a healthy-weight range for your height (BMI 18.5–24.9). BMI is a screening measure for adults and isn't a body-fat or health diagnosis — athletes, the very muscular, children, and pregnant people should use other measures. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="flex-wrap:wrap; gap:14px; align-items:flex-end;">
+        <div>
+          <label>Units</label><br>
+          <span class="seg" id="unit">
+            <button data-u="metric" class="on">Metric</button>
+            <button data-u="imperial">Imperial</button>
+          </span>
+        </div>
+      </div>
+      <div class="spacer"></div>
+      <div class="row" style="flex-wrap:wrap; gap:14px; align-items:flex-end;">
+        <div id="w-metric">
+          <label for="wkg">Weight</label><br>
+          <input class="num" id="wkg" type="text" inputmode="decimal" value="70" placeholder="0"> <span class="note">kg</span>
+        </div>
+        <div id="w-imperial" hidden>
+          <label for="wlb">Weight</label><br>
+          <input class="num" id="wlb" type="text" inputmode="decimal" value="154" placeholder="0"> <span class="note">lb</span>
+        </div>
+        <div id="h-metric">
+          <label for="hcm">Height</label><br>
+          <input class="num" id="hcm" type="text" inputmode="decimal" value="175" placeholder="0"> <span class="note">cm</span>
+        </div>
+        <div id="h-imperial" hidden>
+          <label>Height</label><br>
+          <input class="num" id="hft" type="text" inputmode="decimal" value="5" placeholder="0"> <span class="note">ft</span>
+          <input class="num" id="hin" type="text" inputmode="decimal" value="9" placeholder="0" style="width:70px;"> <span class="note">in</span>
+        </div>
+      </div>
+      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+
+      <div class="spacer"></div>
+      <label>Result</label>
+      <div class="bmi-value" id="bmi">—</div>
+      <div class="cat" id="cat"></div>
+      <div class="summary" id="summary"></div>
+      <p class="note" id="note"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var unitEl = document.getElementById("unit");
+    var wMetric = document.getElementById("w-metric");
+    var wImp = document.getElementById("w-imperial");
+    var hMetric = document.getElementById("h-metric");
+    var hImp = document.getElementById("h-imperial");
+    var wkgEl = document.getElementById("wkg");
+    var wlbEl = document.getElementById("wlb");
+    var hcmEl = document.getElementById("hcm");
+    var hftEl = document.getElementById("hft");
+    var hinEl = document.getElementById("hin");
+    var errEl = document.getElementById("err");
+    var bmiEl = document.getElementById("bmi");
+    var catEl = document.getElementById("cat");
+    var summaryEl = document.getElementById("summary");
+    var noteEl = document.getElementById("note");
+    var unit = "metric";
+
+    function showErr(m) { errEl.textContent = m; errEl.hidden = !m; }
+    function clear(t) { t.innerHTML = ""; t.textContent = ""; }
+
+    // Parse a non-negative decimal. Returns Number or null. Accepts optional leading sign.
+    function parseNum(s) {
+      s = String(s).trim();
+      if (s === "") return null;
+      if (!/^[+]?(\d+\.?\d*|\.\d+)$/.test(s)) return null;
+      var v = parseFloat(s);
+      if (!isFinite(v) || v < 0) return null;
+      return v;
+    }
+
+    function round1(x) { return Math.round(x * 10) / 10; }
+    function round2(x) { return Math.round(x * 100) / 100; }
+    function fmt1(x) { return (Math.round(x * 10) / 10).toFixed(1); }
+    function fmt2(x) { return (Math.round(x * 100) / 100).toFixed(2); }
+
+    function category(b) {
+      if (b < 18.5) return { key: "under", label: "Underweight", color: "var(--ok,#4aa)" };
+      if (b < 25)   return { key: "normal", label: "Normal weight", color: "var(--good,#4a4)" };
+      if (b < 30)   return { key: "over", label: "Overweight", color: "var(--accent,#caa)" };
+      if (b < 35)   return { key: "obese1", label: "Obesity (Class I)", color: "var(--bad,#e64)" };
+      if (b < 40)   return { key: "obese2", label: "Obesity (Class II)", color: "var(--bad,#e64)" };
+      return { key: "obese3", label: "Obesity (Class III)", color: "var(--bad,#e64)" };
+    }
+
+    function stat(parent, val, label) {
+      var d = document.createElement("div"); d.className = "stat";
+      var v = document.createElement("span"); v.className = "stat-value"; v.textContent = val;
+      var l = document.createElement("span"); l.className = "stat-label"; l.textContent = label;
+      d.appendChild(v); d.appendChild(l); parent.appendChild(d);
+    }
+
+    function compute() {
+      clear(summaryEl); clear(noteEl); clear(catEl); showErr("");
+      bmiEl.textContent = "—"; bmiEl.style.color = "";
+
+      var bmi, hMeters, weightKg, heightIn;
+      if (unit === "metric") {
+        var w = parseNum(wkgEl.value);
+        var cm = parseNum(hcmEl.value);
+        if (w === null) { showErr("Enter a valid weight in kilograms."); window.__bmi = null; return; }
+        if (cm === null || cm === 0) { showErr("Enter a valid height in centimetres."); window.__bmi = null; return; }
+        hMeters = cm / 100;
+        bmi = w / (hMeters * hMeters);
+        weightKg = w;
+      } else {
+        var lb = parseNum(wlbEl.value);
+        var ft = parseNum(hftEl.value);
+        var inch = parseNum(hinEl.value);
+        if (lb === null) { showErr("Enter a valid weight in pounds."); window.__bmi = null; return; }
+        if (ft === null && inch === null) { showErr("Enter a valid height."); window.__bmi = null; return; }
+        if (ft === null) ft = 0;
+        if (inch === null) inch = 0;
+        heightIn = ft * 12 + inch;
+        if (heightIn === 0) { showErr("Height must be greater than zero."); window.__bmi = null; return; }
+        bmi = 703 * lb / (heightIn * heightIn);
+        hMeters = heightIn * 0.0254;
+        weightKg = lb * 0.45359237;
+      }
+
+      var cat = category(bmi);
+      bmiEl.textContent = fmt1(bmi);
+      bmiEl.style.color = cat.color;
+      catEl.textContent = cat.label;
+      catEl.style.color = cat.color;
+
+      // Healthy weight range for this height (BMI 18.5-24.9).
+      var loKg = 18.5 * hMeters * hMeters;
+      var hiKg = 24.9 * hMeters * hMeters;
+      if (unit === "imperial") {
+        var loLb = 18.5 * heightIn * heightIn / 703;
+        var hiLb = 24.9 * heightIn * heightIn / 703;
+        stat(summaryEl, fmt1(loLb) + " – " + fmt1(hiLb) + " lb", "Healthy weight range");
+        stat(summaryEl, fmt1(bmi) + " kg/m²", "BMI");
+      } else {
+        stat(summaryEl, fmt1(loKg) + " – " + fmt1(hiKg) + " kg", "Healthy weight range");
+        stat(summaryEl, fmt1(bmi) + " kg/m²", "BMI");
+      }
+
+      var inRange = (weightKg >= loKg && weightKg <= hiKg);
+      noteEl.textContent = "Healthy weight for your height is " + fmt1(loKg) + "–" + fmt1(hiKg) + " kg" +
+        (unit === "imperial" ? " (" + fmt1(loKg / 0.45359237) + "–" + fmt1(hiKg / 0.45359237) + " lb)" : "") +
+        ". Your weight is " + (inRange ? "within" : "outside") + " this range.";
+
+      window.__bmi = { unit: unit, bmi: bmi, cat: cat.key, loKg: loKg, hiKg: hiKg, weightKg: weightKg, hMeters: hMeters, heightIn: heightIn };
+    }
+
+    function setUnit(u) {
+      unit = u;
+      var metric = (u === "metric");
+      wMetric.hidden = !metric; hMetric.hidden = !metric;
+      wImp.hidden = metric; hImp.hidden = metric;
+      unitEl.querySelectorAll("button").forEach(function (b) {
+        b.classList.toggle("on", b.dataset.u === u);
+      });
+      compute();
+    }
+
+    unitEl.querySelectorAll("button").forEach(function (b) {
+      b.addEventListener("click", function () { setUnit(b.dataset.u); });
+    });
+    [wkgEl, wlbEl, hcmEl, hftEl, hinEl].forEach(function (el) { el.addEventListener("input", compute); });
+    setUnit("metric");
+  })();
+  </script>
+</body>
+</html>

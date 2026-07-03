@@ -682,4 +682,12 @@ window.VIRTUAL_TOOLS = [
     icon: "∑",
     added: "2026-07-05T00:20:00Z",
   },
+  {
+    slug: "bmi-calculator",
+    name: "BMI Calculator",
+    description: "Compute Body Mass Index from weight and height in metric (kilograms, centimetres) or imperial (pounds, feet/inches) units. See the BMI value with its WHO adult category (underweight, normal, overweight, or obesity classes I–III) and a healthy-weight range for your height (BMI 18.5–24.9). BMI is a screening measure for adults and isn't a body-fat or health diagnosis. Everything runs locally in your browser.",
+    category: "Health",
+    icon: "⚖",
+    added: "2026-07-05T01:00:00Z",
+  },
 ];
