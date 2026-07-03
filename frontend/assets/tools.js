@@ -658,4 +658,12 @@ window.VIRTUAL_TOOLS = [
     icon: "σ",
     added: "2026-07-04T22:20:00Z",
   },
+  {
+    slug: "work-hours",
+    name: "Work Hours Calculator",
+    description: "Add up hours worked across clock-in / clock-out entries, with per-entry break deductions and a regular-vs-overtime split. Shifts that cross midnight (an out time earlier than the in time) are handled automatically, breaks can't make a day negative, and you can set the regular-hours threshold per entry (8 hours by default). Totals are shown in hours:minutes and decimal hours. Everything runs locally in your browser.",
+    category: "Time",
+    icon: "⏰",
+    added: "2026-07-04T23:00:00Z",
+  },
 ];

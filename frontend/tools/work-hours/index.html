@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Work Hours Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .wh-row { display: grid; grid-template-columns: 1fr 1fr 110px 1fr auto; gap: 8px; align-items: center; margin-bottom: 8px; }
+    .wh-row input[type="time"] { width: 100%; box-sizing: border-box; font-family: ui-monospace, monospace; font-size: 14px; }
+    .wh-row input[type="number"] { width: 80px; font-family: ui-monospace, monospace; }
+    .wh-row .sub { font-size: 12px; opacity: .75; font-family: ui-monospace, monospace; white-space: nowrap; }
+    .wh-row .rm { padding: 4px 8px; }
+    .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+    .summary .stat { padding: 8px 10px; border: 1px solid var(--border,#444); border-radius: 6px; }
+    .summary .stat-value { display:block; font-size: 20px; font-weight: 700; font-family: ui-monospace, monospace; }
+    .summary .stat-label { font-size: 12px; opacity: .8; }
+    button.add { padding: 4px 12px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Work Hours Calculator</h1>
+      <p>Add up hours worked across clock-in / clock-out entries, with per-entry break deductions and a regular-vs-overtime split. Shifts that cross midnight (an out time earlier than the in time) are handled automatically, breaks can't make a day negative, and you can set the regular-hours threshold per entry (8 hours by default). Totals are shown in hours:minutes and decimal hours. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="flex-wrap:wrap; gap:14px; align-items:flex-end;">
+        <div>
+          <label for="thresh">Regular hours per entry</label>
+          <input type="number" id="thresh" value="8" min="0" step="0.25" style="width:80px;"> h
+        </div>
+        <button class="add" id="add">+ Add entry</button>
+      </div>
+      <div class="spacer"></div>
+
+      <div class="wh-row" style="opacity:.6; font-size:12px;">
+        <span>Clock in</span><span>Clock out</span><span>Break (min)</span><span>Worked</span><span></span>
+      </div>
+      <div id="rows"></div>
+
+      <div class="spacer"></div>
+      <label>Totals</label>
+      <div class="summary" id="summary"></div>
+      <p class="note" id="note"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var rowsEl = document.getElementById("rows");
+    var threshEl = document.getElementById("thresh");
+    var summaryEl = document.getElementById("summary");
+    var noteEl = document.getElementById("note");
+    var addEl = document.getElementById("add");
+
+    function parseTime(s) {
+      s = String(s).trim();
+      var m = /^(\d{1,2}):(\d{2})$/.exec(s);
+      if (!m) return null;
+      var h = +m[1], mi = +m[2];
+      if (h < 0 || h > 23 || mi < 0 || mi > 59) return null;
+      return h * 60 + mi;
+    }
+    function spanMin(tin, tout) {
+      if (tout < tin)  return 1440 + tout - tin;
+      if (tout === tin) return 0;
+      return tout - tin;
+    }
+    function fmtHHMM(min) {
+      var neg = min < 0; min = Math.abs(min);
+      var h = Math.floor(min / 60), m = min % 60;
+      return (neg ? "-" : "") + h + ":" + (m < 10 ? "0" + m : m);
+    }
+    function fmtHours(min) {
+      // decimal hours to 2 dp, round half-up (avoid float drift)
+      var cents = Math.floor(min * 100 / 60 + 0.5);
+      return Math.floor(cents / 100) + "." + (cents % 100 < 10 ? "0" : "") + (cents % 100);
+    }
+    function stat(parent, val, label) {
+      var d = document.createElement("div"); d.className = "stat";
+      var v = document.createElement("span"); v.className = "stat-value"; v.textContent = val;
+      var l = document.createElement("span"); l.className = "stat-label"; l.textContent = label;
+      d.appendChild(v); d.appendChild(l); parent.appendChild(d);
+    }
+
+    var seq = 0;
+    function newRow(init) {
+      init = init || { tin: "09:00", tout: "17:00", br: "30" };
+      var id = ++seq;
+      var row = document.createElement("div");
+      row.className = "wh-row";
+      row.innerHTML =
+        '<input type="time" class="tin" value="' + init.tin + '">' +
+        '<input type="time" class="tout" value="' + init.tout + '">' +
+        '<input type="number" class="br" value="' + init.br + '" min="0" step="1">' +
+        '<span class="sub worked">—</span>' +
+        '<button class="rm secondary">×</button>';
+      rowsEl.appendChild(row);
+      row.querySelector(".rm").addEventListener("click", function () { row.remove(); compute(); });
+      row.querySelectorAll("input").forEach(function (el) { el.addEventListener("input", compute); });
+    }
+
+    function compute() {
+      summaryEl.innerHTML = ""; noteEl.textContent = "";
+      var threshMin = Math.round((parseFloat(threshEl.value) || 0) * 60);
+      if (threshMin < 0) threshMin = 0;
+      var total = 0, regular = 0, overtime = 0, validCount = 0;
+      var rowEls = rowsEl.querySelectorAll(".wh-row:not(.removed)");
+      rowEls.forEach(function (row) {
+        var tin = parseTime(row.querySelector(".tin").value);
+        var tout = parseTime(row.querySelector(".tout").value);
+        var br = parseInt(row.querySelector(".br").value, 10);
+        var sub = row.querySelector(".worked");
+        if (tin === null || tout === null) { sub.textContent = "—"; sub.style.color = "var(--bad,#d33)"; return; }
+        if (isNaN(br)) br = 0; if (br < 0) br = 0;
+        var span = spanMin(tin, tout);
+        var dm = Math.max(0, span - br);
+        var reg = Math.min(dm, threshMin);
+        var ot = dm - reg;
+        total += dm; regular += reg; overtime += ot; validCount++;
+        sub.style.color = "";
+        sub.textContent = fmtHHMM(dm) + " (" + fmtHours(dm) + "h)" + (ot > 0 ? "  +" + fmtHHMM(ot) + " OT" : "");
+      });
+      stat(summaryEl, fmtHHMM(total), "Total hours");
+      stat(summaryEl, fmtHours(total) + " h", "Total (decimal)");
+      stat(summaryEl, fmtHHMM(regular), "Regular");
+      stat(summaryEl, fmtHHMM(overtime), "Overtime");
+      stat(summaryEl, String(validCount), "Entries");
+      noteEl.textContent = total === 0
+        ? "No worked hours yet."
+        : fmtHours(total) + " h total = " + fmtHours(regular) + " h regular + " + fmtHours(overtime) + " h overtime.";
+      window.__wh = { total: total, regular: regular, overtime: overtime, entries: validCount };
+    }
+
+    addEl.addEventListener("click", function () { newRow(); compute(); });
+    threshEl.addEventListener("input", compute);
+    newRow({ tin: "08:00", tout: "17:00", br: "30" });
+    newRow({ tin: "08:00", tout: "19:00", br: "30" });
+    compute();
+  })();
+  </script>
+</body>
+</html>
