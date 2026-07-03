@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Aspect Ratio Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+    .summary .stat { padding: 10px 12px; border: 1px solid var(--border,#444); border-radius: 6px; }
+    .summary .stat-value { display:block; font-size: 20px; font-weight: 700; font-family: ui-monospace, monospace; }
+    .summary .stat-label { font-size: 12px; opacity: .8; }
+    .seg { padding: 4px 12px; border: 1px solid var(--border,#444); background: transparent; color: inherit; border-radius: 4px; cursor: pointer; font-size: 13px; }
+    .seg.on { background: var(--accent,#ffd54a); color: #000; border-color: var(--accent,#ffd54a); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Aspect Ratio Calculator</h1>
+      <p>Reduce any resolution to its simplest aspect ratio (1920×1080 → 16:9), resize one side while keeping the aspect ratio exact, and scale by a percentage. Matches against common presets so you can spot a 16:9, 4:3, 1:1 and more at a glance. All math runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="flex-wrap:wrap; gap:16px; align-items:flex-end;">
+        <div>
+          <label for="w">Width</label>
+          <input type="number" id="w" value="1920" min="1" step="1" style="width:110px;">
+        </div>
+        <div>
+          <label for="h">Height</label>
+          <input type="number" id="h" value="1080" min="1" step="1" style="width:110px;">
+        </div>
+      </div>
+      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+
+      <div class="spacer"></div>
+      <label>Ratio</label>
+      <div class="summary" id="ratio"></div>
+      <p class="note" id="preset"></p>
+
+      <div class="spacer"></div>
+      <label>Resize — keep aspect ratio</label>
+      <div class="row" style="flex-wrap:wrap; gap:16px; align-items:flex-end;">
+        <div>
+          <label for="resize">Lock &amp; compute</label><br>
+          <span>
+            <button class="seg on" data-lock="width">width</button>
+            <button class="seg" data-lock="height">height</button>
+          </span>
+        </div>
+        <div>
+          <label for="rval">Target value</label>
+          <input type="number" id="rval" value="1280" min="1" step="any" style="width:110px;">
+        </div>
+      </div>
+      <div class="summary" id="resize" style="margin-top:10px;"></div>
+
+      <div class="spacer"></div>
+      <label>Scale by percentage</label>
+      <div class="row" style="flex-wrap:wrap; gap:16px; align-items:flex-end;">
+        <div>
+          <label for="pct">Percentage</label>
+          <input type="number" id="pct" value="50" step="any" style="width:90px;">%
+        </div>
+      </div>
+      <div class="summary" id="scale" style="margin-top:10px;"></div>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var wEl = document.getElementById("w");
+    var hEl = document.getElementById("h");
+    var rvalEl = document.getElementById("rval");
+    var pctEl = document.getElementById("pct");
+    var ratioEl = document.getElementById("ratio");
+    var presetEl = document.getElementById("preset");
+    var resizeEl = document.getElementById("resize");
+    var scaleEl = document.getElementById("scale");
+    var errEl = document.getElementById("err");
+    var lock = "width";
+
+    var PRESETS = {
+      "16:9": [16, 9], "9:16": [9, 16], "4:3": [4, 3], "3:4": [3, 4],
+      "3:2": [3, 2], "2:3": [2, 3], "21:9": [21, 9], "1:1": [1, 1],
+      "5:4": [5, 4], "16:10": [16, 10], "8:5": [8, 5]
+    };
+
+    function gcd(a, b) {
+      a = Math.abs(a); b = Math.abs(b);
+      while (b) { var t = b; b = a % b; a = t; }
+      return a;
+    }
+    function reduceRatio(w, h) {
+      var g = gcd(w, h);
+      if (g === 0) return null;
+      return { rw: w / g, rh: h / g, g: g };
+    }
+    function roundHalfUp(x) { return Math.floor(x + 0.5); }   // matches Math.round for non-negative
+    function resizeToWidth(W, H, newW) { return roundHalfUp(H * newW / W); }
+    function resizeToHeight(W, H, newH) { return roundHalfUp(W * newH / H); }
+    function scalePercent(W, H, pct) { var f = pct / 100; return [roundHalfUp(W * f), roundHalfUp(H * f)]; }
+
+    function matchPreset(w, h) {
+      if (!h || !w) return [];
+      var red = reduceRatio(w, h);
+      var dec = w / h;
+      var out = [];
+      for (var name in PRESETS) {
+        var pw = PRESETS[name][0], ph = PRESETS[name][1];
+        if ((red.rw === pw && red.rh === ph) || Math.abs(dec - pw / ph) < 1e-9) out.push(name);
+      }
+      return out;
+    }
+
+    function readNum(el) { var v = parseFloat(el.value); return isNaN(v) ? 0 : v; }
+
+    function stat(target, val, label) {
+      var d = document.createElement("div"); d.className = "stat";
+      var v = document.createElement("span"); v.className = "stat-value"; v.textContent = val;
+      var l = document.createElement("span"); l.className = "stat-label"; l.textContent = label;
+      d.appendChild(v); d.appendChild(l); target.appendChild(d);
+    }
+
+    function compute() {
+      errEl.hidden = true; errEl.textContent = "";
+      ratioEl.innerHTML = ""; resizeEl.innerHTML = ""; scaleEl.innerHTML = ""; presetEl.textContent = "";
+      var W = readNum(wEl), H = readNum(hEl);
+      if (W <= 0 || H <= 0) {
+        errEl.textContent = "Enter a width and height greater than zero.";
+        errEl.hidden = false; return;
+      }
+      if (!Number.isFinite(W) || !Number.isFinite(H)) { errEl.textContent = "Width and height must be finite numbers."; errEl.hidden = false; return; }
+
+      var red = reduceRatio(W, H);
+      stat(ratioEl, red.rw + ":" + red.rh, "Reduced ratio");
+      stat(ratioEl, (W / H).toFixed(4), "Decimal (W:H)");
+      stat(ratioEl, String(red.g), "GCD");
+      stat(ratioEl, Math.round((W / H) * 100) / 100 + ":1", "As N:1");
+
+      var matched = matchPreset(W, H);
+      if (matched.length) presetEl.textContent = "Matches the " + matched.join(", ") + " preset exactly.";
+      else presetEl.textContent = "Not an exact match for any common preset.";
+
+      // Resize.
+      var rval = readNum(rvalEl);
+      if (rval > 0) {
+        if (lock === "width") {
+          var nh = resizeToWidth(W, H, rval);
+          stat(resizeEl, Math.round(rval) + " × " + nh, "Result (px)");
+          stat(resizeEl, ((nh / rval)).toFixed(4), "Resulting W:H");
+        } else {
+          var nw = resizeToHeight(W, H, rval);
+          stat(resizeEl, nw + " × " + Math.round(rval), "Result (px)");
+          stat(resizeEl, (nw / Math.round(rval)).toFixed(4), "Resulting W:H");
+        }
+      }
+
+      // Scale.
+      var pct = readNum(pctEl);
+      if (pct !== 0) {
+        var sc = scalePercent(W, H, pct);
+        stat(scaleEl, sc[0] + " × " + sc[1], "Scaled (px)");
+        stat(scaleEl, (pct > 0 ? "+" : "") + Math.round(pct) + "%", "Change");
+      }
+
+      window.__aspect = { red: red, matched: matched, W: W, H: H };   // exposed for verification
+    }
+
+    function bindSeg(selector, key, onChange) {
+      var btns = document.querySelectorAll(selector);
+      btns.forEach(function (b) {
+        b.addEventListener("click", function () {
+          btns.forEach(function (x) { x.className = "seg"; });
+          b.className = "seg on";
+          onChange(b.dataset[key]);
+          compute();
+        });
+      });
+    }
+    bindSeg('[data-lock]', "lock", function (v) { lock = v; });
+
+    [wEl, hEl, rvalEl, pctEl].forEach(function (el) { el.addEventListener("input", compute); el.addEventListener("change", compute); });
+
+    compute();
+  })();
+  </script>
+</body>
+</html>

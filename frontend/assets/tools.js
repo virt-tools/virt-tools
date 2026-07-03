@@ -594,4 +594,12 @@ window.VIRTUAL_TOOLS = [
     icon: "⊕",
     added: "2026-07-04T17:00:00Z",
   },
+  {
+    slug: "aspect-ratio",
+    name: "Aspect Ratio Calculator",
+    description: "Reduce any resolution to its simplest aspect ratio (1920×1080 → 16:9) via greatest common divisor, see the decimal ratio and GCD, resize one side while keeping the aspect ratio exact (rounded to the nearest pixel), and scale both dimensions by a percentage. Matches against common presets (16:9, 4:3, 1:1, 21:9, 16:10, 5:4 …) so you can recognise a format at a glance. All math runs locally in your browser.",
+    category: "Design",
+    icon: "🖥️",
+    added: "2026-07-04T17:40:00Z",
+  },
 ];
