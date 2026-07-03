@@ -370,4 +370,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌍",
     added: "2026-07-03T22:20:00Z",
   },
+  {
+    slug: "iban-validator",
+    name: "IBAN Validator & Checker",
+    description: "Validate an IBAN against ISO 13616 (mod-97 checksum + per-country format), or compute the check digits for a country and BBAN. Runs entirely in your browser — your IBAN never leaves your device.",
+    category: "Security",
+    icon: "🏦",
+    added: "2026-07-03T23:00:00Z",
+  },
 ];

@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>IBAN Validator &amp; Checker — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>IBAN Validator &amp; Checker</h1>
+      <p>Validate an International Bank Account Number against ISO 13616 (mod-97 checksum + per-country format), or compute the check digits for a country + BBAN. Runs entirely in your browser — your IBAN never leaves your device.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="align-items:flex-end;">
+        <div>
+          <label for="mode">Mode</label>
+          <select id="mode">
+            <option value="validate" selected>Validate an IBAN</option>
+            <option value="build">Compute check digits (country + BBAN)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="field" id="inField">
+        <label for="in" id="inLabel">IBAN</label>
+        <input type="text" id="in" value="GB82 WEST 1234 56 9876 5432" style="font-family:ui-monospace,monospace;">
+      </div>
+
+      <div class="spacer"></div>
+      <div class="row" style="justify-content:space-between;">
+        <label for="out">Result</label>
+        <button id="copy" class="secondary" style="padding:4px 10px;">Copy</button>
+      </div>
+      <div class="output" id="out" style="word-break:break-all; min-height:1.6em;"></div>
+      <p class="note" id="note">The IBAN is rearranged (first 4 chars moved to the end), letters replaced by digits (A=10 … Z=35), and the integer taken mod 97. A valid IBAN has remainder 1.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    // ISO 13616 country registry: cc -> { name, len, re } where re validates the BBAN structure
+    // (applied to the full IBAN including the 2-digit check digits after the country code).
+    // n=digit, a=letter, c=alphanumeric.
+    var REG = {
+      AD: { name: "Andorra", len: 24, re: /^AD\d{2}\d{4}\d{4}[A-Z0-9]{12}$/ },
+      AE: { name: "United Arab Emirates", len: 23, re: /^AE\d{2}\d{3}\d{16}$/ },
+      AT: { name: "Austria", len: 20, re: /^AT\d{2}\d{5}\d{11}$/ },
+      BE: { name: "Belgium", len: 16, re: /^BE\d{2}\d{3}\d{7}\d{2}$/ },
+      BG: { name: "Bulgaria", len: 22, re: /^BG\d{2}[A-Z]{4}\d{4}\d{2}[A-Z0-9]{8}$/ },
+      BH: { name: "Bahrain", len: 22, re: /^BH\d{2}[A-Z]{4}[A-Z0-9]{14}$/ },
+      BR: { name: "Brazil", len: 29, re: /^BR\d{2}\d{8}\d{5}\d{10}[A-Z]{1}[A-Z0-9]{1}$/ },
+      CH: { name: "Switzerland", len: 21, re: /^CH\d{2}\d{5}[A-Z0-9]{12}$/ },
+      CY: { name: "Cyprus", len: 28, re: /^CY\d{2}\d{3}\d{5}[A-Z0-9]{16}$/ },
+      CZ: { name: "Czech Republic", len: 24, re: /^CZ\d{2}\d{20}$/ },
+      DE: { name: "Germany", len: 22, re: /^DE\d{2}\d{8}\d{10}$/ },
+      DK: { name: "Denmark", len: 18, re: /^DK\d{2}\d{4}\d{10}$/ },
+      EE: { name: "Estonia", len: 20, re: /^EE\d{2}\d{2}\d{2}\d{11}\d{1}$/ },
+      ES: { name: "Spain", len: 24, re: /^ES\d{2}\d{4}\d{4}\d{2}\d{10}$/ },
+      FI: { name: "Finland", len: 18, re: /^FI\d{2}\d{6}\d{8}$/ },
+      FR: { name: "France", len: 27, re: /^FR\d{2}\d{5}\d{5}[A-Z0-9]{11}\d{2}$/ },
+      GB: { name: "United Kingdom", len: 22, re: /^GB\d{2}[A-Z]{4}\d{6}\d{8}$/ },
+      GE: { name: "Georgia", len: 22, re: /^GE\d{2}[A-Z]{2}\d{16}$/ },
+      GI: { name: "Gibraltar", len: 23, re: /^GI\d{2}[A-Z]{4}[A-Z0-9]{15}$/ },
+      GR: { name: "Greece", len: 27, re: /^GR\d{2}\d{3}\d{4}[A-Z0-9]{16}$/ },
+      HR: { name: "Croatia", len: 21, re: /^HR\d{2}\d{7}\d{10}$/ },
+      HU: { name: "Hungary", len: 28, re: /^HU\d{2}\d{3}\d{4}\d{1}\d{15}\d{1}$/ },
+      IE: { name: "Ireland", len: 22, re: /^IE\d{2}[A-Z]{4}\d{6}\d{8}$/ },
+      IS: { name: "Iceland", len: 26, re: /^IS\d{2}\d{4}\d{2}\d{6}\d{10}$/ },
+      IT: { name: "Italy", len: 27, re: /^IT\d{2}[A-Z]{1}\d{5}\d{5}[A-Z0-9]{12}$/ },
+      LI: { name: "Liechtenstein", len: 21, re: /^LI\d{2}\d{5}[A-Z0-9]{12}$/ },
+      LT: { name: "Lithuania", len: 20, re: /^LT\d{2}\d{5}\d{11}$/ },
+      LU: { name: "Luxembourg", len: 20, re: /^LU\d{2}\d{3}[A-Z0-9]{13}$/ },
+      LV: { name: "Latvia", len: 21, re: /^LV\d{2}[A-Z]{4}[A-Z0-9]{13}$/ },
+      MC: { name: "Monaco", len: 27, re: /^MC\d{2}\d{5}\d{5}[A-Z0-9]{11}\d{2}$/ },
+      MD: { name: "Moldova", len: 24, re: /^MD\d{2}[A-Z]{2}[A-Z0-9]{18}$/ },
+      ME: { name: "Montenegro", len: 22, re: /^ME\d{2}\d{3}\d{13}\d{2}$/ },
+      MT: { name: "Malta", len: 31, re: /^MT\d{2}[A-Z]{4}\d{5}[A-Z0-9]{18}$/ },
+      NL: { name: "Netherlands", len: 18, re: /^NL\d{2}[A-Z]{4}\d{10}$/ },
+      NO: { name: "Norway", len: 15, re: /^NO\d{2}\d{4}\d{6}\d{1}$/ },
+      PL: { name: "Poland", len: 28, re: /^PL\d{2}\d{8}\d{16}$/ },
+      PT: { name: "Portugal", len: 25, re: /^PT\d{2}\d{4}\d{4}\d{11}\d{2}$/ },
+      RO: { name: "Romania", len: 24, re: /^RO\d{2}[A-Z]{4}[A-Z0-9]{16}$/ },
+      SA: { name: "Saudi Arabia", len: 24, re: /^SA\d{2}\d{2}[A-Z0-9]{18}$/ },
+      SE: { name: "Sweden", len: 24, re: /^SE\d{2}\d{3}\d{16}\d{1}$/ },
+      SI: { name: "Slovenia", len: 19, re: /^SI\d{2}\d{5}\d{8}\d{2}$/ },
+      SK: { name: "Slovakia", len: 24, re: /^SK\d{2}\d{4}\d{6}\d{10}$/ },
+      SM: { name: "San Marino", len: 27, re: /^SM\d{2}[A-Z]{1}\d{5}\d{5}[A-Z0-9]{12}$/ },
+      TR: { name: "Turkey", len: 26, re: /^TR\d{2}\d{5}[A-Z0-9]{1}[A-Z0-9]{16}$/ },
+      UA: { name: "Ukraine", len: 29, re: /^UA\d{2}\d{6}[A-Z0-9]{19}$/ },
+      VA: { name: "Vatican", len: 22, re: /^VA\d{2}\d{3}\d{15}$/ }
+    };
+
+    function toDigits(s) {
+      var out = "";
+      for (var i = 0; i < s.length; i++) {
+        var o = s.charCodeAt(i);
+        if (o >= 48 && o <= 57) out += s.charAt(i);            // 0-9
+        else if (o >= 65 && o <= 90) out += (o - 55).toString(); // A=10 ... Z=35
+        else throw new Error("Invalid character '" + s.charAt(i) + "'.");
+      }
+      return out;
+    }
+
+    function mod97(s) {
+      // s: digit string. BigInt handles any IBAN length cleanly.
+      return Number(BigInt(s) % 97n);
+    }
+
+    function validate(raw) {
+      var s = raw.replace(/\s+/g, "").toUpperCase();
+      if (!s) throw new Error("Enter an IBAN.");
+      if (!/^[A-Z]{2}\d{2}[A-Z0-9]+$/.test(s)) throw new Error("Not an IBAN — it must start with a 2-letter country code and 2 check digits.");
+      var cc = s.slice(0, 2);
+      var info = REG[cc];
+      if (!info) throw new Error("Unknown country code '" + cc + "' (not in this tool's registry).");
+      if (s.length !== info.len) throw new Error("Wrong length for " + info.name + " IBANs — expected " + info.len + " characters, got " + s.length + ".");
+      if (!info.re.test(s)) throw new Error("Structure invalid for " + info.name + " IBANs.");
+      var moved = s.slice(4) + s.slice(0, 4);
+      var digits = toDigits(moved);
+      var rem = mod97(digits);
+      var check = s.slice(2, 4);
+      var bban = s.slice(4);
+      if (rem !== 1) {
+        throw new Error("Checksum failed (mod 97 = " + rem + ", expected 1). This IBAN is invalid.");
+      }
+      return {
+        ok: true,
+        text: "✓ Valid IBAN",
+        detail: info.name + " · length " + s.length + " · check digits " + check + " · BBAN " + bban
+      };
+    }
+
+    function build(cc, bban) {
+      cc = cc.trim().toUpperCase();
+      bban = bban.replace(/\s+/g, "").toUpperCase();
+      if (!/^[A-Z]{2}$/.test(cc)) throw new Error("Country code must be exactly 2 letters.");
+      var info = REG[cc];
+      if (!info) throw new Error("Unknown country code '" + cc + "'.");
+      if (!bban) throw new Error("Enter the BBAN (the IBAN without the country code and check digits).");
+      // Construct IBAN with placeholder check digits "00", length = 2 (cc) + 2 (cd) + len(bban)
+      var fullLen = 4 + bban.length;
+      if (fullLen !== info.len) throw new Error("Wrong length for " + info.name + " — expected BBAN of " + (info.len - 4) + " chars, got " + bban.length + ".");
+      // mod-97 over (BBAN + CC + "00") to find the check digits.
+      var moved = bban + cc + "00";
+      var digits = toDigits(moved);
+      var rem = mod97(digits);
+      var cd = 98 - rem;
+      var iban = cc + (cd < 10 ? "0" : "") + cd + bban;
+      if (!info.re.test(iban)) throw new Error("BBAN structure invalid for " + info.name + ".");
+      return { ok: true, text: iban, detail: info.name + " · check digits " + (cd < 10 ? "0" : "") + cd + " (mod 97 → 1)" };
+    }
+
+    var mode = document.getElementById("mode");
+    var inEl = document.getElementById("in");
+    var inLabel = document.getElementById("inLabel");
+    var out = document.getElementById("out");
+    var copy = document.getElementById("copy");
+    var note = document.getElementById("note");
+
+    var DEFAULTS = { validate: "GB82 WEST 1234 56 9876 5432", build: "GB / WEST12345698765432" };
+
+    function run() {
+      var v = inEl.value.trim();
+      try {
+        var res;
+        if (mode.value === "validate") {
+          if (!v) { out.textContent = "—"; note.textContent = "Paste an IBAN to validate (spaces are ignored)."; note.style.color = ""; return; }
+          res = validate(v);
+          out.textContent = res.text;
+          note.textContent = res.detail;
+          out.style.color = "var(--good, #0a0)";
+        } else {
+          // build mode: input is "CC / BBAN" or "CC BBAN"
+          var parts = v.split(/[\/]/).map(function (x) { return x.trim(); });
+          if (parts.length < 2) {
+            var sp = v.split(/\s+/);
+            if (sp.length >= 2 && /^[A-Za-z]{2}$/.test(sp[0])) parts = [sp[0], sp.slice(1).join("")];
+          }
+          if (parts.length < 2 || !parts[0] || !parts[1]) { out.textContent = "—"; note.textContent = "Enter the country code and BBAN, e.g. GB / WEST12345698765432"; note.style.color = ""; return; }
+          res = build(parts[0], parts[1]);
+          out.textContent = res.text;
+          note.textContent = res.detail;
+          out.style.color = "var(--good, #0a0)";
+        }
+        note.style.color = "";
+      } catch (e) {
+        out.textContent = "✗ " + (e && e.message ? e.message : e);
+        note.textContent = "";
+        out.style.color = "var(--bad)";
+      }
+    }
+
+    function copyText() {
+      var t = out.textContent;
+      if (!t || t === "—" || t.indexOf("✗") === 0) return;
+      function done() { copy.textContent = "Copied!"; setTimeout(function () { copy.textContent = "Copy"; }, 1200); }
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done);
+      else { var ta = document.createElement("textarea"); ta.value = t; document.body.appendChild(ta); ta.select(); try { document.execCommand("copy"); done(); } catch (e) {} ta.remove(); }
+    }
+
+    mode.addEventListener("change", function () {
+      inEl.value = DEFAULTS[mode.value];
+      if (mode.value === "build") inLabel.textContent = "Country / BBAN (e.g. GB / WEST12345698765432)";
+      else inLabel.textContent = "IBAN";
+      run();
+    });
+    inEl.addEventListener("input", run);
+    copy.addEventListener("click", copyText);
+    run();
+  })();
+  </script>
+</body>
+</html>
