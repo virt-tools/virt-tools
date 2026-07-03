@@ -322,4 +322,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌐",
     added: "2026-07-03T18:20:00Z",
   },
+  {
+    slug: "word-frequency",
+    name: "Word Frequency Counter",
+    description: "Count how often each word appears in your text — sorted by frequency, with case folding, stopword filtering and a minimum length. Runs in your browser.",
+    category: "Text",
+    icon: "📈",
+    added: "2026-07-03T19:00:00Z",
+  },
 ];

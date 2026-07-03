@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Word Frequency Counter — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Word Frequency Counter</h1>
+      <p>Count how often each word appears in your text — sorted by frequency, with optional case folding, stopword filtering and a minimum length. Runs entirely in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="in">Text</label>
+        <textarea id="in" placeholder="Paste your text…" style="min-height:160px;">The quick brown fox jumps over the lazy dog. The dog barked, and the fox ran—don't stop! It's 2x faster, isn't it?</textarea>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="row" style="align-items:flex-end;">
+        <div>
+          <label for="sort">Sort by</label>
+          <select id="sort">
+            <option value="freq" selected>Frequency (high → low)</option>
+            <option value="freqAsc">Frequency (low → high)</option>
+            <option value="alpha">Alphabetical</option>
+          </select>
+        </div>
+        <div>
+          <label for="topn">Top N (0 = all)</label>
+          <input type="number" id="topn" min="0" step="1" value="0" style="width:90px;">
+        </div>
+        <div>
+          <label for="minlen">Min length</label>
+          <input type="number" id="minlen" min="1" step="1" value="1" style="width:80px;">
+        </div>
+      </div>
+      <div class="spacer"></div>
+      <div class="row">
+        <label class="check"><input type="checkbox" id="ci" checked> Case-insensitive</label>
+        <label class="check"><input type="checkbox" id="punct" checked> Strip punctuation</label>
+        <label class="check"><input type="checkbox" id="stop"> Remove common stopwords</label>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="stat-grid" id="stats"></div>
+
+      <div class="spacer"></div>
+      <div class="row" style="justify-content:space-between;">
+        <label>Word counts</label>
+        <button id="copy" class="secondary" style="padding:4px 10px;">Copy as TSV</button>
+      </div>
+      <div class="diff-view" id="tbl" style="max-height:55vh;"></div>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var inEl = document.getElementById("in");
+    var sort = document.getElementById("sort");
+    var topn = document.getElementById("topn");
+    var minlen = document.getElementById("minlen");
+    var ci = document.getElementById("ci");
+    var punct = document.getElementById("punct");
+    var stop = document.getElementById("stop");
+    var statsEl = document.getElementById("stats");
+    var tbl = document.getElementById("tbl");
+    var copy = document.getElementById("copy");
+
+    var STOP = ("a an and are as at be by for from has he in is it its of on that the to was were will with " +
+      "i you your yours he she his her hers they them their this these those or but not no if then than so " +
+      "into via about above below up down out off over under again further once").split(" ");
+
+    function stat(label, value) {
+      var d = document.createElement("div"); d.className = "stat";
+      var v = document.createElement("span"); v.className = "stat-value"; v.textContent = value;
+      var l = document.createElement("span"); l.className = "stat-label"; l.textContent = label;
+      d.appendChild(v); d.appendChild(l); return d;
+    }
+    function escapeHtml(s) {
+      return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    function run() {
+      var text = inEl.value;
+      var ignoreCase = ci.checked;
+      var src = ignoreCase ? text.toLowerCase() : text;
+      var toks;
+      if (punct.checked) {
+        var re = /[\p{L}\p{N}]+(?:['’\-][\p{L}\p{N}]+)*/gu;
+        toks = src.match(re) || [];
+      } else {
+        toks = src.split(/\s+/).filter(function (t) { return t.length > 0; });
+      }
+      var minLen = Math.max(1, parseInt(minlen.value, 10) || 1);
+      var stopSet = null;
+      if (stop.checked) { stopSet = {}; STOP.forEach(function (w) { stopSet[w] = true; }); }
+
+      var counts = {};
+      var total = 0;
+      for (var i = 0; i < toks.length; i++) {
+        var w = toks[i];
+        if (w.length < minLen) continue;
+        if (stopSet && stopSet[ignoreCase ? w : w.toLowerCase()]) continue;
+        counts[w] = (counts[w] || 0) + 1;
+        total++;
+      }
+      var entries = Object.keys(counts).map(function (k) { return [k, counts[k]]; });
+      if (sort.value === "freq") entries.sort(function (a, b) { return b[1] - a[1] || a[0].localeCompare(b[0]); });
+      else if (sort.value === "freqAsc") entries.sort(function (a, b) { return a[1] - b[1] || a[0].localeCompare(b[0]); });
+      else entries.sort(function (a, b) { return a[0].localeCompare(b[0]); });
+
+      var unique = entries.length;
+      var n = parseInt(topn.value, 10);
+      if (n > 0 && entries.length > n) entries = entries.slice(0, n);
+
+      statsEl.innerHTML = "";
+      statsEl.appendChild(stat("Total tokens", total.toLocaleString()));
+      statsEl.appendChild(stat("Unique words", unique.toLocaleString()));
+      statsEl.appendChild(stat("Top word", entries.length ? entries[0][0] + " ×" + entries[0][1] : "—"));
+
+      if (!entries.length) {
+        tbl.innerHTML = "<div style=\"padding:12px; color:var(--text-dim);\">No words matched the current filters.</div>";
+        return;
+      }
+      var rows = "";
+      for (var i = 0; i < entries.length; i++) {
+        var pct = total ? (entries[i][1] / total * 100) : 0;
+        rows += "<tr><td class=\"mono\">" + (i + 1) + "</td><td class=\"mono\">" + escapeHtml(entries[i][0]) +
+          "</td><td class=\"mono\">" + entries[i][1] + "</td><td class=\"mono\">" + pct.toFixed(1) + "%</td></tr>";
+      }
+      tbl.innerHTML = "<table class=\"base-table\"><thead><tr><th>#</th><th>Word</th><th>Count</th><th>Share</th></tr></thead><tbody>" + rows + "</tbody></table>";
+    }
+
+    function copyTsv() {
+      var rows = tbl.querySelectorAll("tbody tr");
+      if (!rows.length) return;
+      var lines = [];
+      rows.forEach(function (r) {
+        var cells = r.querySelectorAll("td");
+        lines.push(cells[1].textContent + "\t" + cells[2].textContent);
+      });
+      var t = lines.join("\n");
+      function done() { copy.textContent = "Copied!"; setTimeout(function () { copy.textContent = "Copy as TSV"; }, 1200); }
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done);
+      else { var ta = document.createElement("textarea"); ta.value = t; document.body.appendChild(ta); ta.select(); try { document.execCommand("copy"); done(); } catch (e) {} ta.remove(); }
+    }
+
+    [inEl, sort, topn, minlen, ci, punct, stop].forEach(function (el) {
+      el.addEventListener("input", run);
+      el.addEventListener("change", run);
+    });
+    copy.addEventListener("click", copyTsv);
+
+    run();
+  })();
+  </script>
+</body>
+</html>
