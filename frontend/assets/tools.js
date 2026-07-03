@@ -442,4 +442,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🖍️",
     added: "2026-07-04T04:20:00Z",
   },
+  {
+    slug: "isbn-validator",
+    name: "ISBN Validator & Converter",
+    description: "Validate an ISBN-10 (mod-11, X check digit) or ISBN-13 (mod-10) checksum and convert between the two — ISBN-13 = 978 + the first 9 digits + a recomputed check digit. Runs entirely in your browser.",
+    category: "Text",
+    icon: "📚",
+    added: "2026-07-04T05:00:00Z",
+  },
 ];
