@@ -626,4 +626,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📅",
     added: "2026-07-04T19:40:00Z",
   },
+  {
+    slug: "pace-calculator",
+    name: "Pace Calculator",
+    description: "Convert between pace, time, and distance for running and cycling. Enter any two of distance, pace, and total time and solve for the third, with speed in km/h and mph and a cumulative split table. Miles and kilometres convert using the exact definition (1 mile = 1.609344 km), so pace per mile and pace per kilometre stay perfectly consistent. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🏃",
+    added: "2026-07-04T20:20:00Z",
+  },
 ];

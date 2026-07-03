@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Pace Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .pace-row { display: grid; grid-template-columns: auto auto 1fr; gap: 8px; align-items: center; margin-bottom: 10px; }
+    .pace-row label { min-width: 84px; }
+    .pace-row .pc-val { font-family: ui-monospace, monospace; font-size: 16px; width: 130px; box-sizing: border-box; }
+    .pace-row select { width: 96px; }
+    .solved { background: rgba(255,213,74,.10); border-color: var(--accent,#ffd54a) !important; }
+    .solved .pc-val { font-weight: 700; }
+    .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-top: 6px; }
+    .summary .stat { padding: 8px 10px; border: 1px solid var(--border,#444); border-radius: 6px; }
+    .summary .stat-value { display:block; font-size: 18px; font-weight: 700; font-family: ui-monospace, monospace; }
+    .summary .stat-label { font-size: 12px; opacity: .8; }
+    .seg { display: inline-flex; border: 1px solid var(--border,#444); border-radius: 4px; overflow: hidden; }
+    .seg button { padding: 3px 10px; border: none; background: transparent; color: inherit; cursor: pointer; font-size: 13px; }
+    .seg button.on { background: var(--accent,#ffd54a); color: #000; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Pace Calculator</h1>
+      <p>Convert between pace, time, and distance for running and cycling. Enter any two of distance, pace, and total time, choose the one to solve for, and the third is computed — along with speed in km/h and mph and a cumulative split table. Miles and kilometres convert using the exact definition (1 mile = 1.609344 km), so pace per mile and pace per kilometre stay perfectly consistent. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="flex-wrap:wrap; gap:14px; align-items:flex-end;">
+        <div>
+          <label for="solve">Solve for</label>
+          <select id="solve">
+            <option value="pace" selected>Pace</option>
+            <option value="time">Total time</option>
+            <option value="distance">Distance</option>
+          </select>
+        </div>
+      </div>
+      <div class="spacer"></div>
+
+      <div id="rows">
+        <div class="pace-row" data-k="distance">
+          <label>Distance</label>
+          <input class="pc-val" id="dist" type="number" step="any" min="0" value="5">
+          <select id="dunit">
+            <option value="km" selected>km</option>
+            <option value="mi">miles</option>
+          </select>
+        </div>
+        <div class="pace-row" data-k="pace">
+          <label>Pace</label>
+          <input class="pc-val" id="pace" type="text" inputmode="decimal" value="5:00" placeholder="MM:SS">
+          <select id="punit">
+            <option value="km" selected>per km</option>
+            <option value="mi">per mile</option>
+          </select>
+        </div>
+        <div class="pace-row" data-k="time">
+          <label>Time</label>
+          <input class="pc-val" id="time" type="text" inputmode="decimal" value="25:00" placeholder="H:MM:SS">
+          <span style="font-size:12px; opacity:.7;">H:MM:SS or MM:SS</span>
+        </div>
+      </div>
+      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+
+      <div class="spacer"></div>
+      <label>Result</label>
+      <div class="summary" id="summary"></div>
+      <p class="note" id="note"></p>
+
+      <div class="spacer"></div>
+      <label>Splits (cumulative)</label>
+      <table class="base-table" id="splits">
+        <thead><tr><th>Split</th><th>Time</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <p class="note" id="snote" hidden></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var MI_KM = 1.609344;
+
+    function toKm(d, unit) { return unit === "mi" ? d * MI_KM : d; }
+    function fromKm(km, unit) { return unit === "mi" ? km / MI_KM : km; }
+    function paceToPerKm(paceSec, punit) { return punit === "mi" ? paceSec / MI_KM : paceSec; }
+    function paceFromPerKm(ppkm, punit) { return punit === "mi" ? ppkm * MI_KM : ppkm; }
+
+    function parseTime(s) {
+      s = String(s).trim();
+      if (s === "") return null;
+      var parts = s.split(":");
+      var h, m, se;
+      if (parts.length === 3) { h = parts[0]; m = parts[1]; se = parts[2]; }
+      else if (parts.length === 2) { h = "0"; m = parts[0]; se = parts[1]; }
+      else if (parts.length === 1) { h = "0"; m = "0"; se = parts[0]; }
+      else return null;
+      var H = parseFloat(h), M = parseFloat(m), S = parseFloat(se);
+      if (isNaN(H) || isNaN(M) || isNaN(S) || H < 0 || M < 0 || S < 0) return null;
+      // Component bounds depend on shape: H:MM:SS -> M,S in [0,60); MM:SS -> only S<60; SS -> unbounded.
+      if (parts.length === 3 && (M >= 60 || S >= 60)) return null;
+      if (parts.length === 2 && S >= 60) return null;
+      return H * 3600 + M * 60 + S;
+    }
+    function fmtTime(sec) {
+      sec = Math.floor(sec + 0.5);                 // round half-up for display
+      var h = Math.floor(sec / 3600); sec -= h * 3600;
+      var m = Math.floor(sec / 60); sec -= m * 60;
+      function p(x) { return x < 10 ? "0" + x : "" + x; }
+      return h > 0 ? h + ":" + p(m) + ":" + p(sec) : m + ":" + p(sec);
+    }
+    function fmtPace(ppkm) {
+      // ppkm = seconds per km; show as MM:SS (round half-up to the second)
+      var sec = Math.floor(ppkm + 0.5);
+      var m = Math.floor(sec / 60); sec -= m * 60;
+      function p(x) { return x < 10 ? "0" + x : "" + x; }
+      return m + ":" + p(sec);
+    }
+    function fmtNum(x, dp) {
+      if (!isFinite(x)) return "—";
+      var a = Math.abs(x);
+      if (a === 0) return "0";
+      if (a >= 100) dp = 2;
+      else if (a >= 10) dp = 3;
+      else if (a >= 1) dp = 3;
+      else dp = 4;
+      return x.toFixed(dp);
+    }
+
+    var solveEl = document.getElementById("solve");
+    var distEl = document.getElementById("dist");
+    var dunitEl = document.getElementById("dunit");
+    var paceEl = document.getElementById("pace");
+    var punitEl = document.getElementById("punit");
+    var timeEl = document.getElementById("time");
+    var errEl = document.getElementById("err");
+    var summaryEl = document.getElementById("summary");
+    var noteEl = document.getElementById("note");
+    var splitsBody = document.querySelector("#splits tbody");
+    var snoteEl = document.getElementById("snote");
+    var rows = document.querySelectorAll(".pace-row");
+
+    function showErr(msg) { errEl.textContent = msg; errEl.hidden = !msg; }
+    function clear(t) { t.innerHTML = ""; }
+    function stat(parent, val, label) {
+      var d = document.createElement("div"); d.className = "stat";
+      var v = document.createElement("span"); v.className = "stat-value"; v.textContent = val;
+      var l = document.createElement("span"); l.className = "stat-label"; l.textContent = label;
+      d.appendChild(v); d.appendChild(l); parent.appendChild(d);
+    }
+
+    function markSolved() {
+      var sf = solveEl.value;
+      rows.forEach(function (r) {
+        var isSolved = r.dataset.k === sf;
+        r.classList.toggle("solved", isSolved);
+        var inp = r.querySelector("input");
+        inp.readOnly = isSolved;
+      });
+    }
+
+    var MAX_SPLITS = 100;
+
+    function compute() {
+      clear(summaryEl); clear(splitsBody); noteEl.textContent = ""; snoteEl.hidden = true;
+      showErr("");
+      var sf = solveEl.value;
+      markSolved();
+
+      var dist, pace, time;
+      // parse the two inputs we are NOT solving for
+      if (sf !== "distance") {
+        dist = parseFloat(distEl.value);
+        if (isNaN(dist) || dist < 0) { showErr("Enter a non-negative distance."); return; }
+      }
+      if (sf !== "pace") {
+        pace = parseTime(paceEl.value);
+        if (pace === null) { showErr("Enter pace as MM:SS (or M:SS)."); return; }
+      }
+      if (sf !== "time") {
+        time = parseTime(timeEl.value);
+        if (time === null) { showErr("Enter time as H:MM:SS (or MM:SS)."); return; }
+      }
+
+      var dunit = dunitEl.value, punit = punitEl.value;
+      var distKm, ppkm, timeSec;
+
+      if (sf === "pace") {
+        if (dist === 0) { showErr("Distance must be > 0 to solve for pace."); return; }
+        distKm = toKm(dist, dunit);
+        timeSec = time;
+        ppkm = timeSec / distKm;
+        paceEl.value = fmtPace(paceFromPerKm(ppkm, punit));
+      } else if (sf === "time") {
+        distKm = toKm(dist, dunit);
+        ppkm = paceToPerKm(pace, punit);
+        timeSec = ppkm * distKm;
+        timeEl.value = fmtTime(timeSec);
+      } else { // distance
+        if (pace === 0) { showErr("Pace must be > 0 to solve for distance."); return; }
+        ppkm = paceToPerKm(pace, punit);
+        timeSec = time;
+        distKm = timeSec / ppkm;
+        dist = fromKm(distKm, dunit);
+        distEl.value = (Math.round(dist * 1000) / 1000).toString();
+      }
+
+      // Speed
+      var kmh = timeSec > 0 ? distKm * 3600 / timeSec : 0;
+      var mph = kmh / MI_KM;
+
+      stat(summaryEl, fmtPace(paceFromPerKm(ppkm, "km")), "Pace /km");
+      stat(summaryEl, fmtPace(paceFromPerKm(ppkm, "mi")), "Pace /mile");
+      stat(summaryEl, fmtTime(timeSec), "Total time");
+      stat(summaryEl, fmtNum(distKm) + " km", "Distance");
+      stat(summaryEl, fmtNum(fromKm(distKm, "mi")) + " mi", "Distance");
+      stat(summaryEl, fmtNum(kmh) + " km/h", "Speed");
+      stat(summaryEl, fmtNum(mph) + " mph", "Speed");
+
+      // Splits at integer markers of the distance unit.
+      var perUnitSec = dunit === "mi" ? paceFromPerKm(ppkm, "mi") : ppkm;
+      var totalUnits = dunit === "mi" ? fromKm(distKm, "mi") : distKm;
+      var n = Math.floor(totalUnits + 1e-9);
+      var count = 0, truncated = false;
+      for (var i = 1; i <= n; i++) {
+        if (count >= MAX_SPLITS) { truncated = true; break; }
+        var tr = document.createElement("tr");
+        var td1 = document.createElement("td"); td1.textContent = i + " " + dunit;
+        var td2 = document.createElement("td"); td2.textContent = fmtTime(perUnitSec * i);
+        tr.appendChild(td1); tr.appendChild(td2); splitsBody.appendChild(tr);
+        count++;
+      }
+      if (totalUnits > n + 1e-9 && count < MAX_SPLITS) {
+        var trF = document.createElement("tr");
+        var tdF1 = document.createElement("td"); tdF1.textContent = fmtNum(totalUnits) + " " + dunit + " (finish)";
+        var tdF2 = document.createElement("td"); tdF2.textContent = fmtTime(timeSec);
+        trF.appendChild(tdF1); trF.appendChild(tdF2); splitsBody.appendChild(trF);
+      }
+      if (truncated) { snoteEl.hidden = false; snoteEl.textContent = "Showing the first " + MAX_SPLITS + " splits; later splits omitted."; }
+
+      window.__pace = { ppkm: ppkm, distKm: distKm, timeSec: timeSec, kmh: kmh, mph: mph, dunit: dunit, punit: punit };
+    }
+
+    [solveEl, dunitEl, punitEl].forEach(function (el) {
+      el.addEventListener("change", compute);
+    });
+    [distEl, paceEl, timeEl].forEach(function (el) {
+      el.addEventListener("input", compute);
+    });
+    compute();
+  })();
+  </script>
+</body>
+</html>
