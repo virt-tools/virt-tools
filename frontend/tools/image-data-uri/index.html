@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Image &amp; Base64 / Data URI Converter — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Image &amp; Base64 / Data URI Converter</h1>
+      <p>Encode an image to a <code>data:</code> URI (or raw base64) for embedding inline in HTML, CSS, JSON or Markdown — and decode a data URI back to a downloadable image. Everything is processed locally; your image never leaves your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="align-items:flex-end;">
+        <div>
+          <label for="mode">Mode</label>
+          <select id="mode">
+            <option value="encode" selected>Encode (image → data URI)</option>
+            <option value="decode">Decode (data URI → image)</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- encode UI -->
+      <div id="enc-ui">
+        <div class="spacer"></div>
+        <div class="field">
+          <label for="file">Image</label>
+          <div id="drop" class="dropzone">
+            <input type="file" id="file" accept="image/*" hidden>
+            <p class="dropzone-hint">Click to choose, or drag &amp; drop an image here</p>
+            <p class="dropzone-name" id="drop-name" hidden></p>
+          </div>
+        </div>
+
+        <div class="spacer"></div>
+        <label class="check"><input type="checkbox" id="raw"> Output base64 only (strip the <code>data:</code> prefix)</label>
+
+        <div class="spacer"></div>
+        <div class="row" style="justify-content:space-between;">
+          <label for="enc-out">Data URI</label>
+          <button id="enc-copy" class="secondary" style="padding:4px 10px;">Copy</button>
+        </div>
+        <textarea id="enc-out" readonly style="min-height:120px; font-family:ui-monospace,monospace; word-break:break-all;" placeholder="The data URI will appear here…"></textarea>
+        <p class="note" id="enc-info"></p>
+      </div>
+
+      <!-- decode UI -->
+      <div id="dec-ui" hidden>
+        <div class="spacer"></div>
+        <div class="field">
+          <label for="dec-in">Data URI</label>
+          <textarea id="dec-in" placeholder="Paste a data: URI here, e.g. data:image/png;base64,iVBOR…" style="min-height:90px; font-family:ui-monospace,monospace; word-break:break-all;"></textarea>
+        </div>
+        <div class="row" style="align-items:flex-end;">
+          <div>
+            <label for="dec-mime">MIME type (if not in the URI)</label>
+            <select id="dec-mime">
+              <option value="image/png">image/png</option>
+              <option value="image/jpeg">image/jpeg</option>
+              <option value="image/webp">image/webp</option>
+              <option value="image/svg+xml">image/svg+xml</option>
+              <option value="image/gif">image/gif</option>
+            </select>
+          </div>
+          <label class="check"><input type="checkbox" id="dec-raw" checked> Input is a full <code>data:</code> URI</label>
+        </div>
+
+        <div class="spacer"></div>
+        <div class="field">
+          <label>Preview</label>
+          <div class="image-preview" id="dec-preview"><span class="muted">Paste a data URI to preview</span></div>
+        </div>
+        <div class="row" style="justify-content:space-between; align-items:center;">
+          <span class="note" id="dec-info"></span>
+          <button id="dec-download" style="padding:6px 14px;" disabled>Download</button>
+        </div>
+        <p class="note" id="dec-err" hidden style="color:var(--bad);"></p>
+      </div>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var mode = document.getElementById("mode");
+    var encUI = document.getElementById("enc-ui");
+    var decUI = document.getElementById("dec-ui");
+
+    // encode
+    var fileEl = document.getElementById("file");
+    var drop = document.getElementById("drop");
+    var dropName = document.getElementById("drop-name");
+    var raw = document.getElementById("raw");
+    var encOut = document.getElementById("enc-out");
+    var encInfo = document.getElementById("enc-info");
+    var encCopy = document.getElementById("enc-copy");
+
+    // decode
+    var decIn = document.getElementById("dec-in");
+    var decMime = document.getElementById("dec-mime");
+    var decRaw = document.getElementById("dec-raw");
+    var decPreview = document.getElementById("dec-preview");
+    var decInfo = document.getElementById("dec-info");
+    var decDownload = document.getElementById("dec-download");
+    var decErr = document.getElementById("dec-err");
+
+    var lastDataUri = "";  // for encode copy
+    var lastBlobUrl = null;
+
+    function human(bytes) {
+      if (bytes < 1024) return bytes + " B";
+      if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB";
+      return (bytes / 1048576).toFixed(2) + " MB";
+    }
+
+    // ---- encode ----
+    function loadFile(file) {
+      if (!file || !/^image\//.test(file.type)) { encInfo.textContent = "Please choose an image file."; return; }
+      dropName.textContent = file.name; dropName.hidden = false;
+      var reader = new FileReader();
+      reader.onload = function () {
+        lastDataUri = reader.result; // data: URI
+        renderEncode();
+      };
+      reader.onerror = function () { encInfo.textContent = "Could not read that file."; };
+      reader.readAsDataURL(file);
+    }
+
+    function renderEncode() {
+      if (!lastDataUri) { encOut.value = ""; return; }
+      var out = raw.checked ? lastDataUri.split(",", 2)[1] || "" : lastDataUri;
+      encOut.value = out;
+      var bytes = Math.floor((out.length * 3) / 4); // approx decoded bytes (minus any padding)
+      encInfo.textContent = fileEl.files && fileEl.files[0] ? (fileEl.files[0].name + " · " + fileEl.files[0].type + " · ~" + human(fileEl.files[0].size) + " → " + out.length + " base64 chars") : (out.length + " base64 chars");
+    }
+
+    function copyEncode() {
+      var t = encOut.value;
+      if (!t) return;
+      function done() { encCopy.textContent = "Copied!"; setTimeout(function () { encCopy.textContent = "Copy"; }, 1200); }
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done);
+      else { var ta = document.createElement("textarea"); ta.value = t; document.body.appendChild(ta); ta.select(); try { document.execCommand("copy"); done(); } catch (e) {} ta.remove(); }
+    }
+
+    // ---- decode ----
+    function parseDataUri(input) {
+      input = input.trim();
+      if (!input) return null;
+      var decRawChecked = decRaw.checked;
+      if (decRawChecked || input.slice(0, 5).toLowerCase() === "data:") {
+        var comma = input.indexOf(",");
+        if (comma < 0) throw new Error("Not a valid data URI — missing comma before the payload.");
+        var head = input.slice(5, comma);
+        var payload = input.slice(comma + 1);
+        var isB64 = /;base64/i.test(head);
+        var mime = head.split(";")[0] || decMime.value;
+        if (!mime) mime = decMime.value;
+        var bytes;
+        if (isB64) {
+          bytes = base64ToBytes(payload);
+        } else {
+          // percent-decoded text data URI -> UTF-8 bytes
+          bytes = new TextEncoder().encode(decodeURIComponent(payload));
+        }
+        return { mime: mime, bytes: bytes, isB64: isB64 };
+      } else {
+        // raw base64 with the selected MIME type
+        return { mime: decMime.value, bytes: base64ToBytes(input), isB64: true };
+      }
+    }
+
+    function base64ToBytes(b64) {
+      var clean = b64.replace(/\s+/g, "");
+      try {
+        var bin = atob(clean);
+      } catch (e) {
+        throw new Error("Invalid base64 input.");
+      }
+      var bytes = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return bytes;
+    }
+
+    function extFor(mime) {
+      return ({ "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/svg+xml": "svg", "image/gif": "gif" })[mime] || "bin";
+    }
+
+    var lastBlob = null;
+    function renderDecode() {
+      decErr.hidden = true; decErr.textContent = "";
+      decPreview.innerHTML = '<span class="muted">Paste a data URI to preview</span>';
+      decInfo.textContent = "";
+      decDownload.disabled = true;
+      if (lastBlobUrl) { URL.revokeObjectURL(lastBlobUrl); lastBlobUrl = null; }
+      lastBlob = null;
+      var v = decIn.value.trim();
+      if (!v) return;
+      try {
+        var r = parseDataUri(v);
+        if (!r) return;
+        lastBlob = new Blob([r.bytes], { type: r.mime });
+        lastBlobUrl = URL.createObjectURL(lastBlob);
+        decPreview.innerHTML = "";
+        var img = new Image();
+        img.src = lastBlobUrl;
+        img.style.maxWidth = "100%";
+        img.onerror = function () { decPreview.innerHTML = '<span class="muted">Could not render — the MIME type or bytes may not be a valid image.</span>'; };
+        decPreview.appendChild(img);
+        decInfo.textContent = r.mime + " · " + human(r.bytes.length) + (r.isB64 ? " · base64" : " · percent-encoded");
+        decDownload.disabled = false;
+      } catch (e) {
+        decErr.textContent = "Error: " + (e && e.message ? e.message : e);
+        decErr.hidden = false;
+      }
+    }
+
+    function downloadDec() {
+      if (!lastBlob) return;
+      var url = URL.createObjectURL(lastBlob);
+      var a = document.createElement("a");
+      a.href = url; a.download = "decoded." + extFor(lastBlob.type);
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    }
+
+    // ---- wiring ----
+    function switchMode() {
+      var enc = mode.value === "encode";
+      encUI.hidden = !enc; decUI.hidden = enc;
+    }
+
+    drop.addEventListener("click", function () { fileEl.click(); });
+    fileEl.addEventListener("change", function () { if (fileEl.files[0]) loadFile(fileEl.files[0]); });
+    ["dragenter", "dragover"].forEach(function (ev) {
+      drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add("drag"); });
+    });
+    ["dragleave", "drop"].forEach(function (ev) {
+      drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove("drag"); });
+    });
+    drop.addEventListener("drop", function (e) { if (e.dataTransfer && e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]); });
+    raw.addEventListener("change", renderEncode);
+    encCopy.addEventListener("click", copyEncode);
+
+    [decIn].forEach(function (el) { el.addEventListener("input", renderDecode); });
+    [decMime, decRaw].forEach(function (el) { el.addEventListener("change", renderDecode); el.addEventListener("input", renderDecode); });
+    decDownload.addEventListener("click", downloadDec);
+
+    mode.addEventListener("change", switchMode);
+    switchMode();
+  })();
+  </script>
+</body>
+</html>

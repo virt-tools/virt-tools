@@ -426,4 +426,12 @@ window.VIRTUAL_TOOLS = [
     icon: "1️⃣",
     added: "2026-07-04T03:00:00Z",
   },
+  {
+    slug: "image-data-uri",
+    name: "Image & Base64 / Data URI Converter",
+    description: "Encode an image to a data: URI (or raw base64) for embedding inline in HTML, CSS, JSON or Markdown — and decode a data URI back to a downloadable image. Runs locally; your image never leaves your browser.",
+    category: "Image",
+    icon: "📎",
+    added: "2026-07-04T03:40:00Z",
+  },
 ];
