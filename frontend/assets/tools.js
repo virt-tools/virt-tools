@@ -706,4 +706,12 @@ window.VIRTUAL_TOOLS = [
     icon: "∩",
     added: "2026-07-05T02:20:00Z",
   },
+  {
+    slug: "tdee-macro-calculator",
+    name: "TDEE & Macro Calculator",
+    description: "Estimate daily calorie needs and a macronutrient split. Basal metabolic rate (BMR) uses the Mifflin-St Jeor equation; total daily energy expenditure (TDEE) multiplies BMR by an activity factor; a goal adjustment adds or subtracts calories for gaining or losing weight; and macros are split into protein, carbohydrate, and fat grams with four preset ratios (balanced, low-carb, high-protein, keto). Estimates are a starting point, not medical advice. Everything runs locally in your browser.",
+    category: "Health",
+    icon: "🔥",
+    added: "2026-07-05T03:00:00Z",
+  },
 ];

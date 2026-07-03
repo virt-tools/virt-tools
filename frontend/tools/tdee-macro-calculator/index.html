@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>TDEE &amp; Macro Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .seg { display: inline-flex; border: 1px solid var(--border,#444); border-radius: 4px; overflow: hidden; flex-wrap: wrap; }
+    .seg button { padding: 5px 12px; border: none; background: transparent; color: inherit; cursor: pointer; font-size: 13px; }
+    .seg button.on { background: var(--accent,#ffd54a); color: #000; }
+    input.num { font-family: ui-monospace, monospace; font-size: 16px; width: 70px; }
+    select { font-size: 14px; }
+    .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 8px; }
+    .summary .stat { padding: 8px 10px; border: 1px solid var(--border,#444); border-radius: 6px; }
+    .summary .stat-value { display:block; font-size: 19px; font-weight: 700; font-family: ui-monospace, monospace; }
+    .summary .stat-label { font-size: 12px; opacity: .8; }
+    .macro-table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+    .macro-table td, .macro-table th { font-family: ui-monospace, monospace; padding: 4px 10px; text-align: left; font-size: 14px; }
+    .macro-table th { opacity: .8; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>TDEE &amp; Macro Calculator</h1>
+      <p>Estimate your daily calorie needs and macronutrient split. Basal metabolic rate (BMR) uses the Mifflin-St Jeor equation; total daily energy expenditure (TDEE) multiplies BMR by an activity factor; a goal adjustment adds or subtracts calories for gaining or losing weight; and the macros are split into protein, carbohydrate, and fat grams. Estimates are a starting point, not medical advice — adjust based on real-world results. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="flex-wrap:wrap; gap:14px; align-items:flex-end;">
+        <div>
+          <label>Sex</label><br>
+          <span class="seg" id="sex">
+            <button data-s="m" class="on">Male</button>
+            <button data-s="f">Female</button>
+          </span>
+        </div>
+        <div>
+          <label for="age">Age</label><br>
+          <input class="num" id="age" type="text" inputmode="numeric" value="30"> <span class="note">yrs</span>
+        </div>
+        <div>
+          <label for="wkg">Weight</label><br>
+          <input class="num" id="wkg" type="text" inputmode="decimal" value="80" style="width:80px;"> <span class="note">kg</span>
+        </div>
+        <div>
+          <label for="hcm">Height</label><br>
+          <input class="num" id="hcm" type="text" inputmode="decimal" value="180" style="width:80px;"> <span class="note">cm</span>
+        </div>
+      </div>
+      <div class="spacer"></div>
+      <div class="row" style="flex-wrap:wrap; gap:14px; align-items:flex-end;">
+        <div>
+          <label for="act">Activity level</label><br>
+          <select id="act">
+            <option value="sedentary">Sedentary (little/no exercise) — ×1.2</option>
+            <option value="light">Light (1–3 days/week) — ×1.375</option>
+            <option value="moderate" selected>Moderate (3–5 days/week) — ×1.55</option>
+            <option value="active">Active (6–7 days/week) — ×1.725</option>
+            <option value="very">Very active (physical job/daily) — ×1.9</option>
+          </select>
+        </div>
+        <div>
+          <label for="goal">Goal</label><br>
+          <select id="goal">
+            <option value="lose">Lose weight (−500 kcal)</option>
+            <option value="maintain" selected>Maintain</option>
+            <option value="gain">Gain weight (+500 kcal)</option>
+          </select>
+        </div>
+        <div>
+          <label for="preset">Macro split</label><br>
+          <select id="preset">
+            <option value="balanced" selected>Balanced (30/40/30)</option>
+            <option value="lowcarb">Low-carb (40/25/35)</option>
+            <option value="highprotein">High-protein (35/40/25)</option>
+            <option value="keto">Keto (25/5/70)</option>
+          </select>
+        </div>
+      </div>
+      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+
+      <div class="spacer"></div>
+      <label>Energy</label>
+      <div class="summary" id="summary"></div>
+
+      <div class="spacer"></div>
+      <label>Macros <span style="opacity:.6; font-weight:normal;">(grams per day)</span></label>
+      <table class="macro-table" id="macro"></table>
+      <p class="note" id="note"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var sexEl = document.getElementById("sex");
+    var ageEl = document.getElementById("age");
+    var wkgEl = document.getElementById("wkg");
+    var hcmEl = document.getElementById("hcm");
+    var actEl = document.getElementById("act");
+    var goalEl = document.getElementById("goal");
+    var presetEl = document.getElementById("preset");
+    var errEl = document.getElementById("err");
+    var summaryEl = document.getElementById("summary");
+    var macroEl = document.getElementById("macro");
+    var noteEl = document.getElementById("note");
+    var sex = "m";
+
+    function showErr(m) { errEl.textContent = m; errEl.hidden = !m; }
+    function clear(t) { t.innerHTML = ""; t.textContent = ""; }
+
+    function parseNum(s, allowDec) {
+      s = String(s).trim();
+      if (s === "") return null;
+      var re = allowDec ? /^[+]?(\d+\.?\d*|\.\d+)$/ : /^[+]?\d+$/;
+      if (!re.test(s)) return null;
+      var v = parseFloat(s);
+      if (!isFinite(v) || v < 0) return null;
+      return v;
+    }
+    function round0(x) { return Math.round(x); }
+    function fmt0(x) { return Math.round(x).toLocaleString("en-US"); }
+    function fmt1(x) { return (Math.round(x * 10) / 10).toFixed(1); }
+
+    var ACTIVITY = { sedentary: 1.2, light: 1.375, moderate: 1.55, active: 1.725, very: 1.9 };
+    var GOAL_ADJUST = { lose: -500, maintain: 0, gain: 500 };
+    var MACROS = {
+      balanced: [0.30, 0.40, 0.30],
+      lowcarb: [0.40, 0.25, 0.35],
+      highprotein: [0.35, 0.40, 0.25],
+      keto: [0.25, 0.05, 0.70]
+    };
+
+    function bmr(g, w, h, a) {
+      var base = 10 * w + 6.25 * h - 5 * a;
+      return g === "m" ? base + 5 : base - 161;
+    }
+
+    function stat(parent, val, label) {
+      var d = document.createElement("div"); d.className = "stat";
+      var v = document.createElement("span"); v.className = "stat-value"; v.textContent = val;
+      var l = document.createElement("span"); l.className = "stat-label"; l.textContent = label;
+      d.appendChild(v); d.appendChild(l); parent.appendChild(d);
+    }
+
+    function macroRow(table, name, grams, pct, kcg) {
+      var tr = document.createElement("tr");
+      var td1 = document.createElement("td"); td1.textContent = name;
+      var td2 = document.createElement("td"); td2.textContent = fmt1(grams) + " g";
+      var td3 = document.createElement("td"); td3.textContent = Math.round(pct * 100) + "%";
+      var td4 = document.createElement("td"); td4.textContent = fmt0(kcg) + " kcal";
+      tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3); tr.appendChild(td4);
+      table.appendChild(tr);
+    }
+
+    function compute() {
+      clear(summaryEl); clear(macroEl); clear(noteEl); showErr("");
+      var age = parseNum(ageEl.value, false);
+      var w = parseNum(wkgEl.value, true);
+      var h = parseNum(hcmEl.value, true);
+      if (age === null || age < 15 || age > 100) { showErr("Enter an age between 15 and 100."); window.__tdee = null; return; }
+      if (w === null || w === 0) { showErr("Enter a valid weight in kilograms."); window.__tdee = null; return; }
+      if (h === null || h === 0) { showErr("Enter a valid height in centimetres."); window.__tdee = null; return; }
+
+      var b = bmr(sex, w, h, age);
+      var act = ACTIVITY[actEl.value];
+      var t = b * act;
+      var goal = goalEl.value;
+      var target = t + GOAL_ADJUST[goal];
+      var preset = presetEl.value;
+      var mp = MACROS[preset];
+
+      var pG = target * mp[0] / 4;
+      var cG = target * mp[1] / 4;
+      var fG = target * mp[2] / 9;
+      var pK = pG * 4, cK = cG * 4, fK = fG * 9;
+
+      stat(summaryEl, fmt0(b) + " kcal", "BMR (Mifflin-St Jeor)");
+      stat(summaryEl, fmt0(t) + " kcal", "TDEE (×" + act + ")");
+      stat(summaryEl, fmt0(target) + " kcal", "Target calories (" + goal + ")");
+
+      // header row
+      var thead = document.createElement("tr");
+      ["Macro", "Grams", "% of cal", "Calories"].forEach(function (t) {
+        var th = document.createElement("th"); th.textContent = t; thead.appendChild(th);
+      });
+      macroEl.appendChild(thead);
+      macroRow(macroEl, "Protein", pG, mp[0], pK);
+      macroRow(macroEl, "Carbohydrate", cG, mp[1], cK);
+      macroRow(macroEl, "Fat", fG, mp[2], fK);
+      var tot = document.createElement("tr");
+      ["Total", fmt1(pG + cG + fG) + " g", "100%", fmt0(pK + cK + fK) + " kcal"].forEach(function (t) {
+        var td = document.createElement("td"); td.style.fontWeight = "700"; td.textContent = t; tot.appendChild(td);
+      });
+      macroEl.appendChild(tot);
+
+      noteEl.textContent = "Mifflin-St Jeor estimate for a " + (sex === "m" ? "male" : "female") +
+        " with " + fmt0(act) + "× activity. " + (goal === "maintain" ? "Maintenance calories." :
+        (goal === "lose" ? "A 500 kcal/day deficit ≈ 0.5 kg (≈1 lb) lost per week." :
+        "A 500 kcal/day surplus ≈ 0.5 kg (≈1 lb) gained per week.")) +
+        " Macro grams assume " + fmt0(target) + " kcal/day.";
+
+      window.__tdee = { sex: sex, bmr: b, tdee: t, target: target, preset: preset,
+                        protein: pG, carb: cG, fat: fG, pK: pK, cK: cK, fK: fK };
+    }
+
+    sexEl.querySelectorAll("button").forEach(function (b) {
+      b.addEventListener("click", function () {
+        sexEl.querySelectorAll("button").forEach(function (x) { x.classList.remove("on"); });
+        b.classList.add("on"); sex = b.dataset.s; compute();
+      });
+    });
+    [ageEl, wkgEl, hcmEl].forEach(function (el) { el.addEventListener("input", compute); });
+    [actEl, goalEl, presetEl].forEach(function (el) { el.addEventListener("change", compute); });
+    compute();
+  })();
+  </script>
+</body>
+</html>
