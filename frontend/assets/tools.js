@@ -99,4 +99,11 @@ window.VIRTUAL_TOOLS = [
     category: "Text",
     icon: "🔍",
   },
+  {
+    slug: "jwt-decoder",
+    name: "JWT Decoder",
+    description: "Decode a JSON Web Token's header and payload claims locally — inspect iat/exp/nbf without sending it anywhere.",
+    category: "Security",
+    icon: "🔑",
+  },
 ];

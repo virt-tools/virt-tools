@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>JWT Decoder — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>JWT Decoder</h1>
+      <p>Inspect a JSON Web Token — decode the header and payload claims locally in your browser. The signature is <strong>not</strong> verified; this is for reading tokens, not trusting them.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="token">JWT</label>
+        <textarea id="token" placeholder="Paste a token (eyJhbGciOi…)" style="min-height:90px;"></textarea>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="row">
+        <button id="copy" class="secondary">Copy payload</button>
+        <span class="note" id="status" style="margin:0;"></span>
+      </div>
+
+      <div class="spacer"></div>
+      <div id="err" class="note" style="color:var(--bad);"></div>
+
+      <label>Header <span class="muted" id="alg"></span></label>
+      <div class="output" id="header-out" style="white-space:pre-wrap; word-break:break-word;"></div>
+
+      <div class="spacer"></div>
+      <label>Payload (claims)</label>
+      <div class="output" id="payload-out" style="white-space:pre-wrap; word-break:break-word;"></div>
+
+      <div class="spacer"></div>
+      <label>Time claims</label>
+      <div class="output" id="time-out" style="white-space:pre-wrap; word-break:break-word;"></div>
+
+      <div class="spacer"></div>
+      <label>Signature</label>
+      <div class="output" id="sig-out" style="word-break:break-all;"></div>
+      <p class="note">Decoded locally — no network requests. Signature verification requires the signer's secret/public key, which this tool never asks for.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var tokenEl = document.getElementById("token");
+    var err = document.getElementById("err");
+    var status = document.getElementById("status");
+    var headerOut = document.getElementById("header-out");
+    var payloadOut = document.getElementById("payload-out");
+    var timeOut = document.getElementById("time-out");
+    var sigOut = document.getElementById("sig-out");
+    var algEl = document.getElementById("alg");
+    var lastPayload = "";
+
+    // base64url → bytes. JWT segments use URL-safe alphabet with no padding.
+    function b64urlDecode(seg) {
+      seg = seg.replace(/-/g, "+").replace(/_/g, "/");
+      while (seg.length % 4) seg += "=";
+      var bin = atob(seg);
+      var bytes = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return bytes;
+    }
+
+    function bytesToText(bytes) {
+      // Respect UTF-8 when present (TextDecoder is available in all modern browsers).
+      if (window.TextDecoder) return new TextDecoder("utf-8").decode(bytes);
+      var s = "";
+      for (var i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+      return s;
+    }
+
+    function decodeSegment(seg) {
+      var bytes = b64urlDecode(seg);
+      var text = bytesToText(bytes);
+      var obj = JSON.parse(text);
+      return obj;
+    }
+
+    function pretty(obj) {
+      return JSON.stringify(obj, null, 2);
+    }
+
+    function fmtDate(epoch) {
+      if (typeof epoch !== "number" || !isFinite(epoch)) return null;
+      // epoch seconds → ISO string (UTC) and a relative note.
+      var ms = epoch * 1000;
+      var d = new Date(ms);
+      if (isNaN(d.getTime())) return null;
+      return d.toISOString();
+    }
+
+    function relNote(epoch) {
+      if (typeof epoch !== "number" || !isFinite(epoch)) return "";
+      var now = Math.floor(Date.now() / 1000);
+      var diff = epoch - now;
+      var abs = Math.abs(diff);
+      var unit, val;
+      if (abs < 60) { unit = "s"; val = abs; }
+      else if (abs < 3600) { unit = "min"; val = Math.round(abs / 60); }
+      else if (abs < 86400) { unit = "h"; val = Math.round(abs / 3600); }
+      else { unit = "day" + (Math.round(abs / 86400) === 1 ? "" : "s"); val = Math.round(abs / 86400); }
+      return diff >= 0 ? "in " + val + " " + unit : val + " " + unit + " ago";
+    }
+
+    function run() {
+      err.textContent = "";
+      headerOut.textContent = "";
+      payloadOut.textContent = "";
+      timeOut.textContent = "";
+      sigOut.textContent = "";
+      algEl.textContent = "";
+      status.textContent = "";
+      lastPayload = "";
+
+      var raw = tokenEl.value.trim();
+      if (!raw) return;
+
+      var parts = raw.split(".");
+      if (parts.length < 2 || parts.length > 3) {
+        err.textContent = "A JWT must have 2 or 3 dot-separated segments (header.payload.signature).";
+        return;
+      }
+
+      var header, payload;
+      try {
+        header = decodeSegment(parts[0]);
+        payload = decodeSegment(parts[1]);
+      } catch (e) {
+        err.textContent = "Could not decode a segment as base64url JSON: " + e.message;
+        return;
+      }
+
+      if (typeof header !== "object" || header === null || typeof payload !== "object" || payload === null) {
+        err.textContent = "Header and payload must decode to JSON objects.";
+        return;
+      }
+
+      lastPayload = pretty(payload);
+      headerOut.textContent = pretty(header);
+      payloadOut.textContent = lastPayload;
+      if (header.alg) algEl.textContent = "(alg: " + header.alg + ")";
+      sigOut.textContent = parts[2] ? parts[2] : "(none — unsigned token)";
+
+      // Interpret the standard time claims.
+      var lines = [];
+      ["iat", "nbf", "exp"].forEach(function (claim) {
+        if (payload[claim] !== undefined) {
+          var v = payload[claim];
+          var iso = fmtDate(v);
+          if (iso === null) {
+            lines.push(claim + ": " + JSON.stringify(v) + "  (not a numeric timestamp)");
+          } else {
+            lines.push(claim + ": " + v + "  →  " + iso + "  (" + relNote(v) + ")");
+          }
+        }
+      });
+      if (!lines.length) lines.push("No standard time claims (iat / nbf / exp) present.");
+      // An explicit expiry verdict is genuinely useful.
+      if (payload.exp !== undefined) {
+        var expIso = fmtDate(payload.exp);
+        if (expIso !== null) {
+          var now = Math.floor(Date.now() / 1000);
+          lines.push("");
+          lines.push(payload.exp < now ? "⚠ This token is EXPIRED." : "✓ This token has not expired yet.");
+        }
+      }
+      timeOut.textContent = lines.join("\n");
+      status.textContent = "Decoded";
+    }
+
+    tokenEl.addEventListener("input", run);
+
+    document.getElementById("copy").addEventListener("click", function () {
+      if (!lastPayload) return;
+      var btn = this;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(lastPayload).then(function () {
+          btn.textContent = "Copied!"; setTimeout(function () { btn.textContent = "Copy payload"; }, 1200);
+        });
+      } else {
+        var ta = document.createElement("textarea");
+        ta.value = lastPayload; document.body.appendChild(ta); ta.select();
+        try { document.execCommand("copy"); btn.textContent = "Copied!"; setTimeout(function () { btn.textContent = "Copy payload"; }, 1200); }
+        catch (e) {}
+        ta.remove();
+      }
+    });
+
+    run();
+  })();
+  </script>
+</body>
+</html>
