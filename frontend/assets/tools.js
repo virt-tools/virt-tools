@@ -394,4 +394,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🪙",
     added: "2026-07-04T00:20:00Z",
   },
+  {
+    slug: "placeholder-image-generator",
+    name: "Placeholder Image Generator",
+    description: "Generate placeholder images of any size and color with an optional label — download as PNG or SVG. Text color auto-picks white or black from the background. Everything is rendered in your browser.",
+    category: "Design",
+    icon: "⬜",
+    added: "2026-07-04T01:00:00Z",
+  },
 ];
