@@ -338,4 +338,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📟",
     added: "2026-07-03T19:40:00Z",
   },
+  {
+    slug: "roman-numeral",
+    name: "Roman Numeral Converter",
+    description: "Convert integers (1–3999) to Roman numerals and back. Decode validates canonical form and rejects non-standard spellings. Runs in your browser.",
+    category: "Math",
+    icon: "🏛️",
+    added: "2026-07-03T20:20:00Z",
+  },
 ];
