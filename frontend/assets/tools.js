@@ -402,4 +402,12 @@ window.VIRTUAL_TOOLS = [
     icon: "⬜",
     added: "2026-07-04T01:00:00Z",
   },
+  {
+    slug: "checksum",
+    name: "CRC32 & Adler-32 Checksum",
+    description: "Compute non-cryptographic CRC-32 (IEEE 802.3, used by ZIP / PNG / Ethernet) and Adler-32 (zlib) checksums of text or files, with an optional expected-checksum compare. Runs entirely in your browser.",
+    category: "Security",
+    icon: "✔️",
+    added: "2026-07-04T01:40:00Z",
+  },
 ];
