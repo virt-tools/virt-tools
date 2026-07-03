@@ -121,6 +121,13 @@ window.VIRTUAL_TOOLS = [
     icon: "📝",
   },
   {
+    slug: "word-counter",
+    name: "Word & Character Counter",
+    description: "Live text statistics — characters, words, sentences, paragraphs, lines, reading time and longest word.",
+    category: "Text",
+    icon: "✍️",
+  },
+  {
     slug: "jwt-decoder",
     name: "JWT Decoder",
     description: "Decode a JSON Web Token's header and payload claims locally — inspect iat/exp/nbf without sending it anywhere.",
