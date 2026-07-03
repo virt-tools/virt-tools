@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Color Palette from Image — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Color Palette from Image</h1>
+      <p>Extract a dominant color palette from any image using median-cut quantization. Useful for building a brand palette from a photo or logo. Everything is processed locally with a canvas — your image never leaves your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="file">Image</label>
+        <div id="drop" class="dropzone">
+          <input type="file" id="file" accept="image/*" hidden>
+          <p class="dropzone-hint">Click to choose, or drag &amp; drop an image here</p>
+          <p class="dropzone-name" id="drop-name" hidden></p>
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="row" style="align-items:flex-end;">
+        <div>
+          <label for="n">Colors: <span id="n-val">6</span></label>
+          <input type="range" id="n" min="2" max="12" value="6" step="1">
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="image-preview" id="thumb" style="display:flex; align-items:center; justify-content:center; min-height:80px;"><span class="muted">No image yet</span></div>
+
+      <div class="spacer"></div>
+      <label>Palette <span class="muted">click a swatch to copy its hex</span></label>
+      <div class="palette" id="palette"></div>
+
+      <div class="spacer"></div>
+      <div class="row">
+        <button id="copyall" class="secondary">Copy all hex values</button>
+        <button id="download" class="secondary">Download as CSS variables</button>
+      </div>
+      <p class="note" id="note"></p>
+      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var fileEl = document.getElementById("file");
+    var drop = document.getElementById("drop");
+    var dropName = document.getElementById("drop-name");
+    var nEl = document.getElementById("n");
+    var nVal = document.getElementById("n-val");
+    var thumb = document.getElementById("thumb");
+    var palette = document.getElementById("palette");
+    var copyAll = document.getElementById("copyall");
+    var download = document.getElementById("download");
+    var note = document.getElementById("note");
+    var err = document.getElementById("err");
+
+    var img = null;
+    var current = [];   // hex strings
+
+    function rgbToHex(r, g, b) {
+      function c(v) { v = Math.max(0, Math.min(255, Math.round(v))); return ("0" + v.toString(16)).slice(-2); }
+      return "#" + c(r) + c(g) + c(b);
+    }
+    function textOn(hex) {
+      var m = /^#?([0-9a-f]{6})$/i.exec(hex);
+      var n = m ? parseInt(m[1], 16) : 0;
+      var lum = 0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255);
+      return lum < 140 ? "#fff" : "#1a1f29";
+    }
+
+    // Median-cut quantization. pixels: array of [r,g,b]. returns up to n [r,g,b].
+    function medianCut(pixels, n) {
+      if (!pixels.length) return [];
+      var boxes = [pixels];
+      while (boxes.length < n) {
+        var bestI = -1, bestRange = -1;
+        for (var i = 0; i < boxes.length; i++) {
+          var box = boxes[i];
+          if (box.length < 2) continue;
+          for (var ch = 0; ch < 3; ch++) {
+            var lo = 255, hi = 0;
+            for (var k = 0; k < box.length; k++) { var v = box[k][ch]; if (v < lo) lo = v; if (v > hi) hi = v; }
+            if (hi - lo > bestRange) { bestRange = hi - lo; bestI = i; }
+          }
+        }
+        if (bestI < 0) break;
+        var box = boxes[bestI];
+        var ranges = [];
+        for (var ch = 0; ch < 3; ch++) {
+          var lo = 255, hi = 0;
+          for (var k = 0; k < box.length; k++) { var v = box[k][ch]; if (v < lo) lo = v; if (v > hi) hi = v; }
+          ranges.push([hi - lo, ch]);
+        }
+        ranges.sort(function (a, b) { return b[0] - a[0]; });
+        var ch = ranges[0][1];
+        box.sort(function (a, b) { return a[ch] - b[ch]; });
+        var mid = box.length >> 1;
+        boxes.splice(bestI, 1, box.slice(0, mid), box.slice(mid));
+      }
+      var out = [];
+      for (var i = 0; i < boxes.length; i++) {
+        var box = boxes[i];
+        if (!box.length) continue;
+        var r = 0, g = 0, b = 0;
+        for (var k = 0; k < box.length; k++) { r += box[k][0]; g += box[k][1]; b += box[k][2]; }
+        out.push([Math.floor(r / box.length), Math.floor(g / box.length), Math.floor(b / box.length)]);
+      }
+      return out;
+    }
+
+    function showErr(m) { err.textContent = m; err.hidden = false; note.textContent = ""; }
+    function clearErr() { err.hidden = true; err.textContent = ""; }
+
+    function extract() {
+      if (!img) return;
+      clearErr();
+      // scale down for performance
+      var maxSide = 200;
+      var w = img.naturalWidth, h = img.naturalHeight;
+      var scale = Math.max(w, h) > maxSide ? maxSide / Math.max(w, h) : 1;
+      w = Math.max(1, Math.round(w * scale));
+      h = Math.max(1, Math.round(h * scale));
+      var canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      var ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, w, h);
+      var data = ctx.getImageData(0, 0, w, h).data;
+      var pixels = [];
+      for (var i = 0; i < data.length; i += 4) {
+        // skip fully-transparent pixels
+        if (data[i + 3] < 16) continue;
+        pixels.push([data[i], data[i + 1], data[i + 2]]);
+      }
+      if (!pixels.length) { showErr("No opaque pixels found in this image."); return; }
+      var n = Math.max(2, Math.min(12, parseInt(nEl.value, 10) || 6));
+      var cols = medianCut(pixels, n);
+      current = cols.map(function (c) { return rgbToHex(c[0], c[1], c[2]); });
+      renderPalette();
+      note.textContent = "Extracted " + current.length + " color" + (current.length === 1 ? "" : "s") + " from " + w + "×" + h + " (" + pixels.length + " sampled pixels).";
+    }
+
+    function renderPalette() {
+      palette.innerHTML = "";
+      current.forEach(function (hex, i) {
+        var sw = document.createElement("div");
+        sw.className = "swatch";
+        sw.style.background = hex;
+        sw.style.color = textOn(hex);
+        sw.innerHTML = '<span class="swatch-hex">' + hex.toUpperCase() + "</span>";
+        sw.title = "Click to copy " + hex;
+        sw.addEventListener("click", function () { copy(hex, "Copied " + hex.toUpperCase()); });
+        palette.appendChild(sw);
+      });
+    }
+
+    function copy(text, label) {
+      function done() { note.textContent = label || "Copied!"; setTimeout(function () { if (note.textContent === label) note.textContent = ""; }, 1200); }
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done);
+      else { var ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select(); try { document.execCommand("copy"); done(); } catch (e) {} ta.remove(); }
+    }
+
+    function loadFile(file) {
+      clearErr();
+      if (!file || !/^image\//.test(file.type)) { showErr("Please choose an image file."); return; }
+      dropName.textContent = file.name; dropName.hidden = false;
+      var url = URL.createObjectURL(file);
+      var image = new Image();
+      image.onload = function () {
+        img = image;
+        URL.revokeObjectURL(url);
+        thumb.innerHTML = "";
+        var preview = image.cloneNode();
+        preview.style.maxWidth = "100%";
+        preview.style.maxHeight = "180px";
+        thumb.appendChild(preview);
+        extract();
+      };
+      image.onerror = function () { showErr("Could not read that image. Try a different file."); URL.revokeObjectURL(url); };
+      image.src = url;
+    }
+
+    // wiring
+    drop.addEventListener("click", function () { fileEl.click(); });
+    fileEl.addEventListener("change", function () { if (fileEl.files[0]) loadFile(fileEl.files[0]); });
+    ["dragenter", "dragover"].forEach(function (ev) {
+      drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add("drag"); });
+    });
+    ["dragleave", "drop"].forEach(function (ev) {
+      drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove("drag"); });
+    });
+    drop.addEventListener("drop", function (e) { if (e.dataTransfer && e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]); });
+    nEl.addEventListener("input", function () { nVal.textContent = nEl.value; if (img) extract(); });
+
+    copyAll.addEventListener("click", function () { if (current.length) copy(current.join(", "), "Copied all hex values"); });
+    download.addEventListener("click", function () {
+      if (!current.length) return;
+      var css = ":root {\n" + current.map(function (h, i) { return "  --color-" + (i + 1) + ": " + h + ";"; }).join("\n") + "\n}";
+      var blob = new Blob([css], { type: "text/css" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a"); a.href = url; a.download = "image-palette.css"; document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      note.textContent = "Downloaded image-palette.css"; setTimeout(function () { note.textContent = ""; }, 1500);
+    });
+  })();
+  </script>
+</body>
+</html>

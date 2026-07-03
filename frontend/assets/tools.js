@@ -434,4 +434,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📎",
     added: "2026-07-04T03:40:00Z",
   },
+  {
+    slug: "image-palette",
+    name: "Color Palette from Image",
+    description: "Extract a dominant color palette (2–12 colors) from any image using median-cut quantization. Click a swatch to copy its hex, or download the palette as CSS variables. Runs locally — your image never leaves your browser.",
+    category: "Design",
+    icon: "🖍️",
+    added: "2026-07-04T04:20:00Z",
+  },
 ];
