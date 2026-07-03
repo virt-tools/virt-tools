@@ -474,4 +474,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📍",
     added: "2026-07-04T07:00:00Z",
   },
+  {
+    slug: "chmod-calculator",
+    name: "Unix File Permissions (chmod) Calculator",
+    description: "Convert between numeric octal notation (e.g. 755 or 4755) and symbolic notation (e.g. rwxr-xr-x or rwsr-xr-x), with full support for the setuid, setgid and sticky special bits. Pure bit arithmetic, in your browser.",
+    category: "System",
+    icon: "📁",
+    added: "2026-07-04T07:40:00Z",
+  },
 ];

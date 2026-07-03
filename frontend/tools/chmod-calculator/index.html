@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>chmod File Permissions Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Unix File Permissions (chmod) Calculator</h1>
+      <p>Convert between numeric octal notation (e.g. <code>755</code> or <code>4755</code>) and symbolic notation (e.g. <code>rwxr-xr-x</code> or <code>rwsr-xr-x</code>), with full support for the setuid, setgid and sticky special bits. Pure bit arithmetic, in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="align-items:flex-end;">
+        <div>
+          <label for="mode">Mode</label>
+          <select id="mode">
+            <option value="toSym" selected>Numeric → Symbolic</option>
+            <option value="toNum">Symbolic → Numeric</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="field">
+        <label for="in" id="inLabel">Numeric (octal)</label>
+        <input type="text" id="in" value="755" spellcheck="false" inputmode="numeric" style="font-family:ui-monospace,monospace; letter-spacing:0.1em;" placeholder="755">
+      </div>
+
+      <div class="spacer"></div>
+      <div class="row" style="justify-content:space-between;">
+        <label for="out">Result</label>
+        <button id="copy" class="secondary" style="padding:4px 10px;">Copy</button>
+      </div>
+      <div class="output" id="out" style="letter-spacing:0.1em; font-family:ui-monospace,monospace; min-height:1.6em;"></div>
+      <p class="note" id="note"></p>
+
+      <div class="spacer"></div>
+      <table class="base-table" id="tbl" style="width:100%;"></table>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var mode = document.getElementById("mode");
+    var inEl = document.getElementById("in");
+    var inLabel = document.getElementById("inLabel");
+    var out = document.getElementById("out");
+    var copy = document.getElementById("copy");
+    var note = document.getElementById("note");
+    var tbl = document.getElementById("tbl");
+
+    function digitToRwx(d) {
+      return (d & 4 ? "r" : "-") + (d & 2 ? "w" : "-") + (d & 1 ? "x" : "-");
+    }
+    function applySpecial(execChar, bit, on, off) {
+      if (!bit) return execChar;
+      return execChar === "x" ? on : off;
+    }
+    function numToSym(numeric) {
+      var s = (numeric || "").trim();
+      if (!/^[0-7]{3,4}$/.test(s)) throw new Error("Enter 3 or 4 octal digits (0–7), e.g. 755 or 4755.");
+      if (s.length === 3) s = "0" + s;
+      var sp = parseInt(s.charAt(0), 10);
+      var u = parseInt(s.charAt(1), 10);
+      var g = parseInt(s.charAt(2), 10);
+      var o = parseInt(s.charAt(3), 10);
+      var usr = digitToRwx(u);
+      var grp = digitToRwx(g);
+      var oth = digitToRwx(o);
+      usr = usr.slice(0, 2) + applySpecial(usr.charAt(2), sp & 4, "s", "S");
+      grp = grp.slice(0, 2) + applySpecial(grp.charAt(2), sp & 2, "s", "S");
+      oth = oth.slice(0, 2) + applySpecial(oth.charAt(2), sp & 1, "t", "T");
+      return { sym: usr + grp + oth, special: sp, u: u, g: g, o: o };
+    }
+
+    function rwxToDigit(triple) {
+      var d = 0;
+      if (triple.charAt(0) === "r") d |= 4;
+      if (triple.charAt(1) === "w") d |= 2;
+      if ("xst".indexOf(triple.charAt(2)) >= 0) d |= 1; // lowercase s/t imply execute
+      return d;
+    }
+    function symToNum(sym) {
+      var s = (sym || "").trim();
+      if (s.length === 10 && "dlbcps-".indexOf(s.charAt(0)) >= 0) s = s.slice(1); // strip file type
+      if (!/^[rwxstST-]{9}$/.test(s)) throw new Error("Enter 9 symbolic chars (r, w, x, s, S, t, T, -), e.g. rwxr-xr-x.");
+      var usr = s.slice(0, 3), grp = s.slice(3, 6), oth = s.slice(6, 9);
+      var u = rwxToDigit(usr), g = rwxToDigit(grp), o = rwxToDigit(oth);
+      var special = 0;
+      if ("sS".indexOf(usr.charAt(2)) >= 0) special |= 4;
+      if ("sS".indexOf(grp.charAt(2)) >= 0) special |= 2;
+      if ("tT".indexOf(oth.charAt(2)) >= 0) special |= 1;
+      return { num: (special ? String(special) : "") + String(u) + String(g) + String(o), special: special, u: u, g: g, o: o, sym: s };
+    }
+
+    function fmtNum(n) {
+      var special = n.special, u = n.u, g = n.g, o = n.o;
+      var core = String(u) + String(g) + String(o);
+      return (special ? String(special) + core : core);
+    }
+
+    function renderTable(info) {
+      tbl.innerHTML = "";
+      var classes = [
+        { name: "Owner (user)", u: info.u, sp: info.special & 4, spName: "setuid" },
+        { name: "Group", u: info.g, sp: info.special & 2, spName: "setgid" },
+        { name: "Other", u: info.o, sp: info.special & 1, spName: "sticky" }
+      ];
+      classes.forEach(function (c) {
+        var tr = document.createElement("tr");
+        var td1 = document.createElement("td"); td1.style.fontWeight = "600"; td1.textContent = c.name;
+        var td2 = document.createElement("td"); td2.style.fontFamily = "ui-monospace,monospace";
+        td2.textContent = (c.u & 4 ? "read" : "—") + " · " + (c.u & 2 ? "write" : "—") + " · " + (c.u & 1 ? "execute" : "—");
+        var td3 = document.createElement("td"); td3.className = "muted";
+        td3.textContent = c.sp ? (c.spName + " " + (c.u & 1 ? "on" : "on (no exec)")) : "";
+        tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3);
+        tbl.appendChild(tr);
+      });
+      // special row summary
+      var sp = info.special || 0;
+      var spLabel = (sp & 4 ? "setuid " : "") + (sp & 2 ? "setgid " : "") + (sp & 1 ? "sticky" : "");
+      if (spLabel.trim()) {
+        var tr = document.createElement("tr");
+        var td1 = document.createElement("td"); td1.style.fontWeight = "600"; td1.textContent = "Special bits";
+        var td2 = document.createElement("td"); td2.setAttribute("colspan", "2"); td2.textContent = spLabel.trim() + " (" + sp + ")";
+        tr.appendChild(td1); tr.appendChild(td2);
+        tbl.appendChild(tr);
+      }
+    }
+
+    function run() {
+      out.style.color = "";
+      try {
+        var raw = inEl.value;
+        if (mode.value === "toSym") {
+          var info = numToSym(raw);
+          out.textContent = info.sym;
+          renderTable(info);
+          var numStr = fmtNum(info);
+          note.textContent = numStr + " → " + info.sym + "  ·  " + (info.special ? "includes special bits" : "no special bits");
+          note.style.color = "";
+        } else {
+          var info = symToNum(raw);
+          out.textContent = fmtNum(info);
+          renderTable(info);
+          note.textContent = info.sym + " → " + fmtNum(info);
+          note.style.color = "";
+        }
+      } catch (e) {
+        out.textContent = "✗ " + (e && e.message ? e.message : e);
+        out.style.color = "var(--bad)";
+        note.textContent = "";
+        tbl.innerHTML = "";
+      }
+    }
+
+    function copyText() {
+      var t = out.textContent;
+      if (!t || t.indexOf("✗") === 0) return;
+      function done() { copy.textContent = "Copied!"; setTimeout(function () { copy.textContent = "Copy"; }, 1200); }
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done);
+      else { var ta = document.createElement("textarea"); ta.value = t; document.body.appendChild(ta); ta.select(); try { document.execCommand("copy"); done(); } catch (e) {} ta.remove(); }
+    }
+
+    var DEFAULTS = { toSym: "755", toNum: "rwxr-xr-x" };
+    var LABELS = { toSym: "Numeric (octal)", toNum: "Symbolic" };
+    mode.addEventListener("change", function () {
+      inEl.value = DEFAULTS[mode.value];
+      inLabel.textContent = LABELS[mode.value];
+      run();
+    });
+    inEl.addEventListener("input", run);
+    copy.addEventListener("click", copyText);
+    run();
+  })();
+  </script>
+</body>
+</html>
