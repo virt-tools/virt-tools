@@ -178,4 +178,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🖼️",
     added: "2026-07-03T07:08:00Z",
   },
+  {
+    slug: "csv-json",
+    name: "CSV / JSON Converter",
+    description: "Convert between CSV and JSON — handles quoted fields, embedded delimiters and newlines. Runs locally, nothing uploaded.",
+    category: "Text",
+    icon: "📊",
+    added: "2026-07-03T07:40:00Z",
+  },
 ];
