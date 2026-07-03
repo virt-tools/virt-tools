@@ -78,4 +78,11 @@ window.VIRTUAL_TOOLS = [
     category: "Text",
     icon: "🔤",
   },
+  {
+    slug: "uuid-generator",
+    name: "UUID Generator",
+    description: "Generate RFC 4122 v4 UUIDs with crypto.randomUUID — bulk, uppercase, with or without hyphens.",
+    category: "Security",
+    icon: "🆔",
+  },
 ];
