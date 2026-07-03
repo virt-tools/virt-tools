@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Password Generator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Password Generator</h1>
+      <p>Generate strong, random passwords entirely in your browser using the Web Crypto API. Nothing is ever sent over the network.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="length">Length: <span id="length-val">20</span></label>
+        <input type="range" id="length" min="4" max="64" value="20">
+      </div>
+
+      <div class="row" style="flex-wrap:wrap; gap:14px;">
+        <label class="check"><input type="checkbox" id="opt-upper" checked> Uppercase (A–Z)</label>
+        <label class="check"><input type="checkbox" id="opt-lower" checked> Lowercase (a–z)</label>
+        <label class="check"><input type="checkbox" id="opt-digit" checked> Digits (0–9)</label>
+        <label class="check"><input type="checkbox" id="opt-symbol" checked> Symbols (!@#$…)</label>
+        <label class="check"><input type="checkbox" id="opt-noambiguous"> Exclude look-alikes (Il1O0)</label>
+      </div>
+
+      <div class="spacer"></div>
+      <button id="generate">Generate</button>
+      <button id="copy" class="secondary">Copy</button>
+
+      <div class="spacer"></div>
+      <label for="out">Your password</label>
+      <div class="output" id="out" style="font-family:monospace; word-break:break-all;"></div>
+      <p class="note" id="strength"></p>
+      <p class="note">Generated with <code>crypto.getRandomValues()</code> — cryptographically secure, never transmitted.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var lengthInput = document.getElementById("length");
+    var lengthVal = document.getElementById("length-val");
+    var out = document.getElementById("out");
+    var strengthEl = document.getElementById("strength");
+    var lastPassword = "";
+
+    var SETS = {
+      upper: "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+      lower: "abcdefghijklmnopqrstuvwxyz",
+      digit: "0123456789",
+      symbol: "!@#$%^&*()-_=+[]{};:,.<>?/~"
+    };
+    var AMBIGUOUS = "Il1O0";
+
+    function buildPool() {
+      var opts = {
+        upper: document.getElementById("opt-upper").checked,
+        lower: document.getElementById("opt-lower").checked,
+        digit: document.getElementById("opt-digit").checked,
+        symbol: document.getElementById("opt-symbol").checked
+      };
+      var noAmbiguous = document.getElementById("opt-noambiguous").checked;
+      var pool = "";
+      var required = [];
+      Object.keys(SETS).forEach(function (k) {
+        if (!opts[k]) return;
+        var chars = SETS[k];
+        if (noAmbiguous) chars = chars.split("").filter(function (c) {
+          return AMBIGUOUS.indexOf(c) === -1;
+        }).join("");
+        pool += chars;
+        if (chars) required.push(chars);
+      });
+      return { pool: pool, required: required };
+    }
+
+    // Unbiased random index over [0, max) avoiding modulo bias.
+    function randomInt(max) {
+      if (max <= 0) return 0;
+      var maxUint32 = 0xFFFFFFFF;
+      var limit = maxUint32 - (maxUint32 % max);
+      var buf = new Uint32Array(1);
+      var x;
+      do {
+        crypto.getRandomValues(buf);
+        x = buf[0];
+      } while (x >= limit);
+      return x % max;
+    }
+
+    function generate() {
+      var len = parseInt(lengthInput.value, 10) || 4;
+      var ref = buildPool();
+      if (!ref.pool) {
+        out.textContent = "";
+        strengthEl.textContent = "Select at least one character set.";
+        lastPassword = "";
+        return;
+      }
+      var chars = [];
+      // Guarantee at least one from each chosen set, then fill randomly.
+      ref.required.forEach(function (set) {
+        chars.push(set[randomInt(set.length)]);
+      });
+      while (chars.length < len) chars.push(ref.pool[randomInt(ref.pool.length)]);
+      // Shuffle (Fisher–Yates) so the guaranteed chars aren't always first.
+      for (var i = chars.length - 1; i > 0; i--) {
+        var j = randomInt(i + 1);
+        var tmp = chars[i]; chars[i] = chars[j]; chars[j] = tmp;
+      }
+      lastPassword = chars.slice(0, len).join("");
+      out.textContent = lastPassword;
+      estimateStrength(lastPassword, ref.pool.length);
+    }
+
+    function estimateStrength(pw, poolSize) {
+      var entropy = pw.length * Math.log2(poolSize || 1);
+      var bits = entropy.toFixed(0);
+      var label, cls;
+      if (entropy < 40) { label = "Weak"; cls = "status-rejected"; }
+      else if (entropy < 60) { label = "Fair"; cls = "status-received"; }
+      else if (entropy < 80) { label = "Strong"; cls = "status-completed"; }
+      else { label = "Very strong"; cls = "status-completed"; }
+      strengthEl.innerHTML = "Entropy ≈ " + bits + " bits — <span class=\"status-badge " + cls + "\">" + label + "</span>";
+    }
+
+    document.getElementById("generate").addEventListener("click", generate);
+
+    document.getElementById("copy").addEventListener("click", function () {
+      if (!lastPassword) return;
+      var btn = this;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(lastPassword).then(function () {
+          btn.textContent = "Copied!"; setTimeout(function () { btn.textContent = "Copy"; }, 1200);
+        });
+      } else {
+        var ta = document.createElement("textarea");
+        ta.value = lastPassword; document.body.appendChild(ta); ta.select();
+        try { document.execCommand("copy"); btn.textContent = "Copied!"; setTimeout(function () { btn.textContent = "Copy"; }, 1200); }
+        catch (e) {}
+        ta.remove();
+      }
+    });
+
+    lengthInput.addEventListener("input", function () {
+      lengthVal.textContent = lengthInput.value;
+      generate();
+    });
+    ["opt-upper", "opt-lower", "opt-digit", "opt-symbol", "opt-noambiguous"].forEach(function (id) {
+      document.getElementById(id).addEventListener("change", generate);
+    });
+
+    generate();
+  })();
+  </script>
+</body>
+</html>
