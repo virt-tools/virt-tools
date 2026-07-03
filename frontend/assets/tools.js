@@ -506,4 +506,12 @@ window.VIRTUAL_TOOLS = [
     icon: "✂️",
     added: "2026-07-04T09:40:00Z",
   },
+  {
+    slug: "unit-converter",
+    name: "Unit Converter",
+    description: "Convert between common units across length, mass, temperature, area, volume, speed, digital storage, time, pressure, energy and data rate — exact arithmetic against SI / NIST-defined factors, with proper Kelvin-based temperature conversion. Runs entirely in your browser.",
+    category: "Math",
+    icon: "📏",
+    added: "2026-07-04T10:20:00Z",
+  },
 ];

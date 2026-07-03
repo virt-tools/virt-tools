@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Unit Converter — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Unit Converter</h1>
+      <p>Convert between common units across length, mass, temperature, area, volume, speed, digital storage, time, pressure, energy and data rate. All conversions are exact arithmetic against SI / NIST-defined factors — nothing is sent anywhere, everything runs in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="align-items:flex-end;">
+        <div>
+          <label for="cat">Category</label>
+          <select id="cat"></select>
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="row" style="align-items:flex-end; flex-wrap:wrap; gap:12px;">
+        <div>
+          <label for="from">From</label>
+          <select id="from"></select>
+        </div>
+        <div>
+          <label for="val">Value</label>
+          <input type="text" id="val" value="1" inputmode="decimal" spellcheck="false" style="font-family:ui-monospace,monospace; width:160px;">
+        </div>
+        <button id="swap" class="secondary" title="Swap units">⇄</button>
+        <div>
+          <label for="to">To</label>
+          <select id="to"></select>
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="row" style="justify-content:space-between;">
+        <label for="out">Result</label>
+        <button id="copy" class="secondary" style="padding:4px 10px;">Copy</button>
+      </div>
+      <div class="output" id="out" style="word-break:break-all; min-height:1.6em; font-family:ui-monospace,monospace;"></div>
+      <p class="note" id="note"></p>
+      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    // Authoritative base constants (exact, SI/NIST-defined).
+    var LB = 0.45359237;            // kg per avoirdupois pound
+    var G_US = 3.785411784e-3;      // m^3 per US gallon
+    var IN = 0.0254;                // m per inch
+    var FT = 0.3048;                // m per foot
+    var LBF = 4.4482216152605;      // N per pound-force (lb * 9.80665)
+    var ATM = 101325;              // Pa per standard atmosphere
+    var CAL = 4.184;               // J per thermochemical calorie
+    var EV = 1.602176634e-19;      // J per electronvolt (2019 SI)
+    var BTU_IT = 1055.05585262;    // J per IT Btu
+
+    // Each category: { base, units: { key: {f, label} } }
+    // f = factor such that value_in_base = value * f (derived units computed).
+    var CATEGORIES = {
+      "Length": { base: "m", units: {
+        "m":   [1, "meter (m)"], "km": [1000, "kilometer (km)"],
+        "cm":  [0.01, "centimeter (cm)"], "mm": [0.001, "millimeter (mm)"],
+        "um":  [1e-6, "micrometer (µm)"], "nm": [1e-9, "nanometer (nm)"],
+        "in":  [IN, "inch (in)"], "ft": [FT, "foot (ft)"],
+        "yd":  [FT*3, "yard (yd)"], "mi": [FT*5280, "mile (mi)"],
+        "nmi": [1852, "nautical mile (nmi)"], "ly": [9.4607304725808e15, "light-year"]
+      }},
+      "Mass": { base: "kg", units: {
+        "kg":  [1, "kilogram (kg)"], "g": [1e-3, "gram (g)"],
+        "mg":  [1e-6, "milligram (mg)"], "ug": [1e-9, "microgram (µg)"],
+        "t":   [1000, "metric ton (t)"], "carat": [2e-4, "carat"],
+        "lb":  [LB, "pound (lb)"], "oz": [LB/16, "ounce (oz)"],
+        "stone": [LB*14, "stone"], "ton": [LB*2000, "US ton (short)"],
+        "ton_uk": [LB*2240, "long ton (UK)"], "ozt": [31.1034768e-3, "troy ounce"]
+      }},
+      "Temperature": { base: "K", special: true, units: {
+        "K": ["Kelvin (K)"], "C": ["Celsius (°C)"], "F": ["Fahrenheit (°F)"], "R": ["Rankine (°R)"]
+      }},
+      "Area": { base: "m²", units: {
+        "m2":  [1, "square meter (m²)"], "km2": [1e6, "square kilometer (km²)"],
+        "cm2": [1e-4, "square centimeter (cm²)"], "ha": [1e4, "hectare (ha)"],
+        "are": [100, "are (a)"], "in2": [IN*IN, "square inch (in²)"],
+        "ft2": [FT*FT, "square foot (ft²)"], "yd2": [(FT*3)*(FT*3), "square yard (yd²)"],
+        "acre":[FT*FT*43560, "acre"], "mi2": [(FT*5280)*(FT*5280), "square mile (mi²)"]
+      }},
+      "Volume": { base: "m³", units: {
+        "m3": [1, "cubic meter (m³)"], "L": [1e-3, "liter (L)"],
+        "mL": [1e-6, "milliliter (mL)"], "cm3": [1e-6, "cubic centimeter (cm³)"],
+        "in3": [IN*IN*IN, "cubic inch (in³)"], "ft3": [FT*FT*FT, "cubic foot (ft³)"],
+        "gal_us": [G_US, "US gallon"], "qt_us": [G_US/4, "US quart"],
+        "pt_us":  [G_US/8, "US pint"], "cup_us": [G_US/16, "US cup"],
+        "floz_us":[G_US/128, "US fluid ounce"], "tbsp_us": [G_US/256, "US tablespoon"],
+        "tsp_us": [G_US/768, "US teaspoon"], "gal_uk": [4.54609e-3, "UK gallon"],
+        "floz_uk":[4.54609e-3/160, "UK fluid ounce"], "bbl_oil": [G_US*42, "oil barrel (42 gal)"]
+      }},
+      "Speed": { base: "m/s", units: {
+        "mps": [1, "meter / second (m/s)"], "kmh": [1000/3600.0, "kilometer / hour (km/h)"],
+        "mph": [FT*5280/3600.0, "mile / hour (mph)"], "fps": [FT, "foot / second (ft/s)"],
+        "fpm": [FT/60.0, "foot / minute (ft/min)"], "knot": [1852/3600.0, "knot"]
+      }},
+      "Digital storage": { base: "B", units: {
+        "bit": [0.125, "bit"], "nibble": [0.5, "nibble"], "B": [1, "byte (B)"],
+        "KB": [1e3, "kilobyte (KB)"], "MB": [1e6, "megabyte (MB)"],
+        "GB": [1e9, "gigabyte (GB)"], "TB": [1e12, "terabyte (TB)"], "PB": [1e15, "petabyte (PB)"],
+        "KiB":[1024, "kibibyte (KiB)"], "MiB": [1024*1024, "mebibyte (MiB)"],
+        "GiB":[1024*1024*1024, "gibibyte (GiB)"], "TiB": [1024*1024*1024*1024, "tebibyte (TiB)"],
+        "PiB":[1024*1024*1024*1024*1024, "pebibyte (PiB)"]
+      }},
+      "Time": { base: "s", units: {
+        "ns": [1e-9, "nanosecond (ns)"], "us": [1e-6, "microsecond (µs)"],
+        "ms": [1e-3, "millisecond (ms)"], "s": [1, "second (s)"],
+        "min":[60, "minute (min)"], "h": [3600, "hour (h)"],
+        "d":  [86400, "day (d)"], "wk": [604800, "week (wk)"],
+        "mo_avg": [2629800.0, "month (30.44 d avg)"], "yr365": [365*86400, "year (365 d)"],
+        "yr_jul": [365.25*86400, "year (Julian 365.25 d)"], "dec": [10*365.25*86400, "decade"],
+        "cent": [100*365.25*86400, "century"]
+      }},
+      "Pressure": { base: "Pa", units: {
+        "Pa": [1, "pascal (Pa)"], "kPa": [1e3, "kilopascal (kPa)"],
+        "MPa":[1e6, "megapascal (MPa)"], "hPa": [100, "hectopascal (hPa)"],
+        "bar":[1e5, "bar"], "mbar": [100, "millibar (mbar)"],
+        "atm":[ATM, "atmosphere (atm)"], "torr": [ATM/760.0, "torr (mmHg)"],
+        "inHg":[3386.389, "inch of mercury (inHg)"], "psi": [LBF/(IN*IN), "pound / in² (psi)"]
+      }},
+      "Energy": { base: "J", units: {
+        "J": [1, "joule (J)"], "kJ": [1e3, "kilojoule (kJ)"], "MJ": [1e6, "megajoule (MJ)"],
+        "cal": [CAL, "calorie (cal)"], "kcal": [CAL*1000, "kilocalorie (kcal, food Cal)"],
+        "Wh": [3600, "watt-hour (Wh)"], "kWh": [3.6e6, "kilowatt-hour (kWh)"],
+        "MWh":[3.6e9, "megawatt-hour (MWh)"], "eV": [EV, "electronvolt (eV)"],
+        "keV":[EV*1e3, "kiloelectronvolt (keV)"], "MeV": [EV*1e6, "megaelectronvolt (MeV)"],
+        "Btu":[BTU_IT, "Btu (IT)"], "ftlb": [LBF*FT, "foot-pound (ft·lb)"],
+        "therm": [BTU_IT*1e5, "therm (EC)"]
+      }},
+      "Data rate": { base: "bit/s", units: {
+        "bps": [1, "bit / s (bps)"], "kbps": [1e3, "kilobit / s (kbps)"],
+        "Mbps":[1e6, "megabit / s (Mbps)"], "Gbps": [1e9, "gigabit / s (Gbps)"],
+        "Bps": [8, "byte / s (Bps)"], "KBps": [8e3, "kilobyte / s (KBps)"],
+        "MBps":[8e6, "megabyte / s (MBps)"], "GBps": [8e9, "gigabyte / s (GBps)"],
+        "KiBps":[8*1024, "kibibyte / s (KiBps)"], "MiBps": [8*1024*1024, "mebibyte / s (MiBps)"]
+      }}
+    };
+
+    var catEl = document.getElementById("cat");
+    var fromEl = document.getElementById("from");
+    var toEl = document.getElementById("to");
+    var valEl = document.getElementById("val");
+    var swapBtn = document.getElementById("swap");
+    var out = document.getElementById("out");
+    var note = document.getElementById("note");
+    var copy = document.getElementById("copy");
+    var err = document.getElementById("err");
+
+    function fmtNum(x) {
+      if (!isFinite(x)) return String(x);
+      if (x === 0) return "0";
+      var ax = Math.abs(x);
+      if (ax >= 1e15 || ax < 1e-6) return x.toExponential(6).replace(/\.?0+e/, "e");
+      // up to 10 significant digits, trim trailing zeros
+      var s;
+      if (ax >= 1) s = x.toPrecision(10);
+      else s = x.toPrecision(9);
+      if (s.indexOf("e") < 0) s = s.replace(/\.?0+$/, "");
+      return s;
+    }
+
+    function toKelvin(v, u) {
+      if (u === "K") return v;
+      if (u === "C") return v + 273.15;
+      if (u === "F") return (v - 32) * 5 / 9 + 273.15;
+      if (u === "R") return v * 5 / 9;
+      return NaN;
+    }
+    function fromKelvin(k, u) {
+      if (u === "K") return k;
+      if (u === "C") return k - 273.15;
+      if (u === "F") return (k - 273.15) * 9 / 5 + 32;
+      if (u === "R") return k * 9 / 5;
+      return NaN;
+    }
+
+    function convert(cat, value, fromU, toU) {
+      var spec = CATEGORIES[cat];
+      if (spec.special) return fromKelvin(toKelvin(value, fromU), toU);
+      var f = spec.units[fromU][0], t = spec.units[toU][0];
+      return (value * f) / t;
+    }
+
+    function fillUnits() {
+      var spec = CATEGORIES[catEl.value];
+      var keys = Object.keys(spec.units);
+      var prevFrom = fromEl.value, prevTo = toEl.value;
+      fromEl.innerHTML = ""; toEl.innerHTML = "";
+      keys.forEach(function (k) {
+        var o1 = document.createElement("option"); o1.value = k;
+        o1.textContent = spec.units[k][spec.special ? 0 : 1]; fromEl.appendChild(o1);
+        var o2 = document.createElement("option"); o2.value = k;
+        o2.textContent = spec.units[k][spec.special ? 0 : 1]; toEl.appendChild(o2);
+      });
+      // restore or pick sensible defaults
+      fromEl.value = keys.indexOf(prevFrom) >= 0 ? prevFrom : keys[0];
+      toEl.value = keys.indexOf(prevTo) >= 0 ? prevTo : (keys[1] || keys[0]);
+    }
+
+    function run() {
+      err.hidden = true; err.textContent = "";
+      out.style.color = "";
+      var v = parseFloat(valEl.value);
+      if (valEl.value.trim() === "" || isNaN(v)) {
+        out.textContent = "✗ enter a number";
+        out.style.color = "var(--bad)";
+        note.textContent = "";
+        return;
+      }
+      var cat = catEl.value;
+      var fromU = fromEl.value, toU = toEl.value;
+      var r = convert(cat, v, fromU, toU);
+      var spec = CATEGORIES[cat];
+      var fromLabel = spec.units[fromU][spec.special ? 0 : 1];
+      var toLabel = spec.units[toU][spec.special ? 0 : 1];
+      out.textContent = fmtNum(v) + " " + fromLabel + " = " + fmtNum(r) + " " + toLabel;
+      if (spec.special) {
+        note.textContent = "Temperature converted via Kelvin (0 °C = 273.15 K, 0 K = -459.67 °F).";
+      } else {
+        var factor = spec.units[fromU][0] / spec.units[toU][0];
+        note.textContent = "1 " + fromLabel + " = " + fmtNum(factor) + " " + toLabel + "  ·  base unit: " + spec.base;
+      }
+    }
+
+    function copyResult() {
+      var t = out.textContent;
+      if (!t || t.indexOf("✗") === 0) return;
+      function done() { copy.textContent = "Copied!"; setTimeout(function () { copy.textContent = "Copy"; }, 1200); }
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done);
+      else { var ta = document.createElement("textarea"); ta.value = t; document.body.appendChild(ta); ta.select(); try { document.execCommand("copy"); done(); } catch (e) {} ta.remove(); }
+    }
+
+    // populate category select
+    Object.keys(CATEGORIES).forEach(function (c) {
+      var o = document.createElement("option"); o.value = c; o.textContent = c; catEl.appendChild(o);
+    });
+    catEl.value = "Length";
+    fillUnits();
+    fromEl.value = "m"; toEl.value = "ft";
+
+    catEl.addEventListener("change", function () { fillUnits(); run(); });
+    fromEl.addEventListener("change", run);
+    toEl.addEventListener("change", run);
+    valEl.addEventListener("input", run);
+    swapBtn.addEventListener("click", function () {
+      var f = fromEl.value; fromEl.value = toEl.value; toEl.value = f;
+      // if now-invalid (shouldn't be, same category) re-fill not needed
+      run();
+    });
+    copy.addEventListener("click", copyResult);
+    run();
+  })();
+  </script>
+</body>
+</html>
