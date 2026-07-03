@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Tip &amp; Bill Split Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; }
+    .summary .stat { padding: 10px 12px; border: 1px solid var(--border,#444); border-radius: 6px; }
+    .summary .stat-value { display:block; font-size: 20px; font-weight: 700; font-family: ui-monospace, monospace; }
+    .summary .stat-label { font-size: 12px; opacity: .8; }
+    .seg { padding: 4px 12px; border: 1px solid var(--border,#444); background: transparent; color: inherit; border-radius: 4px; cursor: pointer; font-size: 13px; }
+    .seg.on { background: var(--accent,#ffd54a); color: #000; border-color: var(--accent,#ffd54a); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Tip &amp; Bill Split Calculator</h1>
+      <p>Figure out the tip and split a bill evenly among any number of people — with tax, an option to tip before or after tax, and an optional round-up so each person pays a whole-dollar amount. All arithmetic is done in integer cents, so when a total doesn't divide evenly the odd cent is distributed fairly (a few people pay one cent more) and every share adds back up to the exact total. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="flex-wrap:wrap; gap:16px; align-items:flex-end;">
+        <div>
+          <label for="bill">Bill (subtotal)</label>
+          <input type="number" id="bill" value="86.40" min="0" step="any" style="width:110px;">
+        </div>
+        <div>
+          <label for="tax">Sales tax (%)</label>
+          <input type="number" id="tax" value="8.25" min="0" step="0.01" style="width:80px;">
+        </div>
+        <div>
+          <label for="tip">Tip (%)</label>
+          <input type="number" id="tip" value="18" min="0" step="0.01" style="width:70px;">
+        </div>
+        <div>
+          <label for="people">People</label>
+          <input type="number" id="people" value="4" min="1" step="1" style="width:70px;">
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="row" style="flex-wrap:wrap; gap:20px; align-items:center;">
+        <div>
+          <label>Tip calculated on</label><br>
+          <span id="tupon">
+            <button class="seg on" data-on="subtotal">Subtotal (before tax)</button>
+            <button class="seg" data-on="posttax">Total (after tax)</button>
+          </span>
+        </div>
+        <label class="check"><input type="checkbox" id="roundup"> Round each share up to the next dollar</label>
+      </div>
+      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+
+      <div class="spacer"></div>
+      <label>Summary</label>
+      <div class="summary" id="summary"></div>
+      <p class="note" id="note"></p>
+      <p class="note" id="breakdown"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var billEl = document.getElementById("bill");
+    var taxEl = document.getElementById("tax");
+    var tipEl = document.getElementById("tip");
+    var peopleEl = document.getElementById("people");
+    var roundupEl = document.getElementById("roundup");
+    var summaryEl = document.getElementById("summary");
+    var noteEl = document.getElementById("note");
+    var breakdownEl = document.getElementById("breakdown");
+    var errEl = document.getElementById("err");
+    var tipOn = "subtotal";
+
+    function fmt(cents) {
+      var neg = cents < 0; var c = Math.abs(Math.round(cents));
+      var s = (Math.floor(c / 100)) + "." + ("0" + (c % 100)).slice(-2);
+      var parts = s.split("."); parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+      return (neg ? "-" : "") + "$" + parts.join(".");
+    }
+
+    function readNum(el) { var v = parseFloat(el.value); return isNaN(v) || v < 0 ? 0 : v; }
+
+    function compute() {
+      errEl.hidden = true; errEl.textContent = "";
+      summaryEl.innerHTML = ""; noteEl.textContent = ""; breakdownEl.textContent = "";
+
+      var bill = readNum(billEl);
+      var taxPct = readNum(taxEl);
+      var tipPct = readNum(tipEl);
+      var people = parseInt(peopleEl.value, 10);
+      var roundup = roundupEl.checked;
+
+      if (bill <= 0) { errEl.textContent = "Enter a bill amount greater than zero."; errEl.hidden = false; return; }
+      if (!(people >= 1)) { errEl.textContent = "Number of people must be at least one."; errEl.hidden = false; return; }
+
+      var billC = Math.round(bill * 100);
+      var taxC = Math.round(billC * taxPct / 100);
+      var taxedC = billC + taxC;
+      var tipBase = tipOn === "posttax" ? taxedC : billC;
+      var tipC = Math.round(tipBase * tipPct / 100);
+      var totalC = billC + taxC + tipC;
+      var n = Math.max(1, people);
+
+      var shares, perC, surplusC;
+      if (roundup) {
+        var ceilPer = Math.ceil(totalC / n);              // cents, even split
+        perC = Math.ceil(ceilPer / 100) * 100;            // round up to whole dollar
+        shares = [];
+        for (var i = 0; i < n; i++) shares.push(perC);
+        surplusC = perC * n - totalC;
+      } else {
+        var base = Math.floor(totalC / n);
+        var rem = totalC % n;                             // first `rem` people pay +1c
+        shares = [];
+        for (var j = 0; j < n; j++) shares.push(base + (j < rem ? 1 : 0));
+        perC = base + (rem > 0 ? 1 : 0);
+        surplusC = 0;
+      }
+
+      function stat(val, label) {
+        var d = document.createElement("div"); d.className = "stat";
+        var v = document.createElement("span"); v.className = "stat-value"; v.textContent = val;
+        var l = document.createElement("span"); l.className = "stat-label"; l.textContent = label;
+        d.appendChild(v); d.appendChild(l); summaryEl.appendChild(d);
+      }
+      stat(fmt(taxC), "Tax");
+      stat(fmt(tipC), "Tip");
+      stat(fmt(totalC), "Grand total");
+      stat(fmt(perC), "Per person");
+      if (surplusC > 0) stat(fmt(surplusC), "Rounded-up surplus");
+
+      // Sanity: shares sum to total (plus surplus when rounding up).
+      var collected = shares.reduce(function (a, s) { return a + s; }, 0);
+      if (roundup) {
+        noteEl.textContent = "Each person pays " + fmt(perC) + " (rounded up to the next dollar), collecting " + fmt(surplusC) + " extra to cover the total — handy for passing one card and sorting the change later.";
+      } else if (n === 1) {
+        noteEl.textContent = "One person pays the full " + fmt(totalC) + ".";
+      } else if (rem > 0) {
+        noteEl.textContent = "Split evenly, the total doesn't divide to the cent: " + rem + " person" + (rem === 1 ? "" : "s") + " pay " + fmt(base + 1) + " and " + (n - rem) + " pay " + fmt(base) + ". The shares add back up to the exact " + fmt(totalC) + ".";
+      } else {
+        noteEl.textContent = "Split evenly: each of the " + n + " people pays " + fmt(base) + ", adding up to " + fmt(totalC) + ".";
+      }
+      var rem2 = totalC % n;
+      breakdownEl.textContent = "Check: collected " + fmt(collected) + (roundup ? " (includes " + fmt(surplusC) + " surplus)" : "") + " against a total of " + fmt(totalC) + (roundup ? "" : (rem2 > 0 ? " — odd cent distributed." : " — exact."));
+
+      window.__tipsplit = { billC: billC, taxC: taxC, tipC: tipC, totalC: totalC, shares: shares, perC: perC, surplusC: surplusC, n: n, roundup: roundup };
+    }
+
+    var segs = document.querySelectorAll('#tupon .seg');
+    segs.forEach(function (b) {
+      b.addEventListener("click", function () {
+        segs.forEach(function (x) { x.className = "seg"; });
+        b.className = "seg on";
+        tipOn = b.dataset.on;
+        compute();
+      });
+    });
+    [billEl, taxEl, tipEl, peopleEl].forEach(function (el) { el.addEventListener("input", compute); el.addEventListener("change", compute); });
+    roundupEl.addEventListener("change", compute);
+
+    compute();
+  })();
+  </script>
+</body>
+</html>

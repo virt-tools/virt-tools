@@ -602,4 +602,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🖥️",
     added: "2026-07-04T17:40:00Z",
   },
+  {
+    slug: "tip-split",
+    name: "Tip & Bill Split Calculator",
+    description: "Work out the tip and split a bill evenly among any number of people — with sales tax, a choice of tipping before or after tax, and an optional round-up so each person pays a whole-dollar amount. All arithmetic is in integer cents, so when a total doesn't divide evenly the odd cent is distributed fairly (a few people pay one cent more) and every share adds back up to the exact total. All math runs locally in your browser.",
+    category: "Finance",
+    icon: "🍽️",
+    added: "2026-07-04T18:20:00Z",
+  },
 ];
