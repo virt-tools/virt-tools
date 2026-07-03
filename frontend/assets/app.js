@@ -53,6 +53,10 @@
         var grid = el("div", { class: "tool-grid" });
         byCategory[cat].forEach(function (t) {
           var card = el("a", { class: "tool-card", href: ROOT + "tools/" + t.slug + "/" });
+          // Stash searchable text for the filter so we don't re-scan the DOM text.
+          card.setAttribute("data-search", (
+            (t.name || "") + " " + (t.description || "") + " " + (t.category || "") + " " + (t.slug || "")
+          ).toLowerCase());
           card.appendChild(el("div", { class: "tool-card-icon" }, [t.icon || "🛠️"]));
           card.appendChild(el("div", { class: "tool-card-name" }, [t.name]));
           card.appendChild(el("div", { class: "tool-card-desc" }, [t.description]));
@@ -60,6 +64,42 @@
         });
         mount.appendChild(grid);
       });
+
+    wireSearch();
+  }
+
+  // Client-side filtering of the rendered catalog. Hides non-matching cards
+  // and any category that ends up empty, so new tools are always discoverable.
+  function wireSearch() {
+    var input = document.getElementById("tool-search");
+    if (!input) return;
+    var emptyNote = document.getElementById("search-empty");
+    var mount = document.getElementById("tool-catalog");
+
+    function filter() {
+      var q = input.value.trim().toLowerCase();
+      var visibleCount = 0;
+      // Each category is an <h2.catalog-category> followed by a <div.tool-grid>.
+      var headers = mount.querySelectorAll(".catalog-category");
+      headers.forEach(function (h) {
+        var grid = h.nextElementSibling;
+        if (!grid) return;
+        var cards = grid.querySelectorAll(".tool-card");
+        var seen = 0;
+        cards.forEach(function (card) {
+          var match = !q || (card.getAttribute("data-search") || "").indexOf(q) !== -1;
+          card.style.display = match ? "" : "none";
+          if (match) seen++;
+        });
+        h.style.display = seen ? "" : "none";
+        grid.style.display = seen ? "" : "none";
+        visibleCount += seen;
+      });
+      if (emptyNote) emptyNote.hidden = visibleCount !== 0;
+    }
+
+    input.addEventListener("input", filter);
+    filter();
   }
 
   function ready(fn) {
