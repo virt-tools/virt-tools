@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Image to ASCII Art Generator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    textarea { width: 100%; box-sizing: border-box; font-family: ui-monospace, "Cascadia Mono", Consolas, Menlo, monospace; }
+    #out { white-space: pre; overflow-x: auto; line-height: 1.0; font-size: 12px; }
+    .charset-preview { font-family: ui-monospace, monospace; letter-spacing: 1px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Image to ASCII Art Generator</h1>
+      <p>Turn a picture into ASCII art you can copy or download. Pick a character ramp, set the output width and flip light/dark to suit a light or dark background. The image is read with FileReader and drawn to a local canvas — nothing is uploaded, and the conversion makes no network requests.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="file">Image</label>
+        <div id="drop" class="dropzone">
+          <input type="file" id="file" accept="image/*" hidden>
+          <p class="dropzone-hint">Click to choose, or drag &amp; drop an image here</p>
+          <p class="dropzone-name" id="drop-name" hidden></p>
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="row" style="flex-wrap:wrap; gap:16px; align-items:flex-end;">
+        <div>
+          <label for="charset">Character ramp (dark → light)</label>
+          <select id="charset">
+            <option value="std">@%#*+=-:.  (standard)</option>
+            <option value="ramp">$@B%8&amp;WM#*oahkbdpqwmZO0QLCJUYXzcvunxrjft/\|()1{}[]?-_+~&lt;&gt;i!lI;:,"^`'.  (detailed)</option>
+            <option value="blocks">█▓▒░  (blocks)</option>
+            <option value="dots">#=-:.  (dots)</option>
+            <option value="bin">#  (binary)</option>
+            <option value="custom">custom…</option>
+          </select>
+        </div>
+        <div id="custom-wrap" hidden>
+          <label for="custom">Custom ramp</label>
+          <input type="text" id="custom" value="@%#*+=-:. " spellcheck="false" style="font-family:ui-monospace,monospace; width:240px;">
+        </div>
+        <div>
+          <label for="cols">Output width (columns)</label>
+          <input type="number" id="cols" value="80" min="8" max="400" step="1" style="width:90px;">
+        </div>
+        <label class="check"><input type="checkbox" id="invert"> invert (for light backgrounds)</label>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="row" style="justify-content:space-between; align-items:center;">
+        <label>ASCII output</label>
+        <span>
+          <button id="copy" class="secondary" style="padding:4px 10px;">Copy</button>
+          <button id="dl" class="secondary" style="padding:4px 10px;">Download .txt</button>
+        </span>
+      </div>
+      <textarea id="out" rows="20" readonly spellcheck="false" placeholder="ASCII art will appear here…"></textarea>
+      <p class="note" id="info"></p>
+      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var fileEl = document.getElementById("file");
+    var drop = document.getElementById("drop");
+    var dropName = document.getElementById("drop-name");
+    var charsetEl = document.getElementById("charset");
+    var customWrap = document.getElementById("custom-wrap");
+    var customEl = document.getElementById("custom");
+    var colsEl = document.getElementById("cols");
+    var invertEl = document.getElementById("invert");
+    var out = document.getElementById("out");
+    var info = document.getElementById("info");
+    var err = document.getElementById("err");
+    var copyBtn = document.getElementById("copy");
+    var dlBtn = document.getElementById("dl");
+
+    var RAMP = {
+      std: "@%#*+=-:. ",
+      ramp: "$@B%8&WM#*oahkbdpqwmZO0QLCJUYXzcvunxrjft/\\|()1{}[]?-_+~<>i!lI;:,\"^`'. ",
+      blocks: "█▓▒░ ",
+      dots: "#=-:. ",
+      bin: "# "
+    };
+
+    // ---- Pure core: map RGBA pixels to an ASCII string. ----
+    // data: Uint8ClampedArray/Uint8Array of RGBA bytes (length w*h*4).
+    // cols: desired output columns. charset: string ordered darkest -> lightest.
+    // invert: swap light/dark (use on a light background). Returns lines joined by \n.
+    function asciiFromRgba(data, w, h, cols, charset, invert) {
+      cols = Math.max(1, Math.floor(cols));
+      var L = charset.length;
+      if (L === 0) return "";
+      // Pixel columns per output column.
+      var xstep = w / cols;
+      // Characters are ~2x taller than wide, so sample half as many rows to keep proportions.
+      var rows = Math.max(1, Math.round((h / xstep) / 2));
+      var ystep = h / rows;
+      var lines = [];
+      for (var r = 0; r < rows; r++) {
+        var y0 = Math.floor(r * ystep);
+        var y1 = Math.floor((r + 1) * ystep);
+        if (y1 <= y0) y1 = y0 + 1;
+        if (y1 > h) y1 = h;
+        var line = "";
+        for (var c = 0; c < cols; c++) {
+          var x0 = Math.floor(c * xstep);
+          var x1 = Math.floor((c + 1) * xstep);
+          if (x1 <= x0) x1 = x0 + 1;
+          if (x1 > w) x1 = w;
+          // Block-averaged luminance over [x0,x1) x [y0,y1).
+          var sum = 0, n = 0;
+          for (var yy = y0; yy < y1; yy++) {
+            var rowBase = yy * w * 4;
+            for (var xx = x0; xx < x1; xx++) {
+              var i = rowBase + xx * 4;
+              // Rec.709 luminance.
+              sum += 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
+              n++;
+            }
+          }
+          if (n === 0) n = 1;
+          var luma = sum / n;                          // 0..255
+          if (invert) luma = 255 - luma;
+          // luma 0 (black) -> darkest char (index 0); luma 255 -> lightest (last).
+          // Round (not floor) so the endpoints land exactly on the ramp ends —
+          // floor would map pure white to the second-lightest char because of
+          // floating-point (0.2126+0.7152+0.0722 sums to ~0.99999999).
+          var ti = Math.round((luma / 255) * (L - 1));
+          if (ti < 0) ti = 0; else if (ti >= L) ti = L - 1;
+          line += charset.charAt(ti);
+        }
+        lines.push(line);
+      }
+      return lines.join("\n");
+    }
+    window.__asciiFromRgba = asciiFromRgba;  // exposed for verification only
+
+    function currentCharset() {
+      if (charsetEl.value === "custom") return customEl.value;
+      return RAMP[charsetEl.value];
+    }
+
+    var lastImage = null;     // HTMLImageElement of the loaded picture
+
+    function render() {
+      err.hidden = true; err.textContent = "";
+      if (!lastImage) return;
+      var cols = parseInt(colsEl.value, 10);
+      if (!(cols >= 8)) { err.textContent = "Width must be at least 8 columns."; err.hidden = false; return; }
+      var charset = currentCharset();
+      if (!charset) { err.textContent = "Please provide a non-empty character ramp."; err.hidden = false; return; }
+      var invert = invertEl.checked;
+
+      // Work on a downscaled copy so huge images stay fast; ASCII width is set by `cols`
+      // anyway, so a cap on the longer side doesn't lose meaningful detail.
+      var MAX = 500;
+      var iw = lastImage.naturalWidth, ih = lastImage.naturalHeight;
+      var scale = Math.min(1, MAX / Math.max(iw, ih));
+      var cw = Math.max(1, Math.round(iw * scale));
+      var ch = Math.max(1, Math.round(ih * scale));
+      var cv = document.createElement("canvas");
+      cv.width = cw; cv.height = ch;
+      var ctx = cv.getContext("2d", { willReadFrequently: true });
+      ctx.drawImage(lastImage, 0, 0, cw, ch);
+      var img = ctx.getImageData(0, 0, cw, ch);
+      var text = asciiFromRgba(img.data, cw, ch, cols, charset, invert);
+      out.value = text;
+      // Resize the textarea to roughly fit the art.
+      var outRows = text.split("\n").length;
+      out.rows = Math.min(40, Math.max(6, outRows));
+      info.textContent = lastImage.naturalWidth + " × " + lastImage.naturalHeight + " px  →  " + cols + " cols, " + outRows + " rows";
+    }
+
+    function loadFile(file) {
+      err.hidden = true; err.textContent = "";
+      if (!file) return;
+      if (!/^image\//.test(file.type)) { err.textContent = "Please choose an image file."; err.hidden = false; return; }
+      dropName.textContent = file.name; dropName.hidden = false;
+      var reader = new FileReader();
+      reader.onload = function () {
+        var im = new Image();
+        im.onload = function () { lastImage = im; render(); };
+        im.onerror = function () { err.textContent = "Could not decode that image."; err.hidden = false; };
+        im.src = reader.result;
+      };
+      reader.onerror = function () { err.textContent = "Could not read that file."; err.hidden = false; };
+      reader.readAsDataURL(file);
+    }
+
+    drop.addEventListener("click", function () { fileEl.click(); });
+    fileEl.addEventListener("change", function () { if (fileEl.files[0]) loadFile(fileEl.files[0]); });
+    ["dragenter", "dragover"].forEach(function (ev) {
+      drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add("drag"); });
+    });
+    ["dragleave", "drop"].forEach(function (ev) {
+      drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove("drag"); });
+    });
+    drop.addEventListener("drop", function (e) { if (e.dataTransfer && e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]); });
+
+    charsetEl.addEventListener("change", function () {
+      customWrap.hidden = charsetEl.value !== "custom";
+      render();
+    });
+    customEl.addEventListener("input", render);
+    colsEl.addEventListener("input", render);
+    invertEl.addEventListener("change", render);
+
+    function copyText() {
+      var t = out.value;
+      if (!t) return;
+      function done() { copyBtn.textContent = "Copied!"; setTimeout(function () { copyBtn.textContent = "Copy"; }, 1200); }
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done);
+      else { var ta = document.createElement("textarea"); ta.value = t; document.body.appendChild(ta); ta.select(); try { document.execCommand("copy"); done(); } catch (e) {} ta.remove(); }
+    }
+    function download() {
+      var t = out.value;
+      if (!t) return;
+      var blob = new Blob([t], { type: "text/plain" });
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "ascii-art.txt";
+      a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+    }
+    copyBtn.addEventListener("click", copyText);
+    dlBtn.addEventListener("click", download);
+  })();
+  </script>
+</body>
+</html>
