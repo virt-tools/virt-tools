@@ -67,68 +67,144 @@
     if (btn) btn.textContent = themeIcon();
   }
 
-  function renderCatalog() {
-    var mount = document.getElementById("tool-catalog");
-    if (!mount || !window.VIRTUAL_TOOLS) return;
+  /* ---- Catalog ---------------------------------------------------------- *
+   * The homepage offers two views over the same registry:
+   *   "all"    — grouped by category (the original layout).
+   *   "recent" — flat list, newest tools first, each card showing when it was
+   *              added. The chosen view is remembered across visits.
+   */
+  var currentView = (function () {
+    try { return localStorage.getItem("vt-view") === "recent" ? "recent" : "all"; }
+    catch (e) { return "all"; }
+  })();
+  var searchInput = null, emptyNote = null, catalogMount = null;
 
-    var byCategory = {};
-    window.VIRTUAL_TOOLS.forEach(function (t) {
-      (byCategory[t.category] = byCategory[t.category] || []).push(t);
-    });
+  // Relative "added X ago" label, with the exact ISO timestamp as a tooltip so
+  // the precise add time is available on hover without crowding the card.
+  function formatAdded(iso) {
+    if (!iso) return "";
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    var diff = (Date.now() - d.getTime()) / 1000;
+    if (diff < 0) return "just now";
+    if (diff < 60) return "just now";
+    if (diff < 3600) return Math.floor(diff / 60) + "m ago";
+    if (diff < 86400) return Math.floor(diff / 3600) + "h ago";
+    if (diff < 2592000) return Math.floor(diff / 86400) + "d ago";
+    return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  }
 
-    Object.keys(byCategory)
-      .sort()
-      .forEach(function (cat) {
-        mount.appendChild(el("h2", { class: "catalog-category" }, [cat]));
-        var grid = el("div", { class: "tool-grid" });
-        byCategory[cat].forEach(function (t) {
-          var card = el("a", { class: "tool-card", href: ROOT + "tools/" + t.slug + "/" });
-          // Stash searchable text for the filter so we don't re-scan the DOM text.
-          card.setAttribute("data-search", (
-            (t.name || "") + " " + (t.description || "") + " " + (t.category || "") + " " + (t.slug || "")
-          ).toLowerCase());
-          card.appendChild(el("div", { class: "tool-card-icon" }, [t.icon || "🛠️"]));
-          card.appendChild(el("div", { class: "tool-card-name" }, [t.name]));
-          card.appendChild(el("div", { class: "tool-card-desc" }, [t.description]));
-          grid.appendChild(card);
-        });
-        mount.appendChild(grid);
+  function toolCard(t) {
+    var card = el("a", { class: "tool-card", href: ROOT + "tools/" + t.slug + "/" });
+    // Stash searchable text for the filter so we don't re-scan the DOM text.
+    card.setAttribute("data-search", (
+      (t.name || "") + " " + (t.description || "") + " " + (t.category || "") + " " + (t.slug || "")
+    ).toLowerCase());
+    card.appendChild(el("div", { class: "tool-card-icon" }, [t.icon || "🛠️"]));
+    card.appendChild(el("div", { class: "tool-card-name" }, [t.name]));
+    card.appendChild(el("div", { class: "tool-card-desc" }, [t.description]));
+    if (t.added) {
+      var added = el("div", { class: "tool-card-added", title: t.added }, ["Added " + formatAdded(t.added)]);
+      card.appendChild(added);
+    }
+    return card;
+  }
+
+  function renderView() {
+    catalogMount.innerHTML = "";
+    if (currentView === "recent") {
+      // Newest first. Tools without an `added` date sort to the end.
+      var sorted = window.VIRTUAL_TOOLS.slice().sort(function (a, b) {
+        return (b.added || "").localeCompare(a.added || "");
       });
-
-    wireSearch();
+      var grid = el("div", { class: "tool-grid recent-grid" });
+      sorted.forEach(function (t) { grid.appendChild(toolCard(t)); });
+      catalogMount.appendChild(grid);
+    } else {
+      var byCategory = {};
+      window.VIRTUAL_TOOLS.forEach(function (t) {
+        (byCategory[t.category] = byCategory[t.category] || []).push(t);
+      });
+      Object.keys(byCategory).sort().forEach(function (cat) {
+        catalogMount.appendChild(el("h2", { class: "catalog-category" }, [cat]));
+        var grid = el("div", { class: "tool-grid" });
+        byCategory[cat].forEach(function (t) { grid.appendChild(toolCard(t)); });
+        catalogMount.appendChild(grid);
+      });
+    }
   }
 
   // Client-side filtering of the rendered catalog. Hides non-matching cards
-  // and any category that ends up empty, so new tools are always discoverable.
-  function wireSearch() {
-    var input = document.getElementById("tool-search");
-    if (!input) return;
-    var emptyNote = document.getElementById("search-empty");
-    var mount = document.getElementById("tool-catalog");
-
-    function filter() {
-      var q = input.value.trim().toLowerCase();
-      var visibleCount = 0;
-      // Each category is an <h2.catalog-category> followed by a <div.tool-grid>.
-      var headers = mount.querySelectorAll(".catalog-category");
-      headers.forEach(function (h) {
-        var grid = h.nextElementSibling;
-        if (!grid) return;
-        var cards = grid.querySelectorAll(".tool-card");
-        var seen = 0;
-        cards.forEach(function (card) {
-          var match = !q || (card.getAttribute("data-search") || "").indexOf(q) !== -1;
-          card.style.display = match ? "" : "none";
-          if (match) seen++;
-        });
-        h.style.display = seen ? "" : "none";
-        grid.style.display = seen ? "" : "none";
-        visibleCount += seen;
+  // and any category/grid that ends up empty, so new tools are always
+  // discoverable. Works for both the grouped and flat (recent) layouts.
+  function filter() {
+    if (!catalogMount) return;
+    var q = (searchInput ? searchInput.value : "").trim().toLowerCase();
+    var visibleCount = 0;
+    // Grouped layout: each category is an <h2.catalog-category> + sibling grid.
+    var headers = catalogMount.querySelectorAll(".catalog-category");
+    headers.forEach(function (h) {
+      var grid = h.nextElementSibling;
+      if (!grid) return;
+      var seen = 0;
+      grid.querySelectorAll(".tool-card").forEach(function (card) {
+        var match = !q || (card.getAttribute("data-search") || "").indexOf(q) !== -1;
+        card.style.display = match ? "" : "none";
+        if (match) seen++;
       });
-      if (emptyNote) emptyNote.hidden = visibleCount !== 0;
+      h.style.display = seen ? "" : "none";
+      grid.style.display = seen ? "" : "none";
+      visibleCount += seen;
+    });
+    // Flat (recent) layout: a single grid with no category headers.
+    var flat = catalogMount.querySelector(".recent-grid");
+    if (flat) {
+      var seen = 0;
+      flat.querySelectorAll(".tool-card").forEach(function (card) {
+        var match = !q || (card.getAttribute("data-search") || "").indexOf(q) !== -1;
+        card.style.display = match ? "" : "none";
+        if (match) seen++;
+      });
+      flat.style.display = seen ? "" : "none";
+      visibleCount += seen;
     }
+    if (emptyNote) emptyNote.hidden = visibleCount !== 0;
+  }
 
-    input.addEventListener("input", filter);
+  function switchView(view) {
+    if (view === currentView) return;
+    currentView = view;
+    try { localStorage.setItem("vt-view", view); } catch (e) {}
+    syncTabs();
+    renderView();
+    filter();
+  }
+
+  function syncTabs() {
+    document.querySelectorAll(".view-tab").forEach(function (tab) {
+      var active = tab.getAttribute("data-view") === currentView;
+      tab.classList.toggle("active", active);
+      tab.setAttribute("aria-selected", active ? "true" : "false");
+    });
+  }
+
+  function wireTabs() {
+    document.querySelectorAll(".view-tab").forEach(function (tab) {
+      tab.addEventListener("click", function () {
+        switchView(tab.getAttribute("data-view"));
+      });
+    });
+    syncTabs();
+  }
+
+  function initCatalog() {
+    catalogMount = document.getElementById("tool-catalog");
+    if (!catalogMount || !window.VIRTUAL_TOOLS) return;
+    searchInput = document.getElementById("tool-search");
+    emptyNote = document.getElementById("search-empty");
+    renderView();
+    wireTabs();
+    if (searchInput) searchInput.addEventListener("input", filter);
     filter();
   }
 
@@ -138,7 +214,7 @@
   }
 
   ready(injectHeader);
-  ready(renderCatalog);
+  ready(initCatalog);
 
   // Expose helpers for tool pages to reuse.
   window.VT = { el: el, ready: ready, ROOT: ROOT };
