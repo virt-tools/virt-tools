@@ -234,4 +234,12 @@ window.VIRTUAL_TOOLS = [
     icon: "↕️",
     added: "2026-07-03T11:10:00Z",
   },
+  {
+    slug: "percentage-calculator",
+    name: "Percentage Calculator",
+    description: "Work out percentages, percent change and value adjustments — what is X% of Y, X is what % of Y, percent change, and value ± X%. Live, in your browser.",
+    category: "Math",
+    icon: "％",
+    added: "2026-07-03T11:45:00Z",
+  },
 ];
