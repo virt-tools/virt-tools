@@ -570,4 +570,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📻",
     added: "2026-07-04T15:00:00Z",
   },
+  {
+    slug: "compound-interest",
+    name: "Compound Interest & Savings Calculator",
+    description: "See how a starting deposit and regular contributions grow with compound interest. Choose the compounding frequency (yearly to daily), the annual rate, and whether you contribute at the start or end of each period. Interest is computed and rounded to the cent every period — the way a real bank credits it — with a year-by-year growth table and CSV export. All math runs locally in your browser, in integer cents for exact cents.",
+    category: "Finance",
+    icon: "🪴",
+    added: "2026-07-04T15:40:00Z",
+  },
 ];

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Compound Interest &amp; Savings Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+    .summary .stat { padding: 10px 12px; border: 1px solid var(--border,#444); border-radius: 6px; }
+    .summary .stat-value { display:block; font-size: 20px; font-weight: 700; font-family: ui-monospace, monospace; }
+    .summary .stat-label { font-size: 12px; opacity: .8; }
+    .growth { max-height: 460px; overflow-y: auto; }
+    .base-table th, .base-table td { padding: 4px 10px; white-space: nowrap; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Compound Interest &amp; Savings Calculator</h1>
+      <p>See how a starting deposit and regular contributions grow over time with compound interest. Choose the compounding frequency (yearly to daily), the annual rate, and whether you contribute at the start or end of each period. Interest is computed and rounded to the cent every period — the way a real bank credits it — so the schedule matches what you'd actually see on a statement. All math runs locally in your browser, in integer cents.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="flex-wrap:wrap; gap:16px; align-items:flex-end;">
+        <div>
+          <label for="principal">Initial deposit</label>
+          <input type="number" id="principal" value="10000" min="0" step="any" style="width:130px;">
+        </div>
+        <div>
+          <label for="rate">Annual rate (%)</label>
+          <input type="number" id="rate" value="5" min="0" step="0.01" style="width:90px;">
+        </div>
+        <div>
+          <label for="freq">Compounding</label>
+          <select id="freq">
+            <option value="1">Annually (1×/yr)</option>
+            <option value="2">Semi-annually (2×/yr)</option>
+            <option value="4">Quarterly (4×/yr)</option>
+            <option value="12" selected>Monthly (12×/yr)</option>
+            <option value="365">Daily (365×/yr)</option>
+          </select>
+        </div>
+        <div>
+          <label for="years">Years</label>
+          <input type="number" id="years" value="10" min="1" max="100" step="1" style="width:70px;">
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="row" style="flex-wrap:wrap; gap:16px; align-items:flex-end;">
+        <div>
+          <label for="pmt">Contribution per period</label>
+          <input type="number" id="pmt" value="0" min="0" step="any" style="width:150px;">
+        </div>
+        <div>
+          <label for="timing">Contribution timing</label>
+          <select id="timing">
+            <option value="end" selected>End of period (ordinary)</option>
+            <option value="begin">Beginning of period (annuity due)</option>
+          </select>
+        </div>
+        <button id="show" class="secondary" style="padding:4px 12px;">Show year-by-year growth</button>
+      </div>
+      <p class="note" id="freq-note"></p>
+
+      <div class="spacer"></div>
+      <label>Summary</label>
+      <div class="summary" id="summary"></div>
+      <p class="note" id="note"></p>
+      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+
+      <div class="spacer"></div>
+      <div id="grow-wrap" hidden>
+        <div class="row" style="justify-content:space-between; align-items:center;">
+          <label>Year-by-year growth</label>
+          <button id="dl" class="secondary" style="padding:4px 10px;">Download .csv</button>
+        </div>
+        <table class="base-table growth" id="grow">
+          <thead><tr><th>Year</th><th>Contributions</th><th>Interest</th><th>Balance</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var principalEl = document.getElementById("principal");
+    var rateEl = document.getElementById("rate");
+    var freqEl = document.getElementById("freq");
+    var yearsEl = document.getElementById("years");
+    var pmtEl = document.getElementById("pmt");
+    var timingEl = document.getElementById("timing");
+    var showBtn = document.getElementById("show");
+    var dlBtn = document.getElementById("dl");
+    var summaryEl = document.getElementById("summary");
+    var noteEl = document.getElementById("note");
+    var freqNoteEl = document.getElementById("freq-note");
+    var errEl = document.getElementById("err");
+    var growWrap = document.getElementById("grow-wrap");
+    var growBody = document.querySelector("#grow tbody");
+
+    function fmt(cents) {
+      var neg = cents < 0; var c = Math.abs(cents);
+      var s = (Math.floor(c / 100)) + "." + ("0" + (c % 100)).slice(-2);
+      var parts = s.split("."); parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+      return (neg ? "-" : "") + "$" + parts.join(".");
+    }
+
+    // Period-by-period stepping, all arithmetic in integer cents.
+    // Interest is rounded to the cent each period — how a bank credits it.
+    // timing: "end" (ordinary) or "begin" (annuity due).
+    function grow(P, annualPct, n, years, PMT, timing) {
+      var rate = annualPct / 100 / n;
+      var N = n * years;
+      var bal = Math.round(P * 100);
+      var contrib = Math.round(P * 100);
+      var pmtCents = Math.round(PMT * 100);
+      var rows = [];
+      for (var period = 1; period <= N; period++) {
+        if (timing === "begin") {
+          bal += pmtCents; contrib += pmtCents;
+        }
+        var interestCents = Math.round(bal * rate);
+        bal += interestCents;
+        if (timing === "end") {
+          bal += pmtCents; contrib += pmtCents;
+        }
+        if (period % n === 0) {
+          var yr = period / n;
+          rows.push({ yr: yr, contributions: contrib, interest: bal - contrib, balance: bal });
+        }
+      }
+      return { finalBalance: bal, totalContrib: contrib, totalInterest: bal - contrib, rows: rows };
+    }
+
+    function readNum(el) { var v = parseFloat(el.value); return isNaN(v) || v < 0 ? 0 : v; }
+
+    var FREQ_LABEL = { "1": "annually", "2": "semi-annually", "4": "quarterly", "12": "monthly", "365": "daily" };
+
+    function compute() {
+      errEl.hidden = true; errEl.textContent = "";
+      growWrap.hidden = true;
+      var P = readNum(principalEl);
+      var rate = readNum(rateEl);
+      var n = parseInt(freqEl.value, 10);
+      var years = Math.round(readNum(yearsEl));
+      var PMT = readNum(pmtEl);
+      var timing = timingEl.value;
+
+      if (P === 0 && PMT === 0) { errEl.textContent = "Enter an initial deposit, a per-period contribution, or both."; errEl.hidden = false; summaryEl.innerHTML = ""; noteEl.textContent = ""; freqNoteEl.textContent = ""; return; }
+      if (years < 1) { errEl.textContent = "Years must be at least 1."; errEl.hidden = false; return; }
+      if (years > 100) { errEl.textContent = "Years can’t exceed 100."; errEl.hidden = false; return; }
+      if (rate < 0) { errEl.textContent = "Interest rate can’t be negative."; errEl.hidden = false; return; }
+
+      var res = grow(P, rate, n, years, PMT, timing);
+      var rows = res.rows;
+
+      freqNoteEl.textContent = "Compounding " + FREQ_LABEL[String(n)] + " — " + (n * years) + " period" + (n * years === 1 ? "" : "s") + " over " + years + " year" + (years === 1 ? "" : "s") + ".";
+
+      summaryEl.innerHTML = "";
+      function stat(val, label) {
+        var d = document.createElement("div"); d.className = "stat";
+        var v = document.createElement("span"); v.className = "stat-value"; v.textContent = val;
+        var l = document.createElement("span"); l.className = "stat-label"; l.textContent = label;
+        d.appendChild(v); d.appendChild(l); summaryEl.appendChild(d);
+      }
+      stat(fmt(res.finalBalance), "Final balance");
+      stat(fmt(res.totalContrib), "Total contributions");
+      stat(fmt(res.totalInterest), "Total interest");
+      var pct = res.totalContrib > 0 ? Math.round((res.totalInterest / res.totalContrib) * 1000) / 10 : 0;
+      stat(pct + "%", "Return on contributions");
+
+      noteEl.textContent = "You contribute " + fmt(res.totalContrib) + " and earn " + fmt(res.totalInterest) + " in interest — a " + pct + "% return on what you put in.";
+
+      growBody.innerHTML = "";
+      rows.forEach(function (r) {
+        var tr = document.createElement("tr");
+        tr.innerHTML = "<td>" + r.yr + "</td><td>" + fmt(r.contributions) + "</td><td>" + fmt(r.interest) +
+          "</td><td>" + fmt(r.balance) + "</td>";
+        growBody.appendChild(tr);
+      });
+      window.__compound = res;     // exposed for verification
+    }
+
+    var inputs = [principalEl, rateEl, freqEl, yearsEl, pmtEl, timingEl];
+    inputs.forEach(function (el) { el.addEventListener("input", compute); el.addEventListener("change", compute); });
+    showBtn.addEventListener("click", function () { compute(); growWrap.hidden = false; });
+    dlBtn.addEventListener("click", function () {
+      if (!window.__compound) return;
+      var csv = "Year,Contributions,Interest,Balance\n";
+      window.__compound.rows.forEach(function (r) {
+        csv += r.yr + "," + (r.contributions / 100) + "," + (r.interest / 100) + "," + (r.balance / 100) + "\n";
+      });
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+      a.download = "compound-interest.csv"; a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+    });
+
+    compute();
+  })();
+  </script>
+</body>
+</html>
