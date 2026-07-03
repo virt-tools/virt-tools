@@ -674,4 +674,12 @@ window.VIRTUAL_TOOLS = [
     icon: "💵",
     added: "2026-07-04T23:40:00Z",
   },
+  {
+    slug: "combinatorics",
+    name: "Combinatorics Calculator",
+    description: "Count arrangements and selections of items. Given a total of n items and a choice of r, compute permutations P(n,r), permutations with repetition (n^r), combinations C(n,r), combinations with repetition (multisets, C(n+r−1,r)), and the factorial of n. All arithmetic uses big integers, so the results are exact — even for values like C(100,50) that overflow ordinary floating point. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "∑",
+    added: "2026-07-05T00:20:00Z",
+  },
 ];

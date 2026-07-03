@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Combinatorics Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    input.num { font-family: ui-monospace, monospace; font-size: 18px; width: 90px; }
+    .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-top: 6px; }
+    .summary .stat { padding: 8px 10px; border: 1px solid var(--border,#444); border-radius: 6px; word-break: break-all; }
+    .summary .stat-value { display:block; font-size: 17px; font-weight: 700; font-family: ui-monospace, monospace; }
+    .summary .stat-label { font-size: 12px; opacity: .85; }
+    .summary .stat .formula { display:block; font-size: 11px; opacity: .6; font-family: ui-monospace, monospace; margin-top: 2px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Combinatorics Calculator</h1>
+      <p>Count arrangements and selections of items. Given a total of <em>n</em> items and a choice of <em>r</em>, this computes permutations (ordered, P(n,r)), permutations with repetition (n<sup>r</sup>), combinations (unordered, C(n,r)), combinations with repetition (multisets, C(n+r−1,r)), and the factorial of n. All arithmetic uses big integers, so the results are exact — even for values like C(100,50) that overflow ordinary floating point. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="flex-wrap:wrap; gap:14px; align-items:flex-end;">
+        <div>
+          <label for="n">Total items (n)</label><br>
+          <input class="num" id="n" type="text" inputmode="numeric" value="8" placeholder="0">
+        </div>
+        <div>
+          <label for="r">Chosen (r)</label><br>
+          <input class="num" id="r" type="text" inputmode="numeric" value="3" placeholder="0">
+        </div>
+      </div>
+      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+
+      <div class="spacer"></div>
+      <label>Results</label>
+      <div class="summary" id="summary"></div>
+      <p class="note" id="note"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var nEl = document.getElementById("n");
+    var rEl = document.getElementById("r");
+    var errEl = document.getElementById("err");
+    var summaryEl = document.getElementById("summary");
+    var noteEl = document.getElementById("note");
+
+    function showErr(m) { errEl.textContent = m; errEl.hidden = !m; }
+    function clear(t) { t.innerHTML = ""; t.textContent = ""; }
+
+    // Parse a non-negative integer (no sign, no decimals). Returns BigInt or null.
+    var MAX = 5000n;
+    function parseNN(s) {
+      s = String(s).trim();
+      if (s === "" || !/^\d+$/.test(s)) return null;
+      return BigInt(s);
+    }
+
+    // factorial(k) = k!
+    function fact(k) {
+      var f = 1n;
+      for (var i = 2n; i <= k; i++) f *= i;
+      return f;
+    }
+    // P(n,r) = n!/(n-r)! via falling product (r terms). null if r<0 or r>n.
+    function perm(n, r) {
+      if (r < 0n || r > n) return null;
+      var res = 1n;
+      for (var i = 0n; i < r; i++) res *= (n - i);
+      return res;
+    }
+    // C(n,r) via multiplicative formula (exact integer at every step). null if r<0 or r>n.
+    function comb(n, r) {
+      if (r < 0n || r > n) return null;
+      if (r > n - r) r = n - r;   // symmetry
+      var res = 1n;
+      for (var i = 1n; i <= r; i++) res = res * (n - i + 1n) / i;
+      return res;
+    }
+    // C^rep(n,r) = C(n+r-1, r). null if n<1 or r<0.
+    function combRep(n, r) {
+      if (n < 1n || r < 0n) return null;
+      return comb(n + r - 1n, r);
+    }
+    // P^rep(n,r) = n^r. null if n<0 or r<0.
+    function permRep(n, r) {
+      if (n < 0n || r < 0n) return null;
+      var res = 1n;
+      for (var i = 0n; i < r; i++) res *= n;
+      return res;
+    }
+
+    // Group a big integer's decimal digits in 3s for readability.
+    function groupBig(x) {
+      var neg = x < 0n; if (neg) x = -x;
+      var s = x.toString(), out = "", len = s.length;
+      for (var i = 0; i < len; i++) {
+        if (i > 0 && (len - i) % 3 === 0) out += ",";
+        out += s[i];
+      }
+      return (neg ? "-" : "") + out;
+    }
+
+    function stat(parent, val, label, formula) {
+      var d = document.createElement("div"); d.className = "stat";
+      var v = document.createElement("span"); v.className = "stat-value"; v.textContent = val;
+      var l = document.createElement("span"); l.className = "stat-label"; l.textContent = label;
+      if (formula) { var f = document.createElement("span"); f.className = "formula"; f.textContent = formula; d.appendChild(v); d.appendChild(l); d.appendChild(f); }
+      else { d.appendChild(v); d.appendChild(l); }
+      parent.appendChild(d);
+    }
+
+    function compute() {
+      clear(summaryEl); clear(noteEl); showErr("");
+      var n = parseNN(nEl.value);
+      var r = parseNN(rEl.value);
+      if (n === null) { showErr("Enter a non-negative integer for n."); window.__comb = null; return; }
+      if (r === null) { showErr("Enter a non-negative integer for r."); window.__comb = null; return; }
+      if (n > MAX) { showErr("n is too large (max " + MAX.toString() + ")."); window.__comb = null; return; }
+      if (r > MAX) { showErr("r is too large (max " + MAX.toString() + ")."); window.__comb = null; return; }
+
+      var p = perm(n, r);
+      var prep = permRep(n, r);
+      var c = comb(n, r);
+      var crep = combRep(n, r);
+      var fn = fact(n);
+
+      stat(summaryEl, p !== null ? groupBig(p) : "—", "Permutations  P(n,r)", "n!/(n−r)!  ·  ordered, no repeats");
+      stat(summaryEl, prep !== null ? groupBig(prep) : "—", "Permutations w/ repetition", "n^r  ·  ordered, repeats OK");
+      stat(summaryEl, c !== null ? groupBig(c) : "—", "Combinations  C(n,r)", "n!/((n−r)!·r!)  ·  unordered, no repeats");
+      stat(summaryEl, crep !== null ? groupBig(crep) : "—", "Combinations w/ repetition", "C(n+r−1, r)  ·  multisets");
+      stat(summaryEl, groupBig(fn), "Factorial  n!", "n!");
+
+      var notes = [];
+      if (r > n) notes.push("r > n, so P(n,r) and C(n,r) are undefined (repetition forms still apply).");
+      if (n === 0n && r > 0n) notes.push("With n = 0 and r > 0, permutation/combination with repetition is 0.");
+      noteEl.textContent = notes.join("  ");
+
+      window.__comb = { n: n, r: r, p: p, prep: prep, c: c, crep: crep, fact: fn };
+    }
+
+    [nEl, rEl].forEach(function (el) { el.addEventListener("input", compute); });
+    compute();
+  })();
+  </script>
+</body>
+</html>
