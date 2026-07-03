@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Sales Tax / VAT Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .seg { display: inline-flex; border: 1px solid var(--border,#444); border-radius: 4px; overflow: hidden; }
+    .seg button { padding: 5px 14px; border: none; background: transparent; color: inherit; cursor: pointer; font-size: 13px; }
+    .seg button.on { background: var(--accent,#ffd54a); color: #000; }
+    .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 6px; }
+    .summary .stat { padding: 8px 10px; border: 1px solid var(--border,#444); border-radius: 6px; }
+    .summary .stat-value { display:block; font-size: 20px; font-weight: 700; font-family: ui-monospace, monospace; }
+    .summary .stat-label { font-size: 12px; opacity: .8; }
+    input.money { font-family: ui-monospace, monospace; font-size: 18px; width: 160px; }
+    input.rate { font-family: ui-monospace, monospace; font-size: 16px; width: 90px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Sales Tax / VAT Calculator</h1>
+      <p>Add sales tax or VAT to a net amount, or back the tax out of a tax-inclusive total — with up to two rate components that combine (for example a national rate plus a regional rate). All arithmetic is done in integer cents with big integers and half-up rounding, so the tax, net, and gross totals are exact to the cent and never drift from floating-point error. For inclusive totals, net plus tax always equals the gross you entered. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="flex-wrap:wrap; gap:14px; align-items:flex-end;">
+        <div>
+          <label>Mode</label><br>
+          <span class="seg" id="mode">
+            <button data-m="add" class="on">Add tax (net → gross)</button>
+            <button data-m="remove">Remove tax (gross → net)</button>
+          </span>
+        </div>
+      </div>
+      <div class="spacer"></div>
+      <div class="row" style="flex-wrap:wrap; gap:14px; align-items:flex-end;">
+        <div>
+          <label for="amt">Amount</label>
+          <input class="money" id="amt" type="text" inputmode="decimal" value="100.00" placeholder="0.00">
+        </div>
+        <div>
+          <label for="r1">Rate 1 (%)</label>
+          <input class="rate" id="r1" type="text" inputmode="decimal" value="7.25" placeholder="0">
+        </div>
+        <div>
+          <label for="r2">Rate 2 (%) <span style="opacity:.6; font-weight:normal;">— optional</span></label>
+          <input class="rate" id="r2" type="text" inputmode="decimal" value="" placeholder="0">
+        </div>
+      </div>
+      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+
+      <div class="spacer"></div>
+      <label>Result</label>
+      <div class="summary" id="summary"></div>
+      <p class="note" id="note"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var modeEl = document.getElementById("mode");
+    var amtEl = document.getElementById("amt");
+    var r1El = document.getElementById("r1");
+    var r2El = document.getElementById("r2");
+    var errEl = document.getElementById("err");
+    var summaryEl = document.getElementById("summary");
+    var noteEl = document.getElementById("note");
+    var mode = "add";
+
+    function showErr(m) { errEl.textContent = m; errEl.hidden = !m; }
+    function clear(t) { t.innerHTML = ""; }
+
+    // Parse a money string to integer cents (BigInt). Accepts $, commas, sign, up to 2 decimals.
+    function parseCents(s) {
+      s = String(s).trim().replace(/[$,\s]/g, "");
+      if (s === "") return null;
+      var neg = false;
+      if (s[0] === "+" || s[0] === "-") { neg = (s[0] === "-"); s = s.slice(1); }
+      if (s === "") return null;
+      var ip, fp;
+      var dot = s.indexOf(".");
+      if (dot >= 0) { ip = s.slice(0, dot); fp = s.slice(dot + 1); }
+      else { ip = s; fp = ""; }
+      if (!/^\d*$/.test(ip) || !/^\d*$/.test(fp)) return null;
+      if (ip === "") ip = "0";
+      fp = fp.slice(0, 2); while (fp.length < 2) fp += "0";
+      var cents = BigInt(ip) * 100n + BigInt(fp);
+      return neg ? -cents : cents;
+    }
+    // Parse a percent rate to an integer scaled by 10^4 (BigInt). Accepts %, sign, up to 4 decimals.
+    function parseRate(s) {
+      s = String(s).trim().replace(/[%\s]/g, "");
+      if (s === "" || s === "-" || s === "+") return 0n;
+      var neg = false;
+      if (s[0] === "+" || s[0] === "-") { neg = (s[0] === "-"); s = s.slice(1); }
+      var ip, fp; var dot = s.indexOf(".");
+      if (dot >= 0) { ip = s.slice(0, dot); fp = s.slice(dot + 1); }
+      else { ip = s; fp = ""; }
+      if (!/^\d*$/.test(ip) || !/^\d*$/.test(fp)) return null;
+      if (ip === "") ip = "0";
+      fp = fp.slice(0, 4); while (fp.length < 4) fp += "0";
+      var r = BigInt(ip) * 10000n + BigInt(fp);
+      return neg ? -r : r;
+    }
+    // Half-up rounding of num/den (both BigInt, positive) = floor(num/den + 1/2) = (2num+den)//(2den)
+    function roundHalfUp(num, den) {
+      return (2n * num + den) / (2n * den);
+    }
+
+    function fmtCents(c) {
+      var neg = c < 0n; if (neg) c = -c;
+      var dollars = c / 100n, cents = c % 100n;
+      function group(d) {
+        var s = d.toString(), out = "", n = s.length;
+        for (var i = 0; i < n; i++) { if (i > 0 && (n - i) % 3 === 0) out += ","; out += s[i]; }
+        return out;
+      }
+      return (neg ? "-" : "") + "$" + group(dollars) + "." + (cents < 10n ? "0" : "") + cents.toString();
+    }
+    function fmtPct(rateInt) {
+      // rateInt scaled 1e4 -> percent string
+      var neg = rateInt < 0n; if (neg) rateInt = -rateInt;
+      var whole = rateInt / 10000n, frac = rateInt % 10000n;
+      var fs = frac.toString().padStart(4, "0").replace(/0+$/, "");
+      return (neg ? "-" : "") + whole.toString() + (fs ? "." + fs : "") + "%";
+    }
+
+    function stat(parent, val, label) {
+      var d = document.createElement("div"); d.className = "stat";
+      var v = document.createElement("span"); v.className = "stat-value"; v.textContent = val;
+      var l = document.createElement("span"); l.className = "stat-label"; l.textContent = label;
+      d.appendChild(v); d.appendChild(l); parent.appendChild(d);
+    }
+
+    function compute() {
+      clear(summaryEl); clear(noteEl); showErr("");
+      var amt = parseCents(amtEl.value);
+      var r1 = parseRate(r1El.value), r2 = parseRate(r2El.value);
+      if (amt === null) { showErr("Enter a valid amount (e.g. 100.00)."); return; }
+      if (r1 === null || r2 === null) { showErr("Enter valid rate percentages (e.g. 7.25)."); return; }
+      var rateInt = r1 + r2;
+      if (rateInt < 0n) { showErr("Rate cannot be negative."); return; }
+      if (amt < 0n) { showErr("Amount cannot be negative."); return; }
+
+      var netC, grossC, taxC;
+      if (mode === "add") {
+        netC = amt;
+        // taxC = round_half_up(amt * rateInt / 1e6)
+        taxC = roundHalfUp(amt * rateInt, 1000000n);
+        grossC = netC + taxC;
+      } else {
+        grossC = amt;
+        // netC = round_half_up(amt * 1e6 / (1e6 + rateInt))
+        if (1000000n + rateInt === 0n) { showErr("Rate of -100% is invalid for removal."); return; }
+        netC = roundHalfUp(amt * 1000000n, 1000000n + rateInt);
+        taxC = grossC - netC;
+      }
+
+      stat(summaryEl, fmtCents(netC), "Net (ex-tax)");
+      stat(summaryEl, fmtCents(taxC), "Tax");
+      stat(summaryEl, fmtCents(grossC), "Gross (incl. tax)");
+      stat(summaryEl, fmtPct(rateInt), "Combined rate");
+      // effective rate: tax/net * 100% -> scaled 1e4 (percent)
+      var effRate = netC > 0n ? roundHalfUp(taxC * 10000n, netC) : null;
+      stat(summaryEl, effRate !== null ? fmtPct(effRate) : "—", "Effective tax rate");
+
+      noteEl.textContent = (mode === "add" ? "Adding " : "Removing ") + fmtPct(rateInt) + " tax: " +
+        fmtCents(netC) + " net + " + fmtCents(taxC) + " tax = " + fmtCents(grossC) + " gross" +
+        (netC + taxC === grossC ? "" : "  (⚠ net+tax ≠ gross)");
+      window.__stax = { mode: mode, netC: netC, taxC: taxC, grossC: grossC, rateInt: rateInt };
+    }
+
+    modeEl.querySelectorAll("button").forEach(function (b) {
+      b.addEventListener("click", function () {
+        modeEl.querySelectorAll("button").forEach(function (x) { x.classList.remove("on"); });
+        b.classList.add("on"); mode = b.dataset.m; compute();
+      });
+    });
+    [amtEl, r1El, r2El].forEach(function (el) { el.addEventListener("input", compute); });
+    compute();
+  })();
+  </script>
+</body>
+</html>

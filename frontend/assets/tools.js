@@ -666,4 +666,12 @@ window.VIRTUAL_TOOLS = [
     icon: "⏰",
     added: "2026-07-04T23:00:00Z",
   },
+  {
+    slug: "sales-tax",
+    name: "Sales Tax / VAT Calculator",
+    description: "Add sales tax or VAT to a net amount, or back the tax out of a tax-inclusive total. Combine up to two rate components (for example a national rate plus a regional rate) and see the net, tax, gross, combined rate, and effective tax rate. All arithmetic is done in integer cents with big integers and half-up rounding, so the results are exact to the cent — for inclusive totals, net plus tax always equals the gross you entered. Everything runs locally in your browser.",
+    category: "Finance",
+    icon: "💵",
+    added: "2026-07-04T23:40:00Z",
+  },
 ];
