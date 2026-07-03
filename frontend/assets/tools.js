@@ -610,4 +610,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🍽️",
     added: "2026-07-04T18:20:00Z",
   },
+  {
+    slug: "fuel-economy",
+    name: "Fuel Economy Converter",
+    description: "Convert fuel economy between miles per gallon (US and UK), litres per 100 km, kilometres per litre, and miles per litre. Type a value in any unit and see the equivalents in all the others. Conversions use the exact definitions (1 mile = 1.609344 km, 1 US gallon = 3.785411784 L, 1 UK gallon = 4.54609 L) routed through a kilometres-per-litre pivot, so every unit stays consistent and round-trips exactly. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "⛽",
+    added: "2026-07-04T19:00:00Z",
+  },
 ];

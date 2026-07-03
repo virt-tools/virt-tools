@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Fuel Economy Converter — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .fe-grid { display: grid; grid-template-columns: 1fr; gap: 10px; max-width: 520px; }
+    .fe-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--border,#444); border-radius: 6px; }
+    .fe-row.src { border-color: var(--accent,#ffd54a); background: rgba(255,213,74,.08); }
+    .fe-val { font-family: ui-monospace, monospace; font-size: 18px; font-weight: 700; }
+    .fe-unit { font-size: 13px; opacity: .8; white-space: nowrap; }
+    .fe-input { font-family: ui-monospace, monospace; font-size: 18px; font-weight: 700; width: 100%; box-sizing: border-box; background: transparent; border: none; color: inherit; padding: 0; }
+    .fe-input:focus { outline: none; }
+    .fe-hint { font-size: 11px; opacity: .6; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Fuel Economy Converter</h1>
+      <p>Convert fuel economy between miles per gallon (US and UK), litres per 100 km, kilometres per litre, and miles per litre. Type a value in any unit and see the equivalents in all the others. Conversions use the exact definitions (1 mile = 1.609344 km, 1 US gallon = 3.785411784 L, 1 UK gallon = 4.54609 L) routed through a kilometres-per-litre pivot, so every unit stays consistent and round-trips exactly. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="flex-wrap:wrap; gap:16px; align-items:flex-end;">
+        <div>
+          <label for="src">Enter a value in</label>
+          <select id="src">
+            <option value="mpg_us" selected>MPG (US)</option>
+            <option value="mpg_uk">MPG (UK/Imperial)</option>
+            <option value="L100km">L/100km</option>
+            <option value="kmL">km/L</option>
+            <option value="miL">mi/L</option>
+          </select>
+        </div>
+        <div style="flex:1; min-width:180px;">
+          <label for="val">Value</label>
+          <input type="number" id="val" value="33" min="0" step="any" style="width:160px; font-family:ui-monospace,monospace; font-size:18px;">
+        </div>
+      </div>
+      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+
+      <div class="spacer"></div>
+      <label>Equivalents</label>
+      <div class="fe-grid" id="grid"></div>
+      <p class="note">Lower L/100km is better; higher MPG, km/L and mi/L are better. UK gallons are larger than US gallons, so the same car shows more MPG in the UK.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var srcEl = document.getElementById("src");
+    var valEl = document.getElementById("val");
+    var gridEl = document.getElementById("grid");
+    var errEl = document.getElementById("err");
+
+    var MI_KM = 1.609344;
+    var USGAL_L = 3.785411784;
+    var UKGAL_L = 4.54609;
+
+    var UNITS = [
+      { key: "mpg_us", label: "MPG (US)", long: "miles per US gallon" },
+      { key: "mpg_uk", label: "MPG (UK)", long: "miles per Imperial gallon" },
+      { key: "L100km", label: "L/100km", long: "litres per 100 km" },
+      { key: "kmL",    label: "km/L",    long: "kilometres per litre" },
+      { key: "miL",    label: "mi/L",    long: "miles per litre" }
+    ];
+
+    function toKmL(value, unit) {
+      var v = Number(value);
+      if (unit === "mpg_us") return v * MI_KM / USGAL_L;
+      if (unit === "mpg_uk") return v * MI_KM / UKGAL_L;
+      if (unit === "L100km") return v === 0 ? Infinity : 100 / v;
+      if (unit === "kmL")    return v;
+      if (unit === "miL")    return v * MI_KM;
+      return NaN;
+    }
+    function fromKmL(kmL, unit) {
+      if (unit === "mpg_us") return kmL * USGAL_L / MI_KM;
+      if (unit === "mpg_uk") return kmL * UKGAL_L / MI_KM;
+      if (unit === "L100km") return kmL === 0 ? Infinity : 100 / kmL;
+      if (unit === "kmL")    return kmL;
+      if (unit === "miL")    return kmL / MI_KM;
+      return NaN;
+    }
+
+    // Display precision: fuel economy is a continuous physical quantity; show enough
+    // sig figs to distinguish units without implying false sub-attosecond precision.
+    function fmt(x) {
+      if (!isFinite(x)) return "—";
+      var a = Math.abs(x);
+      if (a === 0) return "0";
+      if (a >= 1000) return x.toFixed(1);
+      if (a >= 100) return x.toFixed(2);
+      if (a >= 10) return x.toFixed(3);
+      if (a >= 1) return x.toFixed(4);
+      return x.toFixed(6);                 // small values like mi/L
+    }
+
+    function esc(s) { return String(s).replace(/[&<>]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]; }); }
+
+    function compute() {
+      errEl.hidden = true; errEl.textContent = "";
+      gridEl.innerHTML = "";
+      var raw = valEl.value;
+      var src = srcEl.value;
+      var v = parseFloat(raw);
+      if (raw === "" || isNaN(v)) { errEl.textContent = "Enter a numeric value."; errEl.hidden = true; return; }
+      if (v < 0) { errEl.textContent = "Fuel economy can’t be negative."; errEl.hidden = false; return; }
+      if (v === 0 && (src === "L100km" || src === "kmL" || src === "miL" || src === "mpg_us" || src === "mpg_uk")) {
+        // 0 is valid: 0 economy -> infinite L/100km; show 0 for the rate units and "—" for the inverse.
+      }
+      var kmL = toKmL(v, src);
+
+      UNITS.forEach(function (u) {
+        var out = fromKmL(kmL, u.key);
+        var div = document.createElement("div");
+        div.className = "fe-row" + (u.key === src ? " src" : "");
+        if (u.key === src) {
+          // Source row: editable-looking display of the entered value.
+          div.innerHTML = "<div><span class='fe-unit'>" + esc(u.label) + " <span class='fe-hint'>— " + esc(u.long) + " (you entered)</span></span></div><div class='fe-val'>" + esc(fmt(v)) + "</div>";
+        } else {
+          div.innerHTML = "<div><span class='fe-unit'>" + esc(u.label) + " <span class='fe-hint'>— " + esc(u.long) + "</span></span></div><div class='fe-val'>" + esc(fmt(out)) + "</div>";
+        }
+        gridEl.appendChild(div);
+      });
+
+      window.__fuel = { kmL: kmL, src: src, v: v };   // exposed for verification
+    }
+
+    [srcEl, valEl].forEach(function (el) { el.addEventListener("input", compute); el.addEventListener("change", compute); });
+    compute();
+  })();
+  </script>
+</body>
+</html>
