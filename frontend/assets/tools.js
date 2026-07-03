@@ -298,4 +298,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📆",
     added: "2026-07-03T16:20:00Z",
   },
+  {
+    slug: "base32",
+    name: "Base32 Encode / Decode",
+    description: "Encode text to Base32 (RFC 4648) or decode it back — lenient decoding handles lowercase, whitespace and missing padding. Runs locally, nothing sent anywhere.",
+    category: "Encoding",
+    icon: "🔡",
+    added: "2026-07-03T17:00:00Z",
+  },
 ];
