@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>JSON Schema Validator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .err-line { font-family:monospace; padding:3px 0; }
+    .err-path { color: var(--accent, #6ea8fe); }
+    .valid-banner { color: var(--ok, #4ade80); font-weight:600; }
+    .invalid-banner { color: var(--bad, #f87171); font-weight:600; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>JSON Schema Validator</h1>
+      <p>Validate a JSON document against a JSON Schema (draft-07 subset) — entirely in your browser. Nothing uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="schema">JSON Schema</label>
+        <textarea id="schema" placeholder='{ "type":"object", "required":["name"], "properties":{ "name":{"type":"string","minLength":1}, "age":{"type":"integer","minimum":0} } }' style="min-height:120px; font-family:monospace;"></textarea>
+      </div>
+      <div class="field">
+        <label for="data">JSON document</label>
+        <textarea id="data" placeholder='{ "name":"Ada", "age":36 }' style="min-height:120px; font-family:monospace;"></textarea>
+      </div>
+      <div class="row">
+        <button id="validate">Validate</button>
+        <button id="clear" class="secondary">Clear</button>
+      </div>
+      <div class="spacer"></div>
+      <div class="output" id="out"></div>
+      <p class="note" id="note">Supports type, required, properties, items, enum, const, min/max bounds, pattern, uniqueItems, formats (email/uri/date/ipv4/ipv6/uuid), and allOf/anyOf/oneOf/not. Runs locally.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    function matchesType(d, t) {
+      if (t === "null") return d === null;
+      if (t === "boolean") return typeof d === "boolean";
+      if (t === "integer") return typeof d === "number" && Number.isInteger(d);
+      if (t === "number") return typeof d === "number";
+      if (t === "string") return typeof d === "string";
+      if (t === "array") return Array.isArray(d);
+      if (t === "object") return d !== null && typeof d === "object" && !Array.isArray(d);
+      return false;
+    }
+    function jsType(d) { if (d === null) return "null"; if (Array.isArray(d)) return "array"; return typeof d; }
+    function deepEqual(a, b) {
+      if (a === b) return true;
+      if (typeof a !== typeof b || a === null || b === null) return false;
+      if (Array.isArray(a) && Array.isArray(b)) { if (a.length !== b.length) return false; for (var i = 0; i < a.length; i++) if (!deepEqual(a[i], b[i])) return false; return true; }
+      if (typeof a === "object") { var ka = Object.keys(a), kb = Object.keys(b); if (ka.length !== kb.length) return false; return ka.every(function (k) { return deepEqual(a[k], b[k]); }); }
+      return false;
+    }
+    function checkFormat(s, f) {
+      if (f === "email") return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+      if (f === "uri") return /^[a-z][a-z0-9+.-]*:/.test(s);
+      if (f === "date") return /^\d{4}-\d{2}-\d{2}$/.test(s);
+      if (f === "date-time") return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?$/.test(s);
+      if (f === "ipv4") return /^(\d{1,3}\.){3}\d{1,3}$/.test(s);
+      if (f === "ipv6") return /^[0-9a-f:]+$/i.test(s);
+      if (f === "uuid") return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
+      return true;
+    }
+    function validate(schema, data, path) {
+      path = path || "$"; var errs = [];
+      if (schema === true) return errs;
+      if (schema === false) { errs.push({ path: path, msg: "schema is false — nothing allowed" }); return errs; }
+      if (typeof schema !== "object") return errs;
+      if ("type" in schema) { var types = Array.isArray(schema.type) ? schema.type : [schema.type]; if (!types.some(function (t) { return matchesType(data, t); })) errs.push({ path: path, msg: "expected type " + types.join("|") + ", got " + jsType(data) }); }
+      if ("enum" in schema) { if (!schema.enum.some(function (v) { return deepEqual(data, v); })) errs.push({ path: path, msg: "not one of enum values" }); }
+      if ("const" in schema) { if (!deepEqual(data, schema.const)) errs.push({ path: path, msg: "does not equal const" }); }
+      if (typeof data === "string") {
+        if ("minLength" in schema && data.length < schema.minLength) errs.push({ path: path, msg: "shorter than minLength " + schema.minLength });
+        if ("maxLength" in schema && data.length > schema.maxLength) errs.push({ path: path, msg: "longer than maxLength " + schema.maxLength });
+        if ("pattern" in schema) { try { if (!new RegExp(schema.pattern).test(data)) errs.push({ path: path, msg: "does not match pattern " + schema.pattern }); } catch (e) {} }
+        if ("format" in schema && !checkFormat(data, schema.format)) errs.push({ path: path, msg: "does not match format " + schema.format });
+      }
+      if (typeof data === "number") {
+        if ("minimum" in schema && data < schema.minimum) errs.push({ path: path, msg: "less than minimum " + schema.minimum });
+        if ("maximum" in schema && data > schema.maximum) errs.push({ path: path, msg: "greater than maximum " + schema.maximum });
+        if ("exclusiveMinimum" in schema && data <= schema.exclusiveMinimum) errs.push({ path: path, msg: "not > exclusiveMinimum " + schema.exclusiveMinimum });
+        if ("exclusiveMaximum" in schema && data >= schema.exclusiveMaximum) errs.push({ path: path, msg: "not < exclusiveMaximum " + schema.exclusiveMaximum });
+        if ("multipleOf" in schema) { var m = data / schema.multipleOf; if (Math.abs(m - Math.round(m)) > 1e-9) errs.push({ path: path, msg: "not a multipleOf " + schema.multipleOf }); }
+      }
+      if (Array.isArray(data)) {
+        if ("minItems" in schema && data.length < schema.minItems) errs.push({ path: path, msg: "fewer than minItems " + schema.minItems });
+        if ("maxItems" in schema && data.length > schema.maxItems) errs.push({ path: path, msg: "more than maxItems " + schema.maxItems });
+        if (schema.uniqueItems) { var seen = []; for (var i = 0; i < data.length; i++) { for (var j = 0; j < seen.length; j++) { if (deepEqual(data[i], seen[j])) { errs.push({ path: path + "[" + i + "]", msg: "not unique" }); break; } } seen.push(data[i]); } }
+        if ("items" in schema) {
+          if (Array.isArray(schema.items)) { for (var k = 0; k < data.length; k++) { var sub = k < schema.items.length ? schema.items[k] : schema.additionalItems; if (sub !== undefined && sub !== false) errs = errs.concat(validate(sub, data[k], path + "[" + k + "]")); } }
+          else { for (var ii = 0; ii < data.length; ii++) errs = errs.concat(validate(schema.items, data[ii], path + "[" + ii + "]")); }
+        }
+      }
+      if (data && typeof data === "object" && !Array.isArray(data)) {
+        var keys = Object.keys(data);
+        if ("minProperties" in schema && keys.length < schema.minProperties) errs.push({ path: path, msg: "fewer than minProperties " + schema.minProperties });
+        if ("maxProperties" in schema && keys.length > schema.maxProperties) errs.push({ path: path, msg: "more than maxProperties " + schema.maxProperties });
+        if ("required" in schema) schema.required.forEach(function (r) { if (!(r in data)) errs.push({ path: path + "." + r, msg: "required property missing" }); });
+        if ("properties" in schema) Object.keys(schema.properties).forEach(function (p) { if (p in data) errs = errs.concat(validate(schema.properties[p], data[p], path + "." + p)); });
+        if ("patternProperties" in schema) Object.keys(schema.patternProperties).forEach(function (pat) { var re = new RegExp(pat); keys.forEach(function (k) { if (re.test(k)) errs = errs.concat(validate(schema.patternProperties[pat], data[k], path + "." + k)); }); });
+        if ("additionalProperties" in schema && schema.additionalProperties !== undefined) {
+          var propKeys = schema.properties ? Object.keys(schema.properties) : [];
+          var patKeys = schema.patternProperties ? Object.keys(schema.patternProperties) : [];
+          keys.forEach(function (k) {
+            var defined = propKeys.indexOf(k) !== -1 || patKeys.some(function (p) { return new RegExp(p).test(k); });
+            if (!defined) { var ap = schema.additionalProperties; if (ap === false) errs.push({ path: path + "." + k, msg: "additional property not allowed" }); else errs = errs.concat(validate(ap, data[k], path + "." + k)); }
+          });
+        }
+      }
+      if ("allOf" in schema) schema.allOf.forEach(function (s) { errs = errs.concat(validate(s, data, path)); });
+      if ("anyOf" in schema) { if (!schema.anyOf.some(function (s) { return validate(s, data, path).length === 0; })) errs.push({ path: path, msg: "does not match any schema in anyOf" }); }
+      if ("oneOf" in schema) { var mm = schema.oneOf.filter(function (s) { return validate(s, data, path).length === 0; }).length; if (mm !== 1) errs.push({ path: path, msg: "matched " + mm + " schemas in oneOf (must be exactly 1)" }); }
+      if ("not" in schema) { if (validate(schema.not, data, path).length === 0) errs.push({ path: path, msg: "must NOT match the 'not' schema" }); }
+      return errs;
+    }
+
+    var schemaEl = document.getElementById("schema");
+    var dataEl = document.getElementById("data");
+    var out = document.getElementById("out");
+    var note = document.getElementById("note");
+
+    function esc(s) { return String(s).replace(/[&<>]/g, function (c) { return c === "&" ? "&amp;" : c === "<" ? "&lt;" : "&gt;"; }); }
+
+    function run() {
+      out.innerHTML = ""; note.textContent = "";
+      var s, d;
+      try { s = schemaEl.value.trim() ? JSON.parse(schemaEl.value) : null; } catch (e) { out.innerHTML = '<div class="invalid-banner">Schema is not valid JSON: ' + esc(e.message) + '</div>'; return; }
+      try { d = dataEl.value.trim() ? JSON.parse(dataEl.value) : null; } catch (e) { out.innerHTML = '<div class="invalid-banner">Document is not valid JSON: ' + esc(e.message) + '</div>'; return; }
+      if (s === null) { out.innerHTML = '<div class="invalid-banner">Enter a JSON Schema.</div>'; return; }
+      if (d === null) { out.innerHTML = '<div class="invalid-banner">Enter a JSON document.</div>'; return; }
+      var errs;
+      try { errs = validate(s, d); } catch (e) { out.innerHTML = '<div class="invalid-banner">Schema error: ' + esc(e.message) + '</div>'; return; }
+      if (!errs.length) {
+        out.innerHTML = '<div class="valid-banner">✓ Valid — the document matches the schema.</div>';
+        note.textContent = "0 errors — validated locally.";
+      } else {
+        var html = '<div class="invalid-banner">✗ Invalid — ' + errs.length + ' error' + (errs.length === 1 ? "" : "s") + ':</div>';
+        errs.forEach(function (e) { html += '<div class="err-line"><span class="err-path">' + esc(e.path) + '</span> — ' + esc(e.msg) + '</div>'; });
+        out.innerHTML = html;
+        note.textContent = errs.length + " error" + (errs.length === 1 ? "" : "s") + " — validated locally.";
+      }
+    }
+
+    document.getElementById("validate").addEventListener("click", run);
+    document.getElementById("clear").addEventListener("click", function () {
+      schemaEl.value = ""; dataEl.value = ""; out.innerHTML = ""; note.textContent = "";
+    });
+  })();
+  </script>
+</body>
+</html>

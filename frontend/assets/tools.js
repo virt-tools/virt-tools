@@ -115,6 +115,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-04T07:00:00Z",
   },
   {
+    slug: "json-schema-validator",
+    name: "JSON Schema Validator",
+    description: "Validate a JSON document against a JSON Schema (draft-07 subset) — runs locally, zero dependencies.",
+    category: "Encoding",
+    icon: "✅",
+    added: "2026-07-04T11:00:00Z",
+  },
+  {
     slug: "sql-formatter",
     name: "SQL Formatter",
     description: "Pretty-print SQL across many dialects (PostgreSQL, MySQL, SQLite, T-SQL…) — runs locally with sql-formatter.",
