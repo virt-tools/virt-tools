@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Hash Type Detector — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .hit { padding:8px 10px; border-bottom:1px solid var(--border,#2a2f3a); }
+    .hit:last-child { border-bottom:none; }
+    .hit b { font-family:monospace; }
+    .conf { float:right; font-size:12px; opacity:.75; }
+    .hint { opacity:.6; font-size:13px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Hash Type Detector</h1>
+      <p>Paste a hash and see what format(s) it most likely is — by prefix, length and alphabet. Runs entirely in your browser; nothing uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="in">Hash</label>
+        <textarea id="in" placeholder="$2b$10$… or 5d41402abc4b2a76b9719d911017c592" style="min-height:70px; font-family:monospace;"></textarea>
+      </div>
+      <div class="row">
+        <button id="detect">Detect</button>
+        <button id="clear" class="secondary">Clear</button>
+      </div>
+      <div class="spacer"></div>
+      <div id="out"></div>
+      <p class="note" id="note">Detection is heuristic — several formats share a length. Treat results as candidates, not certainty.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var inp = document.getElementById("in");
+    var out = document.getElementById("out");
+    var note = document.getElementById("note");
+
+    function esc(s) {
+      return String(s).replace(/[&<>]/g, function (c) {
+        return c === "&" ? "&amp;" : c === "<" ? "&lt;" : "&gt;";
+      });
+    }
+
+    function isHex(s) { return /^[a-fA-F0-9]+$/.test(s); }
+    function isB64(s) { return /^[A-Za-z0-9+/]+={0,2}$/.test(s) && s.length % 4 === 0; }
+
+    // Length (hex chars) -> candidate digests.
+    var HEX_MAP = {
+      8:  [["CRC32", "high"]],
+      16: [["MD2 / MD4", "low"], ["NTLM (half)", "low"]],
+      32: [["MD5", "high"], ["MD4", "med"], ["NTLM", "med"], ["LANMAN", "low"]],
+      40: [["SHA-1", "high"], ["RIPEMD-160", "med"], ["MySQL5 (SHA1(SHA1))", "low"]],
+      56: [["SHA-224", "high"], ["SHA3-224", "med"]],
+      64: [["SHA-256", "high"], ["SHA3-256", "med"], ["BLAKE2s-256", "low"]],
+      96: [["SHA-384", "high"], ["SHA3-384", "med"]],
+      128: [["SHA-512", "high"], ["SHA3-512", "med"], ["Whirlpool", "low"], ["BLAKE2b-512", "low"]]
+    };
+
+    function b64Bytes(s) {
+      try { var bin = atob(s); return bin.length; } catch (e) { return -1; }
+    }
+    var B64_MAP = {
+      16: "Base64(MD5 / MD4 / NTLM)",
+      20: "Base64(SHA-1 / RIPEMD-160)",
+      28: "Base64(SHA-224)",
+      32: "Base64(SHA-256 / SHA3-256)",
+      48: "Base64(SHA-384)",
+      64: "Base64(SHA-512 / SHA3-512 / Whirlpool)"
+    };
+
+    function detect() {
+      var raw = inp.value.trim();
+      out.innerHTML = "";
+      if (!raw) { note.textContent = "Paste a hash to identify."; return; }
+      var hits = [];
+
+      // Prefix-based (crypt family) — strongest signal.
+      var prefixes = [
+        [/^\$2[abxy]\$/, "Bcrypt"],
+        [/^\$argon2(id|i|d)\$/, "Argon2"],
+        [/^\$scrypt\$/, "scrypt"],
+        [/^\$pbkdf2-/, "PBKDF2 (passlib)"],
+        [/^\$1\$/, "MD5-crypt (Unix)"],
+        [/^\$5\$/, "SHA-256-crypt (Unix)"],
+        [/^\$6\$/, "SHA-512-crypt (Unix)"],
+        [/^\$apr1\$/, "Apache MD5 (apr1)"],
+        [/^\$gy\$/, "GOST Y (Unix crypt)"]
+      ];
+      prefixes.forEach(function (p) { if (p[0].test(raw)) hits.push([p[1], "high"]); });
+
+      var s = raw.replace(/\s+/g, "");
+
+      // Hex digests.
+      if (isHex(s) && HEX_MAP[s.length]) {
+        HEX_MAP[s.length].forEach(function (h) { hits.push([h[0] + " (" + s.length + " hex chars)", h[1]]); });
+      }
+
+      // Base64-encoded digests.
+      if (!isHex(s) && isB64(s) && B64_MAP[b64Bytes(s)]) {
+        hits.push([B64_MAP[b64Bytes(s)] + " (" + b64Bytes(s) + " bytes)", "med"]);
+      }
+
+      // GUID-ish hex (32 with dashes) -> MD5-ish.
+      if (/^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$/.test(raw)) {
+        hits.push(["UUID-format (32 hex + dashes)", "low"]);
+      }
+
+      if (!hits.length) {
+        out.innerHTML = '<div class="hit"><b>No known format matched.</b><div class="hint">Check for stray characters, whitespace, or a non-standard encoding.</div></div>';
+        note.textContent = "No match — length " + s.length + " chars, alphabet " + (isHex(s) ? "hex" : isB64(s) ? "base64" : "unknown") + ".";
+        return;
+      }
+
+      var rank = { high: 0, med: 1, low: 2 };
+      hits.sort(function (a, b) { return rank[a[1]] - rank[b[1]]; });
+      var html = "";
+      hits.forEach(function (h) {
+        html += '<div class="hit"><span class="conf">' + h[1] + ' confidence</span><b>' + esc(h[0]) + '</b></div>';
+      });
+      out.innerHTML = html;
+      note.textContent = hits.length + " candidate" + (hits.length === 1 ? "" : "s") + " — heuristic, not proof.";
+    }
+
+    document.getElementById("detect").addEventListener("click", detect);
+    inp.addEventListener("input", detect);
+    document.getElementById("clear").addEventListener("click", function () {
+      inp.value = ""; out.innerHTML = ""; note.textContent = "Detection is heuristic — several formats share a length. Treat results as candidates, not certainty.";
+    });
+  })();
+  </script>
+</body>
+</html>

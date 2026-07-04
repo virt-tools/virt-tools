@@ -67,6 +67,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-04T01:00:00Z",
   },
   {
+    slug: "hash-type-detector",
+    name: "Hash Type Detector",
+    description: "Identify an unknown hash format by prefix, length and alphabet — heuristic, runs locally.",
+    category: "Security",
+    icon: "🔍",
+    added: "2026-07-04T05:00:00Z",
+  },
+  {
     slug: "hash-generator",
     name: "Hash Generator",
     description: "Compute SHA-1 / SHA-256 / SHA-384 / SHA-512 hashes of text, in-browser via Web Crypto.",
