@@ -147,6 +147,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-04T04:00:00Z",
   },
   {
+    slug: "http-headers",
+    name: "HTTP Headers Reference",
+    description: "Look up common HTTP request and response headers by name or meaning — static reference, runs locally.",
+    category: "Networking",
+    icon: "📨",
+    added: "2026-07-04T10:00:00Z",
+  },
+  {
     slug: "string-escape",
     name: "String Escape / Unescape",
     description: "Escape or unescape text for regex, shell, SQL, CSV and JSON — runs locally, nothing uploaded.",
