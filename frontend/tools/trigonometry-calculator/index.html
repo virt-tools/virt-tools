@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Trigonometry Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .seg { display: inline-flex; border: 1px solid var(--border,#444); border-radius: 4px; overflow: hidden; flex-wrap: wrap; }
+    .seg button { padding: 5px 12px; border: none; background: transparent; color: inherit; cursor: pointer; font-size: 13px; }
+    .seg button.on { background: var(--accent,#ffd54a); color: #000; }
+    input.num { font-family: ui-monospace, monospace; font-size: 18px; width: 130px; }
+    select { font-size: 14px; }
+    .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-top: 8px; }
+    .summary .stat { padding: 8px 10px; border: 1px solid var(--border,#444); border-radius: 6px; }
+    .summary .stat-value { display:block; font-size: 17px; font-weight: 700; font-family: ui-monospace, monospace; word-break: break-all; }
+    .summary .stat-label { font-size: 12px; opacity: .8; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Trigonometry Calculator</h1>
+      <p>Compute the six trigonometric ratios — sin, cos, tan, cot, sec, csc — from an angle entered in degrees, radians, or gradians, or invert a ratio back to an angle with the arc functions. The forward mode also shows the angle converted into all three units, and ratios that are undefined at the given angle (for example tan at 90°) are reported as undefined. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="flex-wrap:wrap; gap:14px; align-items:flex-end;">
+        <div>
+          <label>Mode</label><br>
+          <span class="seg" id="mode">
+            <button data-m="fwd" class="on">Forward (angle → ratios)</button>
+            <button data-m="inv">Inverse (ratio → angle)</button>
+          </span>
+        </div>
+      </div>
+      <div class="spacer"></div>
+
+      <div id="fwd">
+        <div class="row" style="flex-wrap:wrap; gap:14px; align-items:flex-end;">
+          <div>
+            <label for="ang">Angle</label><br>
+            <input class="num" id="ang" type="text" inputmode="decimal" value="30">
+          </div>
+          <div>
+            <label>Unit</label><br>
+            <span class="seg" id="unit">
+              <button data-u="deg" class="on">Degrees</button>
+              <button data-u="rad">Radians</button>
+              <button data-u="grad">Gradians</button>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div id="inv" hidden>
+        <div class="row" style="flex-wrap:wrap; gap:14px; align-items:flex-end;">
+          <div>
+            <label for="fn">Function</label><br>
+            <select id="fn">
+              <option value="asin">arcsin (sin⁻¹)</option>
+              <option value="acos">arccos (cos⁻¹)</option>
+              <option value="atan" selected>arctan (tan⁻¹)</option>
+            </select>
+          </div>
+          <div>
+            <label for="ratio">Ratio</label><br>
+            <input class="num" id="ratio" type="text" inputmode="decimal" value="1">
+          </div>
+          <div>
+            <label>Output unit</label><br>
+            <span class="seg" id="iunit">
+              <button data-u="deg" class="on">Degrees</button>
+              <button data-u="rad">Radians</button>
+              <button data-u="grad">Gradians</button>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+
+      <div class="spacer"></div>
+      <label id="reslabel">Ratios</label>
+      <div class="summary" id="summary"></div>
+      <p class="note" id="note"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var modeEl = document.getElementById("mode");
+    var fwdEl = document.getElementById("fwd");
+    var invEl = document.getElementById("inv");
+    var angEl = document.getElementById("ang");
+    var unitEl = document.getElementById("unit");
+    var fnEl = document.getElementById("fn");
+    var ratioEl = document.getElementById("ratio");
+    var iunitEl = document.getElementById("iunit");
+    var errEl = document.getElementById("err");
+    var resLabel = document.getElementById("reslabel");
+    var summaryEl = document.getElementById("summary");
+    var noteEl = document.getElementById("note");
+    var mode = "fwd", unit = "deg", iunit = "deg";
+
+    function showErr(m) { errEl.textContent = m; errEl.hidden = !m; }
+    function clear(t) { t.innerHTML = ""; t.textContent = ""; }
+
+    function parseNum(s) {
+      s = String(s).trim();
+      if (s === "" || s === "-" || s === "+") return null;
+      if (!/^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(s)) return null;
+      var v = parseFloat(s);
+      if (!isFinite(v)) return null;
+      return v;
+    }
+
+    function fmt(x) {
+      if (x === null || x === undefined) return "undefined";
+      if (!isFinite(x)) return x > 0 ? "∞" : "−∞";
+      if (Object.is(x, -0)) x = 0;
+      if (Math.abs(x) < 1e-15) x = 0;
+      if (x === Math.round(x) && Math.abs(x) < 1e15) return String(Math.round(x));
+      var a = Math.abs(x);
+      var dp = a >= 100 ? 4 : a >= 1 ? 8 : 12;
+      var s = x.toFixed(dp);
+      s = s.replace(/0+$/, "").replace(/\.$/, "");
+      return s;
+    }
+
+    function toRad(value, u) {
+      if (u === "deg") return value * Math.PI / 180;
+      if (u === "rad") return value;
+      return value * Math.PI / 200;   // grad
+    }
+    function fromRad(rad, u) {
+      if (u === "deg") return rad * 180 / Math.PI;
+      if (u === "rad") return rad;
+      return rad * 200 / Math.PI;
+    }
+    function ratios(rad) {
+      var s = Math.sin(rad), c = Math.cos(rad);
+      var out = { sin: s, cos: c };
+      out.tan = Math.abs(c) > 1e-15 ? s / c : null;
+      out.cot = Math.abs(s) > 1e-15 ? c / s : null;
+      out.sec = Math.abs(c) > 1e-15 ? 1 / c : null;
+      out.csc = Math.abs(s) > 1e-15 ? 1 / s : null;
+      return out;
+    }
+    function inverse(fn, value, outU) {
+      var rad;
+      if (fn === "asin") {
+        if (value < -1 || value > 1) return null;
+        rad = Math.asin(value);
+      } else if (fn === "acos") {
+        if (value < -1 || value > 1) return null;
+        rad = Math.acos(value);
+      } else {
+        rad = Math.atan(value);
+      }
+      return fromRad(rad, outU);
+    }
+
+    function stat(parent, val, label) {
+      var d = document.createElement("div"); d.className = "stat";
+      var v = document.createElement("span"); v.className = "stat-value"; v.textContent = val;
+      var l = document.createElement("span"); l.className = "stat-label"; l.textContent = label;
+      d.appendChild(v); d.appendChild(l); parent.appendChild(d);
+    }
+
+    function compute() {
+      clear(summaryEl); clear(noteEl); showErr("");
+      if (mode === "fwd") {
+        resLabel.textContent = "Ratios";
+        var ang = parseNum(angEl.value);
+        if (ang === null) { showErr("Enter a valid angle."); window.__trig = null; return; }
+        var rad = toRad(ang, unit);
+        var r = ratios(rad);
+        stat(summaryEl, fmt(r.sin), "sin");
+        stat(summaryEl, fmt(r.cos), "cos");
+        stat(summaryEl, fmt(r.tan), "tan");
+        stat(summaryEl, fmt(r.cot), "cot");
+        stat(summaryEl, fmt(r.sec), "sec");
+        stat(summaryEl, fmt(r.csc), "csc");
+        stat(summaryEl, fmt(fromRad(rad, "deg")) + "°", "in degrees");
+        stat(summaryEl, fmt(fromRad(rad, "rad")) + " rad", "in radians");
+        stat(summaryEl, fmt(fromRad(rad, "grad")) + " grad", "in gradians");
+        noteEl.textContent = "sin²θ + cos²θ = " + fmt(r.sin * r.sin + r.cos * r.cos);
+        window.__trig = { mode: "fwd", rad: rad, r: r };
+      } else {
+        resLabel.textContent = "Angle";
+        var v = parseNum(ratioEl.value);
+        if (v === null) { showErr("Enter a valid ratio."); window.__trig = null; return; }
+        var fn = fnEl.value;
+        var ang2 = inverse(fn, v, iunit);
+        if (ang2 === null) { showErr("Value out of domain for " + fn + " (must be within [-1, 1])."); window.__trig = null; return; }
+        var rad2 = toRad(ang2, iunit);
+        stat(summaryEl, fmt(ang2), fn + " (" + iunit + ")");
+        stat(summaryEl, fmt(fromRad(rad2, "deg")) + "°", "in degrees");
+        stat(summaryEl, fmt(fromRad(rad2, "rad")) + " rad", "in radians");
+        stat(summaryEl, fmt(fromRad(rad2, "grad")) + " grad", "in gradians");
+        noteEl.textContent = fn + "(" + fmt(v) + ") = " + fmt(ang2) + " " + iunit;
+        window.__trig = { mode: "inv", fn: fn, value: v, angle: ang2, rad: rad2 };
+      }
+    }
+
+    function setMode(m) {
+      mode = m;
+      fwdEl.hidden = (m !== "fwd"); invEl.hidden = (m !== "inv");
+      modeEl.querySelectorAll("button").forEach(function (b) { b.classList.toggle("on", b.dataset.m === m); });
+      compute();
+    }
+    function setSeg(el, u) {
+      el.querySelectorAll("button").forEach(function (b) { b.classList.toggle("on", b.dataset.u === u); });
+    }
+
+    modeEl.querySelectorAll("button").forEach(function (b) {
+      b.addEventListener("click", function () { setMode(b.dataset.m); });
+    });
+    unitEl.querySelectorAll("button").forEach(function (b) {
+      b.addEventListener("click", function () { unit = b.dataset.u; setSeg(unitEl, unit); compute(); });
+    });
+    iunitEl.querySelectorAll("button").forEach(function (b) {
+      b.addEventListener("click", function () { iunit = b.dataset.u; setSeg(iunitEl, iunit); compute(); });
+    });
+    [angEl, ratioEl].forEach(function (el) { el.addEventListener("input", compute); });
+    [fnEl].forEach(function (el) { el.addEventListener("change", compute); });
+    setMode("fwd");
+  })();
+  </script>
+</body>
+</html>
