@@ -115,6 +115,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-04T07:00:00Z",
   },
   {
+    slug: "sql-formatter",
+    name: "SQL Formatter",
+    description: "Pretty-print SQL across many dialects (PostgreSQL, MySQL, SQLite, T-SQL…) — runs locally with sql-formatter.",
+    category: "Encoding",
+    icon: "🗄️",
+    added: "2026-07-04T08:00:00Z",
+  },
+  {
     slug: "mime-type-lookup",
     name: "MIME Type Lookup",
     description: "Look up a file's MIME type by extension or name — static reference, runs locally.",
