@@ -205,6 +205,18 @@
     renderView();
     wireTabs();
     if (searchInput) searchInput.addEventListener("input", filter);
+    // Honour ?q=… so the site-search action advertised in JSON-LD resolves to a
+    // real, linkable results view (e.g. https://virt.tools/?q=base64).
+    try {
+      var q = new URLSearchParams(window.location.search).get("q");
+      if (q && searchInput) {
+        searchInput.value = q;
+        // "Recent" view is flat, so a search there is most useful.
+        if (currentView !== "recent") switchView("recent");
+        else filter();
+        searchInput.focus();
+      }
+    } catch (e) {}
     filter();
   }
 
