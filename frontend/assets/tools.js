@@ -770,4 +770,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🟰",
     added: "2026-07-05T07:40:00Z",
   },
+  {
+    slug: "linear-regression",
+    name: "Linear Regression Calculator",
+    description: "Fit a straight line y = mx + b to a set of points using ordinary least squares. Enter one (x, y) pair per line — separated by a comma or whitespace — and the calculator reports the slope, intercept, the fitted equation, the Pearson correlation coefficient r, the coefficient of determination R², and the sum of squared errors, plus a y prediction for any x you choose. Degenerate cases (too few points, or all x values equal) are detected and reported. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "📉",
+    added: "2026-07-05T08:20:00Z",
+  },
 ];

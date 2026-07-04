@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Linear Regression Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    textarea.pts { font-family: ui-monospace, monospace; font-size: 14px; width: 100%; max-width: 360px; box-sizing: border-box; height: 160px; }
+    .eq { font-family: ui-monospace, monospace; font-size: 22px; font-weight: 800; margin: 8px 0; word-break: break-all; }
+    .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-top: 8px; }
+    .summary .stat { padding: 8px 10px; border: 1px solid var(--border,#444); border-radius: 6px; }
+    .summary .stat-value { display:block; font-size: 17px; font-weight: 700; font-family: ui-monospace, monospace; word-break: break-all; }
+    .summary .stat-label { font-size: 12px; opacity: .8; }
+    .pred input { font-family: ui-monospace, monospace; font-size: 16px; width: 120px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Linear Regression Calculator</h1>
+      <p>Fit a straight line y = mx + b to a set of points using ordinary least squares. Enter one (x, y) pair per line — separated by a comma or whitespace — and the calculator reports the slope, intercept, the fitted equation, the Pearson correlation coefficient r, the coefficient of determination R², and the sum of squared errors. It also predicts y for any x you choose. Degenerate cases (too few points, or all x values equal) are detected and reported. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <label for="pts">Data points (one x, y per line)</label><br>
+      <textarea class="pts" id="pts" inputmode="decimal" spellcheck="false">0,1
+1,3
+2,5
+3,7</textarea>
+      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+
+      <div class="spacer"></div>
+      <label>Fitted line</label>
+      <div class="eq" id="eq"></div>
+      <div class="summary" id="summary"></div>
+
+      <div class="spacer"></div>
+      <div class="row pred" style="flex-wrap:wrap; gap:14px; align-items:flex-end;">
+        <div>
+          <label for="px">Predict y at x =</label><br>
+          <input id="px" type="text" inputmode="decimal" value="5">
+        </div>
+        <div>
+          <label>predicted y</label><br>
+          <span class="eq" id="py" style="font-size:18px;">—</span>
+        </div>
+      </div>
+      <p class="note" id="note"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var ptsEl = document.getElementById("pts");
+    var errEl = document.getElementById("err");
+    var eqEl = document.getElementById("eq");
+    var summaryEl = document.getElementById("summary");
+    var pxEl = document.getElementById("px");
+    var pyEl = document.getElementById("py");
+    var noteEl = document.getElementById("note");
+    var lastFit = null;   // {m, b, status}
+
+    function showErr(m) { errEl.textContent = m; errEl.hidden = !m; }
+    function clear(t) { t.innerHTML = ""; t.textContent = ""; }
+
+    function parseNum(s) {
+      s = String(s).trim();
+      if (s === "" || s === "-" || s === "+") return null;
+      if (!/^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(s)) return null;
+      var v = parseFloat(s);
+      if (!isFinite(v)) return null;
+      return v;
+    }
+
+    function fmt(x) {
+      if (x === null || x === undefined) return "undefined";
+      if (!isFinite(x)) return x > 0 ? "∞" : "−∞";
+      if (Object.is(x, -0)) x = 0;
+      if (Math.abs(x) < 1e-12) x = 0;
+      if (x === Math.round(x) && Math.abs(x) < 1e15) return String(Math.round(x));
+      var a = Math.abs(x);
+      var dp = a >= 100 ? 4 : a >= 1 ? 6 : 10;
+      var s = x.toFixed(dp);
+      s = s.replace(/0+$/, "").replace(/\.$/, "");
+      return s;
+    }
+
+    function parsePoints(text) {
+      var pts = [];
+      var lines = String(text).split("\n");
+      for (var i = 0; i < lines.length; i++) {
+        var line = lines[i].trim();
+        if (line === "") continue;
+        var parts = line.replace(/,/g, " ").split(/\s+/);
+        if (parts.length !== 2) return null;
+        var x = parseNum(parts[0]);
+        var y = parseNum(parts[1]);
+        if (x === null || y === null) return null;
+        pts.push([x, y]);
+      }
+      return pts;
+    }
+
+    function regress(points) {
+      var n = points.length;
+      if (n < 2) return { status: "too_few" };
+      var sx = 0, sy = 0, sxy = 0, sxx = 0, syy = 0;
+      for (var i = 0; i < n; i++) {
+        var x = points[i][0], y = points[i][1];
+        sx += x; sy += y; sxy += x * y; sxx += x * x; syy += y * y;
+      }
+      var denom = n * sxx - sx * sx;
+      if (denom === 0) return { status: "vertical", n: n, xbar: sx / n, ybar: sy / n };
+      var m = (n * sxy - sx * sy) / denom;
+      var b = (sy - m * sx) / n;
+      var denomr = Math.sqrt((n * sxx - sx * sx) * (n * syy - sy * sy));
+      var r = denomr === 0 ? null : (n * sxy - sx * sy) / denomr;
+      var r2 = r === null ? null : r * r;
+      var sse = 0;
+      for (var j = 0; j < n; j++) {
+        var d = points[j][1] - (m * points[j][0] + b);
+        sse += d * d;
+      }
+      return { status: "ok", n: n, m: m, b: b, r: r, r2: r2, sse: sse,
+               xbar: sx / n, ybar: sy / n };
+    }
+
+    function stat(parent, val, label) {
+      var d = document.createElement("div"); d.className = "stat";
+      var v = document.createElement("span"); v.className = "stat-value"; v.textContent = val;
+      var l = document.createElement("span"); l.className = "stat-label"; l.textContent = label;
+      d.appendChild(v); d.appendChild(l); parent.appendChild(d);
+    }
+
+    function fmtTerm(m, b) {
+      // y = m x + b  with sign-aware formatting
+      var s = "y = ";
+      if (m === 1) s += "x";
+      else if (m === -1) s += "−x";
+      else s += fmt(m) + " x";
+      if (b > 0) s += " + " + fmt(b);
+      else if (b < 0) s += " − " + fmt(-b);
+      return s;
+    }
+
+    function compute() {
+      clear(eqEl); clear(summaryEl); clear(noteEl); showErr("");
+      pyEl.textContent = "—";
+      lastFit = null;
+      window.__reg = null;
+
+      var pts = parsePoints(ptsEl.value);
+      if (pts === null) { showErr("Enter one (x, y) pair per line, separated by a comma or space."); return; }
+      var r = regress(pts);
+      if (r.status === "too_few") {
+        eqEl.textContent = "Enter at least two points.";
+        noteEl.textContent = "At least two data points are needed to fit a line.";
+        return;
+      }
+      if (r.status === "vertical") {
+        eqEl.textContent = "Slope is undefined (all x values are equal).";
+        noteEl.textContent = "All x values are identical, so a function y = f(x) cannot be fit. Provide points with at least two distinct x values.";
+        stat(summaryEl, String(r.n), "points (n)");
+        stat(summaryEl, fmt(r.xbar), "mean x");
+        stat(summaryEl, fmt(r.ybar), "mean y");
+        return;
+      }
+
+      eqEl.textContent = fmtTerm(r.m, r.b);
+      stat(summaryEl, String(r.n), "points (n)");
+      stat(summaryEl, fmt(r.m), "slope (m)");
+      stat(summaryEl, fmt(r.b), "intercept (b)");
+      stat(summaryEl, r.r === null ? "undefined" : fmt(r.r), "correlation (r)");
+      stat(summaryEl, r.r2 === null ? "undefined" : fmt(r.r2), "R²");
+      stat(summaryEl, fmt(r.sse), "sum of squared errors");
+      stat(summaryEl, fmt(r.xbar), "mean x");
+      stat(summaryEl, fmt(r.ybar), "mean y");
+      noteEl.textContent = r.r === null
+        ? "The correlation r is undefined because the y values have zero variance."
+        : ("Fit quality: " + (Math.abs(r.r) > 0.999 ? "near-perfect" :
+                               Math.abs(r.r) > 0.7 ? "strong" :
+                               Math.abs(r.r) > 0.4 ? "moderate" : "weak") +
+           " " + (r.r >= 0 ? "positive" : "negative") + " correlation (r = " + fmt(r.r) + ").");
+
+      lastFit = { m: r.m, b: r.b, status: "ok" };
+      window.__reg = { points: pts, result: r };
+      predict();
+    }
+
+    function predict() {
+      if (!lastFit || lastFit.status !== "ok") { pyEl.textContent = "—"; return; }
+      var x = parseNum(pxEl.value);
+      if (x === null) { pyEl.textContent = "—"; return; }
+      pyEl.textContent = fmt(lastFit.m * x + lastFit.b);
+    }
+
+    ptsEl.addEventListener("input", compute);
+    pxEl.addEventListener("input", predict);
+    compute();
+  })();
+  </script>
+</body>
+</html>
