@@ -762,4 +762,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔺",
     added: "2026-07-05T07:00:00Z",
   },
+  {
+    slug: "linear-system-solver",
+    name: "Linear System Solver",
+    description: "Solve a system of two or three linear equations with exact rational arithmetic — no floating-point rounding, so answers like 5/4 stay exact. Enter the coefficients and right-hand-side values and the solver computes the determinant, classifies the system as having a unique solution, being inconsistent (no solution), or being dependent (infinitely many solutions), and reports each variable as an exact fraction with a decimal approximation when the solution is unique. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🟰",
+    added: "2026-07-05T07:40:00Z",
+  },
 ];
