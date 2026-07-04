@@ -802,4 +802,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🏠",
     added: "2026-07-05T10:20:00Z",
   },
+  {
+    slug: "geo-distance",
+    name: "Geo Distance Calculator",
+    description: "Compute the great-circle distance between two points on Earth from their latitude and longitude in decimal degrees, using the haversine formula on a spherical Earth. Choose kilometres, miles, or nautical miles, and the calculator also reports the initial and final bearings, the geographic midpoint, and the destination point reached from a start by travelling a given distance on a fixed bearing. Coordinates accept a sign or an N/S/E/W suffix (e.g. 51.5074 N or -0.1278). Everything runs locally in your browser.",
+    category: "Geography",
+    icon: "🧭",
+    added: "2026-07-05T11:00:00Z",
+  },
 ];

@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Geo Distance Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    input.num { font-family: ui-monospace, monospace; font-size: 18px; width: 150px; }
+    .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 8px; }
+    .summary .stat { padding: 8px 10px; border: 1px solid var(--border,#444); border-radius: 6px; }
+    .summary .stat-value { display:block; font-size: 17px; font-weight: 700; font-family: ui-monospace, monospace; word-break: break-all; }
+    .summary .stat-label { font-size: 12px; opacity: .8; }
+    .seg { display: inline-flex; border: 1px solid var(--border,#444); border-radius: 4px; overflow: hidden; flex-wrap: wrap; }
+    .seg button { padding: 5px 12px; border: none; background: transparent; color: inherit; cursor: pointer; font-size: 13px; }
+    .seg button.on { background: var(--accent,#ffd54a); color: #000; }
+    .sub { font-size: 13px; opacity: .8; margin: 4px 0; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Geo Distance Calculator</h1>
+      <p>Compute the great-circle distance between two points on Earth (specified by latitude and longitude in decimal degrees), plus the initial and final bearings, the midpoint, and a destination point reached from a start by travelling a given distance on a fixed bearing. Distances use the haversine formula on a spherical Earth; choose kilometres, miles, or nautical miles. Coordinates accept a sign or an N/S/E/W suffix (e.g. <code>51.5074 N</code> or <code>-0.1278</code>). Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="sub">Point A</div>
+      <div class="row" style="flex-wrap:wrap; gap:14px; align-items:flex-end;">
+        <div><label for="lat1">Latitude</label><br><input class="num" id="lat1" type="text" value="51.5074 N"></div>
+        <div><label for="lon1">Longitude</label><br><input class="num" id="lon1" type="text" value="0.1278 W"></div>
+      </div>
+      <div class="sub">Point B</div>
+      <div class="row" style="flex-wrap:wrap; gap:14px; align-items:flex-end;">
+        <div><label for="lat2">Latitude</label><br><input class="num" id="lat2" type="text" value="40.7128 N"></div>
+        <div><label for="lon2">Longitude</label><br><input class="num" id="lon2" type="text" value="74.0060 W"></div>
+        <div><label>Unit</label><br>
+          <span class="seg" id="unit">
+            <button data-u="km" class="on">km</button>
+            <button data-u="mi">miles</button>
+            <button data-u="nm">nautical mi</button>
+          </span>
+        </div>
+      </div>
+
+      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+
+      <div class="spacer"></div>
+      <label>Distance, bearings &amp; midpoint</label>
+      <div class="summary" id="summary"></div>
+      <p class="note" id="note"></p>
+    </div>
+
+    <div class="panel">
+      <div class="sub">Destination point (start from Point A)</div>
+      <div class="row" style="flex-wrap:wrap; gap:14px; align-items:flex-end;">
+        <div><label for="brg">Bearing (degrees)</label><br><input class="num" id="brg" type="text" inputmode="decimal" value="288"></div>
+        <div><label for="dist">Distance</label><br><input class="num" id="dist" type="text" inputmode="decimal" value="5570"></div>
+      </div>
+      <div class="spacer"></div>
+      <div class="summary" id="dest"></div>
+      <p class="note" id="dnote"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var lat1El = document.getElementById("lat1"), lon1El = document.getElementById("lon1");
+    var lat2El = document.getElementById("lat2"), lon2El = document.getElementById("lon2");
+    var unitEl = document.getElementById("unit");
+    var brgEl = document.getElementById("brg"), distEl = document.getElementById("dist");
+    var errEl = document.getElementById("err");
+    var summaryEl = document.getElementById("summary"), noteEl = document.getElementById("note");
+    var destEl = document.getElementById("dest"), dnoteEl = document.getElementById("dnote");
+    var unit = "km";
+
+    var R = { km: 6371.0, mi: 3958.7613, nm: 3440.065 };
+    var UNAME = { km: "km", mi: "mi", nm: "nm" };
+
+    function showErr(m) { errEl.textContent = m; errEl.hidden = !m; }
+    function clear(t) { t.innerHTML = ""; t.textContent = ""; }
+
+    function parseNum(s) {
+      s = String(s).trim();
+      if (s === "" || s === "-" || s === "+") return null;
+      if (!/^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(s)) return null;
+      var v = parseFloat(s);
+      if (!isFinite(v)) return null;
+      return v;
+    }
+
+    // Parse a coordinate: signed decimal, or "<number> <N|S|E|W>" (negate for S/W).
+    function parseCoord(s) {
+      s = String(s).trim().replace(/,/g, ".");
+      if (s === "") return null;
+      var sign = 1;
+      var m = s.match(/^([+-]?)\s*(\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?\s*([NSEWnsew]?)$/);
+      if (!m) return null;
+      if (m[1] === "-") sign = -1;
+      var dir = m[3].toUpperCase();
+      if (dir === "S" || dir === "W") sign = -sign;
+      var v = parseFloat(m[2]);
+      if (!isFinite(v)) return null;
+      return sign * v;
+    }
+
+    function fmt(x) {
+      if (x === null || x === undefined) return "undefined";
+      if (!isFinite(x)) return x > 0 ? "∞" : "−∞";
+      if (Object.is(x, -0)) x = 0;
+      if (Math.abs(x) < 1e-12) x = 0;
+      if (x === Math.round(x) && Math.abs(x) < 1e15) return String(Math.round(x));
+      var a = Math.abs(x);
+      var dp = a >= 100 ? 4 : a >= 1 ? 6 : 10;
+      var s = x.toFixed(dp);
+      s = s.replace(/0+$/, "").replace(/\.$/, "");
+      return s;
+    }
+
+    function toRad(d) { return d * Math.PI / 180; }
+    function toDeg(r) { return r * 180 / Math.PI; }
+
+    function haversine(lat1, lon1, lat2, lon2, radius) {
+      var p1 = toRad(lat1), p2 = toRad(lat2);
+      var dp = toRad(lat2 - lat1), dl = toRad(lon2 - lon1);
+      var a = Math.sin(dp / 2) * Math.sin(dp / 2)
+            + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) * Math.sin(dl / 2);
+      var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return radius * c;
+    }
+
+    function initialBearing(lat1, lon1, lat2, lon2) {
+      var p1 = toRad(lat1), p2 = toRad(lat2), dl = toRad(lon2 - lon1);
+      var y = Math.sin(dl) * Math.cos(p2);
+      var x = Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl);
+      return (toDeg(Math.atan2(y, x)) + 360) % 360;
+    }
+
+    function midpoint(lat1, lon1, lat2, lon2) {
+      var p1 = toRad(lat1), p2 = toRad(lat2), dl = toRad(lon2 - lon1);
+      var bx = Math.cos(p2) * Math.cos(dl);
+      var by = Math.cos(p2) * Math.sin(dl);
+      var pm = Math.atan2(Math.sin(p1) + Math.sin(p2),
+                          Math.sqrt((Math.cos(p1) + bx) * (Math.cos(p1) + bx) + by * by));
+      var lm = toRad(lon1) + Math.atan2(by, Math.cos(p1) + bx);
+      return [toDeg(pm), (((toDeg(lm) + 540) % 360) - 180)];
+    }
+
+    function destination(lat1, lon1, bearingDeg, distance, radius) {
+      var d = distance / radius;
+      var p1 = toRad(lat1), l1 = toRad(lon1), th = toRad(bearingDeg);
+      var p2 = Math.asin(Math.sin(p1) * Math.cos(d) + Math.cos(p1) * Math.sin(d) * Math.cos(th));
+      var l2 = l1 + Math.atan2(Math.sin(th) * Math.sin(d) * Math.cos(p1),
+                               Math.cos(d) - Math.sin(p1) * Math.sin(p2));
+      return [toDeg(p2), (((toDeg(l2) + 540) % 360) - 180)];
+    }
+
+    function stat(parent, val, label) {
+      var d = document.createElement("div"); d.className = "stat";
+      var v = document.createElement("span"); v.className = "stat-value"; v.textContent = val;
+      var l = document.createElement("span"); l.className = "stat-label"; l.textContent = label;
+      d.appendChild(v); d.appendChild(l); parent.appendChild(d);
+    }
+
+    function compute() {
+      clear(summaryEl); clear(noteEl); clear(destEl); clear(dnoteEl); showErr("");
+      window.__geo = null;
+
+      var lat1 = parseCoord(lat1El.value);
+      var lon1 = parseCoord(lon1El.value);
+      var lat2 = parseCoord(lat2El.value);
+      var lon2 = parseCoord(lon2El.value);
+      if (lat1 === null) { showErr("Enter a valid latitude for Point A."); return; }
+      if (lon1 === null) { showErr("Enter a valid longitude for Point A."); return; }
+      if (lat2 === null) { showErr("Enter a valid latitude for Point B."); return; }
+      if (lon2 === null) { showErr("Enter a valid longitude for Point B."); return; }
+      if (lat1 < -90 || lat1 > 90) { showErr("Latitude A must be between -90 and 90."); return; }
+      if (lat2 < -90 || lat2 > 90) { showErr("Latitude B must be between -90 and 90."); return; }
+      if (lon1 < -180 || lon1 > 180) { showErr("Longitude A must be between -180 and 180."); return; }
+      if (lon2 < -180 || lon2 > 180) { showErr("Longitude B must be between -180 and 180."); return; }
+
+      var radius = R[unit];
+      var dist = haversine(lat1, lon1, lat2, lon2, radius);
+      var ib = initialBearing(lat1, lon1, lat2, lon2);
+      var fb = (initialBearing(lat2, lon2, lat1, lon1) + 180) % 360;
+      var mp = midpoint(lat1, lon1, lat2, lon2);
+
+      stat(summaryEl, fmt(dist), "Distance (" + UNAME[unit] + ")");
+      stat(summaryEl, fmt(ib) + "°", "Initial bearing A→B");
+      stat(summaryEl, fmt(fb) + "°", "Final bearing at B");
+      stat(summaryEl, fmt(mp[0]), "Midpoint latitude");
+      stat(summaryEl, fmt(mp[1]), "Midpoint longitude");
+
+      noteEl.textContent = "Point A to Point B is " + fmt(dist) + " " + UNAME[unit] +
+        ", bearing " + fmt(ib) + "°; midpoint at (" + fmt(mp[0]) + ", " + fmt(mp[1]) + ").";
+
+      // Destination from A.
+      var brg = parseNum(brgEl.value);
+      var ddist = parseNum(distEl.value);
+      if (brg !== null && ddist !== null) {
+        var dest = destination(lat1, lon1, brg, ddist, radius);
+        stat(destEl, fmt(dest[0]), "Destination latitude");
+        stat(destEl, fmt(dest[1]), "Destination longitude");
+        dnoteEl.textContent = "Travelling " + fmt(ddist) + " " + UNAME[unit] + " on bearing " +
+          fmt(brg) + "° from Point A reaches (" + fmt(dest[0]) + ", " + fmt(dest[1]) + ").";
+      }
+
+      window.__geo = { lat1: lat1, lon1: lon1, lat2: lat2, lon2: lon2, unit: unit,
+                       dist: dist, ib: ib, fb: fb, midlat: mp[0], midlon: mp[1],
+                       brg: brg, ddist: ddist, destlat: dest ? dest[0] : null, destlon: dest ? dest[1] : null };
+    }
+
+    function setUnit(u) {
+      unit = u;
+      unitEl.querySelectorAll("button").forEach(function (b) { b.classList.toggle("on", b.dataset.u === u); });
+      compute();
+    }
+    unitEl.querySelectorAll("button").forEach(function (b) {
+      b.addEventListener("click", function () { setUnit(b.dataset.u); });
+    });
+    [lat1El, lon1El, lat2El, lon2El, brgEl, distEl].forEach(function (el) { el.addEventListener("input", compute); });
+    compute();
+  })();
+  </script>
+</body>
+</html>
