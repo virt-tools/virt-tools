@@ -99,6 +99,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-04T02:00:00Z",
   },
   {
+    slug: "http-status-codes",
+    name: "HTTP Status Code Reference",
+    description: "Look up HTTP response status codes by number or meaning — static reference, runs locally.",
+    category: "Networking",
+    icon: "📡",
+    added: "2026-07-04T04:00:00Z",
+  },
+  {
     slug: "string-escape",
     name: "String Escape / Unescape",
     description: "Escape or unescape text for regex, shell, SQL, CSV and JSON — runs locally, nothing uploaded.",
