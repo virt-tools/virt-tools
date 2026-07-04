@@ -730,4 +730,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🗓",
     added: "2026-07-05T04:20:00Z",
   },
+  {
+    slug: "age-calculator",
+    name: "Age Calculator",
+    description: "Calculate exact age from a date of birth, accounting for the calendar — leap years and month lengths are handled so the result is correct even for birthdays on the 29th, 30th, or 31st. Shows age in years, months, and days; total days and weeks lived; the weekday you were born on; and a countdown to your next birthday. \"Today\" defaults to the current date and you can edit it to compute an age as of any date. Everything runs locally in your browser.",
+    category: "Time",
+    icon: "🎂",
+    added: "2026-07-05T05:00:00Z",
+  },
 ];

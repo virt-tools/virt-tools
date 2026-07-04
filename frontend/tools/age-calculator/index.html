@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Age Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    input.date { font-family: ui-monospace, monospace; font-size: 18px; width: 160px; }
+    .age-big { font-size: 30px; font-weight: 800; font-family: ui-monospace, monospace; }
+    .age-big .unit { font-size: 16px; font-weight: 500; opacity: .8; margin: 0 8px 0 2px; }
+    .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 8px; }
+    .summary .stat { padding: 8px 10px; border: 1px solid var(--border,#444); border-radius: 6px; }
+    .summary .stat-value { display:block; font-size: 18px; font-weight: 700; font-family: ui-monospace, monospace; }
+    .summary .stat-label { font-size: 12px; opacity: .8; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Age Calculator</h1>
+      <p>Calculate exact age from a birth date, accounting for the calendar — leap years and month lengths are handled so the result is correct even for birthdays on the 29th, 30th, or 31st. Shows age in years, months, and days; total days and weeks lived; the weekday you were born on; and a countdown to your next birthday. "Today" defaults to the current date in UTC and you can edit it to compute an age as of any date. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="flex-wrap:wrap; gap:14px; align-items:flex-end;">
+        <div>
+          <label for="b">Date of birth</label><br>
+          <input class="date" id="b" type="text" placeholder="YYYY-MM-DD" inputmode="numeric" value="2000-01-01">
+        </div>
+        <div>
+          <label for="t">Age at date</label><br>
+          <input class="date" id="t" type="text" placeholder="YYYY-MM-DD" inputmode="numeric">
+        </div>
+      </div>
+      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+
+      <div class="spacer"></div>
+      <label>Age</label>
+      <div class="age-big" id="age">—</div>
+
+      <div class="spacer"></div>
+      <label>Time lived &amp; next birthday</label>
+      <div class="summary" id="summary"></div>
+      <p class="note" id="note"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var bEl = document.getElementById("b");
+    var tEl = document.getElementById("t");
+    var errEl = document.getElementById("err");
+    var ageEl = document.getElementById("age");
+    var summaryEl = document.getElementById("summary");
+    var noteEl = document.getElementById("note");
+
+    function showErr(m) { errEl.textContent = m; errEl.hidden = !m; }
+    function clear(t) { t.innerHTML = ""; t.textContent = ""; }
+
+    function todayUTC() {
+      var now = new Date();
+      return fmtDate(now.getUTCFullYear(), now.getUTCMonth() + 1, now.getUTCDate());
+    }
+    function fmtDate(y, m, d) {
+      return y + "-" + (m < 10 ? "0" + m : m) + "-" + (d < 10 ? "0" + d : d);
+    }
+    tEl.value = todayUTC();
+
+    function parseDate(s) {
+      s = String(s).trim();
+      var m = s.match(/^(\d{1,4})-(\d{1,2})-(\d{1,2})$/);
+      if (!m) return null;
+      var y = parseInt(m[1], 10), mo = parseInt(m[2], 10), d = parseInt(m[3], 10);
+      if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+      if (d > daysInMonth(y, mo)) return null;
+      return { y: y, m: mo, d: d };
+    }
+    function isLeap(y) { return (y % 4 === 0 && y % 100 !== 0) || (y % 400 === 0); }
+    function daysInMonth(y, mo) {
+      var dim = [31, 0, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+      dim[1] = isLeap(y) ? 29 : 28;
+      return dim[mo - 1];
+    }
+
+    function cmpDate(a, b) {
+      if (a.y !== b.y) return a.y < b.y ? -1 : 1;
+      if (a.m !== b.m) return a.m < b.m ? -1 : 1;
+      if (a.d !== b.d) return a.d < b.d ? -1 : 1;
+      return 0;
+    }
+    function daysBetween(from, to) {
+      var f = Date.UTC(from.y, from.m - 1, from.d);
+      var t = Date.UTC(to.y, to.m - 1, to.d);
+      return Math.round((t - f) / 86400000);
+    }
+
+    function ageYMD(birth, today) {
+      var years = today.y - birth.y;
+      var months = today.m - birth.m;
+      var days = today.d - birth.d;
+      if (days < 0) {
+        months -= 1;
+        var pm = today.m - 1, py = today.y;
+        if (pm === 0) { pm = 12; py -= 1; }
+        days += daysInMonth(py, pm);
+      }
+      if (months < 0) { years -= 1; months += 12; }
+      return { years: years, months: months, days: days };
+    }
+
+    function weekdayName(d) {
+      var dow = new Date(Date.UTC(d.y, d.m - 1, d.d)).getUTCDay();
+      return ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][dow];
+    }
+
+    function nextBirthday(birth, today) {
+      function candFor(year) {
+        var dim = daysInMonth(year, birth.m);
+        return { y: year, m: birth.m, d: Math.min(birth.d, dim) };
+      }
+      var cand = candFor(today.y);
+      if (cmpDate(cand, today) < 0) cand = candFor(today.y + 1);
+      return { date: cand, daysUntil: daysBetween(today, cand) };
+    }
+
+    function stat(parent, val, label) {
+      var d = document.createElement("div"); d.className = "stat";
+      var v = document.createElement("span"); v.className = "stat-value"; v.textContent = val;
+      var l = document.createElement("span"); l.className = "stat-label"; l.textContent = label;
+      d.appendChild(v); d.appendChild(l); parent.appendChild(d);
+    }
+
+    function compute() {
+      clear(ageEl); clear(summaryEl); clear(noteEl); showErr("");
+      var birth = parseDate(bEl.value);
+      var today = parseDate(tEl.value);
+      if (birth === null) { showErr("Enter a valid date of birth as YYYY-MM-DD."); window.__age = null; return; }
+      if (today === null) { showErr("Enter a valid 'age at' date as YYYY-MM-DD."); window.__age = null; return; }
+      if (cmpDate(today, birth) < 0) { showErr("The 'age at' date is before the date of birth."); window.__age = null; return; }
+      if (cmpDate(today, birth) === 0) {
+        ageEl.textContent = "0 years (born today)";
+        stat(summaryEl, "0 days", "Total time lived");
+        stat(summaryEl, "0 weeks", "Total weeks");
+        var nb = nextBirthday(birth, today);
+        stat(summaryEl, fmtDate(nb.date.y, nb.date.m, nb.date.d), "Next birthday");
+        stat(summaryEl, nb.daysUntil === 0 ? "today" : "in " + nb.daysUntil + " days", "Days until");
+        noteEl.textContent = "Born on a " + weekdayName(birth) + ".";
+        window.__age = { years: 0, months: 0, days: 0, totalDays: 0 };
+        return;
+      }
+
+      var a = ageYMD(birth, today);
+      ageEl.innerHTML = a.years + "<span class=\"unit\">years</span>" + a.months +
+        "<span class=\"unit\">months</span>" + a.days + "<span class=\"unit\">days</span>";
+
+      var totalDays = daysBetween(birth, today);
+      var totalWeeks = Math.floor(totalDays / 7);
+      var nb = nextBirthday(birth, today);
+
+      stat(summaryEl, String(totalDays), "Total days lived");
+      stat(summaryEl, String(totalWeeks), "Total weeks lived");
+      stat(summaryEl, weekdayName(birth), "Day you were born");
+      stat(summaryEl, fmtDate(nb.date.y, nb.date.m, nb.date.d), "Next birthday");
+      stat(summaryEl, nb.daysUntil === 0 ? "it's today!" : "in " + nb.daysUntil + " days", "Days until next");
+      stat(summaryEl, weekdayName(nb.date), "Next birthday falls on");
+
+      noteEl.textContent = "Born " + fmtDate(birth.y, birth.m, birth.d) + " (" + weekdayName(birth) +
+        "); " + a.years + " years, " + a.months + " months, " + a.days + " days old as of " +
+        fmtDate(today.y, today.m, today.d) + ". Next birthday is " + fmtDate(nb.date.y, nb.date.m, nb.date.d) +
+        " (" + weekdayName(nb.date) + ") — " + (nb.daysUntil === 0 ? "today!" : "in " + nb.daysUntil + " days") + ".";
+
+      window.__age = { years: a.years, months: a.months, days: a.days, totalDays: totalDays,
+                       totalWeeks: totalWeeks, next: nb };
+    }
+
+    [bEl, tEl].forEach(function (el) { el.addEventListener("input", compute); });
+    compute();
+  })();
+  </script>
+</body>
+</html>
