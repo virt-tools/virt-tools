@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Amortization Schedule Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    input.num { font-family: ui-monospace, monospace; font-size: 18px; width: 130px; }
+    .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 8px; }
+    .summary .stat { padding: 8px 10px; border: 1px solid var(--border,#444); border-radius: 6px; }
+    .summary .stat-value { display:block; font-size: 17px; font-weight: 700; font-family: ui-monospace, monospace; word-break: break-all; }
+    .summary .stat-label { font-size: 12px; opacity: .8; }
+    .seg { display: inline-flex; border: 1px solid var(--border,#444); border-radius: 4px; overflow: hidden; flex-wrap: wrap; }
+    .seg button { padding: 5px 12px; border: none; background: transparent; color: inherit; cursor: pointer; font-size: 13px; }
+    .seg button.on { background: var(--accent,#ffd54a); color: #000; }
+    .table-wrap { max-height: 420px; overflow: auto; margin-top: 10px; border: 1px solid var(--border,#444); border-radius: 6px; }
+    table.base-table { width: 100%; border-collapse: collapse; }
+    table.base-table th, table.base-table td { padding: 5px 10px; text-align: right; white-space: nowrap; }
+    table.base-table th { position: sticky; top: 0; background: var(--bg,#222); opacity: .95; font-weight: 600; }
+    table.base-table tbody tr:nth-child(odd) td { background: rgba(127,127,127,0.06); }
+    table.base-table td.k { font-weight: 700; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Amortization Schedule Calculator</h1>
+      <p>Generate a full loan amortization schedule. Enter the loan principal, the annual interest rate (APR), and the term in years, and the calculator works out the fixed monthly payment, then breaks every payment into interest and principal with the remaining balance after each month. Toggle between a month-by-month detail and a yearly summary. A 0% rate is handled as a straight-line payoff. All arithmetic uses the standard amortization formula and runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="flex-wrap:wrap; gap:14px; align-items:flex-end;">
+        <div>
+          <label for="P">Principal</label><br>
+          <input class="num" id="P" type="text" inputmode="decimal" value="200000">
+        </div>
+        <div>
+          <label for="rate">Annual rate % (APR)</label><br>
+          <input class="num" id="rate" type="text" inputmode="decimal" value="6.5">
+        </div>
+        <div>
+          <label for="years">Term (years)</label><br>
+          <input class="num" id="years" type="text" inputmode="decimal" value="30">
+        </div>
+        <div>
+          <label>View</label><br>
+          <span class="seg" id="view">
+            <button data-v="month" class="on">Monthly</button>
+            <button data-v="year">Yearly</button>
+          </span>
+        </div>
+      </div>
+
+      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+
+      <div class="spacer"></div>
+      <label>Summary</label>
+      <div class="summary" id="summary"></div>
+      <p class="note" id="note"></p>
+
+      <div class="spacer"></div>
+      <label id="schemelabel">Monthly schedule</label>
+      <div class="table-wrap">
+        <table class="base-table" id="table">
+          <thead><tr><th>#</th><th>Payment</th><th>Interest</th><th>Principal</th><th>Balance</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var PEl = document.getElementById("P");
+    var rateEl = document.getElementById("rate");
+    var yearsEl = document.getElementById("years");
+    var viewEl = document.getElementById("view");
+    var errEl = document.getElementById("err");
+    var summaryEl = document.getElementById("summary");
+    var noteEl = document.getElementById("note");
+    var tbody = document.querySelector("#table tbody");
+    var schemeLabel = document.getElementById("schemelabel");
+    var view = "month";
+
+    function showErr(m) { errEl.textContent = m; errEl.hidden = !m; }
+    function clear(t) { t.innerHTML = ""; t.textContent = ""; }
+
+    function parseNum(s) {
+      s = String(s).trim();
+      if (s === "" || s === "-" || s === "+") return null;
+      if (!/^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(s)) return null;
+      var v = parseFloat(s);
+      if (!isFinite(v)) return null;
+      return v;
+    }
+
+    function money(x) {
+      if (x === null || x === undefined) return "undefined";
+      if (!isFinite(x)) return x > 0 ? "∞" : "−∞";
+      if (Object.is(x, -0)) x = 0;
+      var neg = x < 0; x = Math.abs(x);
+      var s = x.toFixed(2);
+      // thousands separators
+      var parts = s.split(".");
+      parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+      return (neg ? "−" : "") + parts.join(".");
+    }
+
+    function monthlyPayment(P, rate, years) {
+      var n = Math.round(years * 12);
+      if (n <= 0) return NaN;
+      if (rate === 0) return P / n;
+      var i = rate / 100 / 12;
+      return P * i / (1 - Math.pow(1 + i, -n));
+    }
+
+    function buildRows(P, rate, years) {
+      var n = Math.round(years * 12);
+      var i = rate === 0 ? 0 : rate / 100 / 12;
+      var M = monthlyPayment(P, rate, years);
+      var rows = [];
+      var bal = P;
+      for (var m = 1; m <= n; m++) {
+        var interest = bal * i;
+        var principal = M - interest;
+        bal -= principal;
+        if (m === n && Math.abs(bal) < 1e-6 * Math.max(1, Math.abs(P))) bal = 0;
+        rows.push({ m: m, pay: M, int: interest, prin: principal, bal: bal });
+      }
+      return rows;
+    }
+
+    function stat(parent, val, label) {
+      var d = document.createElement("div"); d.className = "stat";
+      var v = document.createElement("span"); v.className = "stat-value"; v.textContent = val;
+      var l = document.createElement("span"); l.className = "stat-label"; l.textContent = label;
+      d.appendChild(v); d.appendChild(l); parent.appendChild(d);
+    }
+
+    function compute() {
+      clear(summaryEl); clear(noteEl); clear(tbody); showErr("");
+      window.__amort = null;
+
+      var P = parseNum(PEl.value);
+      var rate = parseNum(rateEl.value);
+      var years = parseNum(yearsEl.value);
+      if (P === null) { showErr("Enter a valid principal."); return; }
+      if (P <= 0) { showErr("Principal must be greater than 0."); return; }
+      if (rate === null) { showErr("Enter a valid annual interest rate."); return; }
+      if (rate < 0) { showErr("Annual rate must be at least 0."); return; }
+      if (years === null) { showErr("Enter a valid term in years."); return; }
+      if (years <= 0) { showErr("Term must be greater than 0 years."); return; }
+      if (Math.round(years * 12) > 1200) { showErr("Term is too long (max 100 years)."); return; }
+
+      var rows = buildRows(P, rate, years);
+      var n = rows.length;
+      var M = monthlyPayment(P, rate, years);
+      var totalPaid = M * n;
+      var totalInterest = totalPaid - P;
+
+      stat(summaryEl, money(M), "Monthly payment");
+      stat(summaryEl, String(n), "Number of payments");
+      stat(summaryEl, money(totalPaid), "Total paid");
+      stat(summaryEl, money(totalInterest), "Total interest");
+
+      noteEl.textContent = "A " + money(P) + " loan at " + (rate === Math.round(rate) ? rate : rate) +
+        "% APR over " + years + " years costs " + money(M) + "/month; you pay " +
+        money(totalInterest) + " in interest (" + money(totalPaid) + " total).";
+
+      if (view === "month") {
+        schemeLabel.textContent = "Monthly schedule";
+        for (var a = 0; a < rows.length; a++) {
+          var r = rows[a];
+          var row = document.createElement("tr");
+          var c;
+          c = document.createElement("td"); c.className = "k"; c.textContent = String(r.m); row.appendChild(c);
+          c = document.createElement("td"); c.textContent = money(r.pay); row.appendChild(c);
+          c = document.createElement("td"); c.textContent = money(r.int); row.appendChild(c);
+          c = document.createElement("td"); c.textContent = money(r.prin); row.appendChild(c);
+          c = document.createElement("td"); c.textContent = money(r.bal); row.appendChild(c);
+          tbody.appendChild(row);
+        }
+      } else {
+        schemeLabel.textContent = "Yearly summary";
+        var yrs = years;
+        for (var y = 1; y <= Math.ceil(yrs); y++) {
+          var lo = (y - 1) * 12, hi = Math.min(y * 12, n);
+          if (lo >= n) break;
+          var sp = 0, si = 0, sb = 0;
+          for (var b = lo; b < hi; b++) { sp += rows[b].prin; si += rows[b].int; sb = rows[b].bal; }
+          var yr = document.createElement("tr");
+          var c2;
+          c2 = document.createElement("td"); c2.className = "k"; c2.textContent = String(y); yr.appendChild(c2);
+          c2 = document.createElement("td"); c2.textContent = money(sp + si); yr.appendChild(c2);
+          c2 = document.createElement("td"); c2.textContent = money(si); yr.appendChild(c2);
+          c2 = document.createElement("td"); c2.textContent = money(sp); yr.appendChild(c2);
+          c2 = document.createElement("td"); c2.textContent = money(sb); yr.appendChild(c2);
+          tbody.appendChild(yr);
+        }
+      }
+
+      window.__amort = { P: P, rate: rate, years: years, M: M, n: n,
+                         totalPaid: totalPaid, totalInterest: totalInterest, view: view };
+    }
+
+    function setView(v) {
+      view = v;
+      viewEl.querySelectorAll("button").forEach(function (b) { b.classList.toggle("on", b.dataset.v === v); });
+      compute();
+    }
+    viewEl.querySelectorAll("button").forEach(function (b) {
+      b.addEventListener("click", function () { setView(b.dataset.v); });
+    });
+    [PEl, rateEl, yearsEl].forEach(function (el) { el.addEventListener("input", compute); });
+    compute();
+  })();
+  </script>
+</body>
+</html>

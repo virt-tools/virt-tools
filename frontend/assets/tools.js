@@ -794,4 +794,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎰",
     added: "2026-07-05T09:40:00Z",
   },
+  {
+    slug: "amortization-schedule",
+    name: "Amortization Schedule Calculator",
+    description: "Generate a full loan amortization schedule. Enter the principal, annual interest rate (APR), and term in years, and the calculator works out the fixed monthly payment, then breaks every payment into interest and principal with the remaining balance after each month. Toggle between a month-by-month detail and a yearly summary. A 0% rate is handled as a straight-line payoff. The monthly payment uses the standard amortization formula and every row is computed locally in your browser.",
+    category: "Finance",
+    icon: "🏠",
+    added: "2026-07-05T10:20:00Z",
+  },
 ];
