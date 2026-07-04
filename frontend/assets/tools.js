@@ -99,6 +99,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-04T02:00:00Z",
   },
   {
+    slug: "string-escape",
+    name: "String Escape / Unescape",
+    description: "Escape or unescape text for regex, shell, SQL, CSV and JSON — runs locally, nothing uploaded.",
+    category: "Text",
+    icon: "🛡️",
+    added: "2026-07-04T03:00:00Z",
+  },
+  {
     slug: "timestamp-converter",
     name: "Unix Timestamp Converter",
     description: "Convert between Unix epoch timestamps and human-readable UTC / local dates.",
