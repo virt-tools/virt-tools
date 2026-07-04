@@ -59,6 +59,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T03:27:17Z",
   },
   {
+    slug: "bcrypt-hash",
+    name: "Bcrypt Hash & Verify",
+    description: "Hash a password with bcrypt or verify one against an existing hash — runs locally with bcryptjs.",
+    category: "Security",
+    icon: "🔑",
+    added: "2026-07-04T01:00:00Z",
+  },
+  {
     slug: "hash-generator",
     name: "Hash Generator",
     description: "Compute SHA-1 / SHA-256 / SHA-384 / SHA-512 hashes of text, in-browser via Web Crypto.",
