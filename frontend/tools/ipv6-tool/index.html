@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>IPv6 Address Tool — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    input.addr { font-family: ui-monospace, monospace; font-size: 18px; width: 100%; max-width: 480px; box-sizing: border-box; }
+    .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-top: 8px; }
+    .summary .stat { padding: 8px 10px; border: 1px solid var(--border,#444); border-radius: 6px; }
+    .summary .stat-value { display:block; font-size: 15px; font-weight: 700; font-family: ui-monospace, monospace; word-break: break-all; }
+    .summary .stat-label { font-size: 12px; opacity: .8; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>IPv6 Address Tool</h1>
+      <p>Parse and normalise an IPv6 address. Enter an address in any valid form — with leading zeros, mixed case, <code>::</code> shorthand, or an embedded IPv4-mapped tail (e.g. <code>::ffff:192.0.2.1</code>) — and the tool validates it, expands it to the full eight-group form, compresses it to the canonical RFC 5952 shortest form (lowercase, longest run of zero groups collapsed, no leading zeros), shows the reverse-DNS <code>ip6.arpa</code> name, and reports the 128-bit integer value. A zone id after <code>%</code> (e.g. <code>fe80::1%eth0</code>) is accepted and stripped. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <label for="addr">IPv6 address</label><br>
+      <input class="addr" id="addr" type="text" value="2001:db8::1" autocomplete="off" spellcheck="false">
+
+      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+
+      <div class="spacer"></div>
+      <label>Normalised address</label>
+      <div class="summary" id="summary"></div>
+      <p class="note" id="note"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var addrEl = document.getElementById("addr");
+    var errEl = document.getElementById("err");
+    var summaryEl = document.getElementById("summary");
+    var noteEl = document.getElementById("note");
+    var MAX = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFn;  // 2^128 - 1
+
+    function showErr(m) { errEl.textContent = m; errEl.hidden = !m; }
+    function clear(t) { t.innerHTML = ""; t.textContent = ""; }
+
+    function parseHextet(h) {
+      if (!/^[0-9a-fA-F]{1,4}$/.test(h)) return null;
+      return BigInt(parseInt(h, 16));
+    }
+
+    function parseIPv4(s) {
+      var parts = s.split(".");
+      if (parts.length !== 4) return null;
+      var ip = 0n;
+      for (var i = 0; i < 4; i++) {
+        var p = parts[i];
+        if (!/^[0-9]+$/.test(p)) return null;
+        if (p.length > 1 && p[0] === "0") return null;   // no leading zeros (IPv4 rule)
+        var v = Number(p);
+        if (v > 255) return null;
+        ip = (ip << 8n) | BigInt(v);
+      }
+      return ip;
+    }
+
+    // Faithful port of CPython's IPv6Address._ip_int_from_string.
+    function ipIntFromString(raw) {
+      var s = String(raw).trim();
+      if (s === "") return null;
+      var pct = s.indexOf("%");
+      if (pct !== -1) {                                  // strip zone id
+        var scope = s.slice(pct + 1);
+        if (scope === "" || scope.indexOf("%") !== -1) return null;
+        s = s.slice(0, pct);
+        if (s === "") return null;
+      }
+      if (s.indexOf("/") !== -1) return null;            // no prefix allowed
+      if (s.length > 45) return null;
+      var parts = s.split(":");
+      if (parts.length < 3) return null;                 // need >= 2 colons
+      if (parts[parts.length - 1].indexOf(".") !== -1) { // embedded IPv4 tail
+        var v4 = parseIPv4(parts.pop());
+        if (v4 === null) return null;
+        parts.push(((v4 >> 16n) & 0xFFFFn).toString(16));
+        parts.push((v4 & 0xFFFFn).toString(16));
+      }
+      if (parts.length > 9) return null;
+      var skip = -1;
+      for (var i = 1; i < parts.length - 1; i++) {       // interior '::'
+        if (parts[i] === "") {
+          if (skip !== -1) return null;                  // at most one '::'
+          skip = i;
+        }
+      }
+      var partsHi, partsLo, partsSkipped;
+      if (skip !== -1) {
+        partsHi = skip; partsLo = parts.length - skip - 1;
+        if (parts[0] === "") { partsHi -= 1; if (partsHi !== 0) return null; }
+        if (parts[parts.length - 1] === "") { partsLo -= 1; if (partsLo !== 0) return null; }
+        partsSkipped = 8 - (partsHi + partsLo);
+        if (partsSkipped < 1) return null;
+      } else {
+        if (parts.length !== 8) return null;
+        if (parts[0] === "") return null;
+        if (parts[parts.length - 1] === "") return null;
+        partsHi = 8; partsLo = 0; partsSkipped = 0;
+      }
+      var ip = 0n, g;
+      for (var i = 0; i < partsHi; i++) { g = parseHextet(parts[i]); if (g === null) return null; ip = (ip << 16n) | g; }
+      ip <<= (16n * BigInt(partsSkipped));
+      for (var i = parts.length - partsLo; i < parts.length; i++) { g = parseHextet(parts[i]); if (g === null) return null; ip = (ip << 16n) | g; }
+      if (ip > MAX) return null;
+      return ip;
+    }
+
+    function compressHextets(hextets) {   // faithful port of CPython _compress_hextets
+      var bestStart = -1, bestLen = 0, dcStart = -1, dcLen = 0;
+      for (var i = 0; i < hextets.length; i++) {
+        if (hextets[i] === "0") {
+          dcLen++;
+          if (dcStart === -1) dcStart = i;
+          if (dcLen > bestLen) { bestLen = dcLen; bestStart = dcStart; }
+        } else { dcLen = 0; dcStart = -1; }
+      }
+      if (bestLen > 1) {
+        var bestEnd = bestStart + bestLen;
+        if (bestEnd === hextets.length) hextets.push("");
+        hextets.splice(bestStart, bestLen, "");
+        if (bestStart === 0) hextets.unshift("");
+      }
+      return hextets;
+    }
+
+    function stringFromIpInt(ip) {        // compressed 8-hextet form (no leading zeros)
+      var hex = ip.toString(16);
+      while (hex.length < 32) hex = "0" + hex;
+      var hextets = [];
+      for (var x = 0; x < 32; x += 4) hextets.push(parseInt(hex.substr(x, 4), 16).toString(16));
+      return compressHextets(hextets).join(":");
+    }
+
+    function explodedString(ip) {         // full 8-group form (with leading zeros)
+      var hex = ip.toString(16);
+      while (hex.length < 32) hex = "0" + hex;
+      var parts = [];
+      for (var x = 0; x < 32; x += 4) parts.push(hex.substr(x, 4));
+      return parts.join(":");
+    }
+
+    function ipv4Dotted(low32) {
+      var b = [Number((low32 >> 24n) & 255n), Number((low32 >> 16n) & 255n),
+               Number((low32 >> 8n) & 255n), Number(low32 & 255n)];
+      return b[0] + "." + b[1] + "." + b[2] + "." + b[3];
+    }
+
+    function isV4Mapped(ip) { return (ip >> 32n) === 0xFFFFn; }
+
+    function compressedForm(ip) {
+      if (isV4Mapped(ip)) return stringFromIpInt(ip >> 32n) + ":" + ipv4Dotted(ip & 0xFFFFFFFFn);
+      return stringFromIpInt(ip);
+    }
+
+    function explodedForm(ip) {
+      if (isV4Mapped(ip)) return explodedString(ip).substr(0, 30) + ipv4Dotted(ip & 0xFFFFFFFFn);
+      return explodedString(ip);
+    }
+
+    function reversePointer(ip) {
+      var s;
+      if (isV4Mapped(ip)) {
+        var head = explodedString(ip).substr(0, 30);
+        var hex8 = (ip & 0xFFFFFFFFn).toString(16);
+        while (hex8.length < 8) hex8 = "0" + hex8;
+        s = head + hex8;
+      } else {
+        s = explodedString(ip);
+      }
+      var chars = s.split("").reverse().join("").replace(/:/g, "");
+      return chars.split("").join(".") + ".ip6.arpa";
+    }
+
+    function stat(parent, val, label) {
+      var d = document.createElement("div"); d.className = "stat";
+      var v = document.createElement("span"); v.className = "stat-value"; v.textContent = val;
+      var l = document.createElement("span"); l.className = "stat-label"; l.textContent = label;
+      d.appendChild(v); d.appendChild(l); parent.appendChild(d);
+    }
+
+    function compute() {
+      clear(summaryEl); clear(noteEl); showErr("");
+      window.__ipv6 = null;
+
+      var ip = ipIntFromString(addrEl.value);
+      if (ip === null) {
+        showErr("That is not a valid IPv6 address.");
+        return;
+      }
+      var comp = compressedForm(ip);
+      var expl = explodedForm(ip);
+      var rev = reversePointer(ip);
+      var mapped = isV4Mapped(ip);
+
+      stat(summaryEl, comp, "Compressed (RFC 5952)");
+      stat(summaryEl, expl, "Expanded (full form)");
+      stat(summaryEl, rev, "Reverse DNS (ip6.arpa)");
+      stat(summaryEl, ip.toString(10), "Integer (decimal)");
+      var hex = ip.toString(16); while (hex.length < 32) hex = "0" + hex;
+      stat(summaryEl, "0x" + hex, "Integer (hex)");
+
+      noteEl.textContent = (mapped ? "This is an IPv4-mapped address; the last 32 bits are shown as a dotted-quad. "
+                                   : "Canonical form: lowercase, longest run of zero groups collapsed to ::, leading zeros removed. ")
+        + "Reverse-DNS name: " + rev + ".";
+
+      window.__ipv6 = { input: addrEl.value, ip: ip.toString(10), compressed: comp,
+                        exploded: expl, reverse: rev, mapped: mapped };
+    }
+
+    addrEl.addEventListener("input", compute);
+    compute();
+  })();
+  </script>
+</body>
+</html>

@@ -810,4 +810,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🧭",
     added: "2026-07-05T11:00:00Z",
   },
+  {
+    slug: "ipv6-tool",
+    name: "IPv6 Address Tool",
+    description: "Parse and normalise an IPv6 address. Enter an address in any valid form — with leading zeros, mixed case, :: shorthand, or an embedded IPv4-mapped tail (e.g. ::ffff:192.0.2.1) — and the tool validates it, expands it to the full eight-group form, compresses it to the canonical RFC 5952 shortest form (lowercase, longest run of zero groups collapsed, no leading zeros), shows the reverse-DNS ip6.arpa name, and reports the 128-bit integer value. A zone id after % (e.g. fe80::1%eth0) is accepted and stripped. Everything runs locally in your browser.",
+    category: "Networking",
+    icon: "🛰️",
+    added: "2026-07-05T11:40:00Z",
+  },
 ];
