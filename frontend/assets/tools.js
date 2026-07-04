@@ -91,6 +91,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-04T00:00:00Z",
   },
   {
+    slug: "mime-type-lookup",
+    name: "MIME Type Lookup",
+    description: "Look up a file's MIME type by extension or name — static reference, runs locally.",
+    category: "System",
+    icon: "🗂️",
+    added: "2026-07-04T02:00:00Z",
+  },
+  {
     slug: "timestamp-converter",
     name: "Unix Timestamp Converter",
     description: "Convert between Unix epoch timestamps and human-readable UTC / local dates.",
