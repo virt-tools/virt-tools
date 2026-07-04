@@ -826,4 +826,12 @@ window.VIRTUAL_TOOLS = [
     icon: "ℂ",
     added: "2026-07-05T12:20:00Z",
   },
+  {
+    slug: "semver-toolkit",
+    name: "SemVer Toolkit",
+    description: "Parse, compare, range-check, sort, and bump Semantic Versioning 2.0.0 strings. Parse a version into its major, minor, patch, pre-release and build parts; compare two versions with full pre-release precedence (numeric identifiers numerically, alphanumeric lexically, a pre-release ranking below its release); check a version against an npm-style range (^, ~, >, >=, <, <=, =, x-ranges, and || unions) with the standard pre-release inclusion rule; sort a list of versions ascending or descending; and bump major, minor, patch, or pre-release levels. Everything runs locally in your browser.",
+    category: "Text",
+    icon: "🔖",
+    added: "2026-07-04T12:28:00Z",
+  },
 ];
