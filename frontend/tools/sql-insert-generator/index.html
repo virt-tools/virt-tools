@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>SQL INSERT Generator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>SQL INSERT Generator</h1>
+      <p>Turn CSV or JSON rows into <code>INSERT</code> statements — entirely in your browser. Nothing uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="in">Input</label>
+        <textarea id="in" placeholder='id,name,active&#10;1,Ada,true&#10;2,"O&#39;Brien",false' style="min-height:120px; font-family:monospace;"></textarea>
+      </div>
+      <div class="row" style="align-items:flex-end; flex-wrap:wrap;">
+        <div>
+          <label for="type">Input format</label>
+          <select id="type">
+            <option value="csv" selected>CSV</option>
+            <option value="json">JSON (array of objects)</option>
+          </select>
+        </div>
+        <div>
+          <label for="table">Table name</label>
+          <input id="table" type="text" value="my_table" style="font-family:monospace;">
+        </div>
+        <div>
+          <label for="batch">Rows per statement</label>
+          <select id="batch">
+            <option value="1" selected>1 (one INSERT per row)</option>
+            <option value="10">10</option>
+            <option value="100">100</option>
+            <option value="0">All rows</option>
+          </select>
+        </div>
+        <div>
+          <label for="nulls">Empty CSV cell =</label>
+          <select id="nulls">
+            <option value="null" selected>NULL</option>
+            <option value="empty">empty string</option>
+          </select>
+        </div>
+      </div>
+      <div class="spacer"></div>
+      <div class="row" style="justify-content:space-between;">
+        <label for="out">Output</label>
+        <button id="copy" class="secondary" style="padding:4px 10px;">Copy</button>
+      </div>
+      <div class="output" id="out" style="white-space:pre; font-family:monospace;"></div>
+      <p class="note" id="note">Generated locally. String values are single-quote-escaped; numbers stay unquoted.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var inp = document.getElementById("in");
+    var out = document.getElementById("out");
+    var note = document.getElementById("note");
+
+    function esc() { return ""; }
+
+    // RFC 4180 CSV parser -> array of rows (array of string cells).
+    function parseCSV(text) {
+      var rows = [], row = [], field = "", inQuotes = false, i = 0;
+      while (i < text.length) {
+        var c = text[i];
+        if (inQuotes) {
+          if (c === '"') {
+            if (text[i + 1] === '"') { field += '"'; i += 2; continue; }
+            inQuotes = false; i++; continue;
+          }
+          field += c; i++; continue;
+        }
+        if (c === '"') { inQuotes = true; i++; continue; }
+        if (c === ',') { row.push(field); field = ""; i++; continue; }
+        if (c === '\r') { i++; continue; }
+        if (c === '\n') { row.push(field); rows.push(row); row = []; field = ""; i++; continue; }
+        field += c; i++;
+      }
+      if (field.length || row.length) { row.push(field); rows.push(row); }
+      return rows.filter(function (r) { return !(r.length === 1 && r[0] === ""); });
+    }
+
+    function isInt(s) { return /^[+-]?\d+$/.test(s); }
+    function isNum(s) { return /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(s); }
+
+    function sqlString(s) { return "'" + s.replace(/'/g, "''") + "'"; }
+    function ident(s) { return '"' + s.replace(/"/g, '""') + '"'; }
+
+    function cellValue(s, nullMode) {
+      if (s === "" || s === null || s === undefined) {
+        if (nullMode === "null") return "NULL";
+        return "''";
+      }
+      if (s === "true") return "TRUE";
+      if (s === "false") return "FALSE";
+      if (isInt(s) || isNum(s)) return s;
+      return sqlString(s);
+    }
+
+    function build() {
+      var text = inp.value.trim();
+      if (!text) { set("", "Paste some CSV or JSON first."); return []; }
+      var type = document.getElementById("type").value;
+      var table = document.getElementById("table").value.trim() || "my_table";
+      var batch = parseInt(document.getElementById("batch").value, 10);
+      var nullMode = document.getElementById("nulls").value;
+      var cols, rows;
+
+      try {
+        if (type === "csv") {
+          var parsed = parseCSV(text);
+          if (parsed.length < 1) { set("", "No rows found in CSV."); return []; }
+          cols = parsed[0];
+          rows = parsed.slice(1).map(function (r) {
+            var o = {};
+            cols.forEach(function (c, i) { o[c] = r[i] === undefined ? "" : r[i]; });
+            return o;
+          });
+        } else {
+          var arr = JSON.parse(text);
+          if (!Array.isArray(arr)) { set("", "JSON must be an array of objects."); return []; }
+          var keySet = {};
+          arr.forEach(function (o) { for (var k in o) keySet[k] = true; });
+          cols = Object.keys(keySet);
+          rows = arr;
+        }
+      } catch (e) {
+        set("", "Error parsing input: " + (e.message || e));
+        return [];
+      }
+
+      if (!cols.length) { set("", "No columns detected."); return []; }
+      if (!rows.length) { set("", "No data rows detected."); return []; }
+
+      var colList = cols.map(ident).join(", ");
+      var n = batch > 0 ? batch : rows.length;
+      var lines = [];
+      for (var r = 0; r < rows.length; r += n) {
+        var chunk = rows.slice(r, r + n);
+        var tuples = chunk.map(function (row) {
+          var vals = cols.map(function (c) {
+            var v = row[c];
+            return cellValue(v === undefined ? "" : String(v), nullMode);
+          });
+          return "  (" + vals.join(", ") + ")";
+        });
+        lines.push("INSERT INTO " + ident(table) + " (" + colList + ") VALUES\n" + tuples.join(",\n") + ";");
+      }
+      set(lines.join("\n\n"), null);
+      note.textContent = rows.length + " row" + (rows.length === 1 ? "" : "s") + ", " + cols.length + " column" + (cols.length === 1 ? "" : "s") + " — generated locally.";
+      return lines;
+    }
+
+    function set(text, err) {
+      out.textContent = text;
+      out.style.color = err ? "var(--bad)" : "";
+      if (err) note.textContent = err;
+    }
+
+    ["type", "table", "batch", "nulls"].forEach(function (id) {
+      var el = document.getElementById(id);
+      el.addEventListener("input", build);
+      el.addEventListener("change", build);
+    });
+    inp.addEventListener("input", build);
+
+    document.getElementById("copy").addEventListener("click", function () {
+      var t = out.textContent;
+      if (!t) return;
+      var b = this;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(t).then(function () {
+          b.textContent = "Copied!"; setTimeout(function () { b.textContent = "Copy"; }, 1200);
+        });
+      } else {
+        var ta = document.createElement("textarea");
+        ta.value = t; document.body.appendChild(ta); ta.select();
+        try { document.execCommand("copy"); b.textContent = "Copied!"; setTimeout(function () { b.textContent = "Copy"; }, 1200); }
+        catch (e) {}
+        ta.remove();
+      }
+    });
+
+    build();
+  })();
+  </script>
+</body>
+</html>

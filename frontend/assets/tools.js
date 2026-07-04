@@ -123,6 +123,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-04T08:00:00Z",
   },
   {
+    slug: "sql-insert-generator",
+    name: "SQL INSERT Generator",
+    description: "Turn CSV or JSON rows into INSERT statements with proper quoting — runs locally, nothing uploaded.",
+    category: "Encoding",
+    icon: "📥",
+    added: "2026-07-04T09:00:00Z",
+  },
+  {
     slug: "mime-type-lookup",
     name: "MIME Type Lookup",
     description: "Look up a file's MIME type by extension or name — static reference, runs locally.",
