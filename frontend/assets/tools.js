@@ -75,6 +75,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T04:05:18Z",
   },
   {
+    slug: "yaml-converter",
+    name: "JSON ⇄ YAML Converter",
+    description: "Convert between JSON and YAML in your browser with js-yaml — nothing uploaded.",
+    category: "Encoding",
+    icon: "📄",
+    added: "2026-07-04T00:00:00Z",
+  },
+  {
     slug: "timestamp-converter",
     name: "Unix Timestamp Converter",
     description: "Convert between Unix epoch timestamps and human-readable UTC / local dates.",
