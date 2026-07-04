@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Normal Distribution Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .seg { display: inline-flex; border: 1px solid var(--border,#444); border-radius: 4px; overflow: hidden; flex-wrap: wrap; }
+    .seg button { padding: 5px 12px; border: none; background: transparent; color: inherit; cursor: pointer; font-size: 13px; }
+    .seg button.on { background: var(--accent,#ffd54a); color: #000; }
+    input.num { font-family: ui-monospace, monospace; font-size: 18px; width: 130px; }
+    .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 8px; }
+    .summary .stat { padding: 8px 10px; border: 1px solid var(--border,#444); border-radius: 6px; }
+    .summary .stat-value { display:block; font-size: 17px; font-weight: 700; font-family: ui-monospace, monospace; word-break: break-all; }
+    .summary .stat-label { font-size: 12px; opacity: .8; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Normal Distribution Calculator</h1>
+      <p>Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses a high-accuracy rational approximation; results match standard normal tables to about six significant figures. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="flex-wrap:wrap; gap:14px; align-items:flex-end;">
+        <div>
+          <label for="mu">Mean μ</label><br>
+          <input class="num" id="mu" type="text" inputmode="decimal" value="0">
+        </div>
+        <div>
+          <label for="sigma">Std dev σ (positive)</label><br>
+          <input class="num" id="sigma" type="text" inputmode="decimal" value="1">
+        </div>
+        <div>
+          <label>Mode</label><br>
+          <span class="seg" id="mode">
+            <button data-m="cdf" class="on">P(X ≤ x)</button>
+            <button data-m="inv">Percentile → x</button>
+            <button data-m="int">Interval P(a ≤ X ≤ b)</button>
+          </span>
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+      <div id="cdfin" class="row" style="flex-wrap:wrap; gap:14px; align-items:flex-end;">
+        <div>
+          <label for="x">Value x</label><br>
+          <input class="num" id="x" type="text" inputmode="decimal" value="1">
+        </div>
+      </div>
+      <div id="invin" class="row" hidden style="flex-wrap:wrap; gap:14px; align-items:flex-end;">
+        <div>
+          <label for="p">Probability p (0–1)</label><br>
+          <input class="num" id="p" type="text" inputmode="decimal" value="0.95">
+        </div>
+      </div>
+      <div id="intin" class="row" hidden style="flex-wrap:wrap; gap:14px; align-items:flex-end;">
+        <div>
+          <label for="a">Lower bound a</label><br>
+          <input class="num" id="a" type="text" inputmode="decimal" value="-1.96">
+        </div>
+        <div>
+          <label for="b">Upper bound b</label><br>
+          <input class="num" id="b" type="text" inputmode="decimal" value="1.96">
+        </div>
+      </div>
+
+      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+
+      <div class="spacer"></div>
+      <label id="reslabel">Results</label>
+      <div class="summary" id="summary"></div>
+      <p class="note" id="note"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var modeEl = document.getElementById("mode");
+    var cdfin = document.getElementById("cdfin");
+    var invin = document.getElementById("invin");
+    var intin = document.getElementById("intin");
+    var muEl = document.getElementById("mu");
+    var sigmaEl = document.getElementById("sigma");
+    var xEl = document.getElementById("x");
+    var pEl = document.getElementById("p");
+    var aEl = document.getElementById("a");
+    var bEl = document.getElementById("b");
+    var errEl = document.getElementById("err");
+    var resLabel = document.getElementById("reslabel");
+    var summaryEl = document.getElementById("summary");
+    var noteEl = document.getElementById("note");
+    var mode = "cdf";
+    var SQRT2 = Math.SQRT2;
+    var SQRT2PI = Math.sqrt(2 * Math.PI);
+
+    function showErr(m) { errEl.textContent = m; errEl.hidden = !m; }
+    function clear(t) { t.innerHTML = ""; t.textContent = ""; }
+
+    function parseNum(s) {
+      s = String(s).trim();
+      if (s === "" || s === "-" || s === "+") return null;
+      if (!/^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(s)) return null;
+      var v = parseFloat(s);
+      if (!isFinite(v)) return null;
+      return v;
+    }
+
+    function fmt(x) {
+      if (x === null || x === undefined) return "undefined";
+      if (!isFinite(x)) return x > 0 ? "∞" : "−∞";
+      if (Object.is(x, -0)) x = 0;
+      if (Math.abs(x) < 1e-12) x = 0;
+      if (x === Math.round(x) && Math.abs(x) < 1e15) return String(Math.round(x));
+      var a = Math.abs(x);
+      var dp = a >= 100 ? 4 : a >= 1 ? 6 : 10;
+      var s = x.toFixed(dp);
+      s = s.replace(/0+$/, "").replace(/\.$/, "");
+      return s;
+    }
+
+    function erf(x) {
+      // Abramowitz & Stegun 7.1.26 (|err| < 1.5e-7)
+      var sign = x >= 0 ? 1 : -1;
+      x = Math.abs(x);
+      var t = 1 / (1 + 0.3275911 * x);
+      var poly = ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t;
+      var y = 1 - poly * Math.exp(-x * x);
+      return sign * y;
+    }
+
+    function phiStd(z) { return 0.5 * (1 + erf(z / SQRT2)); }   // standard normal CDF
+    function pdfStd(z) { return Math.exp(-0.5 * z * z) / SQRT2PI; }
+    function zScore(x, mu, sigma) { return (x - mu) / sigma; }
+
+    function invPhiStd(p) {
+      // Inverse standard-normal CDF via Newton's method on the erf-based Phi.
+      // Accuracy is limited by the erf approximation (~1e-7 in p), giving
+      // ~1e-6 in z near the centre and ~1e-4 in the tails — within z-table precision.
+      if (p <= 0) return -Infinity;
+      if (p >= 1) return Infinity;
+      var z;
+      if (p < 0.5) z = -Math.sqrt(-2 * Math.log(p));
+      else z = Math.sqrt(-2 * Math.log(1 - p));
+      for (var i = 0; i < 60; i++) {
+        var e = phiStd(z) - p;
+        if (Math.abs(e) < 1e-13) break;
+        var d = pdfStd(z);
+        if (d < 1e-300) break;
+        z -= e / d;
+      }
+      return z;
+    }
+
+    function stat(parent, val, label) {
+      var d = document.createElement("div"); d.className = "stat";
+      var v = document.createElement("span"); v.className = "stat-value"; v.textContent = val;
+      var l = document.createElement("span"); l.className = "stat-label"; l.textContent = label;
+      d.appendChild(v); d.appendChild(l); parent.appendChild(d);
+    }
+
+    function compute() {
+      clear(summaryEl); clear(noteEl); showErr("");
+      window.__norm = null;
+
+      var mu = parseNum(muEl.value);
+      var sigma = parseNum(sigmaEl.value);
+      if (mu === null) { showErr("Enter a valid mean μ."); return; }
+      if (sigma === null) { showErr("Enter a valid standard deviation σ."); return; }
+      if (sigma <= 0) { showErr("Standard deviation σ must be positive."); return; }
+
+      if (mode === "cdf") {
+        resLabel.textContent = "Cumulative probability";
+        var x = parseNum(xEl.value);
+        if (x === null) { showErr("Enter a valid value x."); return; }
+        var z = zScore(x, mu, sigma);
+        var cdf = phiStd(z);
+        var density = pdfStd(z) / sigma;
+        stat(summaryEl, fmt(z), "z-score (x − μ)/σ");
+        stat(summaryEl, fmt(cdf), "P(X ≤ x)");
+        stat(summaryEl, fmt(1 - cdf), "P(X > x)");
+        stat(summaryEl, fmt(density), "density f(x)");
+        noteEl.textContent = "For x = " + fmt(x) + ", z = " + fmt(z) + ", so P(X ≤ x) ≈ " + fmt(cdf) +
+          " and P(X > x) ≈ " + fmt(1 - cdf) + ".";
+        window.__norm = { mode: "cdf", mu: mu, sigma: sigma, x: x, z: z, cdf: cdf, density: density };
+      } else if (mode === "inv") {
+        resLabel.textContent = "Percentile value";
+        var p = parseNum(pEl.value);
+        if (p === null) { showErr("Enter a valid probability p."); return; }
+        if (p <= 0 || p >= 1) { showErr("Probability p must be strictly between 0 and 1."); return; }
+        var zinv = invPhiStd(p);
+        var xinv = mu + sigma * zinv;
+        stat(summaryEl, fmt(zinv), "z (standard)");
+        stat(summaryEl, fmt(xinv), "x = μ + σ·z");
+        stat(summaryEl, fmt(p), "p (target)");
+        noteEl.textContent = "The " + fmt(p) + " percentile is x ≈ " + fmt(xinv) +
+          " (z ≈ " + fmt(zinv) + ").";
+        window.__norm = { mode: "inv", mu: mu, sigma: sigma, p: p, z: zinv, x: xinv };
+      } else {
+        resLabel.textContent = "Interval probability";
+        var a = parseNum(aEl.value);
+        var b = parseNum(bEl.value);
+        if (a === null) { showErr("Enter a valid lower bound a."); return; }
+        if (b === null) { showErr("Enter a valid upper bound b."); return; }
+        var pa = phiStd(zScore(a, mu, sigma));
+        var pb = phiStd(zScore(b, mu, sigma));
+        var prob = pb - pa;
+        stat(summaryEl, fmt(prob), "P(a ≤ X ≤ b)");
+        stat(summaryEl, fmt(pa), "P(X ≤ a)");
+        stat(summaryEl, fmt(pb), "P(X ≤ b)");
+        stat(summaryEl, fmt(1 - prob), "P(X < a or X > b)");
+        if (a > b) {
+          noteEl.textContent = "Note: a > b, so the interval probability is reported as negative (" + fmt(prob) + "); swap the bounds for a proper interval.";
+        } else {
+          noteEl.textContent = "P(" + fmt(a) + " ≤ X ≤ " + fmt(b) + ") ≈ " + fmt(prob) +
+            " (" + fmt(prob * 100) + "%).";
+        }
+        window.__norm = { mode: "int", mu: mu, sigma: sigma, a: a, b: b, pa: pa, pb: pb, prob: prob };
+      }
+    }
+
+    function setMode(m) {
+      mode = m;
+      cdfin.hidden = (m !== "cdf"); invin.hidden = (m !== "inv"); intin.hidden = (m !== "int");
+      modeEl.querySelectorAll("button").forEach(function (b) { b.classList.toggle("on", b.dataset.m === m); });
+      compute();
+    }
+
+    modeEl.querySelectorAll("button").forEach(function (b) {
+      b.addEventListener("click", function () { setMode(b.dataset.m); });
+    });
+    [muEl, sigmaEl, xEl, pEl, aEl, bEl].forEach(function (el) { el.addEventListener("input", compute); });
+    setMode("cdf");
+  })();
+  </script>
+</body>
+</html>
