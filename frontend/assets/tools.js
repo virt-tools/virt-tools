@@ -107,6 +107,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-04T00:00:00Z",
   },
   {
+    slug: "jsonpath-evaluator",
+    name: "JSONPath Evaluator",
+    description: "Run a JSONPath query against a JSON document and see the matches — runs locally with jsonpath-plus.",
+    category: "Encoding",
+    icon: "🧭",
+    added: "2026-07-04T07:00:00Z",
+  },
+  {
     slug: "mime-type-lookup",
     name: "MIME Type Lookup",
     description: "Look up a file's MIME type by extension or name — static reference, runs locally.",
