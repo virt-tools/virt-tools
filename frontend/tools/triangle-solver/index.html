@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Triangle Solver — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .seg { display: inline-flex; border: 1px solid var(--border,#444); border-radius: 4px; overflow: hidden; flex-wrap: wrap; }
+    .seg button { padding: 5px 12px; border: none; background: transparent; color: inherit; cursor: pointer; font-size: 13px; }
+    .seg button.on { background: var(--accent,#ffd54a); color: #000; }
+    input.num { font-family: ui-monospace, monospace; font-size: 18px; width: 130px; }
+    .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-top: 8px; }
+    .summary .stat { padding: 8px 10px; border: 1px solid var(--border,#444); border-radius: 6px; }
+    .summary .stat-value { display:block; font-size: 17px; font-weight: 700; font-family: ui-monospace, monospace; word-break: break-all; }
+    .summary .stat-label { font-size: 12px; opacity: .8; }
+    .solset { margin-top: 10px; }
+    .solset .sol-card { border: 1px solid var(--border,#444); border-radius: 6px; padding: 10px; margin-bottom: 8px; }
+    .solset .sol-title { font-weight: 700; margin-bottom: 6px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Triangle Solver</h1>
+      <p>Solve any triangle from a mix of sides and angles. Enter three known values in one of four configurations — three sides (SSS), two sides and the included angle (SAS), two angles and the included side (ASA), or two sides and a non-included angle (SSA) — and get all six remaining parts plus the perimeter, area (Heron's formula), inradius, and circumradius. The SSA case is the ambiguous one: the solver returns every valid triangle (zero, one, or two) when the given angle is acute. Angles are in degrees; the convention is that side a lies opposite angle A, and so on. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="flex-wrap:wrap; gap:14px; align-items:flex-end;">
+        <div>
+          <label>Given</label><br>
+          <span class="seg" id="mode">
+            <button data-m="sss" class="on">SSS (3 sides)</button>
+            <button data-m="sas">SAS (2 sides + angle)</button>
+            <button data-m="asa">ASA (2 angles + side)</button>
+            <button data-m="ssa">SSA (2 sides + angle)</button>
+          </span>
+        </div>
+      </div>
+      <p class="note" id="hint"></p>
+
+      <div class="row" id="inputs" style="flex-wrap:wrap; gap:14px; align-items:flex-end;"></div>
+      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+
+      <div class="spacer"></div>
+      <label id="reslabel">Solution</label>
+      <div id="result"></div>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var modeEl = document.getElementById("mode");
+    var hintEl = document.getElementById("hint");
+    var inputsEl = document.getElementById("inputs");
+    var errEl = document.getElementById("err");
+    var resLabel = document.getElementById("reslabel");
+    var resultEl = document.getElementById("result");
+    var mode = "sss";
+    var fields = { sss: ["a", "b", "c"], sas: ["b", "c", "A"], asa: ["A", "B", "c"], ssa: ["a", "b", "A"] };
+    var defaults = { a: "3", b: "4", c: "5", A: "90", B: "45" };
+    var labels = {
+      a: "side a", b: "side b", c: "side c",
+      A: "angle A (°)", B: "angle B (°)"
+    };
+    var hints = {
+      sss: "Enter the three side lengths. Side a is opposite angle A.",
+      sas: "Enter sides b and c, and the angle A between them.",
+      asa: "Enter angles A and B, and the side c between them.",
+      ssa: "Enter sides a and b, and angle A (opposite side a). This case may have two solutions."
+    };
+
+    function showErr(m) { errEl.textContent = m; errEl.hidden = !m; }
+    function clear(t) { t.innerHTML = ""; t.textContent = ""; }
+
+    function parseNum(s) {
+      s = String(s).trim();
+      if (s === "" || s === "-" || s === "+") return null;
+      if (!/^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(s)) return null;
+      var v = parseFloat(s);
+      if (!isFinite(v)) return null;
+      return v;
+    }
+
+    function fmt(x) {
+      if (x === null || x === undefined) return "undefined";
+      if (!isFinite(x)) return x > 0 ? "∞" : "−∞";
+      if (Object.is(x, -0)) x = 0;
+      if (Math.abs(x) < 1e-12) x = 0;
+      if (x === Math.round(x) && Math.abs(x) < 1e15) return String(Math.round(x));
+      var a = Math.abs(x);
+      var dp = a >= 100 ? 4 : a >= 1 ? 6 : 10;
+      var s = x.toFixed(dp);
+      s = s.replace(/0+$/, "").replace(/\.$/, "");
+      return s;
+    }
+
+    var PI = Math.PI;
+    function toRad(d) { return d * PI / 180; }
+    function toDeg(r) { return r * 180 / PI; }
+    function clamp(x, lo, hi) { return Math.max(lo, Math.min(hi, x)); }
+
+    function lawCosAngle(a, b, c) {   // angle opposite side a
+      var v = (b * b + c * c - a * a) / (2 * b * c);
+      return Math.acos(clamp(v, -1, 1));
+    }
+
+    function finish(a, b, c, A, B, C) {
+      var s = (a + b + c) / 2;
+      var area = Math.sqrt(Math.max(0, s * (s - a) * (s - b) * (s - c)));
+      var R = Math.sin(A) > 1e-12 ? a / (2 * Math.sin(A)) : Infinity;
+      var r = s > 1e-12 ? area / s : 0;
+      return { a: a, b: b, c: c, A: A, B: B, C: C,
+               Adeg: toDeg(A), Bdeg: toDeg(B), Cdeg: toDeg(C),
+               perimeter: a + b + c, area: area, R: R, r: r };
+    }
+
+    function sss(a, b, c) {
+      if (a <= 0 || b <= 0 || c <= 0) return null;
+      if (a + b <= c || a + c <= b || b + c <= a) return null;
+      var A = lawCosAngle(a, b, c), B = lawCosAngle(b, a, c), C = lawCosAngle(c, a, b);
+      return finish(a, b, c, A, B, C);
+    }
+    function sas(b, c, Adeg) {
+      var A = toRad(Adeg);
+      if (b <= 0 || c <= 0 || A <= 0 || A >= PI) return null;
+      var a = Math.sqrt(b * b + c * c - 2 * b * c * Math.cos(A));
+      var B = lawCosAngle(b, a, c);
+      var C = PI - A - B;
+      return finish(a, b, c, A, B, C);
+    }
+    function asa(Adeg, Bdeg, c) {
+      var A = toRad(Adeg), B = toRad(Bdeg);
+      if (c <= 0 || A <= 0 || B <= 0 || A + B >= PI) return null;
+      var C = PI - A - B;
+      var a = c * Math.sin(A) / Math.sin(C);
+      var b = c * Math.sin(B) / Math.sin(C);
+      return finish(a, b, c, A, B, C);
+    }
+    function ssa(a, b, Adeg) {
+      var A = toRad(Adeg);
+      if (a <= 0 || b <= 0 || A <= 0 || A >= PI) return [];
+      var sinB = b * Math.sin(A) / a;
+      if (sinB > 1 + 1e-9) return [];
+      if (sinB >= 1 - 1e-9) {
+        var B = PI / 2, C = PI - A - B;
+        if (C <= 1e-9) return [];
+        var c = a * Math.sin(C) / Math.sin(A);
+        return [finish(a, b, c, A, B, C)];
+      }
+      var sols = [];
+      var B1 = Math.asin(clamp(sinB, -1, 1));
+      var cand = [B1, PI - B1];
+      for (var i = 0; i < 2; i++) {
+        var Bi = cand[i], Ci = PI - A - Bi;
+        if (Ci <= 1e-9) continue;
+        var ci = a * Math.sin(Ci) / Math.sin(A);
+        sols.push(finish(a, b, ci, A, Bi, Ci));
+      }
+      return sols;
+    }
+
+    function stat(parent, val, label) {
+      var d = document.createElement("div"); d.className = "stat";
+      var v = document.createElement("span"); v.className = "stat-value"; v.textContent = val;
+      var l = document.createElement("span"); l.className = "stat-label"; l.textContent = label;
+      d.appendChild(v); d.appendChild(l); parent.appendChild(d);
+    }
+
+    function renderSolution(t, container) {
+      var grid = document.createElement("div"); grid.className = "summary";
+      stat(grid, fmt(t.a), "side a");
+      stat(grid, fmt(t.b), "side b");
+      stat(grid, fmt(t.c), "side c");
+      stat(grid, fmt(t.Adeg) + "°", "angle A");
+      stat(grid, fmt(t.Bdeg) + "°", "angle B");
+      stat(grid, fmt(t.Cdeg) + "°", "angle C");
+      stat(grid, fmt(t.perimeter), "perimeter");
+      stat(grid, fmt(t.area), "area");
+      stat(grid, fmt(t.r), "inradius r");
+      stat(grid, fmt(t.R), "circumradius R");
+      container.appendChild(grid);
+    }
+
+    function compute() {
+      clear(resultEl); showErr("");
+      window.__tri = null;
+      var vals = {};
+      for (var i = 0; i < fields[mode].length; i++) {
+        var k = fields[mode][i];
+        var el = document.getElementById("in_" + k);
+        var v = parseNum(el.value);
+        if (v === null) { showErr("Enter a valid number for " + labels[k] + "."); return; }
+        vals[k] = v;
+      }
+      if (mode === "sss") {
+        var t = sss(vals.a, vals.b, vals.c);
+        if (t === null) { showErr("Those sides do not form a valid triangle (each must be less than the sum of the other two)."); return; }
+        resLabel.textContent = "Solution";
+        renderSolution(t, resultEl);
+        window.__tri = { mode: mode, sols: [t] };
+      } else if (mode === "sas") {
+        var t = sas(vals.b, vals.c, vals.A);
+        if (t === null) { showErr("Invalid input: sides must be positive and the included angle must be between 0° and 180°."); return; }
+        resLabel.textContent = "Solution";
+        renderSolution(t, resultEl);
+        window.__tri = { mode: mode, sols: [t] };
+      } else if (mode === "asa") {
+        var t = asa(vals.A, vals.B, vals.c);
+        if (t === null) { showErr("Invalid input: angles must be positive and sum to less than 180°; side must be positive."); return; }
+        resLabel.textContent = "Solution";
+        renderSolution(t, resultEl);
+        window.__tri = { mode: mode, sols: [t] };
+      } else {
+        var sols = ssa(vals.a, vals.b, vals.A);
+        if (sols.length === 0) { showErr("No triangle exists for these values (the side opposite the given angle is too short)."); return; }
+        resLabel.textContent = sols.length === 1 ? "Solution (1 triangle)" : "Solutions (2 triangles — ambiguous case)";
+        var wrap = document.createElement("div"); wrap.className = "solset";
+        for (var i = 0; i < sols.length; i++) {
+          var card = document.createElement("div"); card.className = "sol-card";
+          var title = document.createElement("div"); title.className = "sol-title";
+          title.textContent = sols.length === 1 ? "Triangle" : "Triangle " + (i + 1);
+          card.appendChild(title);
+          renderSolution(sols[i], card);
+          wrap.appendChild(card);
+        }
+        resultEl.appendChild(wrap);
+        window.__tri = { mode: mode, sols: sols };
+      }
+    }
+
+    function buildInputs() {
+      clear(inputsEl);
+      for (var i = 0; i < fields[mode].length; i++) {
+        var k = fields[mode][i];
+        var wrap = document.createElement("div");
+        var lab = document.createElement("label"); lab.setAttribute("for", "in_" + k); lab.textContent = labels[k];
+        var inp = document.createElement("input");
+        inp.className = "num"; inp.type = "text"; inp.inputMode = "decimal";
+        inp.id = "in_" + k; inp.value = defaults[k] || "";
+        inp.addEventListener("input", compute);
+        wrap.appendChild(lab); wrap.appendChild(document.createElement("br")); wrap.appendChild(inp);
+        inputsEl.appendChild(wrap);
+      }
+      hintEl.textContent = hints[mode];
+    }
+
+    modeEl.querySelectorAll("button").forEach(function (b) {
+      b.addEventListener("click", function () {
+        mode = b.dataset.m;
+        modeEl.querySelectorAll("button").forEach(function (x) { x.classList.toggle("on", x.dataset.m === mode); });
+        buildInputs();
+        compute();
+      });
+    });
+    buildInputs();
+    compute();
+  })();
+  </script>
+</body>
+</html>

@@ -754,4 +754,12 @@ window.VIRTUAL_TOOLS = [
     icon: "≡",
     added: "2026-07-05T06:20:00Z",
   },
+  {
+    slug: "triangle-solver",
+    name: "Triangle Solver",
+    description: "Solve any triangle from a mix of sides and angles. Enter three known values in one of four configurations — three sides (SSS), two sides and the included angle (SAS), two angles and the included side (ASA), or two sides and a non-included angle (SSA) — and get all six remaining parts plus the perimeter, area (Heron's formula), inradius, and circumradius. The SSA case is the ambiguous one: the solver returns every valid triangle (zero, one, or two) when the given angle is acute. Angles are in degrees; side a is opposite angle A, and so on. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🔺",
+    added: "2026-07-05T07:00:00Z",
+  },
 ];
