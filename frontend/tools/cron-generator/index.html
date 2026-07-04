@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Cron Expression Generator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .cron-out { font-family:monospace; font-size:18px; word-break:break-all; }
+    .dow-grid { display:flex; flex-wrap:wrap; gap:6px; }
+    .dow-grid label { display:flex; align-items:center; gap:4px; font-size:13px; }
+    .next-run { font-family:monospace; }
+    .next-run li { margin:2px 0; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Cron Expression Generator</h1>
+      <p>Build a 5-field cron expression from friendly options and preview the next run times — entirely in your browser. Nothing uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="freq">Frequency</label>
+        <select id="freq">
+          <option value="minute">Every minute</option>
+          <option value="nmin">Every N minutes</option>
+          <option value="nhour">Every N hours</option>
+          <option value="daily" selected>Daily at a time</option>
+          <option value="weekly">Weekly on days</option>
+          <option value="monthly">Monthly on a day</option>
+          <option value="custom">Custom (5 fields)</option>
+        </select>
+      </div>
+
+      <div class="row" style="align-items:flex-end; flex-wrap:wrap;">
+        <div id="grp-nmin" class="field" hidden>
+          <label for="nmin">Every</label>
+          <select id="nmin">
+            <option>1</option><option>2</option><option selected>5</option><option>10</option><option>15</option><option>20</option><option>30</option>
+          </select><span> minutes</span>
+        </div>
+        <div id="grp-nhour" class="field" hidden>
+          <label for="nhour">Every</label>
+          <select id="nhour">
+            <option>1</option><option selected>2</option><option>3</option><option>4</option><option>6</option><option>8</option><option>12</option>
+          </select><span> hours</span>
+        </div>
+        <div id="grp-time" class="field">
+          <label for="time">At</label>
+          <input id="time" type="time" value="00:00">
+        </div>
+        <div id="grp-dom" class="field" hidden>
+          <label for="dom">Day of month</label>
+          <input id="dom" type="number" min="1" max="31" value="1">
+        </div>
+      </div>
+
+      <div id="grp-dow" class="field" hidden>
+        <label>Days of week</label>
+        <div class="dow-grid">
+          <label><input type="checkbox" class="dow" value="1"> Mon</label>
+          <label><input type="checkbox" class="dow" value="2"> Tue</label>
+          <label><input type="checkbox" class="dow" value="3"> Wed</label>
+          <label><input type="checkbox" class="dow" value="4"> Thu</label>
+          <label><input type="checkbox" class="dow" value="5"> Fri</label>
+          <label><input type="checkbox" class="dow" value="6"> Sat</label>
+          <label><input type="checkbox" class="dow" value="0"> Sun</label>
+        </div>
+      </div>
+
+      <div id="grp-custom" class="field" hidden>
+        <label for="custom">Cron expression</label>
+        <input id="custom" type="text" placeholder="*/5 * * * *" value="*/5 * * * *" style="font-family:monospace;">
+        <p class="note">5 fields: minute hour day-of-month month day-of-week. Supports <code>*</code>, <code>a-b</code>, <code>*/n</code>, <code>a,b,c</code>.</p>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="row" style="justify-content:space-between;">
+        <label for="out">Expression</label>
+        <button id="copy" class="secondary" style="padding:4px 10px;">Copy</button>
+      </div>
+      <div class="output cron-out" id="out"></div>
+      <p class="note" id="desc"></p>
+
+      <div class="spacer"></div>
+      <label>Next 5 runs (your local time)</label>
+      <ul class="next-run" id="next"></ul>
+      <p class="note" id="err"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var MONTHS = { JAN:1,FEB:2,MAR:3,APR:4,MAY:5,JUN:6,JUL:7,AUG:8,SEP:9,OCT:10,NOV:11,DEC:12 };
+    var DOWS = { SUN:0,MON:1,TUE:2,WED:3,THU:4,FRI:5,SAT:6 };
+    function numSort(a,b){return a-b;}
+    function range(lo,hi){var a=[];for(var i=lo;i<=hi;i++)a.push(i);return a;}
+    function resolve(tok,names){if(names&&Object.prototype.hasOwnProperty.call(names,tok))return names[tok];var n=parseInt(tok,10);if(isNaN(n))throw new Error("Invalid value '"+tok+"'");return n;}
+    function parseField(spec,lo,hi,names){
+      spec=spec.trim().toUpperCase();
+      if(spec==="*")return {vals:range(lo,hi),wild:true};
+      var out={},parts=spec.split(",");
+      for(var pi=0;pi<parts.length;pi++){
+        var p=parts[pi].trim();if(!p)continue;
+        var step=1,base=p;
+        if(p.indexOf("/")!==-1){var sp=p.split("/");if(sp.length!==2)throw new Error("Invalid step '"+p+"'");base=sp[0];step=parseInt(sp[1],10);if(!(step>0))throw new Error("Step must be > 0 in '"+p+"'");}
+        var a,b;
+        if(base==="*"){a=lo;b=hi;}
+        else if(base.indexOf("-")!==-1){var r=base.split("-");if(r.length!==2)throw new Error("Invalid range '"+base+"'");a=resolve(r[0],names);b=resolve(r[1],names);}
+        else{a=resolve(base,names);b=(p.indexOf("/")!==-1)?hi:a;}
+        if(a>b)throw new Error("Range start > end in '"+p+"'");
+        for(var v=a;v<=b;v+=step)out[v]=true;
+      }
+      var vals=Object.keys(out).map(Number);
+      if(!vals.length)throw new Error("Empty field '"+spec+"'");
+      vals.forEach(function(v){if(v<lo||v>hi)throw new Error("Value "+v+" out of range ["+lo+","+hi+"]");});
+      return {vals:vals.sort(numSort),wild:false};
+    }
+    function parseCron(expr){
+      var parts=expr.trim().split(/\s+/);
+      if(parts.length!==5)throw new Error("Expected 5 fields, got "+parts.length+".");
+      var min=parseField(parts[0],0,59);
+      var hour=parseField(parts[1],0,23);
+      var dom=parseField(parts[2],1,31);
+      var month=parseField(parts[3],1,12,MONTHS);
+      var dow=parseField(parts[4],0,7,DOWS);
+      var dv=dow.vals.slice();
+      if(dv.indexOf(7)!==-1){dv=dv.filter(function(v){return v!==7;});if(dv.indexOf(0)===-1)dv.push(0);}
+      dv.sort(numSort);
+      return {min:min.vals,hour:hour.vals,dom:dom.vals,month:month.vals,dow:dv,domW:dom.wild,dowW:dow.wild};
+    }
+    function dayMatch(d,c){
+      var dow=d.getDay();
+      if(c.domW&&c.dowW)return true;
+      if(c.domW)return c.dow.indexOf(dow)!==-1;
+      if(c.dowW)return c.dom.indexOf(d.getDate())!==-1;
+      return c.dom.indexOf(d.getDate())!==-1||c.dow.indexOf(dow)!==-1;
+    }
+    function nextFire(c,start){
+      var d=new Date(start.getTime());d.setSeconds(0,0);d=new Date(d.getTime()+60000);
+      var it=0;
+      while(it<600000){it++;
+        if(c.month.indexOf(d.getMonth()+1)===-1){var y=d.getFullYear(),mi=d.getMonth();d=(mi===11)?new Date(y+1,0,1,0,0):new Date(y,mi+1,1,0,0);continue;}
+        if(!dayMatch(d,c)){d=new Date(d.getFullYear(),d.getMonth(),d.getDate()+1,0,0);continue;}
+        if(c.hour.indexOf(d.getHours())===-1){var nh=c.hour.filter(function(h){return h>d.getHours();}).sort(numSort);if(nh.length)d=new Date(d.getFullYear(),d.getMonth(),d.getDate(),nh[0],0);else d=new Date(d.getFullYear(),d.getMonth(),d.getDate()+1,0,0);continue;}
+        if(c.min.indexOf(d.getMinutes())===-1){var nm=c.min.filter(function(m){return m>d.getMinutes();}).sort(numSort);if(nm.length)d=new Date(d.getFullYear(),d.getMonth(),d.getDate(),d.getHours(),nm[0]);else d=new Date(d.getFullYear(),d.getMonth(),d.getDate(),d.getHours()+1,0);continue;}
+        return d;
+      }
+      return null;
+    }
+
+    var freq=document.getElementById("freq");
+    var out=document.getElementById("out");
+    var desc=document.getElementById("desc");
+    var next=document.getElementById("next");
+    var err=document.getElementById("err");
+    var grps=["nmin","nhour","time","dom","dow","custom"].reduce(function(o,id){o[id]=document.getElementById("grp-"+id);return o;},{});
+
+    function showGrps(){
+      var f=freq.value;
+      for(var k in grps)grps[k].hidden=true;
+      if(f==="nmin")grps.nmin.hidden=false;
+      else if(f==="nhour"){grps.nhour.hidden=false;grps.time.hidden=false;}
+      else if(f==="daily")grps.time.hidden=false;
+      else if(f==="weekly"){grps.time.hidden=false;grps.dow.hidden=false;}
+      else if(f==="monthly"){grps.time.hidden=false;grps.dom.hidden=false;}
+      else if(f==="custom")grps.custom.hidden=false;
+    }
+
+    function buildExpr(){
+      var f=freq.value;
+      if(f==="minute")return "* * * * *";
+      if(f==="nmin")return "*/"+document.getElementById("nmin").value+" * * * *";
+      if(f==="nhour"){var t=splitTime();return t.m+" */"+document.getElementById("nhour").value+" * * *";}
+      if(f==="daily"){var t=splitTime();return t.m+" "+t.h+" * * *";}
+      if(f==="weekly"){var t=splitTime();var d=checkedDow();return t.m+" "+t.h+" * * "+(d.length?d.join(","):"*");}
+      if(f==="monthly"){var t=splitTime();var dm=document.getElementById("dom").value||"1";return t.m+" "+t.h+" "+dm+" * *";}
+      return document.getElementById("custom").value.trim();
+    }
+    function splitTime(){var v=document.getElementById("time").value||"00:00";var p=v.split(":");return{m:p[1]||"0",h:p[0]||"0"};}
+    function checkedDow(){var a=[];[].forEach.call(document.querySelectorAll(".dow:checked"),function(c){a.push(c.value);});a.sort(numSort);return a;}
+
+    function describe(expr){
+      var p=expr.trim().split(/\s+/);
+      if(p.length!==5)return expr;
+      return "minute "+p[0]+", hour "+p[1]+", day-of-month "+p[2]+", month "+p[3]+", day-of-week "+p[4]+".";
+    }
+
+    function render(){
+      err.textContent=""; next.innerHTML="";
+      var expr;
+      try{expr=buildExpr();}catch(e){out.textContent="";err.textContent="Error: "+e.message;return;}
+      out.textContent=expr;
+      desc.textContent=describe(expr);
+      try{
+        var c=parseCron(expr);
+        var start=new Date();
+        var lines=[];
+        for(var i=0;i<5;i++){
+          var n=nextFire(c,start);
+          if(!n)break;
+          lines.push("<li>"+n.toLocaleString()+"</li>");
+          start=n;
+        }
+        next.innerHTML=lines.join("")||"<li>—</li>";
+      }catch(e){
+        next.innerHTML="";err.textContent="Invalid expression: "+e.message;
+      }
+    }
+
+    freq.addEventListener("change",function(){showGrps();render();});
+    ["nmin","nhour","time","dom","custom"].forEach(function(id){document.getElementById(id).addEventListener("input",render);document.getElementById(id).addEventListener("change",render);});
+    document.querySelectorAll(".dow").forEach(function(c){c.addEventListener("change",render);});
+
+    document.getElementById("copy").addEventListener("click",function(){
+      var t=out.textContent;if(!t)return;var b=this;
+      if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).then(function(){b.textContent="Copied!";setTimeout(function(){b.textContent="Copy";},1200);});
+      else{var ta=document.createElement("textarea");ta.value=t;document.body.appendChild(ta);ta.select();try{document.execCommand("copy");b.textContent="Copied!";setTimeout(function(){b.textContent="Copy";},1200);}catch(e){}ta.remove();}
+    });
+
+    showGrps();render();
+  })();
+  </script>
+</body>
+</html>

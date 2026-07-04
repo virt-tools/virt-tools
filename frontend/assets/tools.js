@@ -75,6 +75,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-04T05:00:00Z",
   },
   {
+    slug: "cron-generator",
+    name: "Cron Expression Generator",
+    description: "Build a cron schedule from friendly options and preview the next run times — runs locally.",
+    category: "Time",
+    icon: "⏰",
+    added: "2026-07-04T06:00:00Z",
+  },
+  {
     slug: "hash-generator",
     name: "Hash Generator",
     description: "Compute SHA-1 / SHA-256 / SHA-384 / SHA-512 hashes of text, in-browser via Web Crypto.",
