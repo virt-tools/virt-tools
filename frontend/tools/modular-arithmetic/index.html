@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Modular Arithmetic Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    input.num { font-family: ui-monospace, monospace; font-size: 18px; width: 200px; }
+    .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 8px; }
+    .summary .stat { padding: 8px 10px; border: 1px solid var(--border,#444); border-radius: 6px; }
+    .summary .stat-value { display:block; font-size: 17px; font-weight: 700; font-family: ui-monospace, monospace; word-break: break-all; }
+    .summary .stat-label { font-size: 12px; opacity: .8; }
+    .sol { font-family: ui-monospace, monospace; font-size: 16px; word-break: break-all; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Modular Arithmetic Calculator</h1>
+      <p>Work with integers modulo m using exact big-integer arithmetic — no floating-point rounding. Enter two integers a and b and a positive modulus m to see residues, sums, differences, products, modular powers, modular inverses, and greatest common divisors, plus the full solution set of the linear congruence a·x ≡ b (mod m). Negative exponents are supported when an inverse exists, and a congruence with multiple solutions lists every distinct residue in [0, m). Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="flex-wrap:wrap; gap:14px; align-items:flex-end;">
+        <div>
+          <label for="a">a</label><br>
+          <input class="num" id="a" type="text" inputmode="numeric" value="3">
+        </div>
+        <div>
+          <label for="b">b</label><br>
+          <input class="num" id="b" type="text" inputmode="numeric" value="2">
+        </div>
+        <div>
+          <label for="m">modulus m (positive)</label><br>
+          <input class="num" id="m" type="text" inputmode="numeric" value="5">
+        </div>
+      </div>
+      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+
+      <div class="spacer"></div>
+      <label>Residues &amp; GCD</label>
+      <div class="summary" id="basic"></div>
+
+      <div class="spacer"></div>
+      <label>Operations (mod m)</label>
+      <div class="summary" id="ops"></div>
+
+      <div class="spacer"></div>
+      <label>Inverses (mod m)</label>
+      <div class="summary" id="inv"></div>
+
+      <div class="spacer"></div>
+      <label>Linear congruence a·x ≡ b (mod m)</label>
+      <p class="sol" id="sol"></p>
+      <p class="note" id="note"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var aEl = document.getElementById("a");
+    var bEl = document.getElementById("b");
+    var mEl = document.getElementById("m");
+    var errEl = document.getElementById("err");
+    var basicEl = document.getElementById("basic");
+    var opsEl = document.getElementById("ops");
+    var invEl = document.getElementById("inv");
+    var solEl = document.getElementById("sol");
+    var noteEl = document.getElementById("note");
+
+    function showErr(m) { errEl.textContent = m; errEl.hidden = !m; }
+    function clear(t) { t.innerHTML = ""; t.textContent = ""; }
+
+    function parseBigInt(s) {
+      s = String(s).trim();
+      if (s === "") return null;
+      var neg = false;
+      if (s[0] === "-") { neg = true; s = s.slice(1); }
+      else if (s[0] === "+") s = s.slice(1);
+      if (s === "" || !/^\d+$/.test(s)) return null;
+      var v = 0n;
+      for (var i = 0; i < s.length; i++) v = v * 10n + BigInt(s.charCodeAt(i) - 48);
+      return neg ? -v : v;
+    }
+
+    function fmt(x) {
+      if (x === null || x === undefined) return "undefined";
+      return x.toString();
+    }
+
+    function bmod(n, m) { return ((n % m) + m) % m; }   // m > 0 -> [0, m)
+
+    function babs(x) { return x < 0n ? -x : x; }
+
+    function bgcd(a, b) {
+      a = babs(a); b = babs(b);
+      while (b !== 0n) { var t = b; b = a % b; a = t; }
+      return a;
+    }
+
+    function egcd(a, b) {
+      var old_r = a, r = b, old_s = 1n, s = 0n, old_t = 0n, t = 1n;
+      while (r !== 0n) {
+        var q = old_r / r;   // BigInt truncates toward zero
+        old_r = old_r - q * r; var tmp1 = old_r; old_r = r; r = tmp1;
+        old_s = old_s - q * s; var tmp2 = old_s; old_s = s; s = tmp2;
+        old_t = old_t - q * t; var tmp3 = old_t; old_t = t; t = tmp3;
+      }
+      if (old_r < 0n) { old_r = -old_r; old_s = -old_s; old_t = -old_t; }
+      return { g: old_r, x: old_s, y: old_t };
+    }
+
+    function modinv(a, m) {
+      var r = egcd(bmod(a, m), m);
+      if (r.g !== 1n) return null;
+      return bmod(r.x, m);
+    }
+
+    function modpow(a, b, m) {
+      if (b === 0n) return bmod(1n, m);
+      if (b < 0n) {
+        var inv = modinv(a, m);
+        if (inv === null) return null;
+        return modpow(inv, -b, m);
+      }
+      var result = 1n, base = bmod(a, m), e = b;
+      while (e > 0n) {
+        if (e & 1n) result = (result * base) % m;
+        base = (base * base) % m;
+        e >>= 1n;
+      }
+      return bmod(result, m);
+    }
+
+    function solveCongruence(a, b, m) {
+      a = bmod(a, m); b = bmod(b, m);
+      var g = bgcd(a, m);
+      if (b % g !== 0n) return null;
+      var a1 = a / g, b1 = b / g, m1 = m / g;
+      var inv = modinv(a1, m1);
+      if (inv === null) return null;
+      var x0 = bmod(b1 * inv, m1);
+      var sols = [];
+      for (var k = 0n; k < g; k++) sols.push(x0 + k * m1);
+      return sols;
+    }
+
+    function stat(parent, val, label) {
+      var d = document.createElement("div"); d.className = "stat";
+      var v = document.createElement("span"); v.className = "stat-value"; v.textContent = val;
+      var l = document.createElement("span"); l.className = "stat-label"; l.textContent = label;
+      d.appendChild(v); d.appendChild(l); parent.appendChild(d);
+    }
+
+    function compute() {
+      [basicEl, opsEl, invEl].forEach(clear);
+      clear(solEl); clear(noteEl); showErr("");
+      window.__mod = null;
+
+      var a = parseBigInt(aEl.value);
+      var b = parseBigInt(bEl.value);
+      var m = parseBigInt(mEl.value);
+      if (a === null) { showErr("Enter integer a."); return; }
+      if (b === null) { showErr("Enter integer b."); return; }
+      if (m === null) { showErr("Enter a positive integer modulus m."); return; }
+      if (m <= 0n) { showErr("Modulus m must be a positive integer."); return; }
+
+      var ra = bmod(a, m), rb = bmod(b, m);
+      var ga = bgcd(a, m), gb = bgcd(b, m);
+
+      stat(basicEl, fmt(ra), "a mod m");
+      stat(basicEl, fmt(rb), "b mod m");
+      stat(basicEl, fmt(ga), "gcd(a, m)");
+      stat(basicEl, fmt(gb), "gcd(b, m)");
+
+      stat(opsEl, fmt(bmod(a + b, m)), "(a + b) mod m");
+      stat(opsEl, fmt(bmod(a - b, m)), "(a − b) mod m");
+      stat(opsEl, fmt(bmod(a * b, m)), "(a × b) mod m");
+      var pw = modpow(a, b, m);
+      stat(opsEl, pw === null ? "undefined" : fmt(pw), "a^b mod m");
+
+      var ia = modinv(a, m);
+      var ib = modinv(b, m);
+      stat(invEl, ia === null ? "no inverse (gcd ≠ 1)" : fmt(ia), "a⁻¹ mod m");
+      stat(invEl, ib === null ? "no inverse (gcd ≠ 1)" : fmt(ib), "b⁻¹ mod m");
+
+      var sols = solveCongruence(a, b, m);
+      if (sols === null) {
+        solEl.textContent = "No solution (gcd(a, m) does not divide b).";
+      } else if (sols.length === 1) {
+        solEl.textContent = "x ≡ " + fmt(sols[0]) + " (mod " + fmt(m) + ")";
+      } else {
+        solEl.textContent = sols.length + " solutions: " +
+          sols.map(function (s) { return fmt(s); }).join(", ") +
+          "  (mod " + fmt(m) + ")";
+      }
+      noteEl.textContent = "a·x ≡ b (mod m) with a = " + fmt(a) + ", b = " + fmt(b) + ", m = " + fmt(m) + ".";
+
+      window.__mod = { a: a, b: b, m: m, ra: ra, rb: rb, ga: ga, gb: gb,
+                       pw: pw, ia: ia, ib: ib, sols: sols };
+    }
+
+    [aEl, bEl, mEl].forEach(function (el) { el.addEventListener("input", compute); });
+    compute();
+  })();
+  </script>
+</body>
+</html>

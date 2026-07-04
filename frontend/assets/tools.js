@@ -746,4 +746,12 @@ window.VIRTUAL_TOOLS = [
     icon: "〰️",
     added: "2026-07-05T05:40:00Z",
   },
+  {
+    slug: "modular-arithmetic",
+    name: "Modular Arithmetic Calculator",
+    description: "Work with integers modulo m using exact big-integer arithmetic — no floating-point rounding. Enter two integers a and b and a positive modulus m to see residues, sums, differences, products, modular powers, modular inverses, and greatest common divisors, plus the full solution set of the linear congruence a·x ≡ b (mod m). Negative exponents are supported when an inverse exists, and a congruence with multiple solutions lists every distinct residue in [0, m). Everything runs locally in your browser.",
+    category: "Math",
+    icon: "≡",
+    added: "2026-07-05T06:20:00Z",
+  },
 ];
