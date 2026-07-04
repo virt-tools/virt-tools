@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Binomial Distribution Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    input.num { font-family: ui-monospace, monospace; font-size: 18px; width: 130px; }
+    .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 8px; }
+    .summary .stat { padding: 8px 10px; border: 1px solid var(--border,#444); border-radius: 6px; }
+    .summary .stat-value { display:block; font-size: 17px; font-weight: 700; font-family: ui-monospace, monospace; word-break: break-all; }
+    .summary .stat-label { font-size: 12px; opacity: .8; }
+    table.base-table { margin-top: 10px; }
+    table.base-table th, table.base-table td { padding: 4px 10px; text-align: right; }
+    table.base-table th { opacity: .8; font-weight: 600; }
+    table.base-table td.k { font-weight: 700; }
+    table.base-table tr.cur td { background: var(--accent,#ffd54a); color: #000; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Binomial Distribution Calculator</h1>
+      <p>Work with the binomial distribution — the number of successes in n independent Bernoulli trials, each with success probability p. Enter n, p, and a number of successes k to get the probability mass P(X = k), the cumulative P(X ≤ k), and the upper-tail P(X ≥ k), along with the mean, variance, standard deviation, and mode. A small table around the mode shows how probability is spread. Probabilities are computed in log-space via the log-gamma function (Lanczos approximation), so values stay accurate even for large n. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="flex-wrap:wrap; gap:14px; align-items:flex-end;">
+        <div>
+          <label for="n">Trials n (0–1000)</label><br>
+          <input class="num" id="n" type="text" inputmode="numeric" value="10">
+        </div>
+        <div>
+          <label for="p">Success prob. p (0–1)</label><br>
+          <input class="num" id="p" type="text" inputmode="decimal" value="0.5">
+        </div>
+        <div>
+          <label for="k">Successes k</label><br>
+          <input class="num" id="k" type="text" inputmode="numeric" value="5">
+        </div>
+      </div>
+
+      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+
+      <div class="spacer"></div>
+      <label>Results</label>
+      <div class="summary" id="summary"></div>
+      <p class="note" id="note"></p>
+
+      <div class="spacer"></div>
+      <label>Distribution around the mode</label>
+      <table class="base-table" id="table">
+        <thead><tr><th>k</th><th>P(X = k)</th><th>P(X ≤ k)</th><th>P(X ≥ k)</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var nEl = document.getElementById("n");
+    var pEl = document.getElementById("p");
+    var kEl = document.getElementById("k");
+    var errEl = document.getElementById("err");
+    var summaryEl = document.getElementById("summary");
+    var noteEl = document.getElementById("note");
+    var tbody = document.querySelector("#table tbody");
+
+    var LG_C = [
+      0.99999999999980993,
+      676.5203681218851,
+      -1259.1392167224028,
+      771.32342877765313,
+      -176.61502916214059,
+      12.507343278686905,
+      -0.13857109526572012,
+      9.9843695780195716e-6,
+      1.5056327351493116e-7
+    ];
+    var LG_G = 7;
+    var LN_SQRT_2PI = 0.5 * Math.log(2 * Math.PI);
+
+    function lgamma(x) {
+      // Lanczos approximation, g = 7, n = 9. Accurate to ~1e-10 vs math.lgamma.
+      if (x < 0.5) {
+        return Math.log(Math.PI / Math.abs(Math.sin(Math.PI * x))) - lgamma(1 - x);
+      }
+      x -= 1;
+      var a = LG_C[0];
+      var t = x + LG_G + 0.5;
+      for (var i = 1; i < LG_C.length; i++) a += LG_C[i] / (x + i);
+      return LN_SQRT_2PI + (x + 0.5) * Math.log(t) - t + Math.log(a);
+    }
+
+    function showErr(m) { errEl.textContent = m; errEl.hidden = !m; }
+    function clear(t) { t.innerHTML = ""; t.textContent = ""; }
+
+    function parseNum(s) {
+      s = String(s).trim();
+      if (s === "" || s === "-" || s === "+") return null;
+      if (!/^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(s)) return null;
+      var v = parseFloat(s);
+      if (!isFinite(v)) return null;
+      return v;
+    }
+
+    function fmt(x) {
+      if (x === null || x === undefined) return "undefined";
+      if (!isFinite(x)) return x > 0 ? "∞" : "−∞";
+      if (Object.is(x, -0)) x = 0;
+      if (Math.abs(x) < 1e-12) x = 0;
+      if (x === Math.round(x) && Math.abs(x) < 1e15) return String(Math.round(x));
+      var a = Math.abs(x);
+      var dp = a >= 100 ? 4 : a >= 1 ? 6 : 10;
+      var s = x.toFixed(dp);
+      s = s.replace(/0+$/, "").replace(/\.$/, "");
+      return s;
+    }
+
+    function logBinomPmf(n, k, p) {
+      // log of C(n,k) p^k (1-p)^(n-k).
+      if (k < 0 || k > n) return -Infinity;
+      if (p <= 0) return k === 0 ? 0 : -Infinity;
+      if (p >= 1) return k === n ? 0 : -Infinity;
+      return (lgamma(n + 1) - lgamma(k + 1) - lgamma(n - k + 1)
+              + k * Math.log(p) + (n - k) * Math.log(1 - p));
+    }
+
+    function pmf(n, k, p) {
+      if (k < 0 || k > n) return 0;
+      var lp = logBinomPmf(n, k, p);
+      if (lp === -Infinity) return 0;
+      return Math.exp(lp);
+    }
+
+    function cdf(n, k, p) {
+      // P(X <= k)
+      if (k < 0) return 0;
+      if (k >= n) return 1;
+      var s = 0;
+      for (var i = 0; i <= k; i++) s += pmf(n, i, p);
+      return s;
+    }
+
+    function sf(n, k, p) {
+      // P(X >= k) = 1 - P(X <= k-1)
+      return 1 - cdf(n, k - 1, p);
+    }
+
+    function modeOf(n, p) {
+      var m = Math.floor((n + 1) * p);
+      if (m < 0) m = 0;
+      if (m > n) m = n;
+      return m;
+    }
+
+    function stat(parent, val, label) {
+      var d = document.createElement("div"); d.className = "stat";
+      var v = document.createElement("span"); v.className = "stat-value"; v.textContent = val;
+      var l = document.createElement("span"); l.className = "stat-label"; l.textContent = label;
+      d.appendChild(v); d.appendChild(l); parent.appendChild(d);
+    }
+
+    function compute() {
+      clear(summaryEl); clear(noteEl); clear(tbody); showErr("");
+      window.__binom = null;
+
+      var n = parseNum(nEl.value);
+      var p = parseNum(pEl.value);
+      var k = parseNum(kEl.value);
+      if (n === null) { showErr("Enter a valid integer number of trials n."); return; }
+      if (!Number.isInteger(n)) { showErr("n must be a whole number of trials."); return; }
+      if (n < 0) { showErr("n must be at least 0."); return; }
+      if (n > 1000) { showErr("n must be at most 1000 (to keep the table responsive)."); return; }
+      if (p === null) { showErr("Enter a valid success probability p."); return; }
+      if (p < 0 || p > 1) { showErr("p must be between 0 and 1."); return; }
+      if (k === null) { showErr("Enter a valid integer number of successes k."); return; }
+      if (!Number.isInteger(k)) { showErr("k must be a whole number of successes."); return; }
+      if (k < 0 || k > n) { showErr("k must be between 0 and n."); return; }
+
+      var pk = pmf(n, k, p);
+      var cl = cdf(n, k, p);        // P(X <= k)
+      var clt = cdf(n, k - 1, p);   // P(X <  k) = P(X <= k-1)
+      var s = sf(n, k, p);          // P(X >= k)
+      var gt = 1 - cl;              // P(X >  k)
+      var mean = n * p;
+      var varc = n * p * (1 - p);
+      var sd = Math.sqrt(varc);
+      var mode = modeOf(n, p);
+
+      stat(summaryEl, fmt(pk), "P(X = k)");
+      stat(summaryEl, fmt(cl), "P(X ≤ k)");
+      stat(summaryEl, fmt(clt), "P(X < k)");
+      stat(summaryEl, fmt(s), "P(X ≥ k)");
+      stat(summaryEl, fmt(gt), "P(X > k)");
+      stat(summaryEl, fmt(mean), "Mean μ = np");
+      stat(summaryEl, fmt(varc), "Variance σ² = np(1−p)");
+      stat(summaryEl, fmt(sd), "Std dev σ");
+      stat(summaryEl, String(mode), "Mode");
+
+      noteEl.textContent = "For n = " + n + ", p = " + fmt(p) + ": P(X = " + k + ") ≈ " + fmt(pk) +
+        ", P(X ≤ " + k + ") ≈ " + fmt(cl) + ", P(X ≥ " + k + ") ≈ " + fmt(s) + ".";
+
+      // Distribution table around the mode (or full when n is small).
+      var lo, hi;
+      if (n <= 30) { lo = 0; hi = n; }
+      else { lo = Math.max(0, mode - 6); hi = Math.min(n, mode + 6); }
+      if (k < lo) lo = k;
+      if (k > hi) hi = k;
+      // keep the table to a reasonable size
+      if (hi - lo > 30) { lo = Math.max(0, k - 14); hi = Math.min(n, k + 15); }
+
+      var row, td;
+      for (var j = lo; j <= hi; j++) {
+        row = document.createElement("tr");
+        if (j === k) row.className = "cur";
+        td = document.createElement("td"); td.className = "k"; td.textContent = String(j); row.appendChild(td);
+        td = document.createElement("td"); td.textContent = fmt(pmf(n, j, p)); row.appendChild(td);
+        td = document.createElement("td"); td.textContent = fmt(cdf(n, j, p)); row.appendChild(td);
+        td = document.createElement("td"); td.textContent = fmt(sf(n, j, p)); row.appendChild(td);
+        tbody.appendChild(row);
+      }
+
+      window.__binom = { n: n, p: p, k: k, pk: pk, cl: cl, clt: clt, sf: s, gt: gt,
+                         mean: mean, var: varc, sd: sd, mode: mode };
+    }
+
+    [nEl, pEl, kEl].forEach(function (el) { el.addEventListener("input", compute); });
+    compute();
+  })();
+  </script>
+</body>
+</html>

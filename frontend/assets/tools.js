@@ -786,4 +786,12 @@ window.VIRTUAL_TOOLS = [
     icon: "μ",
     added: "2026-07-05T09:00:00Z",
   },
+  {
+    slug: "binomial-distribution",
+    name: "Binomial Distribution Calculator",
+    description: "Work with the binomial distribution — the count of successes in n independent trials each with success probability p. Enter n, p, and a number of successes k to get the probability mass P(X = k), the cumulative P(X ≤ k), P(X < k), P(X ≥ k), and P(X > k), plus the mean, variance, standard deviation, and mode, with a table of probabilities around the mode. Probabilities are computed in log-space using a Lanczos log-gamma approximation, so they stay accurate even for large n (up to 1000). Edge cases p = 0 and p = 1 are handled exactly. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🎰",
+    added: "2026-07-05T09:40:00Z",
+  },
 ];
