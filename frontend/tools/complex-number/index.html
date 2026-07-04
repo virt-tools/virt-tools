@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Complex Number Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    input.num { font-family: ui-monospace, monospace; font-size: 18px; width: 110px; }
+    .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-top: 8px; }
+    .summary .stat { padding: 8px 10px; border: 1px solid var(--border,#444); border-radius: 6px; }
+    .summary .stat-value { display:block; font-size: 16px; font-weight: 700; font-family: ui-monospace, monospace; word-break: break-all; }
+    .summary .stat-label { font-size: 12px; opacity: .8; }
+    .sub { font-size: 13px; opacity: .8; margin: 4px 0; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Complex Number Calculator</h1>
+      <p>Do arithmetic on complex numbers of the form a + bi. Enter two complex numbers (z₁ = a + bi, z₂ = c + di) and an integer exponent n, and the calculator reports their sum, difference, product and quotient, the modulus and argument of z₁, its conjugate and reciprocal, z₁ raised to the n-th power, the principal square root, and the polar forms (r ∠ θ) of both numbers. Division by zero and undefined powers are reported as such. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="sub">z₁ = a + bi</div>
+      <div class="row" style="flex-wrap:wrap; gap:14px; align-items:flex-end;">
+        <div><label for="a">Real a</label><br><input class="num" id="a" type="text" inputmode="decimal" value="1"></div>
+        <div><label for="b">Imag b</label><br><input class="num" id="b" type="text" inputmode="decimal" value="1"></div>
+        <div><label for="n">Power n (−50…50)</label><br><input class="num" id="n" type="text" inputmode="numeric" value="2"></div>
+      </div>
+      <div class="sub">z₂ = c + di</div>
+      <div class="row" style="flex-wrap:wrap; gap:14px; align-items:flex-end;">
+        <div><label for="c">Real c</label><br><input class="num" id="c" type="text" inputmode="decimal" value="3"></div>
+        <div><label for="d">Imag d</label><br><input class="num" id="d" type="text" inputmode="decimal" value="4"></div>
+      </div>
+
+      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+
+      <div class="spacer"></div>
+      <label>Results</label>
+      <div class="summary" id="summary"></div>
+      <p class="note" id="note"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var aEl = document.getElementById("a"), bEl = document.getElementById("b");
+    var cEl = document.getElementById("c"), dEl = document.getElementById("d"), nEl = document.getElementById("n");
+    var errEl = document.getElementById("err");
+    var summaryEl = document.getElementById("summary"), noteEl = document.getElementById("note");
+
+    function showErr(m) { errEl.textContent = m; errEl.hidden = !m; }
+    function clear(t) { t.innerHTML = ""; t.textContent = ""; }
+
+    function parseNum(s) {
+      s = String(s).trim();
+      if (s === "" || s === "-" || s === "+") return null;
+      if (!/^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(s)) return null;
+      var v = parseFloat(s);
+      if (!isFinite(v)) return null;
+      return v;
+    }
+
+    function fmt(x) {
+      if (x === null || x === undefined) return "undefined";
+      if (!isFinite(x)) return x > 0 ? "∞" : "−∞";
+      if (Object.is(x, -0)) x = 0;
+      if (Math.abs(x) < 1e-12) x = 0;
+      if (x === Math.round(x) && Math.abs(x) < 1e15) return String(Math.round(x));
+      var a = Math.abs(x);
+      var dp = a >= 100 ? 4 : a >= 1 ? 6 : 10;
+      var s = x.toFixed(dp);
+      s = s.replace(/0+$/, "").replace(/\.$/, "");
+      return s;
+    }
+
+    // complex as a pair [re, im]
+    function cadd(z1, z2) { return [z1[0] + z2[0], z1[1] + z2[1]]; }
+    function csub(z1, z2) { return [z1[0] - z2[0], z1[1] - z2[1]]; }
+    function cmul(z1, z2) { return [z1[0] * z2[0] - z1[1] * z2[1], z1[0] * z2[1] + z1[1] * z2[0]]; }
+    function cdiv(z1, z2) {
+      var den = z2[0] * z2[0] + z2[1] * z2[1];
+      if (den === 0) return null;
+      return [(z1[0] * z2[0] + z1[1] * z2[1]) / den, (z1[1] * z2[0] - z1[0] * z2[1]) / den];
+    }
+    function conj(z) { return [z[0], -z[1]]; }
+    function cabs(z) { return Math.sqrt(z[0] * z[0] + z[1] * z[1]); }
+    function carg(z) { return Math.atan2(z[1], z[0]); }
+    function recip(z) {
+      var den = z[0] * z[0] + z[1] * z[1];
+      if (den === 0) return null;
+      return [z[0] / den, -z[1] / den];
+    }
+    function cpow(z, n) {
+      var r = cabs(z);
+      if (r === 0) {
+        if (n < 0) return null;
+        if (n === 0) return [1, 0];
+        return [0, 0];
+      }
+      var t = carg(z);
+      var rn = Math.pow(r, n);
+      var nt = n * t;
+      return [rn * Math.cos(nt), rn * Math.sin(nt)];
+    }
+    function csqrt(z) {
+      var r = cabs(z);
+      if (r === 0) return [0, 0];
+      var t = carg(z);
+      var sr = Math.sqrt(r);
+      return [sr * Math.cos(t / 2), sr * Math.sin(t / 2)];
+    }
+
+    function fmtC(z) {
+      var a = z[0], b = z[1];
+      if (Math.abs(b) < 1e-12) return fmt(a);
+      var mag = Math.abs(b);
+      var coef = (Math.abs(mag - 1) < 1e-12) ? "" : fmt(mag);
+      var im = coef + "i";
+      if (Math.abs(a) < 1e-12) return (b >= 0 ? "" : "−") + im;
+      return fmt(a) + (b >= 0 ? " + " : " − ") + im;
+    }
+
+    function fmtPolar(z) {
+      var r = cabs(z), t = carg(z);
+      return fmt(r) + " ∠ " + fmt(t * 180 / Math.PI) + "°";
+    }
+
+    function stat(parent, val, label) {
+      var d = document.createElement("div"); d.className = "stat";
+      var v = document.createElement("span"); v.className = "stat-value"; v.textContent = val;
+      var l = document.createElement("span"); l.className = "stat-label"; l.textContent = label;
+      d.appendChild(v); d.appendChild(l); parent.appendChild(d);
+    }
+
+    function compute() {
+      clear(summaryEl); clear(noteEl); showErr("");
+      window.__cx = null;
+
+      var a = parseNum(aEl.value), b = parseNum(bEl.value);
+      var c = parseNum(cEl.value), d = parseNum(dEl.value);
+      var n = parseNum(nEl.value);
+      if (a === null) { showErr("Enter a valid real part a for z₁."); return; }
+      if (b === null) { showErr("Enter a valid imaginary part b for z₁."); return; }
+      if (c === null) { showErr("Enter a valid real part c for z₂."); return; }
+      if (d === null) { showErr("Enter a valid imaginary part d for z₂."); return; }
+      if (n === null) { showErr("Enter a valid integer exponent n."); return; }
+      if (!Number.isInteger(n)) { showErr("Exponent n must be a whole number."); return; }
+      if (n < -50 || n > 50) { showErr("Exponent n must be between -50 and 50."); return; }
+
+      var z1 = [a, b], z2 = [c, d];
+      var add = cadd(z1, z2), sub = csub(z1, z2), mul = cmul(z1, z2);
+      var div = cdiv(z1, z2);
+      var recipz = recip(z1);
+      var pow = cpow(z1, n);
+      var sq = csqrt(z1);
+      var absz = cabs(z1), argz = carg(z1);
+
+      stat(summaryEl, fmtC(add), "z₁ + z₂");
+      stat(summaryEl, fmtC(sub), "z₁ − z₂");
+      stat(summaryEl, fmtC(mul), "z₁ × z₂");
+      stat(summaryEl, div === null ? "undefined" : fmtC(div), "z₁ ÷ z₂");
+      stat(summaryEl, fmt(absz), "|z₁| (modulus)");
+      stat(summaryEl, fmt(argz), "arg(z₁) (rad)");
+      stat(summaryEl, fmt(argz * 180 / Math.PI), "arg(z₁) (deg)");
+      stat(summaryEl, fmtC(conj(z1)), "conjugate z̄₁");
+      stat(summaryEl, recipz === null ? "undefined" : fmtC(recipz), "1 / z₁");
+      stat(summaryEl, pow === null ? "undefined" : fmtC(pow), "z₁ ^ " + n);
+      stat(summaryEl, fmtC(sq), "√z₁ (principal)");
+      stat(summaryEl, fmtPolar(z1), "z₁ polar r ∠ θ");
+      stat(summaryEl, fmtPolar(z2), "z₂ polar r ∠ θ");
+
+      noteEl.textContent = "z₁ = " + fmtC(z1) + ", z₂ = " + fmtC(z2) + " → sum " + fmtC(add) +
+        ", product " + fmtC(mul) + (div === null ? "; division undefined (z₂ = 0)." : ", quotient " + fmtC(div) + ".");
+
+      window.__cx = { a: a, b: b, c: c, d: d, n: n,
+                     add: add, sub: sub, mul: mul, div: div,
+                     abs: absz, arg: argz, conj: conj(z1), recip: recipz,
+                     pow: pow, sqrt: sq };
+    }
+
+    [aEl, bEl, cEl, dEl, nEl].forEach(function (el) { el.addEventListener("input", compute); });
+    compute();
+  })();
+  </script>
+</body>
+</html>

@@ -818,4 +818,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🛰️",
     added: "2026-07-05T11:40:00Z",
   },
+  {
+    slug: "complex-number",
+    name: "Complex Number Calculator",
+    description: "Do arithmetic on complex numbers of the form a + bi. Enter two complex numbers (z₁ = a + bi, z₂ = c + di) and an integer exponent n, and the calculator reports their sum, difference, product and quotient, the modulus and argument of z₁, its conjugate and reciprocal, z₁ raised to the n-th power, the principal square root, and the polar forms (r ∠ θ) of both numbers. Division by zero and undefined powers are reported as such. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "ℂ",
+    added: "2026-07-05T12:20:00Z",
+  },
 ];
