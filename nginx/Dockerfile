@@ -4,6 +4,10 @@ FROM nginx:alpine
 COPY frontend/ /usr/share/nginx/html/
 COPY nginx/nginx.conf /etc/nginx/conf.d/default.conf
 
+# Generate sitemap.xml from the tool registry so it always lists every tool.
+COPY scripts/generate_sitemap.sh /tmp/generate_sitemap.sh
+RUN sh /tmp/generate_sitemap.sh /usr/share/nginx/html https://virt.tools && rm /tmp/generate_sitemap.sh
+
 # Cache-bust asset URLs so returning visitors always load the latest JS/CSS.
 # A build-time version query (?v=...) is appended to every assets/*.js|css
 # reference in the HTML. Because index.html is served with Cache-Control:
