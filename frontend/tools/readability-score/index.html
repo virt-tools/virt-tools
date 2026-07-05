@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Readability Score — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px; }
+    .stat { background:var(--panel-2,#161a22); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:10px 12px; }
+    .stat .n { font-size:22px; font-weight:600; }
+    .stat .l { font-size:12px; opacity:.7; }
+    .score-row { display:flex; justify-content:space-between; gap:12px; padding:8px 0; border-bottom:1px solid var(--border,#2a2f3a); }
+    .score-row:last-child { border-bottom:none; }
+    .score-name { font-weight:600; }
+    .score-val { font-family:monospace; font-weight:600; }
+    .score-desc { font-size:12px; opacity:.65; flex:1; text-align:right; padding:0 4px; }
+    .sub-h { margin:16px 0 6px; font-weight:600; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Readability Score</h1>
+      <p>Measure text readability — Flesch Reading Ease, Flesch-Kincaid, Gunning Fog, SMOG, Coleman-Liau, ARI — plus word/sentence/syllable counts and reading time. Runs locally; nothing uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="in">Text</label>
+        <textarea id="in" placeholder="Paste an article, essay or any prose…" style="min-height:160px;"></textarea>
+      </div>
+      <div class="row">
+        <button id="analyze">Analyze</button>
+        <button id="clear" class="secondary">Clear</button>
+      </div>
+      <div class="spacer"></div>
+      <div class="sub-h">Counts</div>
+      <div id="counts" class="grid"></div>
+      <div class="sub-h">Reading &amp; speaking time</div>
+      <div id="times" class="grid"></div>
+      <div class="sub-h">Readability scores</div>
+      <div id="scores"></div>
+      <p class="note" id="note">Heuristic syllable counter — approximate, like all readability tools. Runs locally.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var inp = document.getElementById("in");
+    var countsEl = document.getElementById("counts");
+    var timesEl = document.getElementById("times");
+    var scoresEl = document.getElementById("scores");
+    var note = document.getElementById("note");
+
+    function esc(s) { return String(s).replace(/[&<>]/g, function (c) { return c === "&" ? "&amp;" : c === "<" ? "&lt;" : "&gt;"; }); }
+
+    // Heuristic syllable counter (Text-Statistics.js style).
+    function syllables(word) {
+      word = word.toLowerCase().replace(/[^a-z]/g, "");
+      if (word.length <= 3) return 1;
+      word = word.replace(/(?:[^laeiouy]es|ed|[^laeiouy]e)$/, "");
+      word = word.replace(/^y/, "");
+      var m = word.match(/[aeiouy]{1,2}/g);
+      var n = m ? m.length : 0;
+      return Math.max(1, n);
+    }
+
+    function isComplex(word) { return syllables(word) >= 3; }
+
+    function analyze(text) {
+      var sentences = text.split(/[.!?]+(?:\s|$)/).filter(function (s) { return s.trim().length > 0; });
+      var sentenceCount = Math.max(sentences.length, text.trim() ? 1 : 0);
+      var paragraphs = text.split(/\n\s*\n/).filter(function (p) { return p.trim().length > 0; }).length;
+      var words = text.match(/[A-Za-z][A-Za-z'']*/g) || [];
+      var wordCount = words.length;
+      var charCount = text.length;
+      var charCountNoSpaces = text.replace(/\s/g, "").length;
+      var syllableCount = 0, complexCount = 0;
+      words.forEach(function (w) { var s = syllables(w); syllableCount += s; if (s >= 3) complexCount++; });
+      var letterCount = words.join("").length; // letters only (for Coleman-Liau)
+      var avgWordsPerSentence = wordCount ? wordCount / sentenceCount : 0;
+      var avgSyllablesPerWord = wordCount ? syllableCount / wordCount : 0;
+
+      // Scores (guard against divide-by-zero -> show "—" when no words).
+      function fleshReadingEase() {
+        if (!wordCount || !sentenceCount) return null;
+        return 206.835 - 1.015 * (wordCount / sentenceCount) - 84.6 * (syllableCount / wordCount);
+      }
+      function fleshKincaidGrade() {
+        if (!wordCount || !sentenceCount) return null;
+        return 0.39 * (wordCount / sentenceCount) + 11.8 * (syllableCount / wordCount) - 15.59;
+      }
+      function gunningFog() {
+        if (!wordCount || !sentenceCount) return null;
+        return 0.4 * (wordCount / sentenceCount + 100 * (complexCount / wordCount));
+      }
+      function smog() {
+        if (sentenceCount < 3) return null; // SMOG needs >=3 sentences
+        return 1.0430 * Math.sqrt(complexCount * (30 / sentenceCount)) + 3.1291;
+      }
+      function colemanLiau() {
+        if (!wordCount) return null;
+        var L = (letterCount / wordCount) * 100;
+        var S = (sentenceCount / wordCount) * 100;
+        return 0.0588 * L - 0.296 * S - 15.8;
+      }
+      function ari() {
+        if (!wordCount || !sentenceCount) return null;
+        return 4.71 * (charCountNoSpaces / wordCount) + 0.5 * (wordCount / sentenceCount) - 21.43;
+      }
+
+      function interpFlesch(s) {
+        if (s === null) return "—";
+        if (s >= 90) return "Very easy (5th grade)";
+        if (s >= 80) return "Easy (6th grade)";
+        if (s >= 70) return "Fairly easy (7th grade)";
+        if (s >= 60) return "Standard (8th–9th grade)";
+        if (s >= 50) return "Fairly hard (10th–12th grade)";
+        if (s >= 30) return "Difficult (college)";
+        return "Very difficult (college graduate)";
+      }
+      function gradeLabel(s) { return s === null ? "—" : "Grade " + s.toFixed(1); }
+
+      return {
+        counts: [
+          ["Words", wordCount], ["Sentences", sentenceCount], ["Paragraphs", paragraphs],
+          ["Characters", charCount], ["Characters (no spaces)", charCountNoSpaces],
+          ["Syllables", syllableCount], ["Complex words", complexCount],
+          ["Avg words/sentence", avgWordsPerSentence.toFixed(1)],
+          ["Avg syllables/word", avgSyllablesPerWord.toFixed(2)]
+        ],
+        times: [
+          ["Reading time", fmtTime(wordCount / 200)],
+          ["Speaking time", fmtTime(wordCount / 130)]
+        ],
+        scores: [
+          ["Flesch Reading Ease", fleshReadingEase(), function (s) { return s === null ? "—" : s.toFixed(1); }, interpFlesch],
+          ["Flesch-Kincaid Grade", fleshKincaidGrade(), gradeLabel, function () { return "U.S. grade level"; }],
+          ["Gunning Fog", gunningFog(), gradeLabel, function () { return "Years of education needed"; }],
+          ["SMOG Index", smog(), gradeLabel, function () { return sentenceCount < 3 ? "needs ≥3 sentences" : "Years of education needed"; }],
+          ["Coleman-Liau", colemanLiau(), gradeLabel, function () { return "U.S. grade level"; }],
+          ["Automated Readability", ari(), gradeLabel, function () { return "U.S. grade level"; }]
+        ]
+      };
+    }
+
+    function fmtTime(hours) {
+      if (!isFinite(hours) || hours <= 0) return "0s";
+      var s = Math.round(hours * 3600);
+      var m = Math.floor(s / 60), r = s % 60;
+      if (m === 0) return r + "s";
+      return m + "m " + r + "s";
+    }
+
+    function render(data) {
+      function grid(items) {
+        return items.map(function (it) {
+          return '<div class="stat"><div class="n">' + esc(it[1]) + '</div><div class="l">' + it[0] + '</div></div>';
+        }).join("");
+      }
+      countsEl.innerHTML = grid(data.counts);
+      timesEl.innerHTML = grid(data.times);
+      scoresEl.innerHTML = data.scores.map(function (s) {
+        var name = s[0], raw = s[1], fmt = s[2], descFn = s[3];
+        var val = fmt(raw);
+        var desc = descFn(raw);
+        return '<div class="score-row"><span class="score-name">' + name + '</span>'
+          + '<span class="score-desc">' + esc(desc) + '</span>'
+          + '<span class="score-val">' + esc(val) + '</span></div>';
+      }).join("");
+    }
+
+    document.getElementById("analyze").addEventListener("click", function () {
+      var t = inp.value;
+      if (!t.trim()) { countsEl.innerHTML = ""; timesEl.innerHTML = ""; scoresEl.innerHTML = ""; note.textContent = "Enter some text to analyze."; return; }
+      var data = analyze(t);
+      render(data);
+      note.textContent = "Analyzed locally. Syllable counts are heuristic — treat scores as estimates.";
+    });
+
+    document.getElementById("clear").addEventListener("click", function () {
+      inp.value = ""; countsEl.innerHTML = ""; timesEl.innerHTML = ""; scoresEl.innerHTML = "";
+      note.textContent = "Heuristic syllable counter — approximate, like all readability tools. Runs locally.";
+    });
+  })();
+  </script>
+</body>
+</html>

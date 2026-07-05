@@ -211,6 +211,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-05T08:00:00Z",
   },
   {
+    slug: "readability-score",
+    name: "Readability Score",
+    description: "Flesch, Flesch-Kincaid, Gunning Fog, SMOG, Coleman-Liau and ARI scores plus counts and reading time — runs locally.",
+    category: "Text",
+    icon: "📐",
+    added: "2026-07-05T09:00:00Z",
+  },
+  {
     slug: "timestamp-converter",
     name: "Unix Timestamp Converter",
     description: "Convert between Unix epoch timestamps and human-readable UTC / local dates.",
