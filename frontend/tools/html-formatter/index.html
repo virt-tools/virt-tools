@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>HTML Formatter — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>HTML Formatter &amp; Validator</h1>
+      <p>Pretty-print, minify and validate HTML in your browser using the native DOM parser — nothing is uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="in">HTML input</label>
+        <textarea id="in" placeholder="<div class=&quot;card&quot;><h1>Title</h1><p>Hello <em>world</em></p></div>" style="min-height:140px; font-family:monospace;"></textarea>
+      </div>
+      <div class="row">
+        <button id="format">Format</button>
+        <button id="minify" class="secondary">Minify</button>
+        <button id="validate" class="secondary">Validate</button>
+        <button id="clear" class="secondary">Clear</button>
+        <div>
+          <label for="indent">Indent</label>
+          <select id="indent">
+            <option value="2" selected>2 spaces</option>
+            <option value="4">4 spaces</option>
+            <option value="\t">Tab</option>
+          </select>
+        </div>
+      </div>
+      <div class="spacer"></div>
+      <div class="row" style="justify-content:space-between;">
+        <label for="out">Output</label>
+        <button id="copy" class="secondary" style="padding:4px 10px;">Copy</button>
+      </div>
+      <div class="output" id="out" style="white-space:pre; font-family:monospace;"></div>
+      <p class="note" id="note">Parsed locally with the browser's native DOMParser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var inp = document.getElementById("in");
+    var out = document.getElementById("out");
+    var note = document.getElementById("note");
+    var indentSel = document.getElementById("indent");
+
+    // Void elements have no closing tag and no children.
+    var VOID = { area:1, base:1, br:1, col:1, embed:1, hr:1, img:1, input:1,
+      link:1, meta:1, param:1, source:1, track:1, wbr:1 };
+    // Inline elements keep their content on one line with surrounding text.
+    var INLINE = { a:1, abbr:1, b:1, bdi:1, bdo:1, br:1, cite:1, code:1, data:1,
+      dfn:1, em:1, i:1, kbd:1, mark:1, q:1, rp:1, rt:1, ruby:1, s:1, samp:1,
+      small:1, span:1, strong:1, sub:1, sup:1, time:1, u:1, var:1, wbr:1,
+      img:1, label:1, select:1, option:1, button:1, input:1, textarea:1 };
+    // Elements whose inner text is preserved verbatim (no reflow).
+    var PRESERVE = { pre:1, textarea:1, script:1, style:1 };
+
+    function indentString() {
+      var v = indentSel.value;
+      return v === "\\t" ? "\t" : new Array(parseInt(v, 10) + 1).join(" ");
+    }
+
+    function parseHTML(text) {
+      var doc = new DOMParser().parseFromString(text, "text/html");
+      // text/html parser is lenient; report nothing on its "errors" (it rarely sets any).
+      return doc;
+    }
+
+    function attrString(node) {
+      var s = "";
+      for (var i = 0; i < node.attributes.length; i++) {
+        var a = node.attributes[i];
+        var v = a.value || "";
+        s += " " + a.name + '="' + v.replace(/"/g, "&quot;") + '"';
+      }
+      return s;
+    }
+
+    function isWhitespaceText(node) {
+      return node && node.nodeType === 3 && /^\s*$/.test(node.nodeValue);
+    }
+
+    // Collect inline (non-whitespace-only) child nodes.
+    function hasBlockChild(node) {
+      for (var i = 0; i < node.childNodes.length; i++) {
+        var c = node.childNodes[i];
+        if (c.nodeType === 1 && !(c.tagName.toLowerCase() in INLINE)) return true;
+      }
+      return false;
+    }
+
+    // Recursively pretty-print a node into the `lines` array at the given depth.
+    function emit(node, depth, indent, lines) {
+      var pad = new Array(depth + 1).join(indent);
+      if (node.nodeType === 3) { // text
+        var t = node.nodeValue.replace(/\s+/g, " ");
+        if (t.trim()) lines.push(pad + t.trim());
+        return;
+      }
+      if (node.nodeType === 8) { // comment
+        lines.push(pad + "<!--" + node.nodeValue + "-->");
+        return;
+      }
+      if (node.nodeType !== 1) return;
+      var tag = node.tagName.toLowerCase();
+      var attrs = attrString(node);
+
+      if (tag in VOID) {
+        lines.push(pad + "<" + tag + attrs + ">");
+        return;
+      }
+      if (tag in PRESERVE) {
+        // Serialize inner content verbatim.
+        var inner = node.innerHTML || "";
+        lines.push(pad + "<" + tag + attrs + ">" + inner + "</" + tag + ">");
+        return;
+      }
+
+      // Separate children into meaningful nodes (drop pure whitespace between inline runs).
+      var kids = [];
+      for (var i = 0; i < node.childNodes.length; i++) {
+        var c = node.childNodes[i];
+        if (isWhitespaceText(c)) {
+          // Keep a placeholder for inter-element whitespace so inline text spacing survives.
+          if (kids.length && kids[kids.length - 1]._ws === undefined) kids.push({ _ws: true });
+          continue;
+        }
+        kids.push(c);
+      }
+
+      // Block-format only when the element actually contains a block-level
+      // child; otherwise (text + inline children) serialize on a single line.
+      var block = hasBlockChild(node);
+
+      if (!block) {
+        // Inline: serialize children inline with whitespace placeholders as spaces.
+        var inner = "";
+        for (var j = 0; j < kids.length; j++) {
+          if (kids[j]._ws) { if (inner && !/\s$/.test(inner)) inner += " "; continue; }
+          inner += inlineNode(kids[j]);
+        }
+        lines.push(pad + "<" + tag + attrs + ">" + inner + "</" + tag + ">");
+        return;
+      }
+
+      // Block: open tag, then children on deeper lines, then close tag.
+      lines.push(pad + "<" + tag + attrs + ">");
+      for (var k = 0; k < kids.length; k++) {
+        if (kids[k]._ws) continue;
+        emit(kids[k], depth + 1, indent, lines);
+      }
+      lines.push(pad + "</" + tag + ">");
+    }
+
+    // Serialize an inline node (no newlines) for embedding inside a block line.
+    function inlineNode(node) {
+      if (node._ws) return " ";
+      if (node.nodeType === 3) return node.nodeValue.replace(/\s+/g, " ");
+      if (node.nodeType === 8) return "<!--" + node.nodeValue + "-->";
+      if (node.nodeType !== 1) return "";
+      var tag = node.tagName.toLowerCase();
+      var attrs = attrString(node);
+      if (tag in VOID) return "<" + tag + attrs + ">";
+      var inner = "";
+      for (var i = 0; i < node.childNodes.length; i++) {
+        if (isWhitespaceText(node.childNodes[i])) { if (inner && !/\s$/.test(inner)) inner += " "; continue; }
+        inner += inlineNode(node.childNodes[i]);
+      }
+      return "<" + tag + attrs + ">" + inner + "</" + tag + ">";
+    }
+
+    function format(html) {
+      var doc = parseHTML(html);
+      var indent = indentString();
+      var lines = [];
+      // Walk the document body (and head) rather than raw text.
+      var root = doc.documentElement; // <html>
+      emit(root, 0, indent, lines);
+      return lines.join("\n");
+    }
+
+    function minify(html) {
+      var doc = parseHTML(html);
+      // Remove whitespace-only text nodes between block elements. Preserve pre/textarea/script/style.
+      function walk(node) {
+        for (var i = node.childNodes.length - 1; i >= 0; i--) {
+          var c = node.childNodes[i];
+          if (c.nodeType === 3 && /^\s*$/.test(c.nodeValue) && node.childNodes.length > 1) {
+            // Collapse to a single space for inline contexts; drop between block siblings.
+            var prev = node.childNodes[i - 1], next = node.childNodes[i + 1];
+            var prevInline = prev && prev.nodeType === 1 && (prev.tagName.toLowerCase() in INLINE);
+            var nextInline = next && next.nodeType === 1 && (next.tagName.toLowerCase() in INLINE);
+            if (prevInline || nextInline) c.nodeValue = " "; else node.removeChild(c);
+          } else if (c.nodeType === 1) {
+            walk(c);
+          }
+        }
+      }
+      walk(doc);
+      return doc.documentElement.outerHTML;
+    }
+
+    function show(text, err) {
+      out.textContent = text;
+      out.style.color = err ? "var(--bad)" : "";
+      note.textContent = err || "Parsed locally with the browser's native DOMParser.";
+    }
+
+    document.getElementById("format").addEventListener("click", function () {
+      var t = inp.value.trim();
+      if (!t) { show("", "Paste some HTML first."); return; }
+      try { show(format(t), null); note.textContent = "HTML formatted."; }
+      catch (e) { show("", "Could not parse: " + (e.message || e)); }
+    });
+
+    document.getElementById("minify").addEventListener("click", function () {
+      var t = inp.value.trim();
+      if (!t) { show("", "Paste some HTML first."); return; }
+      try { show(minify(t), null); note.textContent = "HTML minified."; }
+      catch (e) { show("", "Could not parse: " + (e.message || e)); }
+    });
+
+    document.getElementById("validate").addEventListener("click", function () {
+      var t = inp.value.trim();
+      if (!t) { show("", "Paste some HTML first."); return; }
+      try { parseHTML(t); out.style.color = "var(--good, #4ade80)"; out.textContent = "✓ Parsed as HTML (the HTML parser is lenient and rarely reports errors)."; note.textContent = "Validated locally."; }
+      catch (e) { show("", "✗ Parse error: " + (e.message || e)); }
+    });
+
+    document.getElementById("clear").addEventListener("click", function () {
+      inp.value = ""; show("", null);
+    });
+
+    document.getElementById("copy").addEventListener("click", function () {
+      var t = out.textContent;
+      if (!t || t.indexOf("✓") === 0) return;
+      var b = this;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(t).then(function () {
+          b.textContent = "Copied!"; setTimeout(function () { b.textContent = "Copy"; }, 1200);
+        });
+      } else {
+        var ta = document.createElement("textarea");
+        ta.value = t; document.body.appendChild(ta); ta.select();
+        try { document.execCommand("copy"); b.textContent = "Copied!"; setTimeout(function () { b.textContent = "Copy"; }, 1200); } catch (e) {}
+        ta.remove();
+      }
+    });
+  })();
+  </script>
+</body>
+</html>

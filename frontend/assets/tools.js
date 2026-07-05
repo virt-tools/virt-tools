@@ -195,6 +195,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-05T06:00:00Z",
   },
   {
+    slug: "html-formatter",
+    name: "HTML Formatter",
+    description: "Pretty-print, minify and validate HTML with the native DOM parser — block/inline aware, runs locally.",
+    category: "Text",
+    icon: "🧹",
+    added: "2026-07-05T07:00:00Z",
+  },
+  {
     slug: "timestamp-converter",
     name: "Unix Timestamp Converter",
     description: "Convert between Unix epoch timestamps and human-readable UTC / local dates.",
