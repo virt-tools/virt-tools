@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Image Rotate &amp; Flip — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .drop {
+      border: 2px dashed var(--border,#2a2f3a); border-radius:10px;
+      padding: 18px; text-align:center; cursor:pointer; transition: border-color .15s, background .15s;
+    }
+    .drop:hover, .drop.drag { border-color: var(--accent,#6ea8fe); background: rgba(110,168,254,.05); }
+    .preview-wrap { margin-top:14px; text-align:center; }
+    #preview { max-width:100%; max-height: 420px; border:1px solid var(--border,#2a2f3a); border-radius:8px; background:#000; }
+    .ops { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0; }
+    .ops button { min-width: 84px; }
+    .meta-line { opacity:.7; font-size:13px; margin:6px 0; text-align:center; }
+    .row { gap:10px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Image Rotate &amp; Flip</h1>
+      <p>Rotate (90°, 180°, or any angle) and flip an image horizontally or vertically, then export as PNG / JPEG / WebP. All in your browser — the image never leaves your device.</p>
+    </div>
+
+    <div class="panel">
+      <div class="drop" id="drop">
+        <input type="file" id="file" accept="image/*" hidden>
+        <div id="dropLabel">Click or drop an image here</div>
+      </div>
+
+      <div class="preview-wrap">
+        <canvas id="preview" hidden></canvas>
+      </div>
+      <div class="meta-line" id="meta"></div>
+
+      <div class="ops">
+        <button id="cw" class="secondary" disabled>Rotate 90° ↻</button>
+        <button id="ccw" class="secondary" disabled>Rotate 90° ↺</button>
+        <button id="r180" class="secondary" disabled>Rotate 180°</button>
+        <button id="fh" class="secondary" disabled>Flip ↔</button>
+        <button id="fv" class="secondary" disabled>Flip ↕</button>
+        <button id="reset" class="secondary" disabled>Reset</button>
+      </div>
+
+      <div class="row" style="align-items:center; flex-wrap:wrap;">
+        <label for="angle">Custom angle: <span id="angval">0</span>°</label>
+        <input type="range" id="angle" min="-180" max="180" value="0" style="flex:1; min-width:160px;" disabled>
+        <button id="applyAngle" class="secondary" disabled>Apply angle</button>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="row" style="flex-wrap:wrap; align-items:center;">
+        <label for="fmt">Export as</label>
+        <select id="fmt">
+          <option value="image/png">PNG</option>
+          <option value="image/jpeg">JPEG</option>
+          <option value="image/webp">WebP</option>
+        </select>
+        <label for="q" id="qLabel" style="display:none;">Quality</label>
+        <input type="range" id="q" min="10" max="100" value="90" style="display:none; width:120px;">
+        <button id="download" disabled>Download</button>
+      </div>
+      <p class="note" id="note">Loads and transforms your image locally with canvas — nothing is uploaded.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var drop = document.getElementById("drop");
+    var fileEl = document.getElementById("file");
+    var dropLabel = document.getElementById("dropLabel");
+    var canvas = document.getElementById("preview");
+    var ctx = canvas.getContext("2d");
+    var metaEl = document.getElementById("meta");
+    var note = document.getElementById("note");
+    var angleEl = document.getElementById("angle");
+    var angval = document.getElementById("angval");
+    var applyAngle = document.getElementById("applyAngle");
+    var fmtEl = document.getElementById("fmt");
+    var qEl = document.getElementById("q");
+    var qLabel = document.getElementById("qLabel");
+    var downloadBtn = document.getElementById("download");
+
+    var sourceImg = null;       // original HTMLImageElement
+    var curCanvas = null;       // current working canvas (the transformed image)
+    var ops = ["cw", "ccw", "r180", "fh", "fv", "reset"];
+    var opBtns = {};
+    ops.forEach(function (id) { opBtns[id] = document.getElementById(id); });
+
+    function setReady(ready) {
+      ops.forEach(function (id) { opBtns[id].disabled = !ready; });
+      angleEl.disabled = !ready; applyAngle.disabled = !ready; downloadBtn.disabled = !ready;
+    }
+
+    function showCurrent() {
+      // Copy curCanvas into the visible preview canvas at display size.
+      canvas.hidden = false;
+      canvas.width = curCanvas.width;
+      canvas.height = curCanvas.height;
+      ctx.drawImage(curCanvas, 0, 0);
+      metaEl.textContent = curCanvas.width + " × " + curCanvas.height + " px";
+    }
+
+    // Create a fresh canvas with given dimensions.
+    function newCanvas(w, h) {
+      var c = document.createElement("canvas");
+      c.width = w; c.height = h;
+      return c;
+    }
+
+    function transform(srcCanvas, fn) {
+      var w = srcCanvas.width, h = srcCanvas.height;
+      var dst = fn(w, h, srcCanvas);
+      return dst;
+    }
+
+    function rotateCW(w, h, src) {
+      var c = newCanvas(h, w);
+      var x = c.getContext("2d");
+      x.translate(c.width, 0);
+      x.rotate(Math.PI / 2);
+      x.drawImage(src, 0, 0);
+      return c;
+    }
+    function rotateCCW(w, h, src) {
+      var c = newCanvas(h, w);
+      var x = c.getContext("2d");
+      x.translate(0, c.height);
+      x.rotate(-Math.PI / 2);
+      x.drawImage(src, 0, 0);
+      return c;
+    }
+    function rotate180(w, h, src) {
+      var c = newCanvas(w, h);
+      var x = c.getContext("2d");
+      x.translate(c.width, c.height);
+      x.rotate(Math.PI);
+      x.drawImage(src, 0, 0);
+      return c;
+    }
+    function flipH(w, h, src) {
+      var c = newCanvas(w, h);
+      var x = c.getContext("2d");
+      x.translate(c.width, 0);
+      x.scale(-1, 1);
+      x.drawImage(src, 0, 0);
+      return c;
+    }
+    function flipV(w, h, src) {
+      var c = newCanvas(w, h);
+      var x = c.getContext("2d");
+      x.translate(0, c.height);
+      x.scale(1, -1);
+      x.drawImage(src, 0, 0);
+      return c;
+    }
+    function rotateAngle(deg, w, h, src) {
+      var rad = deg * Math.PI / 180;
+      var cos = Math.abs(Math.cos(rad)), sin = Math.abs(Math.sin(rad));
+      var nw = Math.round(w * cos + h * sin);
+      var nh = Math.round(w * sin + h * cos);
+      var c = newCanvas(Math.max(1, nw), Math.max(1, nh));
+      var x = c.getContext("2d");
+      x.translate(c.width / 2, c.height / 2);
+      x.rotate(rad);
+      x.drawImage(src, -w / 2, -h / 2);
+      return c;
+    }
+
+    function applyOp(fn) {
+      curCanvas = transform(curCanvas, fn);
+      showCurrent();
+    }
+
+    opBtns.cw.addEventListener("click", function () { applyOp(rotateCW); });
+    opBtns.ccw.addEventListener("click", function () { applyOp(rotateCCW); });
+    opBtns.r180.addEventListener("click", function () { applyOp(rotate180); });
+    opBtns.fh.addEventListener("click", function () { applyOp(flipH); });
+    opBtns.fv.addEventListener("click", function () { applyOp(flipV); });
+    opBtns.reset.addEventListener("click", function () {
+      if (!sourceImg) return;
+      curCanvas = newCanvas(sourceImg.naturalWidth, sourceImg.naturalHeight);
+      curCanvas.getContext("2d").drawImage(sourceImg, 0, 0);
+      angleEl.value = 0; angval.textContent = "0";
+      showCurrent();
+    });
+
+    angleEl.addEventListener("input", function () { angval.textContent = angleEl.value; });
+    applyAngle.addEventListener("click", function () {
+      var deg = parseInt(angleEl.value, 10);
+      if (!deg) return;
+      curCanvas = transform(curCanvas, function (w, h, src) { return rotateAngle(deg, w, h, src); });
+      angleEl.value = 0; angval.textContent = "0";
+      showCurrent();
+    });
+
+    fmtEl.addEventListener("change", function () {
+      var lossy = fmtEl.value !== "image/png";
+      qEl.style.display = lossy ? "" : "none";
+      qLabel.style.display = lossy ? "" : "none";
+    });
+
+    downloadBtn.addEventListener("click", function () {
+      if (!curCanvas) return;
+      var mime = fmtEl.value;
+      var q = parseInt(qEl.value, 10) / 100;
+      var ext = mime === "image/png" ? "png" : mime === "image/jpeg" ? "jpg" : "webp";
+      curCanvas.toBlob(function (blob) {
+        if (!blob) { note.textContent = "Could not encode."; return; }
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement("a");
+        a.href = url; a.download = "image." + ext;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+        note.textContent = "Downloaded. Transformed locally.";
+      }, mime, mime === "image/png" ? undefined : q);
+    });
+
+    function loadImageFile(file) {
+      if (!file || !/^image\//.test(file.type)) { note.textContent = "Please choose an image file."; return; }
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function () {
+        sourceImg = img;
+        curCanvas = newCanvas(img.naturalWidth, img.naturalHeight);
+        curCanvas.getContext("2d").drawImage(img, 0, 0);
+        showCurrent();
+        setReady(true);
+        dropLabel.textContent = "Loaded: " + file.name + " — click to replace";
+        note.textContent = "Image loaded locally. Transformations run in your browser.";
+        URL.revokeObjectURL(url);
+      };
+      img.onerror = function () { note.textContent = "Could not load that image."; URL.revokeObjectURL(url); };
+      img.src = url;
+    }
+
+    fileEl.addEventListener("change", function () { if (fileEl.files[0]) loadImageFile(fileEl.files[0]); });
+    drop.addEventListener("click", function () { fileEl.click(); });
+    drop.addEventListener("dragover", function (e) { e.preventDefault(); drop.classList.add("drag"); });
+    drop.addEventListener("dragleave", function () { drop.classList.remove("drag"); });
+    drop.addEventListener("drop", function (e) {
+      e.preventDefault(); drop.classList.remove("drag");
+      if (e.dataTransfer.files[0]) loadImageFile(e.dataTransfer.files[0]);
+    });
+  })();
+  </script>
+</body>
+</html>

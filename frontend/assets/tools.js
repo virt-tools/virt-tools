@@ -235,6 +235,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-05T11:00:00Z",
   },
   {
+    slug: "image-rotate-flip",
+    name: "Image Rotate & Flip",
+    description: "Rotate (90°, 180°, or any angle) and flip an image horizontally or vertically, then export PNG/JPEG/WebP — runs locally.",
+    category: "Image",
+    icon: "🔄",
+    added: "2026-07-05T12:00:00Z",
+  },
+  {
     slug: "timestamp-converter",
     name: "Unix Timestamp Converter",
     description: "Convert between Unix epoch timestamps and human-readable UTC / local dates.",
