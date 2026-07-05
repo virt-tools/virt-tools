@@ -259,6 +259,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-05T14:00:00Z",
   },
   {
+    slug: "csv-viewer",
+    name: "CSV Viewer",
+    description: "Render CSV as a sortable, filterable table — handles quoted fields and embedded commas/newlines. Runs locally.",
+    category: "Data",
+    icon: "📊",
+    added: "2026-07-05T15:00:00Z",
+  },
+  {
     slug: "timestamp-converter",
     name: "Unix Timestamp Converter",
     description: "Convert between Unix epoch timestamps and human-readable UTC / local dates.",

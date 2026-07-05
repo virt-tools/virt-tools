@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>CSV Viewer — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .tbl-wrap { overflow:auto; max-height: 60vh; border:1px solid var(--border,#2a2f3a); border-radius:8px; }
+    table.csv { border-collapse:collapse; width:100%; font-size:14px; }
+    table.csv th, table.csv td { padding:5px 10px; border-bottom:1px solid var(--border,#2a2f3a); border-right:1px solid var(--border,#2a2f3a); white-space:nowrap; text-align:left; }
+    table.csv th { position:sticky; top:0; background:var(--panel-2,#161a22); cursor:pointer; user-select:none; z-index:1; }
+    table.csv th .arr { opacity:.5; font-size:11px; margin-left:4px; }
+    table.csv tr:nth-child(even) td { background: rgba(255,255,255,.015); }
+    .empty { padding:16px; opacity:.55; text-align:center; }
+    .meta-line { opacity:.7; font-size:13px; margin:6px 0; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>CSV Viewer</h1>
+      <p>Paste CSV (or drop a .csv file) to render it as a table you can sort by clicking headers and filter by searching. Quoted fields, embedded commas and newlines are handled. Runs locally; nothing uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="in">CSV input</label>
+        <textarea id="in" placeholder="name,age,city&#10;Ada,36,London&#10;&quot;Lin, B&quot;,29,&quot;New York, NY&quot;" style="min-height:120px; font-family:monospace;"></textarea>
+      </div>
+      <div class="row" style="flex-wrap:wrap; align-items:center;">
+        <button id="render">Render</button>
+        <button id="clear" class="secondary">Clear</button>
+        <label for="header"><input type="checkbox" id="header" checked> First row is header</label>
+        <label for="delim">Delimiter</label>
+        <select id="delim">
+          <option value=",">Comma</option>
+          <option value=";">Semicolon</option>
+          <option value="\t">Tab</option>
+        </select>
+        <input type="search" id="filter" placeholder="Filter rows…" style="flex:1; min-width:160px;">
+      </div>
+      <div class="meta-line" id="meta">Paste CSV and click Render.</div>
+      <div class="tbl-wrap" id="out"><div class="empty">No data.</div></div>
+      <p class="note" id="note">RFC-4180-style parser. Sorting and filtering happen in your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var inp = document.getElementById("in");
+    var renderBtn = document.getElementById("render");
+    var clearBtn = document.getElementById("clear");
+    var headerEl = document.getElementById("header");
+    var delimEl = document.getElementById("delim");
+    var filterEl = document.getElementById("filter");
+    var out = document.getElementById("out");
+    var meta = document.getElementById("meta");
+    var note = document.getElementById("note");
+
+    var rows = [];        // 2D array of all parsed rows
+    var header = [];      // header row (or [] when no header)
+    var dataRows = [];    // rows excluding the header (when present)
+    var sortCol = -1, sortDesc = false;
+
+    function esc(s) { return String(s).replace(/[&<>]/g, function (c) { return c === "&" ? "&amp;" : c === "<" ? "&lt;" : "&gt;"; }); }
+
+    function delim() {
+      var v = delimEl.value;
+      return v === "\\t" ? "\t" : v;
+    }
+
+    // RFC-4180-ish CSV parser: handles quoted fields, escaped quotes (""),
+    // and embedded newlines within quoted fields.
+    function parseCSV(text, d) {
+      var result = [];
+      var row = [];
+      var field = "";
+      var i = 0, n = text.length;
+      var inQuotes = false;
+      while (i < n) {
+        var c = text[i];
+        if (inQuotes) {
+          if (c === '"') {
+            if (text[i + 1] === '"') { field += '"'; i += 2; continue; }
+            inQuotes = false; i++; continue;
+          }
+          field += c; i++; continue;
+        }
+        if (c === '"') { inQuotes = true; i++; continue; }
+        if (c === d) { row.push(field); field = ""; i++; continue; }
+        if (c === "\r") { i++; continue; } // treat \r as part of line ending
+        if (c === "\n") {
+          row.push(field);
+          if (row.length > 1 || row[0] !== "") result.push(row);
+          row = []; field = ""; i++; continue;
+        }
+        field += c; i++;
+      }
+      // Flush last field/row (if any content).
+      if (field !== "" || row.length) { row.push(field); if (row.length > 1 || row[0] !== "") result.push(row); }
+      return result;
+    }
+
+    function isNumeric(s) { return s !== "" && s !== null && !isNaN(Number(s)); }
+
+    function sortRows() {
+      if (sortCol < 0) return;
+      dataRows.sort(function (a, b) {
+        var av = a[sortCol] === undefined ? "" : a[sortCol];
+        var bv = b[sortCol] === undefined ? "" : b[sortCol];
+        if (isNumeric(av) && isNumeric(bv)) { av = Number(av); bv = Number(bv); }
+        if (av < bv) return sortDesc ? 1 : -1;
+        if (av > bv) return sortDesc ? -1 : 1;
+        return 0;
+      });
+    }
+
+    function filteredRows() {
+      var q = filterEl.value.trim().toLowerCase();
+      if (!q) return dataRows;
+      return dataRows.filter(function (r) {
+        return r.some(function (cell) { return String(cell).toLowerCase().indexOf(q) !== -1; });
+      });
+    }
+
+    function renderTable() {
+      sortRows();
+      var view = filteredRows();
+      if (!view.length) { out.innerHTML = '<div class="empty">No rows.</div>'; meta.textContent = "0 rows"; return; }
+      var html = '<table class="csv">';
+      var cols = header.length || view.reduce(function (m, r) { return Math.max(m, r.length); }, 0);
+
+      if (header.length) {
+        html += "<thead><tr>";
+        for (var h = 0; h < cols; h++) {
+          var label = h < header.length ? header[h] : "";
+          var arr = h === sortCol ? (sortDesc ? "▼" : "▲") : "";
+          html += '<th data-col="' + h + '">' + esc(label || ("col " + (h + 1))) + '<span class="arr">' + arr + '</span></th>';
+        }
+        html += "</tr></thead>";
+      } else {
+        html += "<thead><tr>";
+        for (var h2 = 0; h2 < cols; h2++) {
+          var arr2 = h2 === sortCol ? (sortDesc ? "▼" : "▲") : "";
+          html += '<th data-col="' + h2 + '">col ' + (h2 + 1) + '<span class="arr">' + arr2 + '</span></th>';
+        }
+        html += "</tr></thead>";
+      }
+      html += "<tbody>";
+      view.forEach(function (r) {
+        html += "<tr>";
+        for (var c = 0; c < cols; c++) html += "<td>" + esc(r[c] === undefined ? "" : r[c]) + "</td>";
+        html += "</tr>";
+      });
+      html += "</tbody></table>";
+      out.innerHTML = html;
+      meta.textContent = view.length + " row" + (view.length === 1 ? "" : "s") + " × " + cols + " column" + (cols === 1 ? "" : "s") +
+        (filterEl.value.trim() ? " (filtered from " + dataRows.length + ")" : "");
+    }
+
+    function load() {
+      var text = inp.value;
+      var d = delim();
+      rows = parseCSV(text, d);
+      if (!rows.length) { header = []; dataRows = []; out.innerHTML = '<div class="empty">No data.</div>'; meta.textContent = "No rows parsed."; return; }
+      if (headerEl.checked) { header = rows[0]; dataRows = rows.slice(1); }
+      else { header = []; dataRows = rows; }
+      sortCol = -1; sortDesc = false;
+      renderTable();
+      note.textContent = "Parsed locally. Click a header to sort.";
+    }
+
+    renderBtn.addEventListener("click", load);
+    filterEl.addEventListener("input", renderTable);
+    clearBtn.addEventListener("click", function () {
+      inp.value = ""; header = []; dataRows = []; rows = [];
+      out.innerHTML = '<div class="empty">No data.</div>'; meta.textContent = "Paste CSV and click Render.";
+      filterEl.value = "";
+    });
+
+    // Header click -> sort
+    out.addEventListener("click", function (e) {
+      var th = e.target.closest("th");
+      if (!th) return;
+      var col = parseInt(th.getAttribute("data-col"), 10);
+      if (sortCol === col) sortDesc = !sortDesc;
+      else { sortCol = col; sortDesc = false; }
+      renderTable();
+    });
+
+    // Drag-drop a .csv file
+    inp.addEventListener("dragover", function (e) { e.preventDefault(); });
+    inp.addEventListener("drop", function (e) {
+      e.preventDefault();
+      var f = e.dataTransfer.files[0];
+      if (!f) return;
+      var r = new FileReader();
+      r.onload = function () { inp.value = r.result; load(); };
+      r.readAsText(f);
+    });
+  })();
+  </script>
+</body>
+</html>
