@@ -219,6 +219,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-05T09:00:00Z",
   },
   {
+    slug: "pomodoro-timer",
+    name: "Pomodoro Timer",
+    description: "Focus timer with work / short-break / long-break cycles, a progress ring, beep and optional notification. Runs locally.",
+    category: "Time",
+    icon: "🍅",
+    added: "2026-07-05T10:00:00Z",
+  },
+  {
     slug: "timestamp-converter",
     name: "Unix Timestamp Converter",
     description: "Convert between Unix epoch timestamps and human-readable UTC / local dates.",

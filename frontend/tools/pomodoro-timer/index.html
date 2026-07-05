@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Pomodoro Timer — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .clock {
+      position: relative;
+      width: 260px;
+      height: 260px;
+      margin: 8px auto;
+    }
+    .clock svg { transform: rotate(-90deg); }
+    .clock .bg { stroke: var(--border,#2a2f3a); }
+    .clock .fg { stroke: var(--accent,#6ea8fe); transition: stroke-dashoffset 0.5s linear, stroke 0.4s; }
+    .clock .time {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+    }
+    .clock .time .mmss { font-size: 52px; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .clock .time .phase { font-size: 14px; opacity: .75; margin-top: 4px; letter-spacing:.5px; text-transform:uppercase; }
+    .controls { display:flex; justify-content:center; gap:10px; flex-wrap:wrap; margin:14px 0; }
+    .controls button { min-width: 92px; }
+    .stat-line { text-align:center; opacity:.75; font-size:14px; margin:6px 0; }
+    .settings { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:10px; margin-top:8px; }
+    .settings label { font-size:13px; opacity:.8; display:block; margin-bottom:3px; }
+    .settings input[type="number"] { width:100%; }
+    .row-check { display:flex; align-items:center; gap:8px; }
+    .work .fg { stroke: var(--accent,#6ea8fe); }
+    .short .fg { stroke: var(--good,#4ade80); }
+    .long .fg { stroke: var(--warn,#fbbf24); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Pomodoro Timer</h1>
+      <p>Focus timer with work / short-break / long-break cycles, a progress ring, optional beep and browser notification. All in your browser; nothing uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="clock" id="clock">
+        <svg width="260" height="260" viewBox="0 0 260 260">
+          <circle class="bg" cx="130" cy="130" r="118" fill="none" stroke-width="14"/>
+          <circle class="fg" id="ring" cx="130" cy="130" r="118" fill="none" stroke-width="14"
+            stroke-dasharray="741.4" stroke-dashoffset="0" stroke-linecap="round"/>
+        </svg>
+        <div class="time">
+          <div class="mmss" id="mmss">25:00</div>
+          <div class="phase" id="phase">Work</div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button id="start">Start</button>
+        <button id="pause" class="secondary">Pause</button>
+        <button id="reset" class="secondary">Reset</button>
+        <button id="skip" class="secondary">Skip</button>
+      </div>
+      <div class="stat-line" id="cycles">Cycles completed today: 0</div>
+
+      <div class="spacer"></div>
+      <div class="sub-h" style="font-weight:600;margin-bottom:8px;">Settings</div>
+      <div class="settings">
+        <div>
+          <label for="work">Work (minutes)</label>
+          <input type="number" id="work" min="1" max="180" value="25">
+        </div>
+        <div>
+          <label for="short">Short break (minutes)</label>
+          <input type="number" id="short" min="1" max="60" value="5">
+        </div>
+        <div>
+          <label for="long">Long break (minutes)</label>
+          <input type="number" id="long" min="1" max="60" value="15">
+        </div>
+        <div>
+          <label for="rounds">Rounds before long break</label>
+          <input type="number" id="rounds" min="2" max="10" value="4">
+        </div>
+        <div class="row-check">
+          <input type="checkbox" id="sound" checked>
+          <label for="sound" style="margin:0;">Beep at phase end</label>
+        </div>
+        <div class="row-check">
+          <input type="checkbox" id="notify">
+          <label for="notify" style="margin:0;">Browser notification</label>
+        </div>
+      </div>
+      <p class="note" id="note">Runs locally. Settings and cycle count are saved in your browser only.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    // State
+    var PHASES = { work: "Work", short: "Short break", long: "Long break" };
+    var phase = "work";
+    var remaining = 25 * 60; // seconds
+    var total = 25 * 60;
+    var running = false;
+    var tick = null; // interval id
+    var workRound = 0; // completed work rounds in current cycle-set
+    var todayKey = new Date().toDateString();
+    var cyclesToday = parseInt(localStorage.getItem("vt-pomo-cycles-" + todayKey) || "0", 10);
+
+    // Load settings
+    var cfg = {};
+    try { cfg = JSON.parse(localStorage.getItem("vt-pomo-cfg") || "{}"); } catch (e) { cfg = {}; }
+    var ids = ["work", "short", "long", "rounds"];
+    ids.forEach(function (k) {
+      var el = document.getElementById(k);
+      if (cfg[k]) el.value = cfg[k];
+    });
+    if (cfg.sound === false) document.getElementById("sound").checked = false;
+    if (cfg.notify === true) document.getElementById("notify").checked = true;
+
+    var RING_LEN = 2 * Math.PI * 118; // circumference
+    var ring = document.getElementById("ring");
+    ring.setAttribute("stroke-dasharray", RING_LEN.toFixed(1));
+
+    function fmt(sec) {
+      var m = Math.floor(sec / 60), s = sec % 60;
+      return (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
+    }
+
+    function readSettings() {
+      var c = {};
+      ids.forEach(function (k) { c[k] = Math.max(1, parseInt(document.getElementById(k).value, 10) || 1); });
+      c.sound = document.getElementById("sound").checked;
+      c.notify = document.getElementById("notify").checked;
+      c.rounds = Math.max(2, c.rounds);
+      localStorage.setItem("vt-pomo-cfg", JSON.stringify(c));
+      return c;
+    }
+
+    function phaseLen(p, c) {
+      if (p === "work") return c.work * 60;
+      if (p === "short") return c.short * 60;
+      return c.long * 60;
+    }
+
+    function setPhase(p) {
+      phase = p;
+      var c = readSettings();
+      total = phaseLen(p, c);
+      remaining = total;
+      render();
+    }
+
+    function render() {
+      document.getElementById("mmss").textContent = fmt(remaining);
+      document.getElementById("phase").textContent = PHASES[phase];
+      var frac = total > 0 ? remaining / total : 0;
+      ring.setAttribute("stroke-dashoffset", (RING_LEN * (1 - frac)).toFixed(1));
+      var clock = document.getElementById("clock");
+      clock.className = "clock " + phase;
+      document.title = fmt(remaining) + " · " + PHASES[phase] + " — Pomodoro";
+      document.getElementById("cycles").textContent = "Cycles completed today: " + cyclesToday;
+    }
+
+    function beep() {
+      try {
+        var ctx = new (window.AudioContext || window.webkitAudioContext)();
+        var o = ctx.createOscillator(), g = ctx.createGain();
+        o.connect(g); g.connect(ctx.destination);
+        o.type = "sine"; o.frequency.value = 880;
+        g.gain.setValueAtTime(0.0001, ctx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.6);
+        o.start(); o.stop(ctx.currentTime + 0.62);
+      } catch (e) {}
+    }
+
+    function notify(msg) {
+      if (!document.getElementById("notify").checked) return;
+      try {
+        if (Notification.permission === "granted") new Notification("Pomodoro", { body: msg });
+        else if (Notification.permission !== "denied") Notification.requestPermission().then(function (p) { if (p === "granted") new Notification("Pomodoro", { body: msg }); });
+      } catch (e) {}
+    }
+
+    function nextPhase() {
+      var c = readSettings();
+      if (phase === "work") {
+        workRound++;
+        if (workRound >= c.rounds) { workRound = 0; setPhase("long"); notify("Long break — you earned it."); }
+        else { setPhase("short"); notify("Short break."); }
+        cyclesToday++;
+        localStorage.setItem("vt-pomo-cycles-" + todayKey, String(cyclesToday));
+      } else {
+        setPhase("work"); notify("Back to work.");
+      }
+      if (document.getElementById("sound").checked) beep();
+    }
+
+    function startTimer() {
+      if (running) return;
+      running = true;
+      tick = setInterval(function () {
+        remaining--;
+        if (remaining <= 0) {
+          remaining = 0; render();
+          clearInterval(tick); running = false;
+          nextPhase();
+          // Auto-continue into next phase.
+          startTimer();
+          return;
+        }
+        render();
+      }, 1000);
+    }
+
+    function pauseTimer() { if (running) { clearInterval(tick); running = false; } }
+    function resetTimer() { pauseTimer(); var c = readSettings(); total = phaseLen(phase, c); remaining = total; render(); }
+    function skipPhase() { pauseTimer(); nextPhase(); }
+
+    document.getElementById("start").addEventListener("click", function () {
+      // Re-read settings to apply any changes, but only if at full (haven't started counting).
+      if (remaining === total || remaining === 0) { var c = readSettings(); total = phaseLen(phase, c); if (remaining === 0) remaining = total; }
+      startTimer();
+    });
+    document.getElementById("pause").addEventListener("click", pauseTimer);
+    document.getElementById("reset").addEventListener("click", resetTimer);
+    document.getElementById("skip").addEventListener("click", skipPhase);
+
+    ids.forEach(function (k) {
+      document.getElementById(k).addEventListener("change", function () {
+        if (!running) { var c = readSettings(); total = phaseLen(phase, c); remaining = total; render(); }
+        else readSettings();
+      });
+    });
+    document.getElementById("sound").addEventListener("change", readSettings);
+    document.getElementById("notify").addEventListener("change", function () {
+      if (this.checked && "Notification" in window && Notification.permission === "default") Notification.requestPermission();
+      readSettings();
+    });
+
+    // Reset daily cycle counter at midnight rollover handled lazily on load: if stored key != today, start 0.
+    var storedKey = localStorage.getItem("vt-pomo-cycles-key");
+    if (storedKey && storedKey !== todayKey) { cyclesToday = 0; }
+    localStorage.setItem("vt-pomo-cycles-key", todayKey);
+
+    setPhase("work");
+    render();
+  })();
+  </script>
+</body>
+</html>
