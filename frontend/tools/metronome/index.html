@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Metronome — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .bpm-row { display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+    .bpm-big { font-size:64px; font-weight:600; font-variant-numeric: tabular-nums; min-width:120px; text-align:center; }
+    .dots { display:flex; gap:10px; justify-content:center; margin:14px 0; }
+    .dot { width:18px; height:18px; border-radius:50%; background:var(--panel-2,#161a22); border:1px solid var(--border,#2a2f3a); transition: background .08s, transform .08s; }
+    .dot.on { background: var(--accent,#6ea8fe); transform: scale(1.15); }
+    .dot.accent { background: var(--warn,#fbbf24); transform: scale(1.25); }
+    .controls { display:flex; justify-content:center; gap:10px; flex-wrap:wrap; margin:14px 0; }
+    .controls button { min-width: 92px; }
+    .settings { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:12px; margin-top:8px; }
+    .settings label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    .tap { min-width: 92px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Metronome</h1>
+      <p>A precise browser metronome — set tempo (BPM) and time signature, tap to find a tempo, and play accented beats. Schedules audio with a look-ahead loop for drift-free timing. Runs locally.</p>
+    </div>
+
+    <div class="panel">
+      <div class="bpm-row" style="justify-content:center;">
+        <div class="bpm-big" id="bpmVal">100</div>
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <input type="range" id="bpm" min="40" max="240" value="100" style="width:220px;">
+          <div style="font-size:12px; opacity:.6;">40 – 240 BPM</div>
+        </div>
+      </div>
+
+      <div class="dots" id="dots"></div>
+
+      <div class="controls">
+        <button id="start">Start</button>
+        <button id="stop" class="secondary">Stop</button>
+        <button id="tap" class="secondary tap">Tap tempo</button>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="settings">
+        <div>
+          <label for="beats">Beats per bar</label>
+          <select id="beats">
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4" selected>4</option>
+            <option value="5">5</option>
+            <option value="6">6</option>
+            <option value="7">7</option>
+            <option value="8">8</option>
+          </select>
+        </div>
+        <div>
+          <label for="vol">Volume</label>
+          <input type="range" id="vol" min="0" max="100" value="70" style="width:100%;">
+        </div>
+        <div style="display:flex; align-items:flex-end;">
+          <div>
+            <label for="accent">Accent first beat</label>
+            <input type="checkbox" id="accent" checked>
+          </div>
+        </div>
+      </div>
+      <p class="note" id="note">Click Start (a tap anywhere on the page is allowed for Tap tempo). Audio plays locally via Web Audio.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var bpmEl = document.getElementById("bpm");
+    var bpmVal = document.getElementById("bpmVal");
+    var beatsEl = document.getElementById("beats");
+    var volEl = document.getElementById("vol");
+    var accentEl = document.getElementById("accent");
+    var dotsEl = document.getElementById("dots");
+    var startBtn = document.getElementById("start");
+    var stopBtn = document.getElementById("stop");
+    var tapBtn = document.getElementById("tap");
+    var note = document.getElementById("note");
+
+    var audioCtx = null;
+    var gain = null;
+    var running = false;
+    var schedulerId = null;
+    var nextNoteTime = 0;   // audio-context time of the next beat
+    var beatIndex = 0;      // 0-based beat within the bar
+    var lookahead = 25;     // ms between scheduler ticks
+    var scheduleAhead = 0.1; // seconds to schedule ahead
+
+    function beatsPerBar() { return parseInt(beatsEl.value, 10); }
+    function secondsPerBeat() { return 60 / parseInt(bpmEl.value, 10); }
+
+    function renderDots(activeIdx) {
+      var n = beatsPerBar();
+      var html = "";
+      for (var i = 0; i < n; i++) {
+        var cls = "dot";
+        if (i === activeIdx) cls += accentEl.checked && i === 0 ? " accent" : " on";
+        html += '<span class="' + cls + '"></span>';
+      }
+      dotsEl.innerHTML = html;
+    }
+
+    function tickVisual(beat) {
+      renderDots(beat);
+    }
+
+    // Schedule a click at the given audio-context time.
+    function scheduleClick(time, isAccent) {
+      var osc = audioCtx.createOscillator();
+      var g = audioCtx.createGain();
+      osc.connect(g); g.connect(gain);
+      osc.frequency.value = isAccent ? 1200 : 700;
+      // Short percussive envelope.
+      g.gain.setValueAtTime(0.0001, time);
+      g.gain.exponentialRampToValueAtTime(isAccent ? 0.6 : 0.4, time + 0.001);
+      g.gain.exponentialRampToValueAtTime(0.0001, time + 0.05);
+      osc.start(time);
+      osc.stop(time + 0.06);
+    }
+
+    function scheduler() {
+      while (nextNoteTime < audioCtx.currentTime + scheduleAhead) {
+        var isAccent = accentEl.checked && beatIndex === 0;
+        scheduleClick(nextNoteTime, isAccent);
+        // Schedule the visual update to fire at the right wall-clock time.
+        (function (idx, t) {
+          var ms = Math.max(0, (t - audioCtx.currentTime) * 1000);
+          setTimeout(function () { if (running) tickVisual(idx); }, ms);
+        })(beatIndex, nextNoteTime);
+        nextNoteTime += secondsPerBeat();
+        beatIndex = (beatIndex + 1) % beatsPerBar();
+      }
+    }
+
+    function start() {
+      if (running) return;
+      if (!audioCtx) {
+        try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+        catch (e) { note.textContent = "Web Audio not supported."; return; }
+        gain = audioCtx.createGain();
+        gain.connect(audioCtx.destination);
+      }
+      if (audioCtx.state === "suspended") audioCtx.resume();
+      gain.gain.value = parseInt(volEl.value, 10) / 100;
+      beatIndex = 0;
+      nextNoteTime = audioCtx.currentTime + 0.1;
+      running = true;
+      schedulerId = setInterval(scheduler, lookahead);
+      startBtn.textContent = "Playing…";
+      startBtn.disabled = true;
+      note.textContent = "Playing locally. Adjust tempo live.";
+    }
+
+    function stop() {
+      running = false;
+      if (schedulerId) { clearInterval(schedulerId); schedulerId = null; }
+      startBtn.textContent = "Start";
+      startBtn.disabled = false;
+      renderDots(-1);
+    }
+
+    startBtn.addEventListener("click", start);
+    stopBtn.addEventListener("click", stop);
+
+    bpmEl.addEventListener("input", function () {
+      bpmVal.textContent = bpmEl.value;
+      if (running) {
+        // Tempo change takes effect at the next scheduled beat (secondsPerBeat re-read in scheduler).
+      }
+    });
+    beatsEl.addEventListener("change", function () { if (!running) renderDots(-1); else beatIndex = 0; });
+    volEl.addEventListener("input", function () { if (gain) gain.gain.value = parseInt(volEl.value, 10) / 100; });
+    accentEl.addEventListener("change", function () { if (!running) renderDots(-1); });
+
+    // Tap tempo: average intervals between taps (last 4).
+    var tapTimes = [];
+    function tap() {
+      var now = performance.now();
+      if (tapTimes.length && now - tapTimes[tapTimes.length - 1] > 2000) tapTimes = []; // reset after 2s gap
+      tapTimes.push(now);
+      if (tapTimes.length > 5) tapTimes.shift();
+      if (tapTimes.length >= 2) {
+        var diffs = [];
+        for (var i = 1; i < tapTimes.length; i++) diffs.push(tapTimes[i] - tapTimes[i - 1]);
+        var avg = diffs.reduce(function (a, b) { return a + b; }, 0) / diffs.length;
+        var bpm = Math.round(60000 / avg);
+        if (bpm >= 40 && bpm <= 240) {
+          bpmEl.value = bpm; bpmVal.textContent = bpm;
+        }
+      }
+    }
+    tapBtn.addEventListener("click", function (e) { e.preventDefault(); tap(); });
+
+    renderDots(-1);
+  })();
+  </script>
+</body>
+</html>

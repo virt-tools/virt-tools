@@ -243,6 +243,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-05T12:00:00Z",
   },
   {
+    slug: "metronome",
+    name: "Metronome",
+    description: "Precise browser metronome with tempo, time signature, accents and tap-tempo. Drift-free lookahead Web Audio scheduling. Runs locally.",
+    category: "Time",
+    icon: "🎵",
+    added: "2026-07-05T13:00:00Z",
+  },
+  {
     slug: "timestamp-converter",
     name: "Unix Timestamp Converter",
     description: "Convert between Unix epoch timestamps and human-readable UTC / local dates.",
