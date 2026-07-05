@@ -179,6 +179,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-04T03:00:00Z",
   },
   {
+    slug: "text-reverser",
+    name: "Text Reverser",
+    description: "Reverse characters, words, or lines — plus flip case and tidy line runs. Emoji-safe, runs locally.",
+    category: "Text",
+    icon: "🔁",
+    added: "2026-07-05T05:00:00Z",
+  },
+  {
     slug: "timestamp-converter",
     name: "Unix Timestamp Converter",
     description: "Convert between Unix epoch timestamps and human-readable UTC / local dates.",
