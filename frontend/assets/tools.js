@@ -251,6 +251,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-05T13:00:00Z",
   },
   {
+    slug: "password-strength",
+    name: "Password Strength Checker",
+    description: "Estimate password entropy, composition and time-to-crack; detect common passwords, sequences and repeats. Runs locally.",
+    category: "Security",
+    icon: "🔐",
+    added: "2026-07-05T14:00:00Z",
+  },
+  {
     slug: "timestamp-converter",
     name: "Unix Timestamp Converter",
     description: "Convert between Unix epoch timestamps and human-readable UTC / local dates.",

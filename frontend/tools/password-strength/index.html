@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Password Strength Checker — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .meter { height: 12px; border-radius: 6px; background: var(--panel-2,#161a22); border:1px solid var(--border,#2a2f3a); overflow:hidden; margin:8px 0 4px; }
+    .meter > div { height:100%; width:0; transition: width .25s, background .25s; }
+    .verdict { font-weight:600; font-size: 16px; margin: 4px 0 10px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:10px; margin:10px 0; }
+    .stat { background:var(--panel-2,#161a22); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:8px 10px; }
+    .stat .n { font-size:18px; font-weight:600; }
+    .stat .l { font-size:12px; opacity:.7; }
+    .checks { margin-top:10px; }
+    .check { padding:3px 0; }
+    .check .ok { color: var(--good,#4ade80); }
+    .check .bad { color: var(--bad,#f87171); }
+    .sub-h { margin:16px 0 4px; font-weight:600; }
+    .pwfield { position: relative; }
+    .pwfield .toggle { position:absolute; right:8px; top:6px; padding:2px 8px; font-size:12px; }
+    .weak { background: #f87171; } .fair { background: #fbbf24; } .good { background: #4ade80; } .strong { background: #22d3ee; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Password Strength Checker</h1>
+      <p>Estimate password strength — entropy, composition, time-to-crack, and checks for common passwords, sequences and repeats. Heuristic, runs entirely in your browser; the password never leaves your device.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field pwfield">
+        <label for="in">Password</label>
+        <input id="in" type="password" placeholder="Type a password…" autocomplete="off" spellcheck="false">
+        <button type="button" id="toggle" class="secondary toggle">Show</button>
+      </div>
+
+      <div class="meter"><div id="bar"></div></div>
+      <div class="verdict" id="verdict">—</div>
+
+      <div class="grid" id="stats"></div>
+
+      <div class="sub-h">Checks</div>
+      <div class="checks" id="checks"></div>
+
+      <p class="note" id="note">Heuristic estimate — treat as guidance, not a guarantee. Runs locally; nothing uploaded.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var inp = document.getElementById("in");
+    var bar = document.getElementById("bar");
+    var verdictEl = document.getElementById("verdict");
+    var statsEl = document.getElementById("stats");
+    var checksEl = document.getElementById("checks");
+    var note = document.getElementById("note");
+    var toggle = document.getElementById("toggle");
+
+    // A small embedded list of very common passwords (subset of rockyou top entries).
+    var COMMON = {
+      "123456":1,"password":1,"12345678":1,"qwerty":1,"123456789":1,"12345":1,"1234":1,
+      "111111":1,"1234567":1,"dragon":1,"123123":1,"baseball":1,"abc123":1,"football":1,
+      "monkey":1,"letmein":1,"696969":1,"shadow":1,"master":1,"666666":1,"qwertyuiop":1,
+      "123321":1,"mustang":1,"1234567890":1,"michael":1,"654321":1,"superman":1,"1qaz2wsx":1,
+      "7777777":1,"121212":1,"000000":1,"qazwsx":1,"123qwe":1,"trustno1":1,"iloveyou":1,
+      "admin":1,"welcome":1,"login":1,"root":1,"passw0rd":1,"p@ssw0rd":1,"password1":1,
+      "123456a":1,"qwerty123":1,"1q2w3e4r":1,"sunshine":1,"princess":1,"letmein123":1,
+      "hello":1,"charlie":1,"donald":1,"password123":1,"asdfgh":1,"zxcvbn":1,"asdf":1,
+      "admin123":1,"test":1,"guest":1,"changeme":1,"secret":1,"pass":1,"qwerty1":1
+    };
+
+    var LOWER = "abcdefghijklmnopqrstuvwxyz";
+    var KEYBOARD = ["qwertyuiop","asdfghjkl","zxcvbnm",LOWER,LOWER.split("").reverse().join(""),"0123456789","9876543210"];
+
+    function esc(s) { return String(s).replace(/[&<>]/g, function (c) { return c === "&" ? "&amp;" : c === "<" ? "&lt;" : "&gt;"; }); }
+
+    function hasSeq(pw) {
+      var lower = pw.toLowerCase();
+      for (var k = 0; k < KEYBOARD.length; k++) {
+        var row = KEYBOARD[k];
+        for (var i = 0; i + 3 <= row.length; i++) {
+          var seg = row.slice(i, i + 4);
+          if (lower.indexOf(seg) !== -1) return seg;
+        }
+      }
+      return null;
+    }
+
+    function hasRepeat(pw) {
+      for (var i = 0; i < pw.length - 2; i++) {
+        if (pw[i] === pw[i + 1] && pw[i + 1] === pw[i + 2]) return pw.slice(i, i + 3);
+      }
+      return null;
+    }
+
+    function commonSub(pw) {
+      // Reduce common leet substitutions and check against the common list.
+      var s = pw.toLowerCase().replace(/0/g, "o").replace(/1/g, "i").replace(/3/g, "e").replace(/4/g, "a").replace(/5/g, "s").replace(/7/g, "t").replace(/@/g, "a").replace(/\$/g, "s");
+      if (COMMON[s]) return s;
+      var raw = pw.toLowerCase();
+      if (COMMON[raw]) return raw;
+      // Substring check: catches suffixed/prefixed common passwords (e.g. "iloveyou123").
+      var keys = Object.keys(COMMON);
+      for (var i = 0; i < keys.length; i++) {
+        var k = keys[i];
+        if (k.length >= 5 && s.indexOf(k) !== -1) return k;
+        if (k.length >= 5 && raw.indexOf(k) !== -1) return k;
+      }
+      return null;
+    }
+
+    function analyze(pw) {
+      var len = pw.length;
+      var lower = (pw.match(/[a-z]/g) || []).length;
+      var upper = (pw.match(/[A-Z]/g) || []).length;
+      var digit = (pw.match(/[0-9]/g) || []).length;
+      var sym = len - lower - upper - digit;
+      var pool = 0;
+      if (lower) pool += 26;
+      if (upper) pool += 26;
+      if (digit) pool += 10;
+      if (sym) pool += 33; // typical printable symbol count
+      var entropy = len && pool ? len * Math.log2(pool) : 0;
+
+      // Penalize patterns: reduce effective entropy.
+      var penalty = 0;
+      var seq = hasSeq(pw);
+      var rep = hasRepeat(pw);
+      var common = commonSub(pw);
+      if (seq) penalty += 15;
+      if (rep) penalty += 10;
+      if (common) penalty += 40;
+      if (len < 8) penalty += 20;
+      var effEntropy = Math.max(0, entropy - penalty);
+
+      // Crack time at 1e10 guesses/sec (fast offline attack baseline).
+      var guesses = Math.pow(2, effEntropy);
+      var seconds = guesses / 1e10;
+      var crack = fmtTime(seconds);
+
+      // Verdict bands from effective entropy (bits).
+      var level, pct, label, cls;
+      if (common || len < 6 || effEntropy < 28) { level = 0; label = "Very weak"; cls = "weak"; pct = 15; }
+      else if (effEntropy < 40) { level = 1; label = "Weak"; cls = "weak"; pct = 35; }
+      else if (effEntropy < 56) { level = 2; label = "Fair"; cls = "fair"; pct = 60; }
+      else if (effEntropy < 80) { level = 3; label = "Strong"; cls = "good"; pct = 85; }
+      else { level = 4; label = "Very strong"; cls = "strong"; pct = 100; }
+
+      var checks = [
+        ["At least 12 characters", len >= 12],
+        ["At least 8 characters", len >= 8],
+        ["Lowercase letters", lower > 0],
+        ["Uppercase letters", upper > 0],
+        ["Digits", digit > 0],
+        ["Symbols", sym > 0],
+        ["No common password", !common],
+        ["No keyboard / alphabetical sequence", !seq],
+        ["No 3+ repeated characters", !rep]
+      ];
+
+      return { len: len, lower: lower, upper: upper, digit: digit, sym: sym,
+        entropy: entropy, effEntropy: effEntropy, crack: crack, level: level,
+        label: label, cls: cls, pct: pct, checks: checks, common: common, seq: seq, rep: rep };
+    }
+
+    function fmtTime(seconds) {
+      if (!isFinite(seconds)) return "instant";
+      if (seconds < 1) return "less than a second";
+      var units = [["year", 31536000], ["day", 86400], ["hour", 3600], ["minute", 60], ["second", 1]];
+      for (var i = 0; i < units.length; i++) {
+        var v = Math.floor(seconds / units[i][1]);
+        if (v >= 1) {
+          if (v >= 1e9) return "millennia";
+          if (v >= 1e6) return v.toExponential(1) + " " + units[i][0] + "s";
+          return v + " " + units[i][0] + (v === 1 ? "" : "s");
+        }
+      }
+      return "less than a second";
+    }
+
+    function render(a) {
+      bar.className = "";
+      bar.classList.add(a.cls);
+      bar.style.width = a.pct + "%";
+      verdictEl.textContent = a.label + " — " + a.crack + " to crack (offline, ~10¹⁰ guesses/s)";
+      verdictEl.style.color = ({ weak: "var(--bad,#f87171)", fair: "var(--warn,#fbbf24)", good: "var(--good,#4ade80)", strong: "var(--accent,#22d3ee)" })[a.cls] || "";
+
+      var stats = [
+        ["Length", a.len], ["Entropy", a.entropy.toFixed(0) + " bits"],
+        ["Effective entropy", a.effEntropy.toFixed(0) + " bits"],
+        ["Lowercase", a.lower], ["Uppercase", a.upper], ["Digits", a.digit], ["Symbols", a.sym]
+      ];
+      statsEl.innerHTML = stats.map(function (s) {
+        return '<div class="stat"><div class="n">' + esc(s[1]) + '</div><div class="l">' + s[0] + '</div></div>';
+      }).join("");
+
+      checksEl.innerHTML = a.checks.map(function (c) {
+        return '<div class="check"><span class="' + (c[1] ? "ok" : "bad") + '">' + (c[1] ? "✓" : "✗") + '</span> ' + esc(c[0]) + '</div>';
+      }).join("");
+    }
+
+    function run() {
+      var pw = inp.value;
+      if (!pw) {
+        bar.style.width = "0%"; verdictEl.textContent = "—"; statsEl.innerHTML = ""; checksEl.innerHTML = "";
+        note.textContent = "Heuristic estimate — treat as guidance, not a guarantee. Runs locally; nothing uploaded.";
+        return;
+      }
+      var a = analyze(pw);
+      render(a);
+      var extra = [];
+      if (a.common) extra.push('matches common password "' + a.common + '"');
+      if (a.seq) extra.push('contains sequence "' + a.seq + '"');
+      if (a.rep) extra.push('repeats "' + a.rep + '"');
+      note.textContent = extra.length ? "Issues: " + extra.join("; ") + "." : "Looks reasonable. Heuristic — treat as guidance.";
+    }
+
+    inp.addEventListener("input", run);
+    toggle.addEventListener("click", function () {
+      if (inp.type === "password") { inp.type = "text"; toggle.textContent = "Hide"; }
+      else { inp.type = "password"; toggle.textContent = "Show"; }
+    });
+  })();
+  </script>
+</body>
+</html>
