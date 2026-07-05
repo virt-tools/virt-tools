@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Key Code Viewer — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .capture {
+      border: 2px dashed var(--border,#2a2f3a);
+      border-radius: 10px;
+      padding: 28px;
+      text-align: center;
+      cursor: text;
+      outline: none;
+      user-select: none;
+      min-height: 90px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      transition: border-color .15s, background .15s;
+    }
+    .capture:focus, .capture.active { border-color: var(--accent,#6ea8fe); background: rgba(110,168,254,.05); }
+    .capture .hint { opacity:.6; font-size:14px; }
+    .capture .lastkey { font-size:48px; font-weight:600; font-variant-numeric: tabular-nums; }
+    .detail-grid { display:grid; grid-template-columns: 130px 1fr auto; gap:6px 12px; align-items:center; margin-top:16px; }
+    .detail-grid .k { opacity:.7; font-weight:600; }
+    .detail-grid .v { font-family:monospace; word-break:break-all; }
+    .detail-grid .copy-btn { padding:2px 8px; font-size:12px; }
+    .hist { margin-top:18px; }
+    .hist-chips { display:flex; flex-wrap:wrap; gap:6px; }
+    .chip {
+      font-family:monospace; font-size:12px; padding:3px 8px; border-radius:6px;
+      background:var(--panel-2,#161a22); border:1px solid var(--border,#2a2f3a);
+    }
+    .chip .c-key { font-weight:600; }
+    .chip .c-code { opacity:.55; margin-left:6px; }
+    .sub-h { margin:18px 0 6px; font-weight:600; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Key Code Viewer</h1>
+      <p>Press any key to inspect its <code>event.key</code>, <code>event.code</code>, legacy <code>keyCode</code> and modifier state. Useful for building keyboard UIs and games. Runs locally; no data leaves your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="capture" id="capture" tabindex="0" autofocus>
+        <div class="lastkey" id="lastkey">—</div>
+        <div class="hint">Click here, then press any key.</div>
+      </div>
+
+      <div class="detail-grid" id="details"></div>
+
+      <div class="hist">
+        <div class="sub-h">Recent keys</div>
+        <div class="hist-chips" id="history"></div>
+      </div>
+
+      <p class="note" id="note"><code>keyCode</code> and <code>which</code> are deprecated but still returned by browsers and needed for many legacy mappings. Captured locally.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var capture = document.getElementById("capture");
+    var lastkey = document.getElementById("lastkey");
+    var detailsEl = document.getElementById("details");
+    var historyEl = document.getElementById("history");
+    var note = document.getElementById("note");
+
+    function esc(s) {
+      return String(s).replace(/[&<>]/g, function (c) { return c === "&" ? "&amp;" : c === "<" ? "&lt;" : "&gt;"; });
+    }
+    function quoteStr(s) {
+      // Show control characters as escape sequences.
+      if (s === "") return '""';
+      var out = '"';
+      for (var i = 0; i < s.length; i++) {
+        var ch = s[i], code = s.charCodeAt(i);
+        if (code < 0x20) {
+          var names = { 9: "\\t", 10: "\\n", 13: "\\r", 27: "\\e" };
+          out += names[code] || "\\x" + (code < 16 ? "0" : "") + code.toString(16);
+        } else if (code === 0x22) {
+          out += '\\"';
+        } else {
+          out += ch;
+        }
+      }
+      return out + '"';
+    }
+
+    function copyBtn(value) {
+      return '<button type="button" class="copy-btn secondary" data-v="' + encodeURIComponent(value) + '">Copy</button>';
+    }
+
+    var history = [];
+    function pushHistory(e) {
+      history.unshift({ key: e.key, code: e.code, kc: e.keyCode });
+      if (history.length > 12) history.pop();
+      renderHistory();
+    }
+    function renderHistory() {
+      if (!history.length) { historyEl.innerHTML = '<span style="opacity:.5;font-size:13px;">No keys yet.</span>'; return; }
+      historyEl.innerHTML = history.map(function (h) {
+        return '<span class="chip"><span class="c-key">' + esc(h.key || "—") + '</span><span class="c-code">' + esc(h.code || "") + " · " + h.kc + '</span></span>';
+      }).join("");
+    }
+    renderHistory();
+
+    function render(e) {
+      var display = e.key || "—";
+      lastkey.textContent = display;
+      var rows = [
+        ["event.key", quoteStr(e.key), e.key || ""],
+        ["event.code", e.code || "", e.code || ""],
+        ["keyCode", String(e.keyCode), String(e.keyCode)],
+        ["which", String(e.which), String(e.which)],
+        ["event.location", locationName(e.location), ""],
+        ["ctrlKey", String(e.ctrlKey), ""],
+        ["shiftKey", String(e.shiftKey), ""],
+        ["altKey", String(e.altKey), ""],
+        ["metaKey", String(e.metaKey), ""],
+        ["repeat", String(e.repeat), ""]
+      ];
+      detailsEl.innerHTML = rows.map(function (r) {
+        return '<div class="k">' + r[0] + '</div>'
+          + '<div class="v">' + esc(r[1]) + '</div>'
+          + '<div>' + (r[2] !== "" ? copyBtn(r[2]) : "") + '</div>';
+      }).join("");
+    }
+
+    function locationName(loc) {
+      if (loc === 0) return "0 (standard)";
+      if (loc === 1) return "1 (left)";
+      if (loc === 2) return "2 (right)";
+      if (loc === 3) return "3 (numpad)";
+      return String(loc);
+    }
+
+    function handleKey(e) {
+      // Capture only when the capture box is focused, or always on keydown if user prefers.
+      // We listen on the capture element specifically (see addEventListener below).
+      e.preventDefault();
+      capture.classList.add("active");
+      render(e);
+      pushHistory(e);
+      note.textContent = "Captured locally.";
+      // Keep focus for repeat presses.
+    }
+
+    capture.addEventListener("keydown", handleKey);
+    // Also capture globally so the tool works even before clicking, but skip when
+    // focus is in an input (so the user can still type elsewhere without hijacking).
+    document.addEventListener("keydown", function (e) {
+      var active = document.activeElement;
+      if (active === capture) return; // already handled
+      if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable)) return;
+      // Don't intercept browser/OS shortcuts that include ctrl/meta except plain ones.
+      handleKey(e);
+    });
+
+    capture.addEventListener("click", function () { capture.focus(); });
+
+    // Copy delegation
+    document.addEventListener("click", function (e) {
+      var b = e.target.closest(".copy-btn");
+      if (!b) return;
+      var val = decodeURIComponent(b.getAttribute("data-v") || "");
+      if (!val) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(val).then(function () {
+          var t = b.textContent; b.textContent = "Copied!";
+          setTimeout(function () { b.textContent = t; }, 1200);
+        });
+      } else {
+        var ta = document.createElement("textarea");
+        ta.value = val; document.body.appendChild(ta); ta.select();
+        try { document.execCommand("copy"); var t2 = b.textContent; b.textContent = "Copied!"; setTimeout(function () { b.textContent = t2; }, 1200); } catch (x) {}
+        ta.remove();
+      }
+    });
+
+    // Autofocus
+    setTimeout(function () { capture.focus(); }, 50);
+  })();
+  </script>
+</body>
+</html>

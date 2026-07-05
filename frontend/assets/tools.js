@@ -227,6 +227,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-05T10:00:00Z",
   },
   {
+    slug: "key-code-viewer",
+    name: "Key Code Viewer",
+    description: "Inspect keyboard event.key, event.code, keyCode and modifier state for any key press. Runs locally.",
+    category: "Reference",
+    icon: "⌨️",
+    added: "2026-07-05T11:00:00Z",
+  },
+  {
     slug: "timestamp-converter",
     name: "Unix Timestamp Converter",
     description: "Convert between Unix epoch timestamps and human-readable UTC / local dates.",
