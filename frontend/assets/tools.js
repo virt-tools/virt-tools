@@ -187,6 +187,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-05T05:00:00Z",
   },
   {
+    slug: "url-parser",
+    name: "URL Parser",
+    description: "Break a URL into scheme, host, port, path, decoded query params and fragment — runs locally.",
+    category: "Network",
+    icon: "🔗",
+    added: "2026-07-05T06:00:00Z",
+  },
+  {
     slug: "timestamp-converter",
     name: "Unix Timestamp Converter",
     description: "Convert between Unix epoch timestamps and human-readable UTC / local dates.",
