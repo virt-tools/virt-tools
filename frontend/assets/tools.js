@@ -203,6 +203,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-05T07:00:00Z",
   },
   {
+    slug: "css-formatter",
+    name: "CSS Formatter",
+    description: "Pretty-print or minify CSS — nested at-rules, calc(), strings and combinators handled. Runs locally.",
+    category: "Text",
+    icon: "🎨",
+    added: "2026-07-05T08:00:00Z",
+  },
+  {
     slug: "timestamp-converter",
     name: "Unix Timestamp Converter",
     description: "Convert between Unix epoch timestamps and human-readable UTC / local dates.",

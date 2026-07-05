@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>CSS Formatter — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>CSS Formatter &amp; Minifier</h1>
+      <p>Pretty-print or minify CSS — including nested at-rules like <code>@media</code> and <code>@keyframes</code>. Parsed locally; nothing uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="in">CSS input</label>
+        <textarea id="in" placeholder="a,button{color:red;background:blue}.card{padding:8px}" style="min-height:140px; font-family:monospace;"></textarea>
+      </div>
+      <div class="row">
+        <button id="format">Format</button>
+        <button id="minify" class="secondary">Minify</button>
+        <button id="clear" class="secondary">Clear</button>
+        <div>
+          <label for="indent">Indent</label>
+          <select id="indent">
+            <option value="2" selected>2 spaces</option>
+            <option value="4">4 spaces</option>
+            <option value="\t">Tab</option>
+          </select>
+        </div>
+      </div>
+      <div class="spacer"></div>
+      <div class="row" style="justify-content:space-between;">
+        <label for="out">Output</label>
+        <button id="copy" class="secondary" style="padding:4px 10px;">Copy</button>
+      </div>
+      <div class="output" id="out" style="white-space:pre; font-family:monospace;"></div>
+      <p class="note" id="note">Parsed locally with a hand-written tokenizer — no network calls.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var inp = document.getElementById("in");
+    var out = document.getElementById("out");
+    var note = document.getElementById("note");
+    var indentSel = document.getElementById("indent");
+
+    function indentString() {
+      var v = indentSel.value;
+      return v === "\\t" ? "\t" : new Array(parseInt(v, 10) + 1).join(" ");
+    }
+
+    // ---- Tokenizer: split top-level items (statements and rule blocks) ----
+    // Each item: { type:"statement", text } or { type:"rule", prelude, body }
+    function parseItems(text) {
+      var items = [];
+      var i = 0, n = text.length;
+      while (i < n) {
+        // Collect the prelude: everything up to '{' or ';' (respecting comments/strings).
+        var seg = "";
+        while (i < n && text[i] !== "{" && text[i] !== ";") {
+          if (text[i] === "/" && text[i + 1] === "*") {
+            var j = text.indexOf("*/", i + 2);
+            if (j === -1) { seg += text.slice(i); i = n; break; }
+            seg += text.slice(i, j + 2); i = j + 2; continue;
+          }
+          if (text[i] === '"' || text[i] === "'") {
+            var q = text[i]; seg += text[i]; i++;
+            while (i < n && text[i] !== q) {
+              if (text[i] === "\\" && i + 1 < n) { seg += text[i] + text[i + 1]; i += 2; continue; }
+              seg += text[i]; i++;
+            }
+            if (i < n) { seg += text[i]; i++; }
+            continue;
+          }
+          seg += text[i]; i++;
+        }
+        seg = seg.trim();
+        if (i >= n) { if (seg) items.push({ type: "statement", text: seg }); break; }
+        if (text[i] === ";") {
+          if (seg) items.push({ type: "statement", text: seg + ";" });
+          i++;
+          continue;
+        }
+        // text[i] === '{' — find the matching '}'.
+        i++;
+        var depth = 1, bodyStart = i;
+        while (i < n && depth > 0) {
+          var c = text[i];
+          if (c === "/" && text[i + 1] === "*") {
+            var k = text.indexOf("*/", i + 2); if (k === -1) { i = n; break; } i = k + 2; continue;
+          }
+          if (c === '"' || c === "'") {
+            var q2 = c; i++;
+            while (i < n && text[i] !== q2) {
+              if (text[i] === "\\" && i + 1 < n) { i += 2; continue; }
+              i++;
+            }
+            i++; continue;
+          }
+          if (c === "{") depth++;
+          else if (c === "}") { depth--; if (depth === 0) break; }
+          i++;
+        }
+        var body = text.slice(bodyStart, i);
+        i++; // skip the closing '}'
+        items.push({ type: "rule", prelude: seg, body: body });
+      }
+      return items;
+    }
+
+    // Split a declaration block into individual "prop: value" declarations.
+    function splitDecls(body) {
+      var decls = [];
+      var i = 0, n = body.length, cur = "";
+      while (i < n) {
+        var c = body[i];
+        if (c === "/" && body[i + 1] === "*") {
+          // Keep comments attached to the following declaration.
+          var j = body.indexOf("*/", i + 2);
+          if (j === -1) { cur += body.slice(i); i = n; break; }
+          cur += body.slice(i, j + 2); i = j + 2; continue;
+        }
+        if (c === '"' || c === "'") {
+          var q = c; cur += c; i++;
+          while (i < n && body[i] !== q) {
+            if (body[i] === "\\" && i + 1 < n) { cur += body[i] + body[i + 1]; i += 2; continue; }
+            cur += body[i]; i++;
+          }
+          if (i < n) { cur += body[i]; i++; }
+          continue;
+        }
+        if (c === "(") {
+          // Parenthesised values (url(), calc(), var()) — balance parens.
+          var d = 1; cur += c; i++;
+          while (i < n && d > 0) {
+            if (body[i] === "(") d++;
+            else if (body[i] === ")") d--;
+            cur += body[i]; i++;
+          }
+          continue;
+        }
+        if (c === ";") {
+          if (cur.trim()) decls.push(cur.trim());
+          cur = ""; i++; continue;
+        }
+        cur += c; i++;
+      }
+      if (cur.trim()) decls.push(cur.trim());
+      return decls;
+    }
+
+    function normalizeDecl(d) {
+      // Collapse internal whitespace runs to single spaces; no space around ':'.
+      // Preserve strings/parens content as-is.
+      var out2 = "";
+      var i = 0, n = d.length;
+      while (i < n) {
+        var c = d[i];
+        if (c === '"' || c === "'") {
+          var q = c; out2 += c; i++;
+          while (i < n && d[i] !== q) {
+            if (d[i] === "\\" && i + 1 < n) { out2 += d[i] + d[i + 1]; i += 2; continue; }
+            out2 += d[i]; i++;
+          }
+          if (i < n) { out2 += d[i]; i++; }
+          continue;
+        }
+        if (c === "(") {
+          var dep = 1; out2 += c; i++;
+          while (i < n && dep > 0) {
+            if (d[i] === "(") dep++;
+            else if (d[i] === ")") dep--;
+            out2 += d[i]; i++;
+          }
+          continue;
+        }
+        out2 += c; i++;
+      }
+      // Now collapse whitespace and fix spacing.
+      out2 = out2.replace(/\s+/g, " ").trim();
+      var colon = out2.indexOf(":");
+      if (colon !== -1) {
+        var prop = out2.slice(0, colon).trim();
+        var val = out2.slice(colon + 1).trim();
+        out2 = prop + ": " + val;
+      }
+      return out2;
+    }
+
+    function isAtRule(prelude) {
+      return /^\s*@/.test(prelude);
+    }
+
+    function formatSelectors(sel) {
+      // Split on commas (top-level only), trim, rejoin with ", ".
+      var parts = [];
+      var i = 0, n = sel.length, cur = "";
+      while (i < n) {
+        var c = sel[i];
+        if (c === "(") {
+          var d = 1; cur += c; i++;
+          while (i < n && d > 0) { if (sel[i] === "(") d++; else if (sel[i] === ")") d--; cur += sel[i]; i++; }
+          continue;
+        }
+        if (c === ",") { parts.push(cur.trim()); cur = ""; i++; continue; }
+        cur += c; i++;
+      }
+      if (cur.trim()) parts.push(cur.trim());
+      return parts.join(", ");
+    }
+
+    function format(items, depth, indent, lines) {
+      var pad = new Array(depth + 1).join(indent);
+      items.forEach(function (item) {
+        if (item.type === "statement") {
+          lines.push(pad + item.text);
+          return;
+        }
+        // rule
+        if (isAtRule(item.prelude)) {
+          lines.push(pad + item.prelude.replace(/\s+/g, " ").trim() + " {");
+          var nested = parseItems(item.body);
+          if (nested.length) format(nested, depth + 1, indent, lines);
+          lines.push(pad + "}");
+        } else {
+          var sel = formatSelectors(item.prelude);
+          lines.push(pad + sel + " {");
+          splitDecls(item.body).forEach(function (d) {
+            lines.push(pad + indent + normalizeDecl(d) + ";");
+          });
+          lines.push(pad + "}");
+        }
+      });
+    }
+
+    function doFormat(css) {
+      var items = parseItems(css);
+      var lines = [];
+      format(items, 0, indentString(), lines);
+      return lines.join("\n");
+    }
+
+    // Split on top-level commas (respecting parens/brackets/strings).
+    function splitTopCommas(sel) {
+      var parts = [], cur = "", i = 0, n = sel.length, depth = 0;
+      while (i < n) {
+        var c = sel[i];
+        if (c === '"' || c === "'") {
+          var q = c; cur += c; i++;
+          while (i < n && sel[i] !== q) {
+            if (sel[i] === "\\" && i + 1 < n) { cur += sel[i] + sel[i + 1]; i += 2; continue; }
+            cur += sel[i]; i++;
+          }
+          if (i < n) { cur += sel[i]; i++; } continue;
+        }
+        if (c === "(" || c === "[") { depth++; cur += c; i++; continue; }
+        if (c === ")" || c === "]") { depth--; cur += c; i++; continue; }
+        if (c === "," && depth === 0) { parts.push(cur); cur = ""; i++; continue; }
+        cur += c; i++;
+      }
+      parts.push(cur);
+      return parts;
+    }
+
+    function minifySelector(s) {
+      // Collapse whitespace (string-aware), drop spaces around > + ~ combinators.
+      var out = "", i = 0, n = s.length, wasSpace = false, noNextSpace = false;
+      while (i < n) {
+        var c = s[i];
+        if (c === '"' || c === "'") {
+          var q = c; out += c; i++;
+          while (i < n && s[i] !== q) {
+            if (s[i] === "\\" && i + 1 < n) { out += s[i] + s[i + 1]; i += 2; continue; }
+            out += s[i]; i++;
+          }
+          if (i < n) { out += s[i]; i++; } wasSpace = false; noNextSpace = false; continue;
+        }
+        if (/\s/.test(c)) { if (!noNextSpace) wasSpace = true; i++; continue; }
+        // Combinator: drop surrounding space (before via rtrim, after via noNextSpace).
+        if (c === ">" || c === "+" || c === "~") { out = out.replace(/\s+$/, ""); out += c; wasSpace = false; noNextSpace = true; i++; continue; }
+        if (wasSpace && !noNextSpace && out && !/\s$/.test(out)) out += " ";
+        noNextSpace = false; wasSpace = false;
+        out += c; i++;
+      }
+      return out.trim();
+    }
+
+    function minifyValue(v) {
+      var out = "", i = 0, n = v.length, wasSpace = false, depth = 0;
+      while (i < n) {
+        var c = v[i];
+        if (c === '"' || c === "'") {
+          var q = c; out += c; i++;
+          while (i < n && v[i] !== q) {
+            if (v[i] === "\\" && i + 1 < n) { out += v[i] + v[i + 1]; i += 2; continue; }
+            out += v[i]; i++;
+          }
+          if (i < n) { out += v[i]; i++; } wasSpace = false; continue;
+        }
+        if (c === "(") { depth++; out += "("; wasSpace = false; i++; continue; }
+        if (c === ")") { depth--; out += ")"; wasSpace = false; i++; continue; }
+        if (/\s/.test(c)) { wasSpace = true; i++; continue; }
+        if (wasSpace && out && !/\s$/.test(out)) out += " ";
+        out += c; wasSpace = false; i++;
+      }
+      return out.trim();
+    }
+
+    function minifyDecl(d) {
+      // Find first top-level colon (respecting strings/parens).
+      var ci = -1, i = 0, n = d.length, depth = 0;
+      while (i < n) {
+        var c = d[i];
+        if (c === '"' || c === "'") { var q = c; i++; while (i < n && d[i] !== q) { if (d[i] === "\\" && i + 1 < n) { i += 2; continue; } i++; } i++; continue; }
+        if (c === "(") { depth++; i++; continue; }
+        if (c === ")") { depth--; i++; continue; }
+        if (c === ":" && depth === 0) { ci = i; break; }
+        i++;
+      }
+      if (ci === -1) return minifyValue(d);
+      var prop = d.slice(0, ci).trim();
+      return prop + ":" + minifyValue(d.slice(ci + 1));
+    }
+
+    function minifyItems(items) {
+      var out = "";
+      items.forEach(function (item) {
+        if (item.type === "statement") { out += item.text; return; }
+        if (isAtRule(item.prelude)) {
+          out += item.prelude.replace(/\s+/g, " ").trim() + "{";
+          out += minifyItems(parseItems(item.body));
+          out += "}";
+        } else {
+          var sels = splitTopCommas(item.prelude).map(minifySelector).join(",");
+          out += sels + "{" + splitDecls(item.body).map(minifyDecl).join(";") + "}";
+        }
+      });
+      return out;
+    }
+
+    function doMinify(css) {
+      return minifyItems(parseItems(css));
+    }
+    document.getElementById("format").addEventListener("click", function () {
+      var t = inp.value.trim();
+      if (!t) { show("", "Paste some CSS first."); return; }
+      try { show(doFormat(t), null); note.textContent = "CSS formatted."; }
+      catch (e) { show("", "Parse error: " + (e.message || e)); }
+    });
+
+    document.getElementById("minify").addEventListener("click", function () {
+      var t = inp.value.trim();
+      if (!t) { show("", "Paste some CSS first."); return; }
+      try { show(doMinify(t), null); note.textContent = "CSS minified."; }
+      catch (e) { show("", "Error: " + (e.message || e)); }
+    });
+
+    document.getElementById("clear").addEventListener("click", function () {
+      inp.value = ""; show("", null);
+    });
+
+    document.getElementById("copy").addEventListener("click", function () {
+      var t = out.textContent;
+      if (!t) return;
+      var b = this;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(t).then(function () {
+          b.textContent = "Copied!"; setTimeout(function () { b.textContent = "Copy"; }, 1200);
+        });
+      } else {
+        var ta = document.createElement("textarea");
+        ta.value = t; document.body.appendChild(ta); ta.select();
+        try { document.execCommand("copy"); b.textContent = "Copied!"; setTimeout(function () { b.textContent = "Copy"; }, 1200); } catch (e) {}
+        ta.remove();
+      }
+    });
+  })();
+  </script>
+</body>
+</html>
