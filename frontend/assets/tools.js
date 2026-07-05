@@ -123,6 +123,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-04T11:00:00Z",
   },
   {
+    slug: "xml-formatter",
+    name: "XML Formatter",
+    description: "Pretty-print, minify and validate XML with the browser's native DOM parser — nothing uploaded.",
+    category: "Encoding",
+    icon: "🗂️",
+    added: "2026-07-05T00:00:00Z",
+  },
+  {
     slug: "sql-formatter",
     name: "SQL Formatter",
     description: "Pretty-print SQL across many dialects (PostgreSQL, MySQL, SQLite, T-SQL…) — runs locally with sql-formatter.",

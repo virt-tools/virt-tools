@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>XML Formatter — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>XML Formatter &amp; Validator</h1>
+      <p>Pretty-print, minify and validate XML in your browser using the native DOM parser — nothing is uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="in">XML input</label>
+        <textarea id="in" placeholder="<note><to>Ada</to><body>Hello</body></note>" style="min-height:140px; font-family:monospace;"></textarea>
+      </div>
+      <div class="row">
+        <button id="format">Format</button>
+        <button id="minify" class="secondary">Minify</button>
+        <button id="validate" class="secondary">Validate</button>
+        <button id="clear" class="secondary">Clear</button>
+        <div>
+          <label for="indent">Indent</label>
+          <select id="indent">
+            <option value="2" selected>2 spaces</option>
+            <option value="4">4 spaces</option>
+            <option value="\t">Tab</option>
+          </select>
+        </div>
+      </div>
+      <div class="spacer"></div>
+      <div class="row" style="justify-content:space-between;">
+        <label for="out">Output</label>
+        <button id="copy" class="secondary" style="padding:4px 10px;">Copy</button>
+      </div>
+      <div class="output" id="out" style="white-space:pre; font-family:monospace;"></div>
+      <p class="note" id="note">Parsed locally with the browser's native DOMParser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var inp = document.getElementById("in");
+    var out = document.getElementById("out");
+    var note = document.getElementById("note");
+    var indentSel = document.getElementById("indent");
+
+    function indentString() {
+      var v = indentSel.value;
+      return v === "\\t" ? "\t" : new Array(parseInt(v, 10) + 1).join(" ");
+    }
+
+    function parseXML(text) {
+      var doc = new DOMParser().parseFromString(text, "application/xml");
+      var perr = doc.getElementsByTagName("parsererror");
+      if (perr.length) {
+        // Extract a readable message from the parsererror element.
+        var msg = perr[0].textContent || "XML parse error";
+        throw new Error(msg.replace(/\s+/g, " ").trim().slice(0, 300));
+      }
+      return doc;
+    }
+
+    // Native pretty-print via an identity XSLT transform with indent="yes".
+    function pretty(doc, indent) {
+      var xsltSrc =
+        '<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="1.0">' +
+        '<xsl:output method="xml" indent="yes"/>' +
+        '<xsl:template match="@*|node()"><xsl:copy><xsl:apply-templates select="@*|node()"/></xsl:copy></xsl:template>' +
+        '</xsl:stylesheet>';
+      var xsltDoc = new DOMParser().parseFromString(xsltSrc, "application/xml");
+      var p = new XSLTProcessor();
+      p.importStylesheet(xsltDoc);
+      // XSLTProcessor ignores our indent selector; it uses its own. We post-process.
+      var result = p.transformToDocument(doc);
+      var serialized = new XMLSerializer().serializeToString(result);
+      // Re-indent to the user's chosen width if not 2 spaces (XSLT defaults vary).
+      return reindent(serialized, indent);
+    }
+
+    function reindent(xml, indent) {
+      // The XSLT identity transform already pretty-prints (with its own indent).
+      // Re-flow it to the user's chosen indent by tracking tag depth per line.
+      var depth = 0, out = [];
+      xml.split(/\n/).forEach(function (line) {
+        var s = line.trim();
+        if (!s) return;
+        var isClose = /^<\//.test(s);
+        var isSelfClose = /\/>$/.test(s);
+        var isOpen = /^<[^/?!]/.test(s) && !isSelfClose && !/^<[^>]*>\s*[^<]/.test(s) === false;
+        // isOpen: starts with a tag and contains no element-free text after it on this line
+        isOpen = /^<[^/?!]/.test(s) && !isSelfClose && !/<[^>]+>[^<]+/.test(s);
+        if (isClose) depth = Math.max(0, depth - 1);
+        out.push(new Array(depth + 1).join(indent) + s);
+        if (isOpen) depth++;
+      });
+      return out.join("\n");
+    }
+
+    function minify(doc) {
+      // Strip whitespace-only text nodes between elements, then serialize.
+      var walker = function (node) {
+        for (var i = node.childNodes.length - 1; i >= 0; i--) {
+          var c = node.childNodes[i];
+          if (c.nodeType === 3 && /^\s*$/.test(c.nodeValue) && node.childNodes.length > 1) {
+            node.removeChild(c);
+          } else if (c.nodeType === 1) {
+            walker(c);
+          }
+        }
+      };
+      walker(doc);
+      return new XMLSerializer().serializeToString(doc);
+    }
+
+    function show(text, err) {
+      out.textContent = text;
+      out.style.color = err ? "var(--bad)" : "";
+      note.textContent = err || "Parsed locally with the browser's native DOMParser.";
+    }
+
+    function getDoc() {
+      var text = inp.value.trim();
+      if (!text) { show("", "Paste some XML first."); throw new Error("empty"); }
+      return parseXML(text);
+    }
+
+    document.getElementById("format").addEventListener("click", function () {
+      try { show(pretty(getDoc(), indentString()), null); note.textContent = "Well-formed XML — formatted."; }
+      catch (e) { show("", "Invalid XML: " + (e.message || e)); }
+    });
+
+    document.getElementById("minify").addEventListener("click", function () {
+      try { show(minify(getDoc()), null); note.textContent = "Well-formed XML — minified."; }
+      catch (e) { show("", "Invalid XML: " + (e.message || e)); }
+    });
+
+    document.getElementById("validate").addEventListener("click", function () {
+      try { getDoc(); show("", null); note.textContent = "✓ Well-formed XML."; out.textContent = ""; out.style.color = "var(--good, #4ade80)"; out.textContent = "✓ Well-formed XML."; }
+      catch (e) { show("", "✗ Invalid XML: " + (e.message || e)); }
+    });
+
+    document.getElementById("clear").addEventListener("click", function () {
+      inp.value = ""; show("", null);
+    });
+
+    document.getElementById("copy").addEventListener("click", function () {
+      var t = out.textContent;
+      if (!t || t.indexOf("✓") === 0) return;
+      var b = this;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(t).then(function () {
+          b.textContent = "Copied!"; setTimeout(function () { b.textContent = "Copy"; }, 1200);
+        });
+      } else {
+        var ta = document.createElement("textarea");
+        ta.value = t; document.body.appendChild(ta); ta.select();
+        try { document.execCommand("copy"); b.textContent = "Copied!"; setTimeout(function () { b.textContent = "Copy"; }, 1200); }
+        catch (e) {}
+        ta.remove();
+      }
+    });
+  })();
+  </script>
+</body>
+</html>
