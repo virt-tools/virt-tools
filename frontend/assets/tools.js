@@ -1011,6 +1011,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-06T17:00:00Z",
   },
   {
+    slug: "body-fat-calculator",
+    name: "Body Fat Calculator",
+    description: "Estimate body fat percentage from circumference measurements using the U.S. Navy method, with the BMI-based Deurenpeng formula as a cross-check. Choose metric or U.S. units, enter height, neck, waist (and hip for women), weight, and age, and get the body fat percentage, fat mass, lean mass, BMI, and an ACE category (essential, athletes, fitness, acceptable, obese). Everything runs locally in your browser.",
+    category: "Health",
+    icon: "📏",
+    added: "2026-07-06T18:00:00Z",
+  },
+  {
     slug: "quadratic-solver",
     name: "Quadratic Equation Solver",
     description: "Solve a quadratic equation ax² + bx + c = 0. Enter the three coefficients and get the discriminant, the roots (two distinct real, one repeated real, or a complex-conjugate pair), the vertex and axis of symmetry of the parabola, and the factored form when the roots are real. A built-in check evaluates the polynomial at each root so you can confirm the result, and the linear case (a = 0) is handled too. Everything runs locally in your browser.",
