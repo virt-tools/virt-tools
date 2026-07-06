@@ -1019,6 +1019,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-06T18:00:00Z",
   },
   {
+    slug: "bac-calculator",
+    name: "BAC Calculator",
+    description: "Estimate blood alcohol concentration (BAC) from the number of standard drinks, body weight, sex, and time since you started drinking, using the Widmark formula with adjustable elimination rate. Reports BAC in per-mille (‰) and percent (g/dL), an impairment level, common legal driving limits (Sweden, EU, UK/US, aggravated), and an estimate of time until sober. Not a safe-to-drive test. Everything runs locally in your browser.",
+    category: "Health",
+    icon: "🍺",
+    added: "2026-07-06T21:00:00Z",
+  },
+  {
     slug: "quadratic-solver",
     name: "Quadratic Equation Solver",
     description: "Solve a quadratic equation ax² + bx + c = 0. Enter the three coefficients and get the discriminant, the roots (two distinct real, one repeated real, or a complex-conjugate pair), the vertex and axis of symmetry of the parabola, and the factored form when the roots are real. A built-in check evaluates the polynomial at each root so you can confirm the result, and the linear case (a = 0) is handled too. Everything runs locally in your browser.",

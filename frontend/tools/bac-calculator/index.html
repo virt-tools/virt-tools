@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>BAC Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .seg { display:inline-flex; border:1px solid var(--border,#2a2f3a); border-radius:8px; overflow:hidden; margin-bottom:10px; }
+    .seg button { border:none; border-radius:0; background:transparent; color:inherit; padding:6px 14px; cursor:pointer; }
+    .seg button.active { background: var(--accent,#6ea8fe); color:#08101f; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:12px; margin:10px 0; }
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    .big { font-size:44px; font-weight:700; font-variant-numeric: tabular-nums; text-align:center; margin:8px 0 2px; }
+    .sub { text-align:center; opacity:.8; font-size:15px; margin-bottom:10px; }
+    .results { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:10px; margin:10px 0; }
+    .res { background:var(--panel-2,#161a22); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:8px 10px; }
+    .res .n { font-size:20px; font-weight:600; font-variant-numeric: tabular-nums; }
+    .res .l { font-size:12px; opacity:.7; }
+    .limits { margin:10px 0; font-size:13px; }
+    .limits table { width:100%; border-collapse:collapse; font-variant-numeric: tabular-nums; }
+    .limits th, .limits td { padding:5px 8px; text-align:left; border-bottom:1px solid var(--border,#2a2f3a); }
+    .limits th { opacity:.65; font-weight:normal; }
+    .limits td.v { text-align:right; }
+    .limits tr.over td { color: var(--bad,#f87171); }
+    .warn { border-left:3px solid var(--bad,#f87171); padding:8px 12px; margin:10px 0; background:var(--panel-2,#161a22); border-radius:4px; font-size:13px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>BAC Calculator</h1>
+      <p>Estimate blood alcohol concentration (BAC) from the number of standard drinks, body weight, sex, and time elapsed since you started drinking, using the Widmark formula. Shows BAC in per-mille (‰) and percent (%), an impairment level, common legal driving limits, and an estimate of time until sober. Estimates are approximate — actual BAC varies by metabolism, food, and tolerance. Do not use to decide whether you are safe to drive. Everything runs locally.</p>
+    </div>
+
+    <div class="panel">
+      <div class="seg" id="sex">
+        <button type="button" data-s="male" class="active">Male</button>
+        <button type="button" data-s="female" class="secondary">Female</button>
+      </div>
+
+      <div class="seg" id="units">
+        <button type="button" data-u="metric" class="active">Metric (kg)</button>
+        <button type="button" data-u="us" class="secondary">U.S. (lb)</button>
+      </div>
+
+      <div class="grid">
+        <div><label for="weight">Weight</label><input type="number" id="weight" min="0" step="0.1" value="80"></div>
+        <div><label for="drinks">Standard drinks</label><input type="number" id="drinks" min="0" step="0.5" value="3"></div>
+        <div><label for="hours">Hours since first drink</label><input type="number" id="hours" min="0" step="0.25" value="2"></div>
+        <div><label for="beta">Elimination rate (‰/hr)</label><input type="number" id="beta" min="0.01" max="0.3" step="0.005" value="0.15"></div>
+      </div>
+
+      <div class="big" id="bac">—</div>
+      <div class="sub" id="level">Enter the values.</div>
+
+      <div class="results" id="results"></div>
+
+      <div class="warn" id="warn" hidden></div>
+
+      <div class="limits">
+        <table id="limits"><thead><tr><th>Legal driving limit</th><th>Limit</th><th>Your BAC</th></tr></thead><tbody></tbody></table>
+      </div>
+
+      <p class="note" id="note">A standard drink ≈ 14 g of pure ethanol = one 12 oz 5% beer, one 5 oz 12% wine, or one 1.5 oz 40% spirit. Widmark distribution factor: men 0.68, women 0.55. This is an estimate, not a safe-to-drive test — tolerance, food, medication, and metabolism all affect real BAC. Runs locally.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var sexEl = document.getElementById("sex");
+    var unitsEl = document.getElementById("units");
+    var weightEl = document.getElementById("weight");
+    var drinksEl = document.getElementById("drinks");
+    var hoursEl = document.getElementById("hours");
+    var betaEl = document.getElementById("beta");
+    var bacEl = document.getElementById("bac");
+    var levelEl = document.getElementById("level");
+    var resultsEl = document.getElementById("results");
+    var warnEl = document.getElementById("warn");
+    var limitsBody = document.querySelector("#limits tbody");
+    var note = document.getElementById("note");
+
+    var sex = "male";
+    var units = "metric";
+
+    var R = { male: 0.68, female: 0.55 };
+    var STD_DRINK_G = 14; // grams of pure ethanol per standard drink
+
+    // Widmark: BAC_permille = alcohol_g / (r * weight_kg) - beta * hours
+    // Returns per-mille. If negative, returns 0.
+    function bacPermille(sex, weightKg, drinks, hours, beta) {
+      if (weightKg <= 0) return 0;
+      var alcoholG = drinks * STD_DRINK_G;
+      var raw = alcoholG / (R[sex] * weightKg) - beta * hours;
+      return Math.max(0, raw);
+    }
+
+    function num(el) { var v = parseFloat(el.value); return isFinite(v) ? v : NaN; }
+
+    function readWeightKg() {
+      var w = num(weightEl);
+      if (units === "us") w *= 0.45359237; // lb -> kg
+      return w;
+    }
+
+    var LEVELS = [
+      { max: 0.2,  label: "Sober / negligible", cls: "ok" },
+      { max: 0.5,  label: "Mild relaxation", cls: "ok" },
+      { max: 0.8,  label: "Reduced coordination", cls: "warn" },
+      { max: 1.5,  label: "Legally intoxicated in most places", cls: "bad" },
+      { max: 2.5,  label: "Significant impairment", cls: "bad" },
+      { max: 3.5,  label: "Severe impairment, confusion", cls: "bad" },
+      { max: 5.0,  label: "Risk of blackout / coma", cls: "bad" },
+      { max: Infinity, label: "Medical emergency — call for help", cls: "bad" }
+    ];
+
+    function levelFor(permille) {
+      for (var i = 0; i < LEVELS.length; i++) if (permille <= LEVELS[i].max) return LEVELS[i];
+      return LEVELS[LEVELS.length - 1];
+    }
+
+    var LIMITS = [
+      { name: "Sweden / Norway (general)", permille: 0.2 },
+      { name: "Many EU / Australia (general)", permille: 0.5 },
+      { name: "UK, US, Canada (general)", permille: 0.8 },
+      { name: "US 'aggravated' / heavy penalties", permille: 1.5 }
+    ];
+
+    function compute() {
+      var w = readWeightKg();
+      var drinks = num(drinksEl);
+      var hours = num(hoursEl);
+      var beta = num(betaEl);
+      if (![w, drinks, hours, beta].every(function (v) { return isFinite(v) && v >= 0; }) || w === 0) {
+        bacEl.textContent = "—";
+        levelEl.textContent = "Enter all values (non-negative).";
+        resultsEl.innerHTML = "";
+        warnEl.hidden = true;
+        limitsBody.innerHTML = "";
+        return;
+      }
+
+      var permille = bacPermille(sex, w, drinks, hours, beta);
+      var percent = permille / 10; // ‰ -> % (g/dL)
+      var level = levelFor(permille);
+
+      bacEl.textContent = permille.toFixed(2) + " ‰  (" + percent.toFixed(3) + "%)";
+      levelEl.textContent = level.label;
+
+      // Time until sober (until permille < 0.2): (permille - 0.2) / beta, if positive.
+      var soberH = (permille > 0.2 && beta > 0) ? (permille - 0.2) / beta : 0;
+      var alcoholG = drinks * STD_DRINK_G;
+      var wUnit = (units === "metric") ? "kg" : "lb";
+      var wDisp = (units === "metric") ? w : w / 0.45359237;
+
+      var html = "";
+      html += '<div class="res"><div class="n">' + permille.toFixed(2) + ' ‰</div><div class="l">BAC (per-mille)</div></div>';
+      html += '<div class="res"><div class="n">' + percent.toFixed(3) + ' %</div><div class="l">BAC (g/dL)</div></div>';
+      html += '<div class="res"><div class="n">' + alcoholG.toFixed(0) + ' g</div><div class="l">Alcohol consumed</div></div>';
+      html += '<div class="res"><div class="n">' + (soberH > 0 ? soberH.toFixed(1) + " h" : "—") + '</div><div class="l">Until &lt;0.2‰</div></div>';
+      resultsEl.innerHTML = html;
+
+      // High-BAC warning.
+      if (permille >= 2.5) {
+        warnEl.hidden = false;
+        warnEl.textContent = permille >= 3.5
+          ? "⚠ This BAC level carries serious risk of unconsciousness or death. Seek medical help if this is real."
+          : "⚠ Significant impairment. Do not drive, ride, or operate machinery.";
+      } else if (permille >= 0.5) {
+        warnEl.hidden = false;
+        warnEl.textContent = "⚠ Above the common legal driving limit in many countries. Do not drive.";
+      } else {
+        warnEl.hidden = true;
+      }
+
+      // Legal limits table.
+      var rows = "";
+      for (var i = 0; i < LIMITS.length; i++) {
+        var L = LIMITS[i];
+        var over = permille > L.permille + 1e-9;
+        rows += '<tr class="' + (over ? "over" : "") + '"><td>' + L.name + '</td><td class="v">' + L.permille.toFixed(1) + ' ‰</td><td class="v">' + (over ? "over" : "under") + '</td></tr>';
+      }
+      limitsBody.innerHTML = rows;
+    }
+
+    sexEl.addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-s]"); if (!b) return;
+      sex = b.getAttribute("data-s");
+      Array.prototype.forEach.call(sexEl.querySelectorAll("button"), function (x) { x.classList.remove("active"); });
+      b.classList.add("active");
+      compute();
+    });
+
+    unitsEl.addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-u]"); if (!b) return;
+      var next = b.getAttribute("data-u");
+      if (next === units) return;
+      var w = parseFloat(weightEl.value);
+      if (isFinite(w) && w > 0) {
+        weightEl.value = (next === "us") ? (w / 0.45359237).toFixed(1) : (w * 0.45359237).toFixed(1);
+      }
+      units = next;
+      Array.prototype.forEach.call(unitsEl.querySelectorAll("button"), function (x) { x.classList.remove("active"); });
+      b.classList.add("active");
+      document.querySelector('label[for="weight"]').textContent = (next === "metric") ? "Weight (kg)" : "Weight (lb)";
+      compute();
+    });
+
+    [weightEl, drinksEl, hoursEl, betaEl].forEach(function (el) { el.addEventListener("input", compute); });
+
+    compute();
+  })();
+  </script>
+</body>
+</html>
