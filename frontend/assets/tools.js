@@ -307,6 +307,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-06T13:00:00Z",
   },
   {
+    slug: "team-picker",
+    name: "Random Team Assigner",
+    description: "Split a list of names into balanced random teams — for classrooms, sports, games, or secret-santa groups. Enter names (one per line or comma-separated), choose the number of teams, and assign with a Fisher–Yates shuffle followed by a round-robin deal so team sizes differ by at most one. An optional numeric or text seed makes the draw reproducible, and each team can optionally be sorted alphabetically. Everything runs locally in your browser.",
+    category: "Data",
+    icon: "👥",
+    added: "2026-07-07T01:00:00Z",
+  },
+  {
     slug: "dice-roller",
     name: "Dice Roller",
     description: "Roll dice with notation — 4d6kh3, 2d20+5, 3d8dl1. Sums individual dice and a 10k-roll distribution. Runs locally.",
