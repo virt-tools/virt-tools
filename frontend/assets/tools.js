@@ -187,6 +187,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-05T05:00:00Z",
   },
   {
+    slug: "tab-spaces",
+    name: "Tab & Spaces Converter",
+    description: "Convert between tabs and spaces with column-aware tab expansion. Reindent leading whitespace only or convert everywhere. Runs locally.",
+    category: "Text",
+    icon: "⇥",
+    added: "2026-07-06T06:00:00Z",
+  },
+  {
     slug: "url-parser",
     name: "URL Parser",
     description: "Break a URL into scheme, host, port, path, decoded query params and fragment — runs locally.",

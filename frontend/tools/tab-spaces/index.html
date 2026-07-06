@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Tab &amp; Spaces Converter — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .opts { display:flex; flex-wrap:wrap; gap:14px; align-items:center; margin:10px 0; }
+    .opts label { font-size:14px; }
+    .stats { opacity:.7; font-size:13px; margin:6px 0; }
+    .io { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    @media (max-width:640px){ .io { grid-template-columns:1fr; } }
+    .io textarea { min-height:240px; font-family:monospace; }
+    .seg { display:inline-flex; border:1px solid var(--border,#2a2f3a); border-radius:8px; overflow:hidden; }
+    .seg button { border:none; border-radius:0; background:transparent; color:inherit; padding:6px 12px; cursor:pointer; }
+    .seg button.active { background: var(--accent,#6ea8fe); color:#08101f; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Tab &amp; Spaces Converter</h1>
+      <p>Convert between tabs and spaces with column-aware tab expansion. Choose to reindent only leading whitespace or convert everywhere. Runs locally; nothing uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="opts">
+        <div class="seg" id="mode">
+          <button type="button" data-m="t2s" class="active">Tabs → Spaces</button>
+          <button type="button" data-m="s2t" class="secondary">Spaces → Tabs</button>
+        </div>
+        <label>Tab width <input type="number" id="width" min="1" max="8" value="4" style="width:64px;"></label>
+        <label><input type="checkbox" id="leading" checked> Leading whitespace only</label>
+        <button id="run">Convert</button>
+        <button id="swap" class="secondary">Swap</button>
+      </div>
+
+      <div class="io">
+        <div>
+          <label for="in">Input</label>
+          <textarea id="in" spellcheck="false" placeholder="Paste indented text here…">function hello() {
+	return greet("world");
+}</textarea>
+        </div>
+        <div>
+          <label for="out">Output</label>
+          <textarea id="out" readonly spellcheck="false"></textarea>
+        </div>
+      </div>
+
+      <div class="stats" id="stats">Click Convert.</div>
+      <button id="copy" class="secondary">Copy output</button>
+      <p class="note" id="note">Column-aware tab expansion: a tab advances to the next multiple of the tab width. Runs locally.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var inEl = document.getElementById("in");
+    var outEl = document.getElementById("out");
+    var widthEl = document.getElementById("width");
+    var leadingEl = document.getElementById("leading");
+    var modeEl = document.getElementById("mode");
+    var statsEl = document.getElementById("stats");
+    var note = document.getElementById("note");
+    var mode = "t2s";
+
+    function repeat(s, n) { var o = ""; while (n-- > 0) o += s; return o; }
+
+    modeEl.addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-m]");
+      if (!b) return;
+      mode = b.getAttribute("data-m");
+      Array.prototype.forEach.call(modeEl.querySelectorAll("button"), function (x) { x.classList.remove("active"); });
+      b.classList.add("active");
+    });
+
+    // Column-aware tab expansion: each tab -> spaces to next multiple of n.
+    function expandTabs(text, n) {
+      var out = "", col = 0;
+      for (var i = 0; i < text.length; i++) {
+        var c = text[i];
+        if (c === "\t") { var s = n - (col % n); out += repeat(" ", s); col += s; }
+        else if (c === "\n" || c === "\r") { out += c; if (c === "\n") col = 0; }
+        else { out += c; col++; }
+      }
+      return out;
+    }
+
+    // Pack a run of leading whitespace into tabs of width n (+ remainder spaces),
+    // first expanding any embedded tabs to spaces column-aware so mixed indent normalises.
+    function reindentLeading(line, n) {
+      var m = /^([ \t]*)([\s\S]*)$/.exec(line);
+      var indent = m[1], rest = m[2];
+      // Expand indent to a flat space run.
+      var spaces = "", col = 0;
+      for (var i = 0; i < indent.length; i++) {
+        if (indent[i] === "\t") { var s = n - (col % n); spaces += repeat(" ", s); col += s; }
+        else { spaces += " "; col++; }
+      }
+      var tabs = Math.floor(spaces.length / n);
+      var rem = spaces.length % n;
+      return repeat("\t", tabs) + repeat(" ", rem) + rest;
+    }
+
+    // Convert runs of n spaces to tabs everywhere (non-leading mode).
+    function packSpaces(text, n) {
+      var re = new RegExp("(?:" + repeat(" ", n) + ")+", "g");
+      return text.replace(re, function (m) {
+        var tabs = Math.floor(m.length / n);
+        var rem = m.length % n;
+        return repeat("\t", tabs) + repeat(" ", rem);
+      });
+    }
+
+    function convert() {
+      var n = Math.max(1, Math.min(8, parseInt(widthEl.value, 10) || 4));
+      var leading = leadingEl.checked;
+      var text = inEl.value;
+      var beforeTabs = (text.match(/\t/g) || []).length;
+      var beforeSpaces = (text.match(/ /g) || []).length;
+      var out, label;
+      if (mode === "t2s") {
+        out = leading
+          ? text.split("\n").map(function (l) { return expandTabsLeading(l, n); }).join("\n")
+          : expandTabs(text, n);
+        label = "tabs → spaces";
+      } else {
+        out = leading
+          ? text.split("\n").map(function (l) { return reindentLeading(l, n); }).join("\n")
+          : packSpaces(text, n);
+        label = "spaces → tabs";
+      }
+      outEl.value = out;
+      var afterTabs = (out.match(/\t/g) || []).length;
+      var afterSpaces = (out.match(/ /g) || []).length;
+      statsEl.textContent = label + " · tab width " + n + " · tabs " + beforeTabs + "→" + afterTabs +
+        " · spaces " + beforeSpaces + "→" + afterSpaces + " · length " + text.length + "→" + out.length;
+    }
+
+    // Expand tabs only within leading whitespace (leaving any tabs after code intact).
+    function expandTabsLeading(line, n) {
+      var m = /^([ \t]*)([\s\S]*)$/.exec(line);
+      var indent = m[1], rest = m[2];
+      var out = "", col = 0;
+      for (var i = 0; i < indent.length; i++) {
+        if (indent[i] === "\t") { var s = n - (col % n); out += repeat(" ", s); col += s; }
+        else { out += " "; col++; }
+      }
+      return out + rest;
+    }
+
+    document.getElementById("run").addEventListener("click", convert);
+    document.getElementById("swap").addEventListener("click", function () {
+      inEl.value = outEl.value;
+      // Flip mode for convenience.
+      mode = mode === "t2s" ? "s2t" : "t2s";
+      Array.prototype.forEach.call(modeEl.querySelectorAll("button"), function (x) {
+        x.classList.remove("active");
+      });
+      modeEl.querySelector('button[data-m="' + mode + '"]').classList.add("active");
+      convert();
+    });
+    document.getElementById("copy").addEventListener("click", function () {
+      outEl.select();
+      try { document.execCommand("copy"); note.textContent = "Output copied to clipboard."; }
+      catch (e) { note.textContent = "Copy failed — select and copy manually."; }
+    });
+
+    convert();
+  })();
+  </script>
+</body>
+</html>
