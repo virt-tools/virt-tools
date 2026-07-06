@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>VIN Decoder — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom:10px; }
+    #vin { font-family:monospace; font-size:16px; letter-spacing:1px; max-width:340px; }
+    .verdict { font-size:15px; margin:8px 0; }
+    .ok { color: var(--good,#4ade80); } .bad { color: var(--bad,#f87171); }
+    table.dec { width:100%; border-collapse:collapse; margin:10px 0; font-size:14px; }
+    table.dec th, table.dec td { padding:6px 10px; border-bottom:1px solid var(--border,#2a2f3a); text-align:left; vertical-align:top; }
+    table.dec th { width:34%; opacity:.7; font-weight:normal; }
+    td code { font-family:monospace; }
+    .posbar { font-family:monospace; font-size:13px; letter-spacing:1px; margin:6px 0; opacity:.6; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>VIN Decoder</h1>
+      <p>Decode a 17-character Vehicle Identification Number (VIN): validate the format (no I, O, or Q), check the position-9 check digit with the standard transliteration and weight table, and break out the WMI (country/region and manufacturer), VDS, model year, plant, and serial number. Reference data is built in. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="vin">VIN</label>
+        <input id="vin" type="text" value="1M8GDM9AXKP042788" spellcheck="false" autocomplete="off" maxlength="17">
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <div class="posbar" id="posbar"></div>
+
+      <table class="dec" id="dec"><tbody></tbody></table>
+
+      <p class="note" id="note">A VIN is 17 characters (excluding I, O, Q). Position 9 is a check digit computed from the transliterated values and per-position weights (sum mod 11, X = 10). The model-year code (position 10) repeats every 30 years, so a single code can map to multiple plausible years. Runs locally.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var vinEl = document.getElementById("vin");
+    var verdictEl = document.getElementById("verdict");
+    var posbarEl = document.getElementById("posbar");
+    var decBody = document.querySelector("#dec tbody");
+    var note = document.getElementById("note");
+
+    // Transliteration values for check-digit computation. I, O, Q are not valid VIN chars.
+    var TRANS = {
+      A: 1, B: 2, C: 3, D: 4, E: 5, F: 6, G: 7, H: 8,
+      J: 1, K: 2, L: 3, M: 4, N: 5, P: 7, R: 9,
+      S: 2, T: 3, U: 4, V: 5, W: 6, X: 7, Y: 8, Z: 9
+    };
+    // Per-position weights (positions 1..17); position 9 is the check digit (weight 0).
+    var WEIGHTS = [8, 7, 6, 5, 4, 3, 2, 10, 0, 9, 8, 7, 6, 5, 4, 3, 2];
+
+    // Year codes (position 10) in cycle order, starting at 1980 (cycle 0). Repeats every 30 years.
+    var YEAR_CODES = "ABCDEFGHJKLMNPRSTVWXY123456789".split("");
+    var YEAR_CYCLE_START = 1980;
+
+    // Region from first character.
+    function region(c) {
+      if (/[A-H]/.test(c)) return "Africa";
+      if (/[J-R]/.test(c)) return "Asia";
+      if (/[S-Z]/.test(c)) return "Europe";
+      if (/[1-5]/.test(c)) return "North America";
+      if (/[6-7]/.test(c)) return "Oceania";
+      if (/[8-9]/.test(c)) return "South America";
+      return "Unknown";
+    }
+
+    // A small table of common WMI prefixes -> manufacturer.
+    var WMI = {
+      "1G": "General Motors (USA)",
+      "1F": "Ford (USA)",
+      "1J": "Jeep (USA)",
+      "1C": "Chrysler (USA)",
+      "1H": "Honda (USA)",
+      "1N": "Nissan (USA)",
+      "1T": "Toyota (USA)",
+      "2F": "Ford (Canada)",
+      "2G": "General Motors (Canada)",
+      "2T": "Toyota (Canada)",
+      "3F": "Ford (Mexico)",
+      "3G": "General Motors (Mexico)",
+      "4S": "Subaru-Isuzu (USA)",
+      "5L": "Lincoln (USA)",
+      "9F": "Ford (Brazil)",
+      "JH": "Honda (Japan)",
+      "JT": "Toyota (Japan)",
+      "JM": "Mazda (Japan)",
+      "JN": "Nissan (Japan)",
+      "JS": "Suzuki (Japan)",
+      "JM": "Mazda (Japan)",
+      "SA": "Saab / Seat (Spain/Europe)",
+      "SC": "Smart (France)",
+      "SM": "Mercedes-Benz (Spain/Slovenia)",
+      "SN": "Nissan (Europe/UK)",
+      "WA": "Audi (Germany)",
+      "WB": "BMW (Germany)",
+      "WD": "Mercedes-Benz (Germany)",
+      "WF": "Ferrari (Germany import)",
+      "WP": "Porsche (Germany)",
+      "WV": "Volkswagen (Germany)",
+      "WBA": "BMW (Germany)",
+      "WDB": "Mercedes-Benz (Germany)",
+      "WDD": "Mercedes-Benz (Germany)",
+      "VF": "Renault (France)",
+      "VS": "Vauxhall/Opel (Spain/UK)",
+      "ZAM": "Maserati (Italy)",
+      "ZDF": "Ferrari (Italy)",
+      "ZF": "Fiat (Italy)",
+      "ZH": "Lancia (Italy)",
+      "ZLA": "Lancia (Italy)"
+    };
+    function manufacturer(wmi3) {
+      if (WMI[wmi3]) return WMI[wmi3];
+      if (WMI[wmi3.slice(0, 2)]) return WMI[wmi3.slice(0, 2)];
+      return "Unknown / not in table";
+    }
+
+    function checkDigitChar(vin) {
+      var sum = 0;
+      for (var i = 0; i < 17; i++) {
+        var ch = vin[i];
+        var t;
+        if (/[0-9]/.test(ch)) t = +ch;
+        else if (TRANS[ch]) t = TRANS[ch];
+        else return null; // invalid char
+        sum += t * WEIGHTS[i];
+      }
+      var r = sum % 11;
+      return r === 10 ? "X" : String(r);
+    }
+
+    function plausibleYears(code) {
+      var idx = YEAR_CODES.indexOf(code);
+      if (idx < 0) return [];
+      var years = [];
+      // From the earliest plausible (1930s+) up to current+1, list all cycle matches.
+      var maxYear = new Date().getFullYear() + 1;
+      for (var y = YEAR_CYCLE_START + idx; y <= maxYear; y += 30) {
+        if (y >= YEAR_CYCLE_START) years.push(y);
+      }
+      if (years.length === 0) years.push(YEAR_CYCLE_START + idx); // future first-cycle
+      return years;
+    }
+
+    function row(label, value) {
+      return "<tr><th>" + label + "</th><td>" + value + "</td></tr>";
+    }
+    function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+    function render() {
+      var raw = vinEl.value.trim().toUpperCase();
+      decBody.innerHTML = "";
+      posbarEl.textContent = "";
+      if (!raw) {
+        verdictEl.innerHTML = '<span class="bad">Enter a 17-character VIN.</span>';
+        return;
+      }
+      if (raw.length !== 17) {
+        verdictEl.innerHTML = '<span class="bad">A VIN must be 17 characters (got ' + raw.length + ').</span>';
+        return;
+      }
+      if (/[^A-HJ-NPR-Z0-9]/.test(raw)) {
+        verdictEl.innerHTML = '<span class="bad">Invalid character: VINs use 0–9 and A–Z except I, O, Q.</span>';
+        return;
+      }
+
+      var expected = checkDigitChar(raw);
+      var actual = raw[8]; // position 9
+      var checkOK = (expected !== null && actual === expected);
+      var verdict = checkOK
+        ? '<span class="ok">✓ Valid format and check digit.</span>'
+        : '<span class="bad">✗ Check digit mismatch (position 9 is "' + esc(actual) + '", computed "' + esc(expected) + '").</span>';
+      verdictEl.innerHTML = verdict;
+
+      // Position ruler.
+      var ruler = "";
+      for (var i = 0; i < 17; i++) ruler += ((i + 1) % 10 === 0 ? "↓" : "·");
+      posbarEl.textContent = ruler + "\n" + raw;
+
+      var wmi = raw.slice(0, 3);
+      var vds = raw.slice(3, 8);
+      var plant = raw[10];
+      var serial = raw.slice(11, 17);
+      var yearCode = raw[9];
+      var years = plausibleYears(yearCode);
+      var yearsTxt = years.length ? years.join(" or ") : "Invalid year code";
+      var recentYear = years.length ? years[years.length - 1] : null;
+
+      var html = "";
+      html += row("WMI (positions 1–3)", '<code>' + esc(wmi) + '</code>');
+      html += row("Region", region(wmi[0]));
+      html += row("Manufacturer (guess)", manufacturer(wmi));
+      html += row("VDS (positions 4–8)", '<code>' + esc(vds) + '</code>');
+      html += row("Check digit (position 9)", '<code>' + esc(actual) + '</code> — computed <code>' + esc(expected) + '</code> ' + (checkOK ? '(match)' : '(mismatch)'));
+      html += row("Model year (position 10)", 'code <code>' + esc(yearCode) + '</code> → ' + yearsTxt + (recentYear ? ' (most recent: ' + recentYear + ')' : ''));
+      html += row("Assembly plant (position 11)", '<code>' + esc(plant) + '</code>');
+      html += row("Serial (positions 12–17)", '<code>' + esc(serial) + '</code>');
+      decBody.innerHTML = html;
+    }
+
+    vinEl.addEventListener("input", render);
+    render();
+  })();
+  </script>
+</body>
+</html>

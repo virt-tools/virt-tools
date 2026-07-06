@@ -683,6 +683,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-04T01:40:00Z",
   },
   {
+    slug: "vin-decoder",
+    name: "VIN Decoder",
+    description: "Decode a 17-character Vehicle Identification Number: validate the format (VINs exclude I, O, and Q), verify the position-9 check digit using the standard letter-transliteration and per-position weight table (sum mod 11, X = 10), and break out the WMI (country/region and a manufacturer guess), VDS, model-year code (with its repeating 30-year cycle of plausible years), assembly-plant code, and serial number. Reference data is built in. Everything runs locally in your browser.",
+    category: "Security",
+    icon: "🚗",
+    added: "2026-07-07T00:00:00Z",
+  },
+  {
     slug: "vigenere-cipher",
     name: "Vigenère Cipher",
     description: "Encode and decode text with the classic Vigenère polyalphabetic cipher — a repeating key shifts each letter, preserving case, numbers and punctuation. Runs entirely in your browser.",
