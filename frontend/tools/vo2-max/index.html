@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>VO₂ Max Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .seg { display:inline-flex; border:1px solid var(--border,#2a2f3a); border-radius:8px; overflow:hidden; margin-bottom:10px; }
+    .seg button { border:none; border-radius:0; background:transparent; color:inherit; padding:6px 14px; cursor:pointer; font-size:13px; }
+    .seg button.active { background: var(--accent,#6ea8fe); color:#08101f; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:12px; margin:10px 0; }
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    .big { font-size:42px; font-weight:700; font-variant-numeric: tabular-nums; text-align:center; margin:8px 0 2px; }
+    .sub { text-align:center; opacity:.85; font-size:15px; margin-bottom:10px; }
+    .scale { margin:10px 0; font-size:13px; }
+    .scale table { width:100%; border-collapse:collapse; font-variant-numeric: tabular-nums; }
+    .scale th, .scale td { padding:5px 8px; text-align:center; border-bottom:1px solid var(--border,#2a2f3a); }
+    .scale th { opacity:.65; font-weight:normal; }
+    .scale td.lab { text-align:left; }
+    .scale tr.now { background: rgba(110,168,254,.15); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>VO₂ Max Calculator</h1>
+      <p>Estimate maximal oxygen uptake (VO₂max, in ml/kg/min) — a key measure of aerobic fitness — using three established methods: Cooper's 12-minute run, the Uth heart-rate-ratio estimate, and the Rockport 1-mile walk test. Results are classified against age- and sex-specific normative bands. Estimates are heuristic; for a clinical measurement use a graded treadmill or cycle ergometer with gas analysis. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="seg" id="method">
+        <button type="button" data-m="cooper" class="active">Cooper 12-min run</button>
+        <button type="button" data-m="uth" class="secondary">Uth HR ratio</button>
+        <button type="button" data-m="rockport" class="secondary">Rockport 1-mile walk</button>
+      </div>
+
+      <div class="seg" id="sex">
+        <button type="button" data-s="male" class="active">Male</button>
+        <button type="button" data-s="female" class="secondary">Female</button>
+      </div>
+
+      <div class="grid" id="inputs"></div>
+
+      <div class="big" id="vo2">—</div>
+      <div class="sub" id="cat">Enter the values.</div>
+
+      <div class="scale">
+        <table id="scale"><thead><tr><th>Category</th><th>VO₂max range (ml/kg/min)</th></tr></thead><tbody></tbody></table>
+      </div>
+
+      <p class="note" id="note">VO₂max is the maximum rate of oxygen consumption during incremental exercise, in millilitres per kilogram per minute. Methods: Cooper (12-min run distance), Uth (15.3 × HRmax/HRrest), Rockport (1-mile walk time, ending HR, age, weight, sex). Normative bands are age- and sex-specific approximations. Runs locally.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var methodEl = document.getElementById("method");
+    var sexEl = document.getElementById("sex");
+    var inputsEl = document.getElementById("inputs");
+    var vo2El = document.getElementById("vo2");
+    var catEl = document.getElementById("cat");
+    var scaleBody = document.querySelector("#scale tbody");
+    var note = document.getElementById("note");
+
+    var method = "cooper";
+    var sex = "male";
+
+    // Build the input grid per method. Each input has an id; we read by id in compute().
+    var FIELDSETS = {
+      cooper: [
+        { id: "cooperDist", label: "Distance in 12 min (m)", value: 2800, type: "number" }
+      ],
+      uth: [
+        { id: "uthHRmax", label: "Max heart rate (bpm)", value: 190, type: "number" },
+        { id: "uthHRrest", label: "Resting heart rate (bpm)", value: 60, type: "number" }
+      ],
+      rockport: [
+        { id: "rpAge", label: "Age", value: 30, type: "number" },
+        { id: "rpWeight", label: "Weight (lb)", value: 175, type: "number" },
+        { id: "rpTime", label: "Walk time (min)", value: 14, type: "number", step: "0.01" },
+        { id: "rpHR", label: "Ending heart rate (bpm)", value: 130, type: "number" }
+      ]
+    };
+
+    function buildInputs() {
+      var fields = FIELDSETS[method];
+      var html = "";
+      fields.forEach(function (f) {
+        html += '<div><label for="' + f.id + '">' + f.label + '</label><input type="' + f.type + '" id="' + f.id + '" value="' + f.value + '"' + (f.step ? ' step="' + f.step + '"' : "") + '></div>';
+      });
+      inputsEl.innerHTML = html;
+      fields.forEach(function (f) {
+        document.getElementById(f.id).addEventListener("input", compute);
+      });
+    }
+
+    // VO2max formulas.
+    // Cooper 12-min run (distance in metres): (d - 504.9) / 44.73
+    function cooper(d_m) {
+      if (d_m <= 0) return null;
+      return (d_m - 504.9) / 44.73;
+    }
+    // Uth et al. (2004): 15.3 * (HRmax / HRrest)
+    function uth(hrmax, hrrest) {
+      if (hrmax <= 0 || hrrest <= 0) return null;
+      return 15.3 * (hrmax / hrrest);
+    }
+    // Rockport 1-mile walk: 132.853 - 0.0769*W_lb - 0.3877*age + 6.315*sex - 3.2649*T_min - 0.1565*HR
+    // sex: male=1, female=0. W in lb, T in minutes, HR bpm.
+    function rockport(sex, age, w_lb, t_min, hr) {
+      if (age <= 0 || w_lb <= 0 || t_min <= 0 || hr <= 0) return null;
+      var s = (sex === "male") ? 1 : 0;
+      return 132.853 - 0.0769 * w_lb - 0.3877 * age + 6.315 * s - 3.2649 * t_min - 0.1565 * hr;
+    }
+
+    // Normative VO2max bands (ml/kg/min), by sex and age band.
+    // Each band: [poorMax, fairMax, goodMax, excMax]; superior = above excMax.
+    var BANDS = {
+      male: [
+        { age: [20, 29], b: [38, 42, 46, 50] },
+        { age: [30, 39], b: [35, 39, 43, 47] },
+        { age: [40, 49], b: [32, 36, 39, 43] },
+        { age: [50, 59], b: [29, 32, 35, 38] },
+        { age: [60, 999], b: [25, 29, 32, 35] }
+      ],
+      female: [
+        { age: [20, 29], b: [31, 35, 38, 42] },
+        { age: [30, 39], b: [28, 32, 35, 39] },
+        { age: [40, 49], b: [26, 29, 32, 35] },
+        { age: [50, 59], b: [23, 26, 29, 32] },
+        { age: [60, 999], b: [20, 23, 26, 29] }
+      ]
+    };
+
+    function bandsFor(sex, age) {
+      var list = BANDS[sex];
+      for (var i = 0; i < list.length; i++) if (age >= list[i].age[0] && age <= list[i].age[1]) return list[i].b;
+      return list[0].b;
+    }
+    function categorize(b, vo2) {
+      if (vo2 < b[0]) return { label: "Poor", min: -Infinity, max: b[0] - 0.1 };
+      if (vo2 < b[1]) return { label: "Fair", min: b[0], max: b[1] - 0.1 };
+      if (vo2 < b[2]) return { label: "Good", min: b[1], max: b[2] - 0.1 };
+      if (vo2 < b[3]) return { label: "Excellent", min: b[2], max: b[3] - 0.1 };
+      return { label: "Superior", min: b[3], max: Infinity };
+    }
+
+    function num(id) { var v = parseFloat(document.getElementById(id).value); return isFinite(v) ? v : NaN; }
+
+    function compute() {
+      var v, age = null;
+      if (method === "cooper") {
+        v = cooper(num("cooperDist"));
+      } else if (method === "uth") {
+        v = uth(num("uthHRmax"), num("uthHRrest"));
+      } else {
+        age = num("rpAge");
+        v = rockport(sex, age, num("rpWeight"), num("rpTime"), num("rpHR"));
+      }
+      if (v === null || !isFinite(v) || v <= 0) {
+        vo2El.textContent = "—";
+        catEl.textContent = "Enter all values (positive).";
+        renderScale(null, null);
+        return;
+      }
+      // Cooper/Uth methods don't take age; for the scale we need an age — use a default of 30 if unknown.
+      var ageForScale = (method === "rockport") ? age : 30;
+      var b = bandsFor(sex, ageForScale);
+      var cat = categorize(b, v);
+
+      vo2El.textContent = v.toFixed(1) + " ml/kg/min";
+      catEl.textContent = cat.label + (method !== "rockport" ? " · (scale shown for age 30 — switch to Rockport to set age)" : "");
+      renderScale(b, v);
+    }
+
+    function renderScale(b, vo2) {
+      if (!b) { scaleBody.innerHTML = ""; return; }
+      var labels = ["Poor", "Fair", "Good", "Excellent", "Superior"];
+      var ranges = [
+        "<" + b[0].toFixed(0),
+        b[0].toFixed(0) + "–" + (b[1] - 1).toFixed(0),
+        b[1].toFixed(0) + "–" + (b[2] - 1).toFixed(0),
+        b[2].toFixed(0) + "–" + (b[3] - 1).toFixed(0),
+        "≥" + b[3].toFixed(0)
+      ];
+      var cat = vo2 === null ? null : categorize(b, vo2).label;
+      var html = "";
+      for (var i = 0; i < labels.length; i++) {
+        var now = (cat === labels[i]);
+        html += '<tr class="' + (now ? "now" : "") + '"><td class="lab">' + labels[i] + '</td><td>' + ranges[i] + '</td></tr>';
+      }
+      scaleBody.innerHTML = html;
+    }
+
+    methodEl.addEventListener("click", function (e) {
+      var btn = e.target.closest("button[data-m]"); if (!btn) return;
+      method = btn.getAttribute("data-m");
+      Array.prototype.forEach.call(methodEl.querySelectorAll("button"), function (x) { x.classList.remove("active"); });
+      btn.classList.add("active");
+      buildInputs();
+      compute();
+    });
+
+    sexEl.addEventListener("click", function (e) {
+      var btn = e.target.closest("button[data-s]"); if (!btn) return;
+      sex = btn.getAttribute("data-s");
+      Array.prototype.forEach.call(sexEl.querySelectorAll("button"), function (x) { x.classList.remove("active"); });
+      btn.classList.add("active");
+      compute();
+    });
+
+    buildInputs();
+    compute();
+  })();
+  </script>
+</body>
+</html>

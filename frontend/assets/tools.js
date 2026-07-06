@@ -1043,6 +1043,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-06T21:00:00Z",
   },
   {
+    slug: "vo2-max",
+    name: "VO₂ Max Calculator",
+    description: "Estimate maximal oxygen uptake (VO₂max, ml/kg/min) — a key measure of aerobic fitness — using three established methods: Cooper's 12-minute run (distance), the Uth heart-rate-ratio estimate (15.3 × HRmax / HRrest), and the Rockport 1-mile walk test (age, weight, walk time, ending heart rate, sex). Results are classified against age- and sex-specific normative bands (poor, fair, good, excellent, superior). Estimates are heuristic — for a clinical measurement use graded exercise with gas analysis. Everything runs locally in your browser.",
+    category: "Health",
+    icon: "🫁",
+    added: "2026-07-07T02:00:00Z",
+  },
+  {
     slug: "quadratic-solver",
     name: "Quadratic Equation Solver",
     description: "Solve a quadratic equation ax² + bx + c = 0. Enter the three coefficients and get the discriminant, the roots (two distinct real, one repeated real, or a complex-conjugate pair), the vertex and axis of symmetry of the parabola, and the factored form when the roots are real. A built-in check evaluates the polynomial at each root so you can confirm the result, and the linear case (a = 0) is handled too. Everything runs locally in your browser.",
