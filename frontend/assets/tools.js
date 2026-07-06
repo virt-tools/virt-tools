@@ -1147,6 +1147,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-06T19:00:00Z",
   },
   {
+    slug: "function-plotter",
+    name: "Function Plotter",
+    description: "Plot one or two real-valued functions of x on an SVG grid. Enter expressions using + − * / ^, parentheses, the variable x, constants pi/e/tau, and functions sin, cos, tan, asin, acos, atan, sinh, cosh, tanh, sqrt, cbrt, exp, ln, log, log2, abs, floor, ceil, round, and sign. Set the x range; the y range auto-scales or can be fixed. Power is right-associative and binds tighter than unary minus (so −x² is −(x²)). A safe recursive-descent parser — no eval. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "📈",
+    added: "2026-07-06T20:00:00Z",
+  },
+  {
     slug: "semver-toolkit",
     name: "SemVer Toolkit",
     description: "Parse, compare, range-check, sort, and bump Semantic Versioning 2.0.0 strings. Parse a version into its major, minor, patch, pre-release and build parts; compare two versions with full pre-release precedence (numeric identifiers numerically, alphanumeric lexically, a pre-release ranking below its release); check a version against an npm-style range (^, ~, >, >=, <, <=, =, x-ranges, and || unions) with the standard pre-release inclusion rule; sort a list of versions ascending or descending; and bump major, minor, patch, or pre-release levels. Everything runs locally in your browser.",

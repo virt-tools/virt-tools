@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Function Plotter — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:8px 0; }
+    label { font-size:13px; opacity:.85; }
+    #expr { font-family:monospace; min-width:280px; }
+    .ranges input { width:80px; text-align:center; }
+    #plotWrap { background:var(--panel-2,#161a22); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:8px; margin:12px 0; }
+    svg.plot { width:100%; height:auto; display:block; background: var(--panel,#0f1218); }
+    .legend { font-size:13px; opacity:.85; margin:6px 0; font-family:monospace; }
+    .err { color: var(--bad,#f87171); font-size:14px; margin:8px 0; font-family:monospace; }
+    .hint { font-size:12px; opacity:.65; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Function Plotter</h1>
+      <p>Plot one or two real-valued functions of x on an SVG grid. Enter expressions using + − * / ^, parentheses, the variable x, constants pi and e, and functions sin, cos, tan, asin, acos, atan, sinh, cosh, tanh, sqrt, exp, ln, log, log2, abs, floor, ceil, and round. Set the x range; the y range auto-scales or can be fixed. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row">
+        <label>f(x) =</label>
+        <input id="expr" type="text" value="sin(x)" spellcheck="false" autocomplete="off">
+        <label>color</label>
+        <input id="col" type="color" value="#6ea8fe">
+      </div>
+      <div class="row">
+        <label>g(x) =</label>
+        <input id="expr2" type="text" value="cos(x)/2" spellcheck="false" autocomplete="off">
+        <label>color</label>
+        <input id="col2" type="color" value="#f87171">
+      </div>
+
+      <div class="row ranges">
+        <label>x min</label><input type="number" id="xmin" value="-6.2832" step="any">
+        <label>x max</label><input type="number" id="xmax" value="6.2832" step="any">
+        <label>y mode</label>
+        <select id="ymode">
+          <option value="auto">auto</option>
+          <option value="fixed">fixed</option>
+        </select>
+        <span id="yFixed" hidden>
+          <label>y min</label><input type="number" id="ymin" value="-2" step="any">
+          <label>y max</label><input type="number" id="ymax" value="2" step="any">
+        </span>
+      </div>
+
+      <div class="err" id="err"></div>
+
+      <div id="plotWrap">
+        <svg class="plot" id="plot" viewBox="0 0 600 400" preserveAspectRatio="xMidYMid meet"></svg>
+      </div>
+
+      <div class="legend" id="legend"></div>
+
+      <p class="note" id="note">Operators: + − * / ^ (power, right-associative). Functions as listed. Use explicit <code>*</code> for multiplication (e.g. <code>2*x</code>). Runs locally; the expression never leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script src="expr.js"></script>
+  <script>
+  (function () {
+    var exprEl = document.getElementById("expr");
+    var colEl = document.getElementById("col");
+    var expr2El = document.getElementById("expr2");
+    var col2El = document.getElementById("col2");
+    var xminEl = document.getElementById("xmin");
+    var xmaxEl = document.getElementById("xmax");
+    var ymodeEl = document.getElementById("ymode");
+    var yFixed = document.getElementById("yFixed");
+    var yminEl = document.getElementById("ymin");
+    var ymaxEl = document.getElementById("ymax");
+    var errEl = document.getElementById("err");
+    var plotEl = document.getElementById("plot");
+    var legendEl = document.getElementById("legend");
+    var note = document.getElementById("note");
+
+    var W = 600, H = 400;
+    var PAD = 36;
+
+    function clearErr() { errEl.textContent = ""; }
+
+    function computeRange() {
+      var xmin = parseFloat(xminEl.value), xmax = parseFloat(xmaxEl.value);
+      if (!isFinite(xmin) || !isFinite(xmax) || xmin >= xmax) return null;
+      return { xmin: xmin, xmax: xmax };
+    }
+
+    // Sample a compiled fn across [xmin,xmax]; returns array of {x,y|NaN}.
+    function sample(fn, xmin, xmax, n) {
+      var pts = [];
+      for (var i = 0; i <= n; i++) {
+        var x = xmin + (xmax - xmin) * i / n;
+        var y;
+        try { y = fn(x); } catch (e) { y = NaN; }
+        if (!isFinite(y)) y = NaN;
+        pts.push({ x: x, y: y });
+      }
+      return pts;
+    }
+
+    function niceStep(rough) {
+      // Round up to a 1/2/5 × 10^k nice number.
+      var pow = Math.pow(10, Math.floor(Math.log10(rough)));
+      var norm = rough / pow;
+      var step;
+      if (norm < 1.5) step = 1;
+      else if (norm < 3) step = 2;
+      else if (norm < 7) step = 5;
+      else step = 10;
+      return step * pow;
+    }
+
+    function fmtTick(v, step) {
+      var decimals = step >= 1 ? 0 : Math.ceil(-Math.log10(step));
+      var s = v.toFixed(decimals);
+      return s;
+    }
+
+    function render() {
+      clearErr();
+      var rng = computeRange();
+      if (!rng) { errEl.textContent = "Enter an x range with x min < x max."; plotEl.innerHTML = ""; legendEl.textContent = ""; return; }
+
+      var f1 = null, f2 = null;
+      try { f1 = Expr.compile(exprEl.value); }
+      catch (e) { errEl.textContent = "f(x): " + (e.message || String(e)); plotEl.innerHTML = ""; legendEl.textContent = ""; return; }
+      try {
+        var e2 = expr2El.value.trim();
+        if (e2) f2 = Expr.compile(e2);
+      } catch (e) { errEl.textContent = "g(x): " + (e.message || String(e)); plotEl.innerHTML = ""; legendEl.textContent = ""; return; }
+
+      var N = 600;
+      var p1 = sample(f1, rng.xmin, rng.xmax, N);
+      var p2 = f2 ? sample(f2, rng.xmin, rng.xmax, N) : [];
+
+      // y range
+      var ymin, ymax;
+      if (ymodeEl.value === "fixed") {
+        ymin = parseFloat(yminEl.value); ymax = parseFloat(ymaxEl.value);
+        if (!isFinite(ymin) || !isFinite(ymax) || ymin >= ymax) { errEl.textContent = "Enter a y range with y min < y max."; plotEl.innerHTML = ""; return; }
+      } else {
+        ymin = Infinity; ymax = -Infinity;
+        var collect = function (pts) { for (var i = 0; i < pts.length; i++) { var y = pts[i].y; if (isFinite(y)) { if (y < ymin) ymin = y; if (y > ymax) ymax = y; } } };
+        collect(p1); collect(p2);
+        if (!isFinite(ymin) || !isFinite(ymax)) { ymin = -1; ymax = 1; }
+        if (ymin === ymax) { ymin -= 1; ymax += 1; }
+        var pad = (ymax - ymin) * 0.1;
+        ymin -= pad; ymax += pad;
+      }
+
+      var xScale = (W - 2 * PAD) / (rng.xmax - rng.xmin);
+      var yScale = (H - 2 * PAD) / (ymax - ymin);
+      function sx(x) { return PAD + (x - rng.xmin) * xScale; }
+      function sy(y) { return H - PAD - (y - ymin) * yScale; }
+
+      // Gridlines.
+      var xStep = niceStep((rng.xmax - rng.xmin) / 8);
+      var yStep = niceStep((ymax - ymin) / 6);
+      var svg = "";
+      svg += '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="none"/>';
+
+      // Grid lines
+      var x0 = Math.ceil(rng.xmin / xStep) * xStep;
+      for (var x = x0; x <= rng.xmax + xStep * 1e-9; x += xStep) {
+        var px = sx(x);
+        svg += '<line x1="' + px.toFixed(1) + '" y1="' + PAD + '" x2="' + px.toFixed(1) + '" y2="' + (H - PAD) + '" stroke="var(--border,#2a2f3a)" stroke-width="1"/>';
+        svg += '<text x="' + px.toFixed(1) + '" y="' + (H - PAD + 14) + '" fill="currentColor" opacity="0.55" font-size="10" text-anchor="middle">' + fmtTick(x, xStep) + '</text>';
+      }
+      var y0 = Math.ceil(ymin / yStep) * yStep;
+      for (var y = y0; y <= ymax + yStep * 1e-9; y += yStep) {
+        var py = sy(y);
+        svg += '<line x1="' + PAD + '" y1="' + py.toFixed(1) + '" x2="' + (W - PAD) + '" y2="' + py.toFixed(1) + '" stroke="var(--border,#2a2f3a)" stroke-width="1"/>';
+        svg += '<text x="' + (PAD - 6) + '" y="' + (py + 3).toFixed(1) + '" fill="currentColor" opacity="0.55" font-size="10" text-anchor="end">' + fmtTick(y, yStep) + '</text>';
+      }
+
+      // Axes (x=0, y=0) if in range.
+      if (rng.xmin <= 0 && rng.xmax >= 0) {
+        var ax = sx(0);
+        svg += '<line x1="' + ax.toFixed(1) + '" y1="' + PAD + '" x2="' + ax.toFixed(1) + '" y2="' + (H - PAD) + '" stroke="currentColor" opacity="0.5" stroke-width="1.5"/>';
+      }
+      if (ymin <= 0 && ymax >= 0) {
+        var ay = sy(0);
+        svg += '<line x1="' + PAD + '" y1="' + ay.toFixed(1) + '" x2="' + (W - PAD) + '" y2="' + ay.toFixed(1) + '" stroke="currentColor" opacity="0.5" stroke-width="1.5"/>';
+      }
+
+      // Plot a polyline, breaking at NaN (discontinuities).
+      function plotPolyline(pts, color) {
+        var path = "";
+        var started = false;
+        for (var i = 0; i < pts.length; i++) {
+          var y = pts[i].y;
+          // Clip extreme values to avoid wild asymptotes blowing the scale; break the line instead.
+          if (!isFinite(y) || y < ymin - (ymax - ymin) * 2 || y > ymax + (ymax - ymin) * 2) {
+            started = false;
+            continue;
+          }
+          var px = sx(pts[i].x), py = sy(y);
+          path += (started ? " L" : " M") + px.toFixed(1) + " " + py.toFixed(1);
+          started = true;
+        }
+        if (!path) return "";
+        return '<path d="' + path + '" fill="none" stroke="' + color + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
+      }
+
+      svg += plotPolyline(p1, colEl.value);
+      if (f2) svg += plotPolyline(p2, col2El.value);
+      svg += '<rect x="' + PAD + '" y="' + PAD + '" width="' + (W - 2 * PAD) + '" height="' + (H - 2 * PAD) + '" fill="none" stroke="var(--border,#2a2f3a)" stroke-width="1"/>';
+
+      plotEl.innerHTML = svg;
+
+      // Legend
+      var leg = '<span style="color:' + colEl.value + '">■</span> f(x) = ' + escapeHtml(exprEl.value);
+      if (f2) leg += '  &nbsp;<span style="color:' + col2El.value + '">■</span> g(x) = ' + escapeHtml(expr2El.value);
+      legendEl.innerHTML = leg;
+    }
+
+    function escapeHtml(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+    ymodeEl.addEventListener("change", function () {
+      yFixed.hidden = ymodeEl.value !== "fixed";
+      render();
+    });
+
+    [exprEl, expr2El, xminEl, xmaxEl, yminEl, ymaxEl, colEl, col2El].forEach(function (el) {
+      el.addEventListener("input", render);
+    });
+
+    render();
+  })();
+  </script>
+</body>
+</html>
