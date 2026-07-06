@@ -291,6 +291,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-05T15:00:00Z",
   },
   {
+    slug: "list-randomizer",
+    name: "List Randomizer",
+    description: "Shuffle a list, pick N unique items, or draw a single winner from newline- or comma-separated entries. An optional numeric seed makes the result reproducible. Fisher-Yates shuffle, runs locally.",
+    category: "Data",
+    icon: "🔀",
+    added: "2026-07-06T13:00:00Z",
+  },
+  {
     slug: "dice-roller",
     name: "Dice Roller",
     description: "Roll dice with notation — 4d6kh3, 2d20+5, 3d8dl1. Sums individual dice and a 10k-roll distribution. Runs locally.",
