@@ -923,6 +923,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-05T00:20:00Z",
   },
   {
+    slug: "pascals-triangle",
+    name: "Pascal's Triangle Generator",
+    description: "Generate Pascal's triangle up to 30 rows — each entry is a binomial coefficient C(n,k), the sum of the two above it. Toggle parity colouring to reveal the Sierpinski triangle and copy any row or the whole triangle. Runs locally.",
+    category: "Math",
+    icon: "🔺",
+    added: "2026-07-06T12:00:00Z",
+  },
+  {
     slug: "bmi-calculator",
     name: "BMI Calculator",
     description: "Compute Body Mass Index from weight and height in metric (kilograms, centimetres) or imperial (pounds, feet/inches) units. See the BMI value with its WHO adult category (underweight, normal, overweight, or obesity classes I–III) and a healthy-weight range for your height (BMI 18.5–24.9). BMI is a screening measure for adults and isn't a body-fat or health diagnosis. Everything runs locally in your browser.",
