@@ -251,6 +251,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-05T13:00:00Z",
   },
   {
+    slug: "tone-generator",
+    name: "Tone Generator",
+    description: "Play a pure tone by frequency or musical note, choose a waveform (sine, square, triangle, sawtooth), and sweep across a frequency range. Web Audio, runs locally.",
+    category: "Time",
+    icon: "🔊",
+    added: "2026-07-06T05:00:00Z",
+  },
+  {
     slug: "password-strength",
     name: "Password Strength Checker",
     description: "Estimate password entropy, composition and time-to-crack; detect common passwords, sequences and repeats. Runs locally.",
