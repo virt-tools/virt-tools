@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Matrix Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:8px 0; }
+    label { font-size:13px; opacity:.85; }
+    .dim input { width:54px; text-align:center; }
+    table.mx { border-collapse:collapse; margin:6px 0; }
+    table.mx td { padding:2px; }
+    table.mx input { width:54px; text-align:center; font-family:monospace; font-size:13px; }
+    table.mx.r td { padding:4px 6px; font-family:monospace; font-variant-numeric: tabular-nums; }
+    .mxwrap { display:flex; gap:24px; flex-wrap:wrap; align-items:flex-start; margin:10px 0; }
+    .mxblock { background:var(--panel-2,#161a22); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:10px; }
+    .mxblock h3 { margin:0 0 6px; font-size:14px; opacity:.85; font-weight:600; }
+    select, button { font-size:14px; }
+    .err { color: var(--bad,#f87171); font-size:14px; margin:8px 0; }
+    .scalar input { width:60px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Matrix Calculator</h1>
+      <p>Perform arithmetic and linear-algebra operations on two matrices: addition, subtraction, multiplication, scalar multiplication, transpose, determinant, trace, rank, inverse, and reduced row echelon form (RREF). Up to 6×6. All math runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="mxwrap">
+        <div class="mxblock">
+          <h3>Matrix A</h3>
+          <div class="row dim"><label>rows</label><input type="number" id="aR" min="1" max="6" value="2"><label>cols</label><input type="number" id="aC" min="1" max="6" value="2"></div>
+          <div id="aGrid"></div>
+        </div>
+        <div class="mxblock">
+          <h3>Matrix B</h3>
+          <div class="row dim"><label>rows</label><input type="number" id="bR" min="1" max="6" value="2"><label>cols</label><input type="number" id="bC" min="1" max="6" value="2"></div>
+          <div id="bGrid"></div>
+        </div>
+      </div>
+
+      <div class="row" style="gap:12px;">
+        <label>Operation</label>
+        <select id="op">
+          <optgroup label="A and B">
+            <option value="add">A + B</option>
+            <option value="sub">A − B</option>
+            <option value="mul">A × B</option>
+          </optgroup>
+          <optgroup label="A only">
+            <option value="scalar">scalar × A</option>
+            <option value="transpose">transpose(A)</option>
+            <option value="det">determinant(A)</option>
+            <option value="trace">trace(A)</option>
+            <option value="rank">rank(A)</option>
+            <option value="inverse">inverse(A)</option>
+            <option value="rref">RREF(A)</option>
+          </optgroup>
+        </select>
+        <span class="scalar" id="scalarWrap" hidden>scalar <input type="number" id="scalar" value="2" step="any"></span>
+      </div>
+
+      <button id="go">Compute</button>
+      <div class="err" id="err"></div>
+
+      <div class="mxblock" id="resBlock" hidden>
+        <h3>Result</h3>
+        <div id="resGrid"></div>
+      </div>
+
+      <p class="note" id="note">Edit the cells, choose an operation, and press Compute. Determinant and inverse use Gaussian elimination with partial pivoting. Runs locally.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var aR = document.getElementById("aR"), aC = document.getElementById("aC");
+    var bR = document.getElementById("bR"), bC = document.getElementById("bC");
+    var aGrid = document.getElementById("aGrid"), bGrid = document.getElementById("bGrid");
+    var opEl = document.getElementById("op");
+    var scalarWrap = document.getElementById("scalarWrap");
+    var scalarEl = document.getElementById("scalar");
+    var goBtn = document.getElementById("go");
+    var errEl = document.getElementById("err");
+    var resBlock = document.getElementById("resBlock");
+    var resGrid = document.getElementById("resGrid");
+    var note = document.getElementById("note");
+
+    // Persist cell values across dimension changes by storing raw values keyed by "r,c".
+    var A = {}, B = {}; // "r,c" -> number
+
+    function clampDim(v) { v = parseInt(v, 10); if (!isFinite(v) || v < 1) v = 1; if (v > 6) v = 6; return v; }
+
+    function buildGrid(container, store, rows, cols) {
+      rows = clampDim(rows); cols = clampDim(cols);
+      var html = '<table class="mx">';
+      for (var r = 0; r < rows; r++) {
+        html += "<tr>";
+        for (var c = 0; c < cols; c++) {
+          var key = r + "," + c;
+          var val = store[key] !== undefined ? store[key] : (r === c ? "1" : "0");
+          html += '<td><input type="number" step="any" data-k="' + key + '" value="' + val + '"></td>';
+        }
+        html += "</tr>";
+      }
+      html += "</table>";
+      container.innerHTML = html;
+      Array.prototype.forEach.call(container.querySelectorAll("input"), function (inp) {
+        inp.addEventListener("input", function () {
+          var v = parseFloat(inp.value);
+          store[inp.getAttribute("data-k")] = isFinite(v) ? v : 0;
+        });
+      });
+    }
+
+    function readMatrix(store, rows, cols) {
+      rows = clampDim(rows); cols = clampDim(cols);
+      var m = [];
+      for (var r = 0; r < rows; r++) {
+        var row = [];
+        for (var c = 0; c < cols; c++) {
+          var v = store[r + "," + c];
+          row.push(v !== undefined ? v : 0);
+        }
+        m.push(row);
+      }
+      return m;
+    }
+
+    function fmtNum(n) {
+      if (!isFinite(n)) return String(n);
+      // Round to 1e-9 to absorb float noise, then trim.
+      var r = Math.round(n * 1e9) / 1e9;
+      if (Object.is(r, -0)) r = 0;
+      if (Math.abs(r - Math.round(r)) < 1e-9) return String(Math.round(r));
+      return String(parseFloat(r.toPrecision(10)));
+    }
+
+    function renderMatrix(m) {
+      var html = '<table class="mx r">';
+      for (var r = 0; r < m.length; r++) {
+        html += "<tr>";
+        for (var c = 0; c < m[0].length; c++) html += "<td>" + fmtNum(m[r][c]) + "</td>";
+        html += "</tr>";
+      }
+      html += "</table>";
+      return html;
+    }
+
+    // --- Linear algebra ---
+
+    function shape(m) { return [m.length, m[0].length]; }
+
+    function sameDims(a, b) { return a.length === b.length && a[0].length === b[0].length; }
+    function addMM(a, b) {
+      var r = [];
+      for (var i = 0; i < a.length; i++) { var row = []; for (var j = 0; j < a[0].length; j++) row.push(a[i][j] + b[i][j]); r.push(row); }
+      return r;
+    }
+    function subMM(a, b) {
+      var r = [];
+      for (var i = 0; i < a.length; i++) { var row = []; for (var j = 0; j < a[0].length; j++) row.push(a[i][j] - b[i][j]); r.push(row); }
+      return r;
+    }
+    function mulMM(a, b) {
+      var r = [];
+      for (var i = 0; i < a.length; i++) {
+        var row = [];
+        for (var j = 0; j < b[0].length; j++) {
+          var s = 0;
+          for (var k = 0; k < a[0].length; k++) s += a[i][k] * b[k][j];
+          row.push(s);
+        }
+        r.push(row);
+      }
+      return r;
+    }
+    function scalarMul(a, k) {
+      var r = [];
+      for (var i = 0; i < a.length; i++) { var row = []; for (var j = 0; j < a[0].length; j++) row.push(a[i][j] * k); r.push(row); }
+      return r;
+    }
+    function transpose(a) {
+      var r = [];
+      for (var j = 0; j < a[0].length; j++) { var row = []; for (var i = 0; i < a.length; i++) row.push(a[i][j]); r.push(row); }
+      return r;
+    }
+    function trace(a) {
+      if (a.length !== a[0].length) return null;
+      var s = 0; for (var i = 0; i < a.length; i++) s += a[i][i]; return s;
+    }
+
+    // LU decomposition with partial pivoting; returns {det, lu, piv}. det via product of diag.
+    function lu(a) {
+      var n = a.length;
+      if (a[0].length !== n) return null; // not square
+      var m = a.map(function (row) { return row.slice(); });
+      var det = 1;
+      for (var k = 0; k < n; k++) {
+        // partial pivot
+        var p = k, max = Math.abs(m[k][k]);
+        for (var i = k + 1; i < n; i++) { if (Math.abs(m[i][k]) > max) { max = Math.abs(m[i][k]); p = i; } }
+        if (max < 1e-12) return { det: 0, singular: true };
+        if (p !== k) { var tmp = m[p]; m[p] = m[k]; m[k] = tmp; det = -det; }
+        det *= m[k][k];
+        for (var i = k + 1; i < n; i++) {
+          m[i][k] /= m[k][k];
+          for (var j = k + 1; j < n; j++) m[i][j] -= m[i][k] * m[k][j];
+        }
+      }
+      return { det: det, lu: m };
+    }
+
+    function determinant(a) { var r = lu(a); return r ? r.det : null; }
+
+    // Inverse via Gauss-Jordan on [A | I].
+    function inverse(a) {
+      var n = a.length;
+      if (a[0].length !== n) return null;
+      var m = [];
+      for (var i = 0; i < n; i++) {
+        var row = a[i].slice();
+        for (var j = 0; j < n; j++) row.push(i === j ? 1 : 0);
+        m.push(row);
+      }
+      for (var k = 0; k < n; k++) {
+        var p = k, max = Math.abs(m[k][k]);
+        for (var i = k + 1; i < n; i++) { if (Math.abs(m[i][k]) > max) { max = Math.abs(m[i][k]); p = i; } }
+        if (max < 1e-12) return null; // singular
+        if (p !== k) { var tmp = m[p]; m[p] = m[k]; m[k] = tmp; }
+        var piv = m[k][k];
+        for (var j = 0; j < 2 * n; j++) m[k][j] /= piv;
+        for (var i = 0; i < n; i++) {
+          if (i === k) continue;
+          var f = m[i][k];
+          for (var j = 0; j < 2 * n; j++) m[i][j] -= f * m[k][j];
+        }
+      }
+      var inv = [];
+      for (var i = 0; i < n; i++) { var row = []; for (var j = 0; j < n; j++) row.push(m[i][j + n]); inv.push(row); }
+      return inv;
+    }
+
+    // RREF via Gaussian elimination; returns the reduced matrix.
+    function rref(a) {
+      var m = a.map(function (row) { return row.slice(); });
+      var rows = m.length, cols = m[0].length;
+      var r = 0;
+      for (var c = 0; c < cols && r < rows; c++) {
+        var p = r, max = Math.abs(m[r][c]);
+        for (var i = r + 1; i < rows; i++) { if (Math.abs(m[i][c]) > max) { max = Math.abs(m[i][c]); p = i; } }
+        if (max < 1e-12) continue;
+        if (p !== r) { var tmp = m[p]; m[p] = m[r]; m[r] = tmp; }
+        var piv = m[r][c];
+        for (var j = 0; j < cols; j++) m[r][j] /= piv;
+        for (var i = 0; i < rows; i++) {
+          if (i === r) continue;
+          var f = m[i][c];
+          if (f === 0) continue;
+          for (var j = 0; j < cols; j++) m[i][j] -= f * m[r][j];
+        }
+        r++;
+      }
+      return m;
+    }
+
+    function rank(a) {
+      var r = rref(a);
+      var cnt = 0;
+      for (var i = 0; i < r.length; i++) {
+        var nonzero = false;
+        for (var j = 0; j < r[0].length; j++) { if (Math.abs(r[i][j]) > 1e-9) { nonzero = true; break; } }
+        if (nonzero) cnt++;
+      }
+      return cnt;
+    }
+
+    function showMatrix(m) {
+      resBlock.hidden = false;
+      resGrid.innerHTML = renderMatrix(m);
+    }
+    function showScalar(v) {
+      resBlock.hidden = false;
+      resGrid.innerHTML = '<div style="font-size:24px;font-variant-numeric:tabular-nums;">' + fmtNum(v) + '</div>';
+    }
+    function showErr(msg) { errEl.textContent = msg; resBlock.hidden = true; }
+    function clearErr() { errEl.textContent = ""; }
+
+    function compute() {
+      clearErr();
+      var op = opEl.value;
+      var M = readMatrix(A, aR.value, aC.value);
+      var N = readMatrix(B, bR.value, bC.value);
+
+      try {
+        switch (op) {
+          case "add":
+            if (!sameDims(M, N)) return showErr("A and B must have the same dimensions for addition.");
+            return showMatrix(addMM(M, N));
+          case "sub":
+            if (!sameDims(M, N)) return showErr("A and B must have the same dimensions for subtraction.");
+            return showMatrix(subMM(M, N));
+          case "mul":
+            if (M[0].length !== N.length) return showErr("A columns must equal B rows for multiplication (A is " + M.length + "×" + M[0].length + ", B is " + N.length + "×" + N[0].length + ").");
+            return showMatrix(mulMM(M, N));
+          case "scalar":
+            return showMatrix(scalarMul(M, parseFloat(scalarEl.value)));
+          case "transpose":
+            return showMatrix(transpose(M));
+          case "det":
+            if (M.length !== M[0].length) return showErr("Determinant requires a square matrix.");
+            return showScalar(determinant(M));
+          case "trace":
+            if (M.length !== M[0].length) return showErr("Trace requires a square matrix.");
+            return showScalar(trace(M));
+          case "rank":
+            return showScalar(rank(M));
+          case "inverse":
+            if (M.length !== M[0].length) return showErr("Inverse requires a square matrix.");
+            var inv = inverse(M);
+            if (inv === null) return showErr("Matrix is singular (not invertible).");
+            return showMatrix(inv);
+          case "rref":
+            return showMatrix(rref(M));
+        }
+      } catch (e) {
+        showErr(e.message || String(e));
+      }
+    }
+
+    function rebuildA() { buildGrid(aGrid, A, aR.value, aC.value); }
+    function rebuildB() { buildGrid(bGrid, B, bR.value, bC.value); }
+
+    aR.addEventListener("input", rebuildA); aC.addEventListener("input", rebuildA);
+    bR.addEventListener("input", rebuildB); bC.addEventListener("input", rebuildB);
+
+    opEl.addEventListener("change", function () {
+      scalarWrap.hidden = opEl.value !== "scalar";
+      clearErr();
+    });
+    scalarEl.addEventListener("input", clearErr);
+
+    goBtn.addEventListener("click", compute);
+
+    // Seed a recognisable example: A = [[1,2],[3,4]], B = [[2,0],[1,3]].
+    A["0,0"] = 1; A["0,1"] = 2; A["1,0"] = 3; A["1,1"] = 4;
+    B["0,0"] = 2; B["0,1"] = 0; B["1,0"] = 1; B["1,1"] = 3;
+    rebuildA(); rebuildB();
+  })();
+  </script>
+</body>
+</html>
