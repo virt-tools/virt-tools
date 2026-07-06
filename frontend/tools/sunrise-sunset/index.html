@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Sunrise &amp; Sunset Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; margin:10px 0; }
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    .stats { display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:10px; margin:10px 0; }
+    .stat { background:var(--panel-2,#161a22); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:8px 10px; }
+    .stat .n { font-size:20px; font-weight:600; font-variant-numeric: tabular-nums; }
+    .stat .l { font-size:12px; opacity:.7; }
+    .presets { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0 4px; }
+    .presets button { padding:3px 10px; font-size:13px; }
+    .extra { opacity:.7; font-size:13px; margin-top:8px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Sunrise &amp; Sunset Calculator</h1>
+      <p>Compute sunrise, solar noon, sunset and day length for any date and location using the NOAA solar position algorithm. Runs entirely in your browser — no network, no geolocation ping.</p>
+    </div>
+
+    <div class="panel">
+      <label>Preset locations</label>
+      <div class="presets" id="presets"></div>
+
+      <div class="grid">
+        <div><label for="date">Date</label><input type="date" id="date"></div>
+        <div><label for="lat">Latitude (°)</label><input type="number" id="lat" step="0.0001" value="40.7128"></div>
+        <div><label for="lon">Longitude (°)</label><input type="number" id="lon" step="0.0001" value="-74.0060"></div>
+        <div><label for="tz">UTC offset (hours)</label>
+          <select id="tz"></select>
+        </div>
+      </div>
+
+      <div class="stats" id="stats"></div>
+      <div class="extra" id="extra"></div>
+
+      <p class="note" id="note">NOAA solar algorithm (zenith 90.833° includes refraction and solar radius). Times are local at the chosen UTC offset — pick the offset in effect on the date (DST aware). Runs locally.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var dateEl = document.getElementById("date");
+    var latEl = document.getElementById("lat");
+    var lonEl = document.getElementById("lon");
+    var tzEl = document.getElementById("tz");
+    var statsEl = document.getElementById("stats");
+    var extraEl = document.getElementById("extra");
+    var note = document.getElementById("note");
+    var presetsEl = document.getElementById("presets");
+
+    // Fill UTC offset dropdown -12 .. +14.
+    var tzHtml = "";
+    for (var o = -12; o <= 14; o++) {
+      var lbl = (o >= 0 ? "+" : "") + o;
+      tzHtml += '<option value="' + (o * 60) + '">UTC' + lbl + '</option>';
+    }
+    tzEl.innerHTML = tzHtml;
+    tzEl.value = -5 * 60; // default NYC
+
+    var PRESETS = [
+      { name: "New York", lat: 40.7128, lon: -74.0060, tz: -300 },
+      { name: "London", lat: 51.5074, lon: -0.1278, tz: 0 },
+      { name: "Tokyo", lat: 35.6762, lon: 139.6503, tz: 540 },
+      { name: "Sydney", lat: -33.8688, lon: 151.2093, tz: 600 },
+      { name: "Reykjavík", lat: 64.1466, lon: -21.9426, tz: 0 },
+      { name: "Quito", lat: -0.1807, lon: -78.4678, tz: -300 }
+    ];
+    presetsEl.innerHTML = PRESETS.map(function (p) {
+      return '<button class="secondary" data-lat="' + p.lat + '" data-lon="' + p.lon + '" data-tz="' + p.tz + '">' + p.name + '</button>';
+    }).join("");
+    presetsEl.addEventListener("click", function (e) {
+      var b = e.target.closest("button"); if (!b) return;
+      latEl.value = b.getAttribute("data-lat");
+      lonEl.value = b.getAttribute("data-lon");
+      tzEl.value = b.getAttribute("data-tz");
+      compute();
+    });
+
+    // Default date = today (local).
+    var now = new Date();
+    dateEl.value = now.toISOString().slice(0, 10);
+
+    var rad = Math.PI / 180, deg = 180 / Math.PI;
+
+    // NOAA solar calculation. Returns times in local minutes-from-midnight.
+    function solarTimes(y, mo, d, lat, lon, tzMin) {
+      // Julian Day at 0h UTC of the given date.
+      var jd = Date.UTC(y, mo - 1, d, 0, 0, 0) / 86400000 + 2440587.5;
+      var T = (jd - 2451545.0) / 36525;
+      var L0 = (280.46646 + T * (36000.76983 + T * 0.0003032)) % 360;
+      if (L0 < 0) L0 += 360;
+      var M = 357.52911 + T * (35999.05029 - 0.0001537 * T);
+      var C = Math.sin(rad * M) * (1.914602 - T * (0.004817 + 0.000014 * T))
+            + Math.sin(rad * 2 * M) * (0.019993 - 0.000101 * T)
+            + Math.sin(rad * 3 * M) * 0.000289;
+      var trueLong = L0 + C;
+      var omega = 125.04 - 1934.136 * T;
+      var apparentLong = trueLong - 0.00569 - 0.00478 * Math.sin(rad * omega);
+      var meanObliq = 23 + (26 + ((21.448 - T * (46.815 + T * (0.00059 - T * 0.001813)))) / 60) / 60;
+      var obliq = meanObliq + 0.00256 * Math.cos(rad * omega);
+      var decl = deg * Math.asin(Math.sin(rad * obliq) * Math.sin(rad * apparentLong));
+      // Equation of time (NOAA approximate formula), in minutes.
+      var doy = Math.floor((Date.UTC(y, mo - 1, d) - Date.UTC(y, 0, 1)) / 86400000) + 1;
+      var g = 2 * Math.PI / 365 * (doy - 1);
+      var EoT = 229.18 * (0.000075 + 0.001868 * Math.cos(g) - 0.032077 * Math.sin(g)
+        - 0.014615 * Math.cos(2 * g) - 0.040849 * Math.sin(2 * g));
+      var zen = 90.833;
+      var latR = rad * lat;
+      var cosArg = Math.cos(rad * zen) / (Math.cos(latR) * Math.cos(rad * decl)) - Math.tan(latR) * Math.tan(rad * decl);
+      // No sunrise/sunset (polar day/night): clamp.
+      var ha, status;
+      if (cosArg > 1) { ha = 0; status = "polarNight"; }
+      else if (cosArg < -1) { ha = 180; status = "polarDay"; }
+      else { ha = deg * Math.acos(cosArg); status = "normal"; }
+      // Solar noon in UTC minutes, then shift to local.
+      var solarNoonUTC = 720 - 4 * lon - EoT;
+      var sunriseLocal = solarNoonUTC - ha * 4 + tzMin;
+      var sunsetLocal = solarNoonUTC + ha * 4 + tzMin;
+      var solarNoonLocal = solarNoonUTC + tzMin;
+      return { decl: decl, EoT: EoT, ha: ha, status: status,
+        sunrise: sunriseLocal, sunset: sunsetLocal, solarNoon: solarNoonLocal };
+    }
+
+    function hhmm(min) {
+      min = ((min % 1440) + 1440) % 1440;
+      var h = Math.floor(min / 60), m = Math.round(min % 60);
+      if (m === 60) { h++; m = 0; }
+      h = h % 24;
+      return String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0");
+    }
+    function dur(min) {
+      min = Math.max(0, Math.round(min));
+      var h = Math.floor(min / 60), m = min % 60;
+      return h + "h " + String(m).padStart(2, "0") + "m";
+    }
+
+    function compute() {
+      var v = dateEl.value;
+      if (!v) { statsEl.innerHTML = ""; return; }
+      var parts = v.split("-").map(Number);
+      var lat = parseFloat(latEl.value), lon = parseFloat(lonEl.value), tz = parseInt(tzEl.value, 10);
+      if (!isFinite(lat) || !isFinite(lon) || lat < -90 || lat > 90) { statsEl.innerHTML = ""; extraEl.textContent = "Enter a valid latitude (−90..90) and longitude."; return; }
+      var r = solarTimes(parts[0], parts[1], parts[2], lat, lon, tz);
+      var dayLen = r.sunset - r.sunrise;
+      var rows;
+      if (r.status === "polarDay") {
+        rows = [["Sunrise", "—"], ["Solar noon", hhmm(r.solarNoon)], ["Sunset", "—"], ["Day length", "24h 00m (midnight sun)"]];
+      } else if (r.status === "polarNight") {
+        rows = [["Sunrise", "—"], ["Solar noon", hhmm(r.solarNoon)], ["Sunset", "—"], ["Day length", "0h 00m (polar night)"]];
+      } else {
+        rows = [["Sunrise", hhmm(r.sunrise)], ["Solar noon", hhmm(r.solarNoon)], ["Sunset", hhmm(r.sunset)], ["Day length", dur(dayLen)]];
+      }
+      statsEl.innerHTML = rows.map(function (s) {
+        return '<div class="stat"><div class="n">' + s[1] + '</div><div class="l">' + s[0] + '</div></div>';
+      }).join("");
+      extraEl.textContent = "Solar declination " + r.decl.toFixed(2) + "° · equation of time " +
+        (r.EoT >= 0 ? "+" : "") + r.EoT.toFixed(1) + " min · hour angle " + r.ha.toFixed(2) + "°";
+    }
+
+    dateEl.addEventListener("input", compute);
+    latEl.addEventListener("input", compute);
+    lonEl.addEventListener("input", compute);
+    tzEl.addEventListener("change", compute);
+    compute();
+  })();
+  </script>
+</body>
+</html>
