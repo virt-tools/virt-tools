@@ -243,6 +243,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-05T10:00:00Z",
   },
   {
+    slug: "stopwatch",
+    name: "Stopwatch & Countdown Timer",
+    description: "A stopwatch with lap timing (split and per-lap times) and a countdown timer that beeps when it reaches zero. Drift-free monotonic clock with a Web Audio alarm. Runs locally.",
+    category: "Time",
+    icon: "⏱️",
+    added: "2026-07-06T15:00:00Z",
+  },
+  {
     slug: "key-code-viewer",
     name: "Key Code Viewer",
     description: "Inspect keyboard event.key, event.code, keyCode and modifier state for any key press. Runs locally.",

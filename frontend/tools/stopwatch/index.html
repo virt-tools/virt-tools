@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Stopwatch &amp; Countdown Timer — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .seg { display:inline-flex; border:1px solid var(--border,#2a2f3a); border-radius:8px; overflow:hidden; margin-bottom:12px; }
+    .seg button { border:none; border-radius:0; background:transparent; color:inherit; padding:6px 14px; cursor:pointer; }
+    .seg button.active { background: var(--accent,#6ea8fe); color:#08101f; }
+    .display { font-size:54px; font-weight:600; font-variant-numeric: tabular-nums; text-align:center; margin:14px 0; }
+    .controls { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+    .laps { margin-top:14px; max-height:240px; overflow:auto; }
+    .laps table { width:100%; border-collapse:collapse; font-variant-numeric: tabular-nums; font-size:14px; }
+    .laps th, .laps td { padding:5px 10px; text-align:right; border-bottom:1px solid var(--border,#2a2f3a); }
+    .laps th { text-align:right; opacity:.7; }
+    .laps td.idx { text-align:right; opacity:.6; }
+    .cd-setup { display:flex; gap:8px; justify-content:center; align-items:center; flex-wrap:wrap; margin:10px 0; }
+    .cd-setup input { width:64px; text-align:center; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Stopwatch &amp; Countdown Timer</h1>
+      <p>A stopwatch with lap timing, plus a countdown timer that beeps when it reaches zero. Drift-free timing uses a monotonic clock; the alarm uses Web Audio. Runs locally.</p>
+    </div>
+
+    <div class="panel">
+      <div class="seg" id="mode">
+        <button type="button" data-m="sw" class="active">Stopwatch</button>
+        <button type="button" data-m="cd" class="secondary">Countdown</button>
+      </div>
+
+      <div class="display" id="display">00:00.00</div>
+
+      <div id="cdSetup" hidden>
+        <div class="cd-setup">
+          <label>h <input type="number" id="cdH" min="0" max="23" value="0"></label>
+          <label>m <input type="number" id="cdM" min="0" max="59" value="5"></label>
+          <label>s <input type="number" id="cdS" min="0" max="59" value="0"></label>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button id="startStop">Start</button>
+        <button id="lap" class="secondary">Lap</button>
+        <button id="reset" class="secondary">Reset</button>
+      </div>
+
+      <div class="laps" id="laps"></div>
+      <p class="note" id="note">Start the stopwatch, or switch to countdown to set a duration. Runs locally.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var modeEl = document.getElementById("mode");
+    var display = document.getElementById("display");
+    var cdSetup = document.getElementById("cdSetup");
+    var cdH = document.getElementById("cdH"), cdM = document.getElementById("cdM"), cdS = document.getElementById("cdS");
+    var startStop = document.getElementById("startStop");
+    var lapBtn = document.getElementById("lap");
+    var resetBtn = document.getElementById("reset");
+    var lapsEl = document.getElementById("laps");
+    var note = document.getElementById("note");
+
+    // Format ms as "HH:MM:SS.cs" when hours present, else "MM:SS.cs".
+    function fmt(ms) {
+      ms = Math.max(0, Math.floor(ms));
+      var cs = Math.floor(ms / 10) % 100;
+      var s = Math.floor(ms / 1000) % 60;
+      var m = Math.floor(ms / 60000) % 60;
+      var h = Math.floor(ms / 3600000);
+      function pad(n, w) { return String(n).padStart(w, "0"); }
+      if (h > 0) return pad(h, 2) + ":" + pad(m, 2) + ":" + pad(s, 2) + "." + pad(cs, 2);
+      return pad(m, 2) + ":" + pad(s, 2) + "." + pad(cs, 2);
+    }
+
+    var mode = "sw";   // "sw" | "cd"
+    var running = false;
+    var base = 0;      // performance.now() at start of current run segment
+    var acc = 0;       // accumulated ms before current segment (stopwatch)
+    var laps = [];     // lap split times (ms at press)
+    var cdTarget = 0;  // countdown duration ms
+    var cdStartBase = 0; // when countdown run started (perf.now)
+    var ended = false;
+    var timer = null;
+
+    function perfNow() { return (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now(); }
+
+    function elapsedSW() { return acc + (running ? perfNow() - base : 0); }
+    function remainingCD() {
+      if (!running) return cdTarget; // not running -> show full target
+      var e = perfNow() - cdStartBase;
+      return Math.max(0, cdTarget - e);
+    }
+
+    function render() {
+      if (mode === "sw") {
+        display.textContent = fmt(elapsedSW());
+        lapBtn.style.display = running ? "" : "none";
+      } else {
+        display.textContent = fmt(running ? remainingCD() : cdTarget);
+        lapBtn.style.display = "none";
+      }
+    }
+
+    function tick() { render(); }
+
+    // --- Web Audio beep ---
+    var audioCtx = null;
+    function beep() {
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === "suspended") audioCtx.resume();
+        var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+        o.connect(g); g.connect(audioCtx.destination);
+        o.type = "sine"; o.frequency.value = 880;
+        var t = audioCtx.currentTime;
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.3, t + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+        o.start(t); o.stop(t + 0.55);
+      } catch (e) {}
+    }
+
+    function start() {
+      if (mode === "cd" && cdTarget === 0) { note.textContent = "Set a countdown duration first."; return; }
+      running = true; ended = false;
+      if (mode === "sw") { base = perfNow(); }
+      else { cdStartBase = perfNow(); }
+      startStop.textContent = "Stop";
+      if (!timer) timer = setInterval(tick, 31);
+    }
+    function stop() {
+      running = false;
+      if (mode === "sw") { acc += perfNow() - base; }
+      startStop.textContent = "Start";
+      if (timer) { clearInterval(timer); timer = null; }
+      render();
+    }
+
+    startStop.addEventListener("click", function () {
+      if (mode === "cd" && running) { stop(); return; }
+      if (running) stop(); else start();
+    });
+
+    lapBtn.addEventListener("click", function () {
+      if (mode !== "sw" || !running) return;
+      laps.push(elapsedSW());
+      renderLaps();
+    });
+
+    resetBtn.addEventListener("click", function () {
+      running = false; if (timer) { clearInterval(timer); timer = null; }
+      acc = 0; base = 0; laps = []; ended = false; cdTarget = 0;
+      startStop.textContent = "Start";
+      lapsEl.innerHTML = "";
+      computeCdTarget();
+      render();
+      note.textContent = mode === "sw" ? "Stopwatch reset." : "Countdown reset.";
+    });
+
+    function renderLaps() {
+      if (!laps.length) { lapsEl.innerHTML = ""; return; }
+      var html = '<table><thead><tr><th>#</th><th>Split</th><th>Lap</th></tr></thead><tbody>';
+      var prev = 0;
+      for (var i = 0; i < laps.length; i++) {
+        html += '<tr><td class="idx">' + (i + 1) + '</td><td>' + fmt(laps[i]) + '</td><td>' + fmt(laps[i] - prev) + '</td></tr>';
+        prev = laps[i];
+      }
+      html += '</tbody></table>';
+      lapsEl.innerHTML = html;
+    }
+
+    function computeCdTarget() {
+      var h = parseInt(cdH.value, 10) || 0, m = parseInt(cdM.value, 10) || 0, s = parseInt(cdS.value, 10) || 0;
+      cdTarget = (h * 3600 + m * 60 + s) * 1000;
+    }
+
+    // Countdown watcher: when remaining hits 0, beep and stop.
+    function cdWatch() {
+      if (mode !== "cd" || !running) return;
+      if (remainingCD() <= 0) {
+        beep();
+        running = false; ended = true;
+        cdTarget = 0;
+        if (timer) { clearInterval(timer); timer = null; }
+        startStop.textContent = "Start";
+        display.textContent = "00:00.00";
+        note.textContent = "Countdown finished.";
+      }
+    }
+    // Hook the tick to also watch.
+    var origTick = tick;
+    tick = function () { render(); cdWatch(); };
+
+    modeEl.addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-m]"); if (!b) return;
+      if (running) stop();
+      mode = b.getAttribute("data-m");
+      Array.prototype.forEach.call(modeEl.querySelectorAll("button"), function (x) { x.classList.remove("active"); });
+      b.classList.add("active");
+      cdSetup.hidden = mode !== "cd";
+      lapBtn.style.display = mode === "sw" ? "" : "none";
+      acc = 0; base = 0; laps = []; ended = false;
+      computeCdTarget();
+      lapsEl.innerHTML = "";
+      startStop.textContent = "Start";
+      render();
+    });
+
+    [cdH, cdM, cdS].forEach(function (el) {
+      el.addEventListener("input", function () { if (!running) { computeCdTarget(); render(); } });
+    });
+
+    computeCdTarget();
+    render();
+  })();
+  </script>
+</body>
+</html>
