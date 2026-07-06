@@ -563,6 +563,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T19:40:00Z",
   },
   {
+    slug: "braille-translator",
+    name: "Braille Translator",
+    description: "Convert text to and from Unicode braille (Grade 1, uncontracted) — letters, digits with the number sign, capital prefix, and common punctuation. Runs locally; nothing uploaded.",
+    category: "Text",
+    icon: "⠿",
+    added: "2026-07-06T10:00:00Z",
+  },
+  {
     slug: "roman-numeral",
     name: "Roman Numeral Converter",
     description: "Convert integers (1–3999) to Roman numerals and back. Decode validates canonical form and rejects non-standard spellings. Runs in your browser.",

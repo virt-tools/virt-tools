@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Braille Translator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .seg { display:inline-flex; border:1px solid var(--border,#2a2f3a); border-radius:8px; overflow:hidden; margin-bottom:10px; }
+    .seg button { border:none; border-radius:0; background:transparent; color:inherit; padding:6px 12px; cursor:pointer; }
+    .seg button.active { background: var(--accent,#6ea8fe); color:#08101f; }
+    .io { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    @media (max-width:640px){ .io { grid-template-columns:1fr; } }
+    .io textarea { min-height:180px; }
+    .braille { font-size:22px; line-height:1.6; font-family:'Segoe UI','Apple Symbols','Noto Sans Symbols2',sans-serif; }
+    .meta { opacity:.7; font-size:13px; margin:6px 0; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Braille Translator</h1>
+      <p>Convert text to and from Unicode braille (Grade 1, uncontracted). Letters, digits, capital and number signs, and common punctuation are supported. Runs locally; nothing uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="seg" id="dir">
+        <button type="button" data-d="t2b" class="active">Text → Braille</button>
+        <button type="button" data-d="b2t" class="secondary">Braille → Text</button>
+      </div>
+      <div class="io">
+        <div>
+          <label for="in">Input</label>
+          <textarea id="in" spellcheck="false">Hello, World! 123</textarea>
+        </div>
+        <div>
+          <label for="out">Output</label>
+          <textarea id="out" readonly spellcheck="false"></textarea>
+        </div>
+      </div>
+      <div class="meta" id="meta">Type to convert.</div>
+      <p class="note" id="note">Grade 1 (uncontracted) braille. Capital prefix ⠠ marks an uppercase letter; number prefix ⠼ starts a digit run. Runs locally.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var inEl = document.getElementById("in");
+    var outEl = document.getElementById("out");
+    var dirEl = document.getElementById("dir");
+    var metaEl = document.getElementById("meta");
+    var note = document.getElementById("note");
+    var dir = "t2b";
+
+    // Dot bitmask: dot1=0x01 dot2=0x02 dot3=0x04 dot4=0x08 dot5=0x10 dot6=0x20
+    function cell(dots) { return String.fromCharCode(0x2800 + dots); }
+
+    var LETTERS = {
+      a:0x01, b:0x03, c:0x09, d:0x19, e:0x11, f:0x0B, g:0x1B, h:0x13, i:0x0A, j:0x1A,
+      k:0x05, l:0x07, m:0x0D, n:0x1D, o:0x15, p:0x0F, q:0x1F, r:0x17, s:0x0E, t:0x1E,
+      u:0x25, v:0x27, w:0x3A, x:0x2D, y:0x3D, z:0x35
+    };
+    // Digits 1-9,0 reuse a-j patterns.
+    var DIGITS = { "1":0x01,"2":0x03,"3":0x09,"4":0x19,"5":0x11,"6":0x0B,"7":0x1B,"8":0x13,"9":0x0A,"0":0x1A };
+    var PUNCT = {
+      ".":0x32, ",":0x02, "?":0x26, "!":0x16, ";":0x06, ":":0x12, "-":0x24, "'":0x04,
+      "(":0x3F, ")":0x3F, "/":0x0C, "\"":0x1C
+    };
+    var CAP = 0x20;   // ⠠ capital sign
+    var NUM = 0x0C;   // ⠼ number sign
+    var DEC = 0x28;   // ⠨ decimal point (dots46) — used after digits for .
+
+    // Build reverse maps.
+    var LTR = {}, DIG = {}, PUN = {};
+    for (var k in LETTERS) LTR[LETTERS[k]] = k;
+    for (var d in DIGITS) DIG[DIGITS[d]] = d;
+    for (var p in PUNCT) PUN[PUNCT[p]] = p;
+
+    function textToBraille(s) {
+      var out = "";
+      var numMode = false;
+      for (var i = 0; i < s.length; i++) {
+        var c = s[i], lc = c.toLowerCase();
+        if (/[a-z]/.test(lc)) {
+          numMode = false;
+          if (c >= "A" && c <= "Z") out += cell(CAP);
+          out += cell(LETTERS[lc]);
+        } else if (c >= "0" && c <= "9") {
+          if (!numMode) { out += cell(NUM); numMode = true; }
+          out += cell(DIGITS[c]);
+        } else if (c === " ") {
+          numMode = false; out += " ";
+        } else if (c === "." && numMode) {
+          out += cell(DEC); // decimal within a number
+        } else if (PUNCT[c] !== undefined) {
+          numMode = false; out += cell(PUNCT[c]);
+        } else {
+          numMode = false; out += c; // pass through unknown
+        }
+      }
+      return out;
+    }
+
+    function brailleToText(s) {
+      var out = "";
+      var caps = false, numMode = false;
+      for (var i = 0; i < s.length; i++) {
+        var code = s.charCodeAt(i);
+        if (code < 0x2800 || code > 0x28FF) { // not a braille cell
+          out += s[i]; caps = false; numMode = false; continue;
+        }
+        var dots = code - 0x2800;
+        if (dots === 0) { out += " "; continue; } // blank cell as space
+        if (dots === CAP) { caps = true; continue; }
+        if (dots === NUM) { numMode = true; continue; }
+        if (numMode && DIG[dots] !== undefined) { out += DIG[dots]; continue; }
+        if (numMode && dots === DEC) { out += "."; continue; }
+        if (LTR[dots]) { out += (caps ? LTR[dots].toUpperCase() : LTR[dots]); caps = false; continue; }
+        if (PUN[dots]) { out += PUN[dots]; numMode = false; continue; }
+        // Unknown cell: keep as the braille char itself.
+        out += s[i];
+        caps = false; numMode = false;
+      }
+      return out;
+    }
+
+    function convert() {
+      var v = inEl.value;
+      var out = dir === "t2b" ? textToBraille(v) : brailleToText(v);
+      outEl.value = out;
+      if (dir === "t2b") outEl.classList.add("braille"); else outEl.classList.remove("braille");
+      metaEl.textContent = v.length + " chars in · " + out.length + " chars out";
+    }
+
+    dirEl.addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-d]"); if (!b) return;
+      dir = b.getAttribute("data-d");
+      Array.prototype.forEach.call(dirEl.querySelectorAll("button"), function (x) { x.classList.remove("active"); });
+      b.classList.add("active");
+      // Swap content for convenience.
+      var t = inEl.value; inEl.value = outEl.value; outEl.value = t;
+      convert();
+    });
+    inEl.addEventListener("input", convert);
+
+    convert();
+  })();
+  </script>
+</body>
+</html>
