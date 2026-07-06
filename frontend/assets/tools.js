@@ -939,6 +939,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-05T03:00:00Z",
   },
   {
+    slug: "heart-rate-zones",
+    name: "Heart Rate Zone Calculator",
+    description: "Compute training heart-rate zones from age and resting heart rate using the Karvonen (heart-rate reserve) method or a percentage of max HR, with Tanaka or 220−age max-HR formulas. Runs locally.",
+    category: "Health",
+    icon: "❤️",
+    added: "2026-07-06T08:00:00Z",
+  },
+  {
     slug: "quadratic-solver",
     name: "Quadratic Equation Solver",
     description: "Solve a quadratic equation ax² + bx + c = 0. Enter the three coefficients and get the discriminant, the roots (two distinct real, one repeated real, or a complex-conjugate pair), the vertex and axis of symmetry of the parabola, and the factored form when the roots are real. A built-in check evaluates the polynomial at each root so you can confirm the result, and the linear case (a = 0) is handled too. Everything runs locally in your browser.",

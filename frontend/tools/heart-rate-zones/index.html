@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Heart Rate Zone Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px; margin:10px 0; }
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    .zones { margin:10px 0; }
+    .zone { display:grid; grid-template-columns: minmax(120px,1fr) auto auto auto; gap:10px; align-items:center;
+      padding:9px 12px; border-radius:8px; border:1px solid var(--border,#2a2f3a); margin-bottom:6px; }
+    .zone .nm { font-weight:600; }
+    .zone .pct { font-size:13px; opacity:.7; font-family:monospace; }
+    .zone .rng { font-variant-numeric: tabular-nums; font-weight:600; }
+    .z1 { background: rgba(96,165,250,.08); } .z2 { background: rgba(34,197,94,.08); }
+    .z3 { background: rgba(251,191,36,.08); } .z4 { background: rgba(249,115,22,.08); } .z5 { background: rgba(239,68,68,.10); }
+    .seg { display:inline-flex; border:1px solid var(--border,#2a2f3a); border-radius:8px; overflow:hidden; }
+    .seg button { border:none; border-radius:0; background:transparent; color:inherit; padding:6px 12px; cursor:pointer; }
+    .seg button.active { background: var(--accent,#6ea8fe); color:#08101f; }
+    .maxhr { font-size:18px; margin:8px 0; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Heart Rate Zone Calculator</h1>
+      <p>Compute training heart-rate zones from your age and resting heart rate using the Karvonen (heart-rate reserve) method or a percentage of max HR. Runs locally; nothing uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="grid">
+        <div>
+          <label for="age">Age</label>
+          <input type="number" id="age" min="10" max="100" value="30">
+        </div>
+        <div>
+          <label for="rest">Resting HR (bpm, optional)</label>
+          <input type="number" id="rest" min="30" max="120" value="60">
+        </div>
+        <div>
+          <label>Max HR formula</label>
+          <div class="seg" id="formula">
+            <button type="button" data-f="tanaka" class="active">Tanaka</button>
+            <button type="button" data-f="fox" class="secondary">220−age</button>
+          </div>
+        </div>
+        <div>
+          <label>Method</label>
+          <div class="seg" id="method">
+            <button type="button" data-m="karvonen" class="active">Karvonen</button>
+            <button type="button" data-m="max" class="secondary">% of max</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="maxhr" id="maxhr"></div>
+      <div class="zones" id="zones"></div>
+
+      <p class="note" id="note">Zones use the common 50/60/70/80/90% boundaries. Karvonen: target = restingHR + pct·(maxHR − restingHR). Heuristic — consult a professional for training guidance.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var ageEl = document.getElementById("age");
+    var restEl = document.getElementById("rest");
+    var formulaEl = document.getElementById("formula");
+    var methodEl = document.getElementById("method");
+    var zonesEl = document.getElementById("zones");
+    var maxhrEl = document.getElementById("maxhr");
+    var note = document.getElementById("note");
+
+    var formula = "tanaka", method = "karvonen";
+    formulaEl.addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-f]"); if (!b) return;
+      formula = b.getAttribute("data-f");
+      Array.prototype.forEach.call(formulaEl.querySelectorAll("button"), function (x) { x.classList.remove("active"); });
+      b.classList.add("active"); compute();
+    });
+    methodEl.addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-m]"); if (!b) return;
+      method = b.getAttribute("data-m");
+      Array.prototype.forEach.call(methodEl.querySelectorAll("button"), function (x) { x.classList.remove("active"); });
+      b.classList.add("active"); compute();
+    });
+
+    var ZONES = [
+      { name: "Zone 1 — Recovery", lo: 0.50, hi: 0.60, cls: "z1" },
+      { name: "Zone 2 — Endurance", lo: 0.60, hi: 0.70, cls: "z2" },
+      { name: "Zone 3 — Aerobic",   lo: 0.70, hi: 0.80, cls: "z3" },
+      { name: "Zone 4 — Threshold", lo: 0.80, hi: 0.90, cls: "z4" },
+      { name: "Zone 5 — Max",       lo: 0.90, hi: 1.00, cls: "z5" }
+    ];
+
+    function maxHeartRate(age, f) {
+      if (f === "fox") return 220 - age;
+      return Math.round(208 - 0.7 * age); // Tanaka
+    }
+
+    // target bpm for a fraction `p` of effort.
+    function target(maxHR, restHR, p, m) {
+      if (m === "max") return Math.round(p * maxHR);
+      // Karvonen: restHR + p * (maxHR - restHR). Falls back to %max if no restHR.
+      if (!restHR || restHR <= 0) return Math.round(p * maxHR);
+      return Math.round(restHR + p * (maxHR - restHR));
+    }
+
+    function compute() {
+      var age = parseInt(ageEl.value, 10);
+      var rest = parseInt(restEl.value, 10);
+      if (!isFinite(age) || age < 10 || age > 100) { zonesEl.innerHTML = ""; maxhrEl.textContent = "Enter a valid age (10–100)."; return; }
+      var maxHR = maxHeartRate(age, formula);
+      var restHR = (isFinite(rest) && rest > 0) ? rest : 0;
+      var html = "";
+      for (var i = 0; i < ZONES.length; i++) {
+        var z = ZONES[i];
+        var lo = target(maxHR, restHR, z.lo, method);
+        var hi = target(maxHR, restHR, z.hi, method);
+        html += '<div class="zone ' + z.cls + '"><div><span class="nm">' + z.name + '</span></div>' +
+          '<span class="pct">' + Math.round(z.lo * 100) + '–' + Math.round(z.hi * 100) + '%</span>' +
+          '<span class="rng">' + lo + '–' + hi + ' bpm</span></div>';
+      }
+      zonesEl.innerHTML = html;
+      maxhrEl.textContent = "Max HR (" + (formula === "fox" ? "220−age" : "Tanaka") + "): " + maxHR + " bpm" +
+        (method === "karvonen" && restHR ? " · Resting " + restHR + " · Reserve " + (maxHR - restHR) + " bpm" : "");
+    }
+
+    ageEl.addEventListener("input", compute);
+    restEl.addEventListener("input", compute);
+    compute();
+  })();
+  </script>
+</body>
+</html>
