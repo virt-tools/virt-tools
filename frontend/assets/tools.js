@@ -195,6 +195,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-06T06:00:00Z",
   },
   {
+    slug: "word-wrap",
+    name: "Word Wrap & Reflow",
+    description: "Reflow hard-broken text to a target line width, preserving paragraphs and indentation. Great for text pasted from PDFs or email. Runs locally.",
+    category: "Text",
+    icon: "↵",
+    added: "2026-07-06T07:00:00Z",
+  },
+  {
     slug: "url-parser",
     name: "URL Parser",
     description: "Break a URL into scheme, host, port, path, decoded query params and fragment — runs locally.",

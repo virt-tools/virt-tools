@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Word Wrap &amp; Reflow — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .opts { display:flex; flex-wrap:wrap; gap:14px; align-items:center; margin:10px 0; }
+    .opts label { font-size:14px; }
+    .io { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    @media (max-width:640px){ .io { grid-template-columns:1fr; } }
+    .io textarea { min-height:240px; font-family:monospace; }
+    .stats { opacity:.7; font-size:13px; margin:6px 0; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Word Wrap &amp; Reflow</h1>
+      <p>Reflow hard-broken text to a target line width, preserving paragraphs and indentation. Great for reformatting text pasted from PDFs or email. Runs locally; nothing uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="opts">
+        <label>Line width <input type="number" id="width" min="1" max="200" value="72" style="width:80px;"></label>
+        <label><input type="checkbox" id="preserveIndent" checked> Preserve indent</label>
+        <label><input type="checkbox" id="keepBreaks"> Keep hard line breaks</label>
+        <button id="run">Reflow</button>
+        <button id="copy" class="secondary">Copy output</button>
+      </div>
+
+      <div class="io">
+        <div>
+          <label for="in">Input</label>
+          <textarea id="in" spellcheck="false" placeholder="Paste text to reflow…">Lorem ipsum dolor sit amet, consectetur adipiscing
+elit, sed do eiusmod tempor incididunt ut labore
+et dolore magna aliqua.
+
+    This is a quoted paragraph that should keep
+    its indentation when reflowed to the new width.</textarea>
+        </div>
+        <div>
+          <label for="out">Output</label>
+          <textarea id="out" readonly spellcheck="false"></textarea>
+        </div>
+      </div>
+
+      <div class="stats" id="stats">Click Reflow.</div>
+      <p class="note" id="note">Greedy word-wrap: paragraphs (blank-line separated) are rejoined then rewrapped to the line width. Runs locally.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var inEl = document.getElementById("in");
+    var outEl = document.getElementById("out");
+    var widthEl = document.getElementById("width");
+    var preserveIndentEl = document.getElementById("preserveIndent");
+    var keepBreaksEl = document.getElementById("keepBreaks");
+    var statsEl = document.getElementById("stats");
+    var note = document.getElementById("note");
+
+    // Wrap a single line (no embedded newlines) to width, honoring an optional
+    // hanging indent prefix taken from the line's leading whitespace.
+    function wrapLine(line, width, preserveIndent) {
+      // Capture leading whitespace as the indent to preserve on continuation lines.
+      var indent = "";
+      if (preserveIndent) {
+        var m = /^([ \t]*)[\s\S]*$/.exec(line);
+        indent = m[1];
+      }
+      // Tokenize the content (after indent) into words, collapsing runs of whitespace.
+      var content = preserveIndent ? line.replace(/^[ \t]*/, "") : line.replace(/^[ \t]+/, "");
+      var words = content.split(/[ \t]+/).filter(Boolean);
+      if (!words.length) return line.replace(/[ \t]+$/, "");
+
+      var out = [];
+      var cur = indent;
+      for (var i = 0; i < words.length; i++) {
+        var w = words[i];
+        if (cur === indent) {
+          // First word on the line: always place it (even if it overflows).
+          cur += w;
+        } else if (cur.length + 1 + w.length <= width) {
+          cur += " " + w;
+        } else {
+          out.push(cur);
+          cur = indent + w;
+        }
+      }
+      out.push(cur);
+      return out.join("\n");
+    }
+
+    // Reflow text: paragraphs split on blank lines; within a paragraph, join lines
+    // with a space (reflow) unless keepBreaks is set, then wrap each line.
+    function reflow(text, width, preserveIndent, keepBreaks) {
+      // Normalise CRLF to LF.
+      text = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+      var paras = text.split(/\n[ \t]*\n/);
+      var result = [];
+      for (var p = 0; p < paras.length; p++) {
+        var para = paras[p];
+        if (keepBreaks) {
+          // Wrap each existing line independently; keep paragraph's lines together.
+          var lines = para.split("\n");
+          var wrapped = lines.map(function (l) { return wrapLine(l, width, preserveIndent); });
+          result.push(wrapped.join("\n"));
+        } else {
+          // Join all lines in the paragraph with single spaces, then wrap once.
+          var ls = para.split("\n").map(function (l) { return l.replace(/[ \t]+$/,""); });
+          var indent = "";
+          if (preserveIndent) {
+            var im = /^([ \t]*)[\s\S]*$/.exec(ls[0] || "");
+            indent = im[1];
+          }
+          // Strip leading whitespace from each line so the indent isn't doubled,
+          // then collapse leftover multiple spaces from the join.
+          var joined = ls.map(function (l) { return l.replace(/^[ \t]+/, ""); })
+            .join(" ").replace(/ {2,}/g, " ").replace(/[ \t]+$/,"");
+          // Re-attach the original indent once so wrapLine can re-capture it.
+          var fullLine = preserveIndent ? indent + joined : joined;
+          result.push(wrapLine(fullLine, width, preserveIndent));
+        }
+      }
+      return result.join("\n\n");
+    }
+
+    function run() {
+      var width = Math.max(1, Math.min(200, parseInt(widthEl.value, 10) || 72));
+      var text = inEl.value;
+      var out = reflow(text, width, preserveIndentEl.checked, keepBreaksEl.checked);
+      outEl.value = out;
+      var inLines = text ? text.split("\n").length : 0;
+      var outLines = out ? out.split("\n").length : 0;
+      var longest = 0;
+      out.split("\n").forEach(function (l) { if (l.length > longest) longest = l.length; });
+      statsEl.textContent = "width " + width + " · lines " + inLines + "→" + outLines +
+        " · longest " + longest + " chars · output " + out.length + " chars";
+    }
+
+    document.getElementById("run").addEventListener("click", run);
+    document.getElementById("copy").addEventListener("click", function () {
+      outEl.select();
+      try { document.execCommand("copy"); note.textContent = "Output copied to clipboard."; }
+      catch (e) { note.textContent = "Copy failed — select and copy manually."; }
+    });
+
+    run();
+  })();
+  </script>
+</body>
+</html>
