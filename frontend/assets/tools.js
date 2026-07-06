@@ -1131,6 +1131,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-06T09:00:00Z",
   },
   {
+    slug: "moon-phase",
+    name: "Moon Phase Calculator",
+    description: "Find the Moon's phase for any date and time. Enter a date (defaults to now) to get the phase name (new, waxing crescent, first quarter, waxing gibbous, full, waning gibbous, last quarter, waning crescent), the illuminated fraction, the age of the Moon, and the dates of the next new, first-quarter, full, and last-quarter moons. A simple synodic-month model (29.530588-day lunation from the J2000 reference new moon) with an SVG rendering of the lit disk. Everything runs locally in your browser.",
+    category: "Geography",
+    icon: "🌙",
+    added: "2026-07-06T22:00:00Z",
+  },
+  {
     slug: "ipv6-tool",
     name: "IPv6 Address Tool",
     description: "Parse and normalise an IPv6 address. Enter an address in any valid form — with leading zeros, mixed case, :: shorthand, or an embedded IPv4-mapped tail (e.g. ::ffff:192.0.2.1) — and the tool validates it, expands it to the full eight-group form, compresses it to the canonical RFC 5952 shortest form (lowercase, longest run of zero groups collapsed, no leading zeros), shows the reverse-DNS ip6.arpa name, and reports the 128-bit integer value. A zone id after % (e.g. fe80::1%eth0) is accepted and stripped. Everything runs locally in your browser.",

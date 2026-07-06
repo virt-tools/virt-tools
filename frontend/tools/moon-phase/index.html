@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Moon Phase Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:12px; margin:10px 0; }
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    .head { display:flex; align-items:center; gap:18px; flex-wrap:wrap; margin:14px 0; }
+    .phaseVis { width:120px; height:120px; flex:0 0 auto; }
+    .headText .name { font-size:28px; font-weight:700; }
+    .headText .ill { font-size:16px; opacity:.85; margin-top:4px; }
+    .results { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px; margin:12px 0; }
+    .res { background:var(--panel-2,#161a22); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:8px 10px; }
+    .res .n { font-size:18px; font-weight:600; font-variant-numeric: tabular-nums; }
+    .res .l { font-size:12px; opacity:.7; }
+    .cycle { display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:8px; margin:12px 0; }
+    .cycle .c { background:var(--panel-2,#161a22); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:6px 8px; text-align:center; font-size:12px; }
+    .cycle .c .ico { font-size:20px; }
+    .cycle .c.now { border-color: var(--accent,#6ea8fe); background: rgba(110,168,254,.12); }
+    .next { margin-top:6px; font-size:14px; opacity:.9; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Moon Phase Calculator</h1>
+      <p>Find the moon's phase for any date and time. Enter a date (defaults to now) to get the phase name, illuminated fraction, age of the Moon, and the dates of the next new, first-quarter, full, and last-quarter moons. A simple synodic-month model (lunation 29.530588 days from the J2000 reference new moon). Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="grid">
+        <div><label for="date">Date and time</label><input type="datetime-local" id="date"></div>
+        <div><label for="tz">Hours offset from UTC (auto from browser)</label><input type="number" id="tz" step="0.25" value="0"></div>
+      </div>
+
+      <div class="head">
+        <svg class="phaseVis" id="vis" viewBox="0 0 120 120"></svg>
+        <div class="headText">
+          <div class="name" id="name">—</div>
+          <div class="ill" id="ill">Enter a date.</div>
+        </div>
+      </div>
+
+      <div class="results" id="results"></div>
+
+      <h3 style="margin:16px 0 4px; font-size:15px;">The lunar cycle</h3>
+      <div class="cycle" id="cycle"></div>
+      <div class="next" id="next"></div>
+
+      <p class="note" id="note">Phase angle is computed from the lunation number relative to the J2000 reference new moon (2000-01-06 18:14 UTC). The synodic month is 29.530588 days; the model is accurate to within a few hours of the true phase. Runs locally.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var dateEl = document.getElementById("date");
+    var tzEl = document.getElementById("tz");
+    var visEl = document.getElementById("vis");
+    var nameEl = document.getElementById("name");
+    var illEl = document.getElementById("ill");
+    var resultsEl = document.getElementById("results");
+    var cycleEl = document.getElementById("cycle");
+    var nextEl = document.getElementById("next");
+    var note = document.getElementById("note");
+
+    var SYNODIC = 29.530588; // mean synodic month in days
+    // Reference new moon: 2000-01-06 18:14 UTC. Julian Day number (UT):
+    var REF_JD = 2451550.2597;
+
+    // Julian Day from a JS Date (UTC).
+    function toJD(d) {
+      return d.getTime() / 86400000 + 2440587.5;
+    }
+    function fromJD(jd) {
+      return new Date((jd - 2440587.5) * 86400000);
+    }
+
+    // Phase fraction in [0,1) for a given UTC JS Date.
+    function phaseFraction(d) {
+      var jd = toJD(d);
+      var days = jd - REF_JD;
+      var p = (days % SYNODIC) / SYNODIC;
+      if (p < 0) p += 1;
+      return p;
+    }
+
+    var PHASES = [
+      { lim: 0.03475, name: "New Moon",          ico: "🌑", idx: 0 },
+      { lim: 0.21525, name: "Waxing Crescent",   ico: "🌒", idx: 1 },
+      { lim: 0.28475, name: "First Quarter",      ico: "🌓", idx: 2 },
+      { lim: 0.46525, name: "Waxing Gibbous",     ico: "🌔", idx: 3 },
+      { lim: 0.53475, name: "Full Moon",         ico: "🌕", idx: 4 },
+      { lim: 0.71525, name: "Waning Gibbous",    ico: "🌖", idx: 5 },
+      { lim: 0.78475, name: "Last Quarter",       ico: "🌗", idx: 6 },
+      { lim: 0.96525, name: "Waning Crescent",    ico: "🌘", idx: 7 },
+      { lim: Infinity, name: "New Moon",         ico: "🌑", idx: 0 }
+    ];
+    function phaseInfo(p) {
+      for (var i = 0; i < PHASES.length; i++) if (p <= PHASES[i].lim) return PHASES[i];
+      return PHASES[PHASES.length - 1];
+    }
+
+    // Illuminated fraction k in [0,1]: k = (1 - cos(2*pi*phase)) / 2.
+    function illumination(p) { return (1 - Math.cos(2 * Math.PI * p)) / 2; }
+
+    // SVG visualization of the moon for a given phase fraction (0..1).
+    // Construction: a dark base disk, then a lit shape on top made of two arcs —
+    // the lit-side semicircle (the outer limb) plus the terminator half-ellipse.
+    // The terminator's horizontal semi-axis is r*|cos(2*pi*p)|; its bulge direction
+    // (into the lit side for a crescent, into the night side for a gibbous) is set by
+    // the sweep flag, so the shape correctly degenerates to all-dark at new moon and
+    // all-lit at full moon.
+    function drawPhase(p) {
+      var cx = 60, cy = 60, r = 52;
+      var k = illumination(p); // fraction lit
+      var waxing = p < 0.5;     // waxing: lit on the right; waning: lit on the left
+      var rx = r * Math.abs(Math.cos(2 * Math.PI * p));
+      // Limb arc: top -> bottom via the lit-side semicircle. sweep 1 = right (waxing), 0 = left (waning).
+      var limbSweep = waxing ? 1 : 0;
+      // Terminator arc: bottom -> top. Crescent (k<0.5) bulges into the lit side; gibbous bulges into night.
+      // Right bulge = sweep 1, left bulge = sweep 0.
+      var termSweep = waxing ? (k < 0.5 ? 1 : 0) : (k < 0.5 ? 0 : 1);
+      var svg = "";
+      // Dark base disk.
+      svg += '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="#1b1f2b"/>';
+      // Lit shape (two-arc path).
+      var d = "M" + cx + "," + (cy - r) +
+        " A" + r + "," + r + " 0 0," + limbSweep + " " + cx + "," + (cy + r) +
+        " A" + rx + "," + r + " 0 0," + termSweep + " " + cx + "," + (cy - r) + " Z";
+      svg += '<path d="' + d + '" fill="#e8e6d8"/>';
+      // Subtle outline.
+      svg += '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="var(--border,#2a2f3a)" stroke-width="1"/>';
+      visEl.innerHTML = svg;
+    }
+
+    function fmtDate(d) {
+      var pad = function (n) { return String(n).padStart(2, "0"); };
+      return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + " " +
+             pad(d.getHours()) + ":" + pad(d.getMinutes());
+    }
+
+    function nextPhaseDate(fromJD, targetFraction) {
+      // Find next JD where the phase fraction equals targetFraction (the next occurrence of that phase).
+      var p0 = ((fromJD - REF_JD) % SYNODIC) / SYNODIC; // current phase fraction 0..1
+      if (p0 < 0) p0 += 1;
+      var delta = (targetFraction - p0 + 1) % 1;       // fraction of a synodic month until target
+      if (delta < 1e-9) delta += 1;                     // exactly at it -> next cycle
+      return fromJD + delta * SYNODIC;
+    }
+
+    // Parse the datetime-local string as a wall-clock time at the given UTC offset,
+    // returning a UTC Date. This decouples the result from the browser's local zone.
+    function readUTC() {
+      var v = dateEl.value;
+      if (!v) return null;
+      var off = parseFloat(tzEl.value) || 0;
+      var m = /^(\d+)-(\d+)-(\d+)T(\d+):(\d+)(?::(\d+))?$/.exec(v);
+      if (!m) return null;
+      // Wall-clock as if UTC, then shift by the chosen offset.
+      var ms = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], m[6] ? +m[6] : 0) - off * 3600 * 1000;
+      return new Date(ms);
+    }
+
+    function compute() {
+      var off = parseFloat(tzEl.value) || 0;
+      var d = readUTC();
+      if (!d || isNaN(d.getTime())) {
+        nameEl.textContent = "—";
+        illEl.textContent = "Enter a valid date and time.";
+        resultsEl.innerHTML = "";
+        cycleEl.innerHTML = "";
+        nextEl.textContent = "";
+        visEl.innerHTML = "";
+        return;
+      }
+
+      var p = phaseFraction(d);
+      var info = phaseInfo(p);
+      var k = illumination(p);
+      var ageDays = p * SYNODIC;
+
+      drawPhase(p);
+      nameEl.textContent = info.ico + "  " + info.name;
+      illEl.textContent = (k * 100).toFixed(1) + "% illuminated · age " + ageDays.toFixed(1) + " days";
+
+      var jd = toJD(d);
+      var nextNew = nextPhaseDate(jd, 0);
+      var nextFQ = nextPhaseDate(jd, 0.25);
+      var nextFull = nextPhaseDate(jd, 0.5);
+      var nextLQ = nextPhaseDate(jd, 0.75);
+
+      var html = "";
+      html += '<div class="res"><div class="n">' + (p * 100).toFixed(2) + '%</div><div class="l">Cycle position</div></div>';
+      html += '<div class="res"><div class="n">' + (k * 100).toFixed(1) + '%</div><div class="l">Illuminated</div></div>';
+      html += '<div class="res"><div class="n">' + ageDays.toFixed(1) + ' d</div><div class="l">Moon age</div></div>';
+      html += '<div class="res"><div class="n">' + SYNODIC.toFixed(6) + ' d</div><div class="l">Synodic month</div></div>';
+      resultsEl.innerHTML = html;
+
+      // Cycle strip with current highlighted.
+      var cycle = "";
+      var order = [
+        { ico: "🌑", n: "New" }, { ico: "🌒", n: "Wax Crs" }, { ico: "🌓", n: "1st Qtr" },
+        { ico: "🌔", n: "Wax Gib" }, { ico: "🌕", n: "Full" }, { ico: "🌖", n: "Wan Gib" },
+        { ico: "🌗", n: "Last Qtr" }, { ico: "🌘", n: "Wan Crs" }
+      ];
+      for (var i = 0; i < order.length; i++) {
+        var now = (i === info.idx);
+        cycle += '<div class="c' + (now ? " now" : "") + '"><div class="ico">' + order[i].ico + '</div>' + order[i].n + '</div>';
+      }
+      cycleEl.innerHTML = cycle;
+
+      nextEl.innerHTML =
+        "Next new moon: " + fmtDate(fromJD(nextNew)) + " · " +
+        "first quarter: " + fmtDate(fromJD(nextFQ)) + "<br>" +
+        "Next full moon: " + fmtDate(fromJD(nextFull)) + " · " +
+        "last quarter: " + fmtDate(fromJD(nextLQ));
+    }
+
+    // Default to now in the local timezone.
+    function localNow() {
+      var d = new Date();
+      var pad = function (n) { return String(n).padStart(2, "0"); };
+      return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) +
+        "T" + pad(d.getHours()) + ":" + pad(d.getMinutes());
+    }
+    dateEl.value = localNow();
+    tzEl.value = -(new Date().getTimezoneOffset() / 60); // browser offset hours
+    tzEl.step = "0.25";
+
+    dateEl.addEventListener("input", compute);
+    tzEl.addEventListener("input", compute);
+    compute();
+  })();
+  </script>
+</body>
+</html>
