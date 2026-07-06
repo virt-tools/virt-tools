@@ -627,6 +627,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-04T00:20:00Z",
   },
   {
+    slug: "ascii85",
+    name: "Ascii85 Encoder / Decoder",
+    description: "Encode and decode Ascii85 (Base85) — the 4-to-5 byte encoding used in PDF/PostScript and btoa, with Adobe ~ terminator framing and z zero-group compression. Runs locally; nothing uploaded.",
+    category: "Encoding",
+    icon: "📜",
+    added: "2026-07-06T11:00:00Z",
+  },
+  {
     slug: "placeholder-image-generator",
     name: "Placeholder Image Generator",
     description: "Generate placeholder images of any size and color with an optional label — download as PNG or SVG. Text color auto-picks white or black from the background. Everything is rendered in your browser.",
