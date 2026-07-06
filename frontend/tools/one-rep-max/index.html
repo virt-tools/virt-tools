@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>One-Rep Max Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; margin:10px 0; }
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    .results { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px; margin:10px 0; }
+    .res { background:var(--panel-2,#161a22); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:8px 10px; }
+    .res .n { font-size:20px; font-weight:600; font-variant-numeric: tabular-nums; }
+    .res .l { font-size:12px; opacity:.7; }
+    .res.avg { background: rgba(110,168,254,.12); border-color: var(--accent,#6ea8fe); }
+    table.pct { width:100%; border-collapse:collapse; margin-top:8px; font-variant-numeric: tabular-nums; font-size:14px; }
+    table.pct th, table.pct td { padding:5px 10px; text-align:center; border-bottom:1px solid var(--border,#2a2f3a); }
+    table.pct th { opacity:.7; font-weight:normal; }
+    .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:8px 0; }
+    .seg { display:inline-flex; border:1px solid var(--border,#2a2f3a); border-radius:8px; overflow:hidden; }
+    .seg button { border:none; border-radius:0; background:transparent; color:inherit; padding:5px 12px; cursor:pointer; }
+    .seg button.active { background: var(--accent,#6ea8fe); color:#08101f; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>One-Rep Max Calculator</h1>
+      <p>Estimate your one-repetition maximum from a weight lifted for a number of reps, using six published formulas. Includes a per-formula comparison and a percentage-of-1RM table for setting rep targets. Runs locally.</p>
+    </div>
+
+    <div class="panel">
+      <div class="grid">
+        <div><label for="weight">Weight lifted</label><input type="number" id="weight" min="0" step="0.5" value="100"></div>
+        <div><label for="reps">Reps</label><input type="number" id="reps" min="1" max="20" value="8"></div>
+        <div><label>Unit</label>
+          <div class="seg" id="unit">
+            <button type="button" data-u="kg" class="active">kg</button>
+            <button type="button" data-u="lb" class="secondary">lb</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="results" id="results"></div>
+
+      <h3 style="margin:14px 0 4px; font-size:15px;">Percentage of 1RM (average estimate)</h3>
+      <table class="pct" id="pct"><thead><tr><th>%1RM</th><th>Weight</th><th>≈ Reps</th></tr></thead><tbody></tbody></table>
+
+      <p class="note" id="note">Estimates are heuristic — true 1RM varies by lift and individual. Epley and Brzycki agree well for 1–10 reps. Runs locally.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var weightEl = document.getElementById("weight");
+    var repsEl = document.getElementById("reps");
+    var unitEl = document.getElementById("unit");
+    var resultsEl = document.getElementById("results");
+    var pctBody = document.querySelector("#pct tbody");
+    var note = document.getElementById("note");
+    var unit = "kg";
+
+    var FORMULAS = [
+      { name: "Epley",   f: function(w, r) { return w * (1 + r / 30); } },
+      { name: "Brzycki", f: function(w, r) { return w * 36 / (37 - r); } },
+      { name: "Lander",  f: function(w, r) { return 100 * w / (101.3 - 2.67123 * r); } },
+      { name: "Lombardi",f: function(w, r) { return w * Math.pow(r, 0.10); } },
+      { name: "O'Conner", f: function(w, r) { return w * (1 + 0.025 * r); } },
+      { name: "Wathen",  f: function(w, r) { return 100 * w / (48.8 + 53.8 * Math.exp(-0.075 * r)); } }
+    ];
+
+    // Reps you can do at a given % of 1RM (inverse Epley): r = 30*(1/p - 1).
+    function repsAtPct(p) {
+      if (p >= 1) return 1;
+      var r = 30 * (1 / p - 1);
+      return Math.max(1, Math.round(r));
+    }
+
+    unitEl.addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-u]"); if (!b) return;
+      unit = b.getAttribute("data-u");
+      Array.prototype.forEach.call(unitEl.querySelectorAll("button"), function (x) { x.classList.remove("active"); });
+      b.classList.add("active");
+      compute();
+    });
+
+    function compute() {
+      var w = parseFloat(weightEl.value);
+      var r = parseInt(repsEl.value, 10);
+      if (!isFinite(w) || w <= 0 || !isFinite(r) || r < 1) { resultsEl.innerHTML = ""; pctBody.innerHTML = ""; note.textContent = "Enter a weight and reps (1–20)."; return; }
+      if (r >= 37) { resultsEl.innerHTML = ""; pctBody.innerHTML = ""; note.textContent = "Brzycki is undefined at 37+ reps; keep reps under 20 for reliable estimates."; return; }
+
+      var vals = FORMULAS.map(function (fr) { return fr.f(w, r); });
+      var avg = vals.reduce(function (a, b) { return a + b; }, 0) / vals.length;
+
+      var html = "";
+      FORMULAS.forEach(function (fr, i) {
+        html += '<div class="res' + (fr.name === "Epley" ? "" : "") + '"><div class="n">' + vals[i].toFixed(1) + ' ' + unit + '</div><div class="l">' + fr.name + '</div></div>';
+      });
+      html += '<div class="res avg"><div class="n">' + avg.toFixed(1) + ' ' + unit + '</div><div class="l">Average</div></div>';
+      resultsEl.innerHTML = html;
+
+      // Percentage table: 95% down to 50% in 5% steps.
+      var rows = "";
+      for (var p = 95; p >= 50; p -= 5) {
+        var frac = p / 100;
+        rows += "<tr><td>" + p + "%</td><td>" + (avg * frac).toFixed(1) + " " + unit + "</td><td>" + repsAtPct(frac) + "</td></tr>";
+      }
+      pctBody.innerHTML = rows;
+      note.textContent = "Six formula estimates plus their average. Use the %1RM table to pick a working weight for a target rep range.";
+    }
+
+    weightEl.addEventListener("input", compute);
+    repsEl.addEventListener("input", compute);
+    compute();
+  })();
+  </script>
+</body>
+</html>
