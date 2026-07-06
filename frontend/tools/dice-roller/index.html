@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Dice Roller — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .dice { display:flex; flex-wrap:wrap; gap:6px; margin:10px 0; }
+    .die { width:38px; height:38px; display:flex; align-items:center; justify-content:center;
+      border:1px solid var(--border,#2a2f3a); border-radius:8px; font-weight:600; font-variant-numeric: tabular-nums; }
+    .die.kept { background: var(--accent,#6ea8fe); color:#08101f; }
+    .die.dropped { opacity:.32; }
+    .term { margin-bottom:8px; }
+    .term .lab { font-family:monospace; opacity:.8; font-size:13px; }
+    .result-big { font-size:40px; font-weight:600; margin:6px 0; }
+    .hist { display:flex; align-items:flex-end; gap:2px; height:120px; margin-top:10px; }
+    .hist .bar { flex:1; background: var(--accent,#6ea8fe); border-radius:3px 3px 0 0; position:relative; min-width:6px; }
+    .hist .bar .lbl { position:absolute; bottom:-18px; left:0; right:0; text-align:center; font-size:10px; opacity:.6; }
+    .hist-wrap { padding-bottom:22px; }
+    .stats { display:grid; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); gap:10px; margin:10px 0; }
+    .stat { background:var(--panel-2,#161a22); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:8px 10px; }
+    .stat .n { font-size:18px; font-weight:600; }
+    .stat .l { font-size:12px; opacity:.7; }
+    .quick { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+    .quick button { padding:3px 10px; font-size:13px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Dice Roller</h1>
+      <p>Roll dice with notation — <code>4d6kh3</code> (4d6 keep highest 3), <code>2d20+5</code>, <code>3d8dl1</code> (drop lowest 1). Sum, individual dice, and a 10k-roll distribution. Runs locally.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="in">Dice expression</label>
+        <input id="in" type="text" value="4d6kh3" spellcheck="false" autocomplete="off" style="font-family:monospace;">
+        <div class="quick">
+          <button class="secondary" data-x="1d20">1d20</button>
+          <button class="secondary" data-x="2d20kh1">2d20kh1 (advantage)</button>
+          <button class="secondary" data-x="2d20kl1">2d20kl1 (disadvantage)</button>
+          <button class="secondary" data-x="3d6">3d6</button>
+          <button class="secondary" data-x="4d6kh3">4d6kh3</button>
+          <button class="secondary" data-x="1d100">1d100</button>
+          <button class="secondary" data-x="2d6+3">2d6+3</button>
+        </div>
+      </div>
+
+      <div class="row">
+        <button id="roll">Roll</button>
+        <button id="dist" class="secondary">Roll 10,000 × (distribution)</button>
+        <button id="clear" class="secondary">Clear</button>
+      </div>
+
+      <div class="result-big" id="total"></div>
+      <div id="detail"></div>
+
+      <div class="spacer" id="distSpacer" hidden></div>
+      <div id="distBox" hidden>
+        <div class="stats" id="distStats"></div>
+        <div class="hist-wrap"><div class="hist" id="hist"></div></div>
+      </div>
+
+      <p class="note" id="note">Notation: <code>NdM</code> ± K; keep/drop via <code>kh</code>/<code>kl</code>/<code>dh</code>/<code>dl</code> + count. Runs locally with Math.random.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var inp = document.getElementById("in");
+    var totalEl = document.getElementById("total");
+    var detailEl = document.getElementById("detail");
+    var distBox = document.getElementById("distBox");
+    var distSpacer = document.getElementById("distSpacer");
+    var distStats = document.getElementById("distStats");
+    var hist = document.getElementById("hist");
+    var note = document.getElementById("note");
+
+    function esc(s) { return String(s).replace(/[&<>]/g, function (c) { return c === "&" ? "&amp;" : c === "<" ? "&lt;" : "&gt;"; }); }
+
+    function rollDie(sides) { return 1 + Math.floor(Math.random() * sides); }
+
+    // Tokenize a dice expression into terms and operators.
+    // term: {count, sides, kd?, kdn?} | {const:n} | {op:'+'|'-'}
+    function tokenize(s) {
+      s = s.replace(/\s+/g, "").toLowerCase();
+      var re = /(\d*)d(\d+)(?:(kh|kl|dh|dl)(\d+))?|([+-])|(\d+)/g;
+      var toks = [], m, last = 0;
+      while ((m = re.exec(s)) !== null) {
+        if (m.index !== last) throw new Error("Unexpected character in expression.");
+        if (m[0] === "") break;
+        last = re.lastIndex;
+        if (m[5]) toks.push({ op: m[5] });
+        else if (m[6]) toks.push({ const: +m[6] });
+        else toks.push({ count: m[1] ? +m[1] : 1, sides: +m[2], kd: m[3], kdn: m[4] ? +m[4] : 1 });
+      }
+      if (last !== s.length) throw new Error("Could not parse: " + s);
+      if (!toks.length) throw new Error("Empty expression.");
+      if (toks[toks.length - 1].op) throw new Error("Trailing operator.");
+      return toks;
+    }
+
+    function applyKD(dice, kd, n) {
+      var idxs = dice.map(function (v, i) { return [v, i]; });
+      var sorted = idxs.slice().sort(function (a, b) {
+        return (kd === "kh" || kd === "dh") ? b[0] - a[0] : a[0] - b[0];
+      });
+      n = Math.min(n, dice.length);
+      var keepIdx;
+      if (kd === "kh" || kd === "kl") keepIdx = new Set(sorted.slice(0, n).map(function (x) { return x[1]; }));
+      else keepIdx = new Set(sorted.slice(n).map(function (x) { return x[1]; }));
+      var kept = [], dropped = [];
+      dice.forEach(function (v, i) { (keepIdx.has(i) ? kept : dropped).push(v); });
+      return { kept: kept, dropped: dropped };
+    }
+
+    // Returns { total, terms: [{label, kept, dropped, sum, const?}] }
+    function evalExpr(s, rollFn) {
+      var toks = tokenize(s);
+      var total = 0, sign = 1, terms = [];
+      for (var i = 0; i < toks.length; i++) {
+        var t = toks[i];
+        if (t.op) { sign = t.op === "+" ? 1 : -1; continue; }
+        if (t.const !== undefined) {
+          total += sign * t.const;
+          terms.push({ label: (sign > 0 ? "+" : "−") + t.const, const: sign * t.const });
+          continue;
+        }
+        if (t.count < 1 || t.count > 1000) throw new Error("Dice count out of range (1–1000).");
+        if (t.sides < 2 || t.sides > 10000) throw new Error("Sides out of range (2–10000).");
+        var dice = [];
+        for (var k = 0; k < t.count; k++) dice.push(rollFn(t.sides));
+        var kept = dice.slice(), dropped = [];
+        if (t.kd) { var r = applyKD(dice, t.kd, t.kdn); kept = r.kept; dropped = r.dropped; }
+        var sum = kept.reduce(function (a, b) { return a + b; }, 0);
+        total += sign * sum;
+        terms.push({ label: t.count + "d" + t.sides + (t.kd ? t.kd + t.kdn : ""), kept: kept, dropped: dropped, sum: sign * sum });
+      }
+      return { total: total, terms: terms };
+    }
+
+    function renderDetail(res) {
+      totalEl.textContent = "= " + res.total;
+      var html = "";
+      res.terms.forEach(function (term) {
+        if (term.const !== undefined) {
+          html += '<div class="term"><span class="lab">' + esc(term.label) + '</span> = ' + term.const + '</div>';
+          return;
+        }
+        html += '<div class="term"><span class="lab">' + esc(term.label) + '</span>'
+          + ' → sum ' + term.sum + '<div class="dice">';
+        term.kept.forEach(function (v) { html += '<span class="die kept">' + v + '</span>'; });
+        term.dropped.forEach(function (v) { html += '<span class="die dropped">' + v + '</span>'; });
+        html += '</div></div>';
+      });
+      detailEl.innerHTML = html;
+    }
+
+    function roll() {
+      try {
+        var res = evalExpr(inp.value, rollDie);
+        renderDetail(res);
+        distBox.hidden = true; distSpacer.hidden = true;
+        note.textContent = "Rolled locally with Math.random.";
+      } catch (e) { totalEl.textContent = ""; detailEl.innerHTML = ""; note.textContent = e.message || String(e); }
+    }
+
+    function distribution() {
+      try {
+        var expr = inp.value;
+        var N = 10000, vals = [];
+        for (var i = 0; i < N; i++) vals.push(evalExpr(expr, rollDie).total);
+        vals.sort(function (a, b) { return a - b; });
+        var min = vals[0], max = vals[N - 1];
+        var mean = vals.reduce(function (a, b) { return a + b; }, 0) / N;
+        var variance = 0;
+        for (var j = 0; j < N; j++) variance += (vals[j] - mean) * (vals[j] - mean);
+        variance /= N;
+        var sd = Math.sqrt(variance);
+        var median = vals[Math.floor(N / 2)];
+        // Histogram over the integer range.
+        var counts = {};
+        vals.forEach(function (v) { counts[v] = (counts[v] || 0) + 1; });
+        var maxCount = 0;
+        for (var v in counts) if (counts[v] > maxCount) maxCount = counts[v];
+        var bars = "";
+        for (var b = min; b <= max; b++) {
+          var c = counts[b] || 0;
+          var h = maxCount ? Math.round(c / maxCount * 100) : 0;
+          bars += '<div class="bar" style="height:' + Math.max(1, h) + '%"><span class="lbl">' + b + '</span></div>';
+        }
+        hist.innerHTML = bars;
+        distStats.innerHTML = [["Mean", mean.toFixed(2)], ["Median", median], ["Std dev", sd.toFixed(2)], ["Min", min], ["Max", max], ["Rolls", N]]
+          .map(function (s) { return '<div class="stat"><div class="n">' + s[1] + '</div><div class="l">' + s[0] + '</div></div>'; }).join("");
+        distBox.hidden = false; distSpacer.hidden = false;
+        note.textContent = N + " rolls computed locally.";
+      } catch (e) { note.textContent = e.message || String(e); }
+    }
+
+    document.getElementById("roll").addEventListener("click", roll);
+    document.getElementById("dist").addEventListener("click", distribution);
+    document.getElementById("clear").addEventListener("click", function () {
+      totalEl.textContent = ""; detailEl.innerHTML = ""; distBox.hidden = true; distSpacer.hidden = true;
+    });
+    inp.addEventListener("keydown", function (e) { if (e.key === "Enter") roll(); });
+    Array.prototype.forEach.call(document.querySelectorAll(".quick button"), function (b) {
+      b.addEventListener("click", function () { inp.value = b.getAttribute("data-x"); roll(); });
+    });
+
+    roll();
+  })();
+  </script>
+</body>
+</html>
