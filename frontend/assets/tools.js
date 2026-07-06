@@ -339,6 +339,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T04:55:03Z",
   },
   {
+    slug: "border-radius-generator",
+    name: "Border Radius Generator",
+    description: "Set each corner of a CSS border-radius independently in pixels or percent, with optional elliptical horizontal/vertical radii. Live preview and copy-ready CSS. Runs locally.",
+    category: "Design",
+    icon: "⌓",
+    added: "2026-07-06T14:00:00Z",
+  },
+  {
     slug: "regex-tester",
     name: "Regex Tester",
     description: "Build and test JavaScript regular expressions — live matches, capture groups and flags, in-browser.",
