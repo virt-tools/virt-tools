@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>TOTP / HOTP Authenticator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .seg { display:inline-flex; border:1px solid var(--border,#2a2f3a); border-radius:8px; overflow:hidden; margin-bottom:10px; }
+    .seg button { border:none; border-radius:0; background:transparent; color:inherit; padding:6px 14px; cursor:pointer; }
+    .seg button.active { background: var(--accent,#6ea8fe); color:#08101f; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; margin:10px 0; }
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    .code { font-size:48px; font-weight:700; font-variant-numeric: tabular-nums; letter-spacing:4px; text-align:center; margin:10px 0; }
+    .progress { height:8px; background:var(--panel-2,#161a22); border:1px solid var(--border,#2a2f3a); border-radius:4px; overflow:hidden; margin:4px auto 8px; max-width:240px; }
+    .progress > div { height:100%; background: var(--accent,#6ea8fe); transition: width .3s linear; }
+    .meta { text-align:center; opacity:.7; font-size:13px; margin-bottom:10px; }
+    .qrwrap { text-align:center; margin-top:8px; }
+    #qr { display:inline-block; padding:8px; background:#fff; border-radius:8px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>TOTP / HOTP Authenticator</h1>
+      <p>Generate time-based (RFC 6238) or counter-based (RFC 4226) one-time passwords from a Base32 shared secret, using HMAC-SHA1 and dynamic truncation. Optional otpauth QR for provisioning. Everything runs locally — your secret never leaves the browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="seg" id="mode">
+        <button type="button" data-m="totp" class="active">TOTP (time)</button>
+        <button type="button" data-m="hotp" class="secondary">HOTP (counter)</button>
+      </div>
+
+      <div class="field">
+        <label for="secret">Secret (Base32, no spaces)</label>
+        <input id="secret" type="text" value="JBSWY3DPEHPK3PXP" spellcheck="false" autocomplete="off" style="font-family:monospace;">
+      </div>
+
+      <div class="grid">
+        <div><label for="digits">Digits</label>
+          <select id="digits"><option>6</option><option>8</option></select>
+        </div>
+        <div><label for="step">Step (s, TOTP)</label><input type="number" id="step" min="1" value="30" style="width:90px;"></div>
+        <div id="hotpBox" hidden><label for="counter">Counter (HOTP)</label><input type="number" id="counter" min="0" value="0" style="width:120px;"></div>
+      </div>
+
+      <div class="code" id="code">------</div>
+      <div class="progress"><div id="bar" style="width:0%"></div></div>
+      <div class="meta" id="meta">Enter a Base32 secret.</div>
+
+      <div class="row">
+        <button id="copy">Copy code</button>
+        <button id="inc" class="secondary" hidden>Increment counter</button>
+        <label><input type="checkbox" id="showqr"> Show otpauth QR</label>
+      </div>
+
+      <div class="qrwrap" id="qrwrap" hidden><div id="qr"></div></div>
+      <p class="note" id="note">HMAC-SHA1 + RFC 4226 dynamic truncation. Secret stays in your browser. Runs locally.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script src="/vendor/qrcode.min.js"></script>
+  <script>
+  (function () {
+    var modeEl = document.getElementById("mode");
+    var secretEl = document.getElementById("secret");
+    var digitsEl = document.getElementById("digits");
+    var stepEl = document.getElementById("step");
+    var counterEl = document.getElementById("counter");
+    var hotpBox = document.getElementById("hotpBox");
+    var codeEl = document.getElementById("code");
+    var bar = document.getElementById("bar");
+    var metaEl = document.getElementById("meta");
+    var note = document.getElementById("note");
+    var incBtn = document.getElementById("inc");
+    var showqrEl = document.getElementById("showqr");
+    var qrwrap = document.getElementById("qrwrap");
+    var qrEl = document.getElementById("qr");
+    var mode = "totp";
+
+    var BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+    function base32Decode(s) {
+      s = s.replace(/\s+/g, "").toUpperCase().replace(/=+$/, "");
+      var bits = 0, value = 0, out = [];
+      for (var i = 0; i < s.length; i++) {
+        var idx = BASE32.indexOf(s[i]);
+        if (idx < 0) throw new Error("Invalid Base32 character: " + s[i]);
+        value = (value << 5) | idx;
+        bits += 5;
+        if (bits >= 8) {
+          bits -= 8;
+          out.push((value >> bits) & 0xFF);
+        }
+      }
+      return out;
+    }
+
+    function counterBytes(n) {
+      // 8-byte big-endian; n may exceed 32 bits, so split into high/low 32-bit words.
+      var hi = Math.floor(n / 0x100000000);
+      var lo = n >>> 0;
+      return [
+        (hi >>> 24) & 0xFF, (hi >>> 16) & 0xFF, (hi >>> 8) & 0xFF, hi & 0xFF,
+        (lo >>> 24) & 0xFF, (lo >>> 16) & 0xFF, (lo >>> 8) & 0xFF, lo & 0xFF
+      ];
+    }
+
+    function dynamicTruncate(hmac, digits) {
+      var offset = hmac[hmac.length - 1] & 0x0F;
+      var bin = ((hmac[offset] & 0x7F) << 24) | ((hmac[offset + 1] & 0xFF) << 16) |
+                ((hmac[offset + 2] & 0xFF) << 8) | (hmac[offset + 3] & 0xFF);
+      var mod = Math.pow(10, digits);
+      var code = bin % mod;
+      return String(code).padStart(digits, "0");
+    }
+
+    function totpCounter(unixSec, step) {
+      return Math.floor(unixSec / step);
+    }
+
+    async function hmacSHA1(keyBytes, msgBytes) {
+      var key = await crypto.subtle.importKey("raw", new Uint8Array(keyBytes), { name: "HMAC", hash: { name: "SHA-1" } }, false, ["sign"]);
+      var sig = await crypto.subtle.sign("HMAC", key, new Uint8Array(msgBytes));
+      return Array.from(new Uint8Array(sig));
+    }
+
+    function otpauthURI() {
+      var s = secretEl.value.replace(/\s+/g, "").toUpperCase();
+      if (mode === "totp") return "otpauth://totp/virt.tools:account?secret=" + s + "&digits=" + digitsEl.value + "&period=" + stepEl.value;
+      return "otpauth://hotp/virt.tools:account?secret=" + s + "&digits=" + digitsEl.value + "&counter=" + counterEl.value;
+    }
+
+    function renderQR() {
+      qrEl.innerHTML = "";
+      if (!showqrEl.checked || !window.QRCode) { qrwrap.hidden = true; return; }
+      qrwrap.hidden = false;
+      try { new QRCode(qrEl, { text: otpauthURI(), width: 160, height: 160, correctLevel: QRCode.CorrectLevel.M }); }
+      catch (e) { qrEl.textContent = "QR error"; }
+    }
+
+    var lastCode = "";
+    async function generate() {
+      try {
+        var key = base32Decode(secretEl.value);
+        if (!key.length) { codeEl.textContent = "------"; metaEl.textContent = "Enter a Base32 secret."; return; }
+        var digits = parseInt(digitsEl.value, 10);
+        var counter;
+        if (mode === "totp") {
+          var step = Math.max(1, parseInt(stepEl.value, 10) || 30);
+          counter = totpCounter(Math.floor(Date.now() / 1000), step);
+        } else {
+          counter = parseInt(counterEl.value, 10) || 0;
+        }
+        var hmac = await hmacSHA1(key, counterBytes(counter));
+        lastCode = dynamicTruncate(hmac, digits);
+        codeEl.textContent = lastCode;
+        if (mode === "totp") {
+          var step2 = Math.max(1, parseInt(stepEl.value, 10) || 30);
+          var rem = step2 - (Math.floor(Date.now() / 1000) % step2);
+          metaEl.textContent = "Refreshes in " + rem + " s · counter " + counter;
+          bar.style.width = (rem / step2 * 100) + "%";
+        } else {
+          metaEl.textContent = "Counter " + counter;
+          bar.style.width = "100%";
+        }
+        note.textContent = "Generated locally with HMAC-SHA1.";
+      } catch (e) {
+        codeEl.textContent = "------";
+        metaEl.textContent = e.message || String(e);
+      }
+      renderQR();
+    }
+
+    modeEl.addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-m]"); if (!b) return;
+      mode = b.getAttribute("data-m");
+      Array.prototype.forEach.call(modeEl.querySelectorAll("button"), function (x) { x.classList.remove("active"); });
+      b.classList.add("active");
+      var isHotp = mode === "hotp";
+      hotpBox.hidden = !isHotp;
+      incBtn.hidden = !isHotp;
+      generate();
+    });
+
+    [secretEl, digitsEl, stepEl, counterEl].forEach(function (el) {
+      el.addEventListener("input", generate);
+      if (el === digitsEl || el === stepEl) el.addEventListener("change", generate);
+    });
+
+    document.getElementById("copy").addEventListener("click", function () {
+      if (!lastCode) return;
+      navigator.clipboard && navigator.clipboard.writeText
+        ? navigator.clipboard.writeText(lastCode).then(function(){ note.textContent = "Code copied."; }, function(){ note.textContent = "Copy failed."; })
+        : (note.textContent = "Clipboard unavailable.");
+    });
+    incBtn.addEventListener("click", function () {
+      counterEl.value = (parseInt(counterEl.value, 10) || 0) + 1;
+      generate();
+    });
+    showqrEl.addEventListener("change", generate);
+
+    generate();
+    // Refresh every second for TOTP countdown.
+    setInterval(function () { if (mode === "totp") generate(); }, 1000);
+  })();
+  </script>
+</body>
+</html>

@@ -515,6 +515,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "totp-authenticator",
+    name: "TOTP / HOTP Authenticator",
+    description: "Generate time-based (RFC 6238) or counter-based (RFC 4226) one-time passwords from a Base32 secret using HMAC-SHA1 and dynamic truncation, with an optional otpauth provisioning QR. The secret stays in your browser. Runs locally.",
+    category: "Security",
+    icon: "🔐",
+    added: "2026-07-06T16:00:00Z",
+  },
+  {
     slug: "char-inspector",
     name: "Character & Unicode Inspector",
     description: "Inspect every character in your text — code point, UTF-8 bytes, UTF-16 units and JavaScript escape. Great for debugging encoding issues. Runs in your browser.",
