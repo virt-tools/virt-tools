@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>MAC Address Converter — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 10px; }
+    .out { display:grid; grid-template-columns: minmax(120px,auto) 1fr auto; gap:8px; align-items:center; margin:10px 0; }
+    .out label { font-size:13px; opacity:.8; font-family:monospace; white-space:nowrap; }
+    .out input { font-family:monospace; min-width:0; }
+    .out button { padding:3px 10px; font-size:13px; }
+    .flags { margin:8px 0; font-size:13px; opacity:.85; }
+    .flags .ok { color: var(--good,#4ade80); } .flags .bad { color: var(--bad,#f87171); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>MAC Address Converter</h1>
+      <p>Parse a MAC address in any common format (colon, dash, dot, or no separator) and reformat it. Detects the locally-administered and multicast bits and shows the OUI. Runs locally; nothing uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="in">MAC address</label>
+        <input id="in" type="text" value="52:54:00:12:34:56" spellcheck="false" autocomplete="off" style="font-family:monospace;">
+      </div>
+
+      <div class="flags" id="flags"></div>
+
+      <div class="out" id="out"></div>
+
+      <p class="note" id="note">Recognised formats: <code>01:23:45:67:89:ab</code>, <code>01-23-45-67-89-ab</code>, <code>0123.4567.89ab</code> (Cisco), <code>0123456789ab</code>. Runs locally.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var inEl = document.getElementById("in");
+    var outEl = document.getElementById("out");
+    var flagsEl = document.getElementById("flags");
+    var note = document.getElementById("note");
+
+    // Parse a MAC string in any common format. Returns 6-byte array or throws.
+    function parseMac(s) {
+      s = s.trim().toLowerCase();
+      if (s === "") throw new Error("Empty input.");
+      var cleaned = s.replace(/[\s:.()-]/g, "");
+      // Cisco dotted: 0123.4567.89ab -> after removing dots already handled above; check length 12 hex.
+      if (!/^[0-9a-f]{12}$/.test(cleaned)) {
+        // Try to give a helpful message.
+        if (cleaned.length !== 12) throw new Error("A MAC needs 12 hex digits (got " + cleaned.length + ").");
+        throw new Error("Non-hex characters present.");
+      }
+      var bytes = [];
+      for (var i = 0; i < 12; i += 2) bytes.push(parseInt(cleaned.slice(i, i + 2), 16));
+      return bytes;
+    }
+
+    function hex2(b) { return b.toString(16).padStart(2, "0"); }
+
+    function fmtColon(b, upper) { var h = b.map(hex2); if (upper) h = h.map(function (x) { return x.toUpperCase(); }); return h.join(":"); }
+    function fmtDash(b, upper) { var h = b.map(hex2); if (upper) h = h.map(function (x) { return x.toUpperCase(); }); return h.join("-"); }
+    function fmtDot(b, upper) {
+      var h = b.map(hex2); if (upper) h = h.map(function (x) { return x.toUpperCase(); });
+      return h[0] + h[1] + "." + h[2] + h[3] + "." + h[4] + h[5];
+    }
+    function fmtNone(b, upper) { var h = b.map(hex2).join(""); if (upper) h = h.toUpperCase(); return h; }
+
+    function render() {
+      var html = "";
+      var b;
+      try {
+        b = parseMac(inEl.value);
+      } catch (e) {
+        outEl.innerHTML = "";
+        flagsEl.innerHTML = '<span class="bad">✗</span> ' + (e.message || String(e));
+        return;
+      }
+      var formats = [
+        { name: "Colon (IEEE)", fn: fmtColon },
+        { name: "Dash", fn: fmtDash },
+        { name: "Dotted (Cisco)", fn: fmtDot },
+        { name: "No separator", fn: fmtNone }
+      ];
+      for (var i = 0; i < formats.length; i++) {
+        var val = formats[i].fn(b, false);
+        html += '<label>' + formats[i].name + '</label>' +
+          '<input readonly value="' + val + '" data-v="' + val + '">' +
+          '<button class="secondary" data-copy="' + val + '">Copy</button>';
+      }
+      outEl.innerHTML = html;
+
+      var first = b[0];
+      var multicast = (first & 0x01) === 0x01;       // I/G bit (bit 0)
+      var locallyAdmin = (first & 0x02) === 0x02;     // U/L bit (bit 1)
+      var oui = hex2(b[0]) + ":" + hex2(b[1]) + ":" + hex2(b[2]);
+      flagsEl.innerHTML =
+        '<span class="ok">✓ Valid MAC (6 octets)</span> · ' +
+        'OUI <code>' + oui + '</code> · ' +
+        (multicast ? '<span class="bad">multicast (I/G set)</span>' : 'unicast (I/G clear)') + ' · ' +
+        (locallyAdmin ? '<span class="bad">locally administered (U/L set)</span>' : 'globally unique (U/L clear)');
+    }
+
+    outEl.addEventListener("click", function (e) {
+      var btn = e.target.closest("button[data-copy]");
+      if (!btn) return;
+      var val = btn.getAttribute("data-copy");
+      navigator.clipboard && navigator.clipboard.writeText
+        ? navigator.clipboard.writeText(val).then(function () { note.textContent = "Copied " + val; }, function () { note.textContent = "Copy failed."; })
+        : (note.textContent = "Clipboard unavailable.");
+    });
+
+    inEl.addEventListener("input", render);
+    render();
+  })();
+  </script>
+</body>
+</html>

@@ -1138,4 +1138,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔖",
     added: "2026-07-04T12:28:00Z",
   },
+  {
+    slug: "mac-address",
+    name: "MAC Address Converter",
+    description: "Parse a MAC address in any common format (colon, dash, Cisco dotted, or no separator) and reformat it into all four styles. Detects the multicast (I/G) and locally-administered (U/L) bits in the first octet and shows the OUI (first three octets). Everything runs locally in your browser.",
+    category: "Networking",
+    icon: "🔌",
+    added: "2026-07-06T05:00:00Z",
+  },
 ];
