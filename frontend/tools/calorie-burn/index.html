@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Calorie Burn Calculator (MET) — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .seg { display:inline-flex; border:1px solid var(--border,#2a2f3a); border-radius:8px; overflow:hidden; margin-bottom:10px; }
+    .seg button { border:none; border-radius:0; background:transparent; color:inherit; padding:6px 14px; cursor:pointer; font-size:13px; }
+    .seg button.active { background: var(--accent,#6ea8fe); color:#08101f; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; margin:10px 0; }
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    .big { font-size:42px; font-weight:700; font-variant-numeric: tabular-nums; text-align:center; margin:8px 0 2px; }
+    .sub { text-align:center; opacity:.85; font-size:15px; margin-bottom:10px; }
+    .results { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:10px; margin:10px 0; }
+    .res { background:var(--panel-2,#161a22); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:8px 10px; }
+    .res .n { font-size:20px; font-weight:600; font-variant-numeric: tabular-nums; }
+    .res .l { font-size:12px; opacity:.7; }
+    select#activity { max-width:320px; }
+    .custom { margin-top:8px; }
+    .custom label { display:inline; }
+    .custom input { width:80px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Calorie Burn Calculator</h1>
+      <p>Estimate calories burned during physical activity from its MET (metabolic equivalent of task) value, your body weight, and the duration. Choose from a built-in list of common activities (Ainsworth compendium values) or enter a custom MET. The formula is kcal = MET × weight (kg) × time (hours). Estimates are rough — actual burn varies with fitness, intensity, and metabolism. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="seg" id="units">
+        <button type="button" data-u="metric" class="active">Metric (kg)</button>
+        <button type="button" data-u="us" class="secondary">U.S. (lb)</button>
+      </div>
+
+      <div class="grid">
+        <div style="grid-column:1/-1"><label for="activity">Activity</label>
+          <select id="activity"></select>
+        </div>
+        <div><label for="weight">Weight</label><input type="number" id="weight" min="0" step="0.1" value="75"></div>
+        <div><label for="hours">Hours</label><input type="number" id="hours" min="0" step="0.25" value="0"></div>
+        <div><label for="mins">Minutes</label><input type="number" id="mins" min="0" max="59" step="1" value="45"></div>
+      </div>
+
+      <div class="custom">
+        <label><input type="checkbox" id="customToggle"> Custom MET:</label>
+        <input type="number" id="customMet" min="0" step="0.1" value="5" hidden>
+        <span id="metShown" class="note" style="margin-left:8px"></span>
+      </div>
+
+      <div class="big" id="kcal">—</div>
+      <div class="sub" id="sub">Enter weight and duration.</div>
+
+      <div class="results" id="results"></div>
+
+      <p class="note" id="note">MET values are from the Ainsworth Compendium of Physical Activities. kcal = MET × weight_kg × hours (equivalently MET × 3.5 × weight_kg / 200 × minutes). A MET of 1 ≈ resting. Estimates are approximate. Runs locally.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var unitsEl = document.getElementById("units");
+    var activityEl = document.getElementById("activity");
+    var weightEl = document.getElementById("weight");
+    var hoursEl = document.getElementById("hours");
+    var minsEl = document.getElementById("mins");
+    var customToggle = document.getElementById("customToggle");
+    var customMet = document.getElementById("customMet");
+    var metShown = document.getElementById("metShown");
+    var kcalEl = document.getElementById("kcal");
+    var subEl = document.getElementById("sub");
+    var resultsEl = document.getElementById("results");
+    var note = document.getElementById("note");
+
+    var units = "metric";
+
+    // Representative MET values (Ainsworth Compendium, adult codes).
+    var ACTIVITIES = [
+      ["Sitting quietly / reading", 1.0],
+      ["Standing quietly", 1.3],
+      ["Walking, 2.0 mph (stroll)", 2.5],
+      ["Walking, 3.0 mph", 3.5],
+      ["Walking, 4.0 mph (brisk)", 4.3],
+      ["Walking, 5.0 mph", 6.3],
+      ["Hiking, moderate terrain", 6.0],
+      ["Running, 6 mph (10 km/h)", 9.8],
+      ["Running, 8 mph (12.9 km/h)", 11.8],
+      ["Running, 10 mph (16 km/h)", 14.5],
+      ["Cycling, 12 mph (leisure)", 8.0],
+      ["Cycling, 16 mph (moderate)", 10.0],
+      ["Cycling, 20 mph (vigorous)", 12.0],
+      ["Swimming, moderate", 7.0],
+      ["Swimming, vigorous", 10.0],
+      ["Weight training, moderate", 3.5],
+      ["Weight training, vigorous", 6.0],
+      ["Yoga, Hatha", 2.5],
+      ["Yoga, power", 4.0],
+      ["Pilates", 3.0],
+      ["Dancing, general", 4.8],
+      ["Aerobics, high impact", 7.3],
+      ["Jumping rope", 12.3],
+      ["Basketball, game", 8.0],
+      ["Tennis, singles", 7.3],
+      ["Soccer, game", 10.0],
+      ["Golf, walking + clubs", 4.8],
+      ["Rowing, moderate", 7.0],
+      ["Elliptical, moderate", 5.0],
+      ["Stair climbing", 8.8],
+      ["Gardening, general", 4.0],
+      ["House cleaning, general", 3.3]
+    ];
+
+    function buildActivityList() {
+      var html = "";
+      ACTIVITIES.forEach(function (a, i) {
+        html += '<option value="' + i + '"' + (i === 5 ? " selected" : "") + '>' + a[0] + ' (MET ' + a[1].toFixed(1) + ')</option>';
+      });
+      activityEl.innerHTML = html;
+    }
+
+    function currentMET() {
+      if (customToggle.checked) {
+        var v = parseFloat(customMet.value);
+        return isFinite(v) && v > 0 ? v : null;
+      }
+      var idx = parseInt(activityEl.value, 10);
+      if (!isFinite(idx) || idx < 0 || idx >= ACTIVITIES.length) return null;
+      return ACTIVITIES[idx][1];
+    }
+
+    // kcal = MET * weight_kg * hours.
+    function calories(met, weightKg, hours) {
+      if (met <= 0 || weightKg <= 0 || hours <= 0) return null;
+      return met * weightKg * hours;
+    }
+
+    function compute() {
+      var met = currentMET();
+      var wKg = parseFloat(weightEl.value);
+      if (units === "us") wKg *= 0.45359237;
+      var h = parseFloat(hoursEl.value) || 0;
+      var m = parseFloat(minsEl.value) || 0;
+      var totalH = h + m / 60;
+
+      metShown.textContent = customToggle.checked ? "" : ("Current MET: " + (met !== null ? met.toFixed(1) : "—"));
+
+      if (met === null || !isFinite(wKg) || wKg <= 0 || totalH <= 0) {
+        kcalEl.textContent = "—";
+        subEl.textContent = "Enter a positive weight and duration.";
+        resultsEl.innerHTML = "";
+        return;
+      }
+
+      var kcal = calories(met, wKg, totalH);
+      var perHour = met * wKg; // kcal per hour
+      var perMin = perHour / 60;
+      var wUnit = (units === "metric") ? "kg" : "lb";
+      var wDisp = (units === "metric") ? wKg : wKg / 0.45359237;
+
+      kcalEl.textContent = Math.round(kcal) + " kcal";
+      subEl.textContent = (customToggle.checked ? "Custom MET " + met.toFixed(1) : (ACTIVITIES[parseInt(activityEl.value, 10)][0])) + " · " + wDisp.toFixed(0) + " " + wUnit + " · " + (totalH * 60).toFixed(0) + " min";
+
+      var html = "";
+      html += '<div class="res"><div class="n">' + Math.round(kcal) + '</div><div class="l">kcal burned</div></div>';
+      html += '<div class="res"><div class="n">' + perHour.toFixed(1) + '</div><div class="l">kcal / hour</div></div>';
+      html += '<div class="res"><div class="n">' + perMin.toFixed(1) + '</div><div class="l">kcal / minute</div></div>';
+      html += '<div class="res"><div class="n">' + met.toFixed(1) + '</div><div class="l">MET</div></div>';
+      resultsEl.innerHTML = html;
+    }
+
+    unitsEl.addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-u]"); if (!b) return;
+      var next = b.getAttribute("data-u");
+      if (next === units) return;
+      var w = parseFloat(weightEl.value);
+      if (isFinite(w) && w > 0) {
+        weightEl.value = (next === "us") ? (w / 0.45359237).toFixed(1) : (w * 0.45359237).toFixed(1);
+      }
+      units = next;
+      Array.prototype.forEach.call(unitsEl.querySelectorAll("button"), function (x) { x.classList.remove("active"); });
+      b.classList.add("active");
+      document.querySelector('label[for="weight"]').textContent = (next === "metric") ? "Weight (kg)" : "Weight (lb)";
+      compute();
+    });
+
+    [activityEl, weightEl, hoursEl, minsEl].forEach(function (el) { el.addEventListener("input", compute); el.addEventListener("change", compute); });
+    customToggle.addEventListener("change", function () {
+      customMet.hidden = !customToggle.checked;
+      activityEl.disabled = customToggle.checked;
+      compute();
+    });
+    customMet.addEventListener("input", compute);
+
+    buildActivityList();
+    compute();
+  })();
+  </script>
+</body>
+</html>

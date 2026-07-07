@@ -1051,6 +1051,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-07T02:00:00Z",
   },
   {
+    slug: "calorie-burn",
+    name: "Calorie Burn Calculator",
+    description: "Estimate calories burned during physical activity from its MET (metabolic equivalent of task) value, your body weight, and the duration, using kcal = MET × weight (kg) × time (hours). Choose from a built-in list of common activities with Ainsworth-compendium MET values (walking, running, cycling, swimming, weights, yoga, sports, housework, and more) or enter a custom MET. Metric or U.S. units. Reports total kcal and kcal per hour and minute. Estimates are approximate. Everything runs locally in your browser.",
+    category: "Health",
+    icon: "🔥",
+    added: "2026-07-07T03:00:00Z",
+  },
+  {
     slug: "quadratic-solver",
     name: "Quadratic Equation Solver",
     description: "Solve a quadratic equation ax² + bx + c = 0. Enter the three coefficients and get the discriminant, the roots (two distinct real, one repeated real, or a complex-conjugate pair), the vertex and axis of symmetry of the parabola, and the factored form when the roots are real. A built-in check evaluates the polynomial at each root so you can confirm the result, and the linear case (a = 0) is handled too. Everything runs locally in your browser.",
