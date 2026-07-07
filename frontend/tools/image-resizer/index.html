@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Image Resizer — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .drop { border:2px dashed var(--border,#2a2f3a); border-radius:10px; padding:24px; text-align:center; cursor:pointer; margin:10px 0; }
+    .drop:hover, .drop.drag { border-color: var(--accent,#6ea8fe); }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; margin:10px 0; }
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    .scales { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0; }
+    .scales button { border:1px solid var(--border,#2a2f3a); background:transparent; color:inherit; border-radius:6px; padding:4px 10px; cursor:pointer; font-size:12px; }
+    .scales button.active { background: var(--accent,#6ea8fe); color:#08101f; border-color:transparent; }
+    .preview-wrap { margin:12px 0; text-align:center; }
+    .preview-wrap img { max-width:100%; max-height:340px; border:1px solid var(--border,#2a2f3a); border-radius:6px; background:var(--panel-2,#161a22); }
+    .meta { font-size:13px; opacity:.85; margin:6px 0; }
+    .row { display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; margin:6px 0; }
+    .row > div { display:flex; flex-direction:column; }
+    input[type="range"] { width:160px; }
+    button.do { border:1px solid var(--border,#2a2f3a); background:transparent; color:inherit; border-radius:6px; padding:6px 14px; cursor:pointer; font-size:13px; }
+    button.do.primary { background: var(--accent,#6ea8fe); color:#08101f; border-color:transparent; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Image Resizer</h1>
+      <p>Resize an image to a target width and height, optionally keeping the aspect ratio, then export as PNG, JPEG, or WebP with an adjustable quality. Use percentage presets or enter exact pixel dimensions. The image is decoded and resampled entirely in your browser on a canvas — nothing is uploaded. Large images are downscaled with the browser's built-in smoothing; for upsizing, nearest/bilinear smoothing applies.</p>
+    </div>
+
+    <div class="panel">
+      <div class="drop" id="drop">
+        <p><strong>Click to choose an image</strong> or drag one here</p>
+        <p class="note">PNG, JPEG, WebP, GIF, BMP — processed locally.</p>
+        <input type="file" id="file" accept="image/*" hidden>
+      </div>
+
+      <div id="controls" hidden>
+        <div class="meta" id="meta"></div>
+
+        <div class="grid">
+          <div><label for="w">Width (px)</label><input type="number" id="w" min="1" step="1" value="800"></div>
+          <div><label for="h">Height (px)</label><input type="number" id="h" min="1" step="1" value="600"></div>
+          <div><label for="fmt">Output format</label>
+            <select id="fmt">
+              <option value="image/png">PNG</option>
+              <option value="image/jpeg" selected>JPEG</option>
+              <option value="image/webp">WebP</option>
+            </select>
+          </div>
+          <div><label for="qual">Quality <span id="qv">85</span>%</label>
+            <input type="range" id="qual" min="10" max="100" step="1" value="85">
+          </div>
+        </div>
+
+        <div class="row">
+          <div><label><input type="checkbox" id="lock" checked> Lock aspect ratio</label></div>
+        </div>
+
+        <div class="scales" id="scales"></div>
+
+        <div class="row">
+          <button type="button" class="do primary" id="resizeBtn">Resize &amp; preview</button>
+          <button type="button" class="do" id="download" disabled>Download</button>
+        </div>
+
+        <div class="preview-wrap"><img id="preview" alt="preview" hidden></div>
+        <div class="meta" id="outmeta"></div>
+      </div>
+
+      <p class="note">Choose an image, set the target dimensions (or a scale percentage), pick a format, and click Resize &amp; preview. The result is rendered on a canvas in memory; Download saves the resized file. Quality affects JPEG and WebP only (PNG is lossless). Everything runs locally in your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var drop = document.getElementById("drop");
+    var fileEl = document.getElementById("file");
+    var controls = document.getElementById("controls");
+    var meta = document.getElementById("meta");
+    var wEl = document.getElementById("w");
+    var hEl = document.getElementById("h");
+    var fmtEl = document.getElementById("fmt");
+    var qualEl = document.getElementById("qual");
+    var qv = document.getElementById("qv");
+    var lockEl = document.getElementById("lock");
+    var scalesEl = document.getElementById("scales");
+    var resizeBtn = document.getElementById("resizeBtn");
+    var downloadBtn = document.getElementById("download");
+    var preview = document.getElementById("preview");
+    var outmeta = document.getElementById("outmeta");
+
+    var img = null;        // HTMLImageElement of the source
+    var origW = 0, origH = 0;
+    var aspect = 1;
+    var lastBlob = null;
+    var SCALES = [25, 50, 75, 100, 150, 200];
+
+    function buildScales() {
+      var html = "";
+      SCALES.forEach(function (s) {
+        html += '<button type="button" data-s="' + s + '">' + s + "%</button>";
+      });
+      scalesEl.innerHTML = html;
+    }
+
+    function setMeta() {
+      meta.textContent = "Original: " + origW + " × " + origH + " px · aspect " + (aspect.toFixed(4));
+    }
+
+    function loadFile(file) {
+      if (!file || !file.type.startsWith("image/")) return;
+      var url = URL.createObjectURL(file);
+      var im = new Image();
+      im.onload = function () {
+        img = im;
+        origW = im.naturalWidth || im.width;
+        origH = im.naturalHeight || im.height;
+        aspect = origW / origH;
+        wEl.value = origW;
+        hEl.value = origH;
+        controls.hidden = false;
+        lastBlob = null;
+        downloadBtn.disabled = true;
+        preview.hidden = true;
+        outmeta.textContent = "";
+        setMeta();
+        clearScaleActive();
+        URL.revokeObjectURL(url);
+      };
+      im.onerror = function () { outmeta.textContent = "Could not load that image."; URL.revokeObjectURL(url); };
+      im.src = url;
+    }
+
+    drop.addEventListener("click", function () { fileEl.click(); });
+    fileEl.addEventListener("change", function () { if (fileEl.files[0]) loadFile(fileEl.files[0]); });
+    drop.addEventListener("dragover", function (e) { e.preventDefault(); drop.classList.add("drag"); });
+    drop.addEventListener("dragleave", function () { drop.classList.remove("drag"); });
+    drop.addEventListener("drop", function (e) {
+      e.preventDefault(); drop.classList.remove("drag");
+      var f = e.dataTransfer.files[0]; if (f) loadFile(f);
+    });
+
+    // Aspect lock: editing one updates the other.
+    function onW() { if (lockEl.checked && img) { var w = parseInt(wEl.value,10); if (w>0) hEl.value = Math.round(w / aspect); } }
+    function onH() { if (lockEl.checked && img) { var h = parseInt(hEl.value,10); if (h>0) wEl.value = Math.round(h * aspect); } }
+    wEl.addEventListener("input", onW);
+    hEl.addEventListener("input", onH);
+    lockEl.addEventListener("change", function () { if (lockEl.checked) onW(); });
+
+    qualEl.addEventListener("input", function () { qv.textContent = qualEl.value; });
+    fmtEl.addEventListener("change", function () {
+      var png = fmtEl.value === "image/png";
+      qualEl.disabled = png;
+    });
+
+    function clearScaleActive() {
+      Array.prototype.forEach.call(scalesEl.querySelectorAll("button"), function (b) { b.classList.remove("active"); });
+    }
+
+    scalesEl.addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-s]"); if (!b || !img) return;
+      var s = parseInt(b.getAttribute("data-s"), 10);
+      var nw = Math.max(1, Math.round(origW * s / 100));
+      var nh = Math.max(1, Math.round(origH * s / 100));
+      wEl.value = nw; hEl.value = nh;
+      clearScaleActive(); b.classList.add("active");
+      doResize();
+    });
+
+    function doResize() {
+      if (!img) return;
+      var w = parseInt(wEl.value, 10);
+      var h = parseInt(hEl.value, 10);
+      if (!(w > 0) || !(h > 0)) { outmeta.textContent = "Enter positive width and height."; return; }
+      var canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      var ctx = canvas.getContext("2d");
+      // Smooth scaling for downscaling.
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(img, 0, 0, w, h);
+      var type = fmtEl.value;
+      var q = parseInt(qualEl.value, 10) / 100;
+      var ext = type === "image/png" ? "png" : (type === "image/webp" ? "webp" : "jpg");
+      canvas.toBlob(function (blob) {
+        if (!blob) { outmeta.textContent = "Export failed for this format."; return; }
+        lastBlob = blob;
+        if (preview.src && preview.src.startsWith("blob:")) URL.revokeObjectURL(preview.src);
+        preview.src = URL.createObjectURL(blob);
+        preview.hidden = false;
+        downloadBtn.disabled = false;
+        outmeta.textContent = "Output: " + w + " × " + h + " px · " + type.replace("image/", "").toUpperCase() + " · " + (blob.size / 1024).toFixed(1) + " KB";
+      }, type, q);
+    }
+
+    resizeBtn.addEventListener("click", function () { clearScaleActive(); doResize(); });
+
+    downloadBtn.addEventListener("click", function () {
+      if (!lastBlob) return;
+      var ext = fmtEl.value === "image/png" ? "png" : (fmtEl.value === "image/webp" ? "webp" : "jpg");
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(lastBlob);
+      a.download = "resized." + ext;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+    });
+
+    buildScales();
+  })();
+  </script>
+</body>
+</html>

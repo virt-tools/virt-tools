@@ -275,6 +275,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-05T12:00:00Z",
   },
   {
+    slug: "image-resizer",
+    name: "Image Resizer",
+    description: "Resize an image to exact pixel dimensions or a scale percentage, optionally keeping the aspect ratio, then export as PNG, JPEG, or WebP with an adjustable quality. Pick a percentage preset (25–200%) or type width and height; the locked aspect updates the other field automatically. The image is decoded and resampled on an in-memory canvas — nothing is uploaded. Download the resized file when you're happy with the preview. Everything runs locally in your browser.",
+    category: "Image",
+    icon: "🖼️",
+    added: "2026-07-07T10:00:00Z",
+  },
+  {
     slug: "metronome",
     name: "Metronome",
     description: "Precise browser metronome with tempo, time signature, accents and tap-tempo. Drift-free lookahead Web Audio scheduling. Runs locally.",
