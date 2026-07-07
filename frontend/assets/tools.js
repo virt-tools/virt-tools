@@ -963,6 +963,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-04T22:20:00Z",
   },
   {
+    slug: "confidence-interval",
+    name: "Confidence Interval Calculator",
+    description: "Compute a confidence interval for a population mean from a sample mean, standard deviation, and size. For n ≥ 30 it uses the normal (z) critical value; for smaller samples with unknown population σ it uses the t distribution (Cornish–Fisher approximation). Choose a confidence level (90 / 95 / 98 / 99 % or custom) and get the margin of error, standard error, critical value, and lower and upper bounds. The z quantile is found by Newton's method on the error-function CDF and matches standard tables to about six figures. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "📐",
+    added: "2026-07-07T08:00:00Z",
+  },
+  {
     slug: "work-hours",
     name: "Work Hours Calculator",
     description: "Add up hours worked across clock-in / clock-out entries, with per-entry break deductions and a regular-vs-overtime split. Shifts that cross midnight (an out time earlier than the in time) are handled automatically, breaks can't make a day negative, and you can set the regular-hours threshold per entry (8 hours by default). Totals are shown in hours:minutes and decimal hours. Everything runs locally in your browser.",

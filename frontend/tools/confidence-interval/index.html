@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Confidence Interval Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .seg { display:inline-flex; border:1px solid var(--border,#2a2f3a); border-radius:8px; overflow:hidden; margin-bottom:10px; }
+    .seg button { border:none; border-radius:0; background:transparent; color:inherit; padding:6px 14px; cursor:pointer; font-size:13px; }
+    .seg button.active { background: var(--accent,#6ea8fe); color:#08101f; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; margin:10px 0; }
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    .big { font-size:36px; font-weight:700; font-variant-numeric: tabular-nums; text-align:center; margin:8px 0 2px; }
+    .sub { text-align:center; opacity:.85; font-size:15px; margin-bottom:10px; }
+    .results { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px; margin:10px 0; }
+    .res { background:var(--panel-2,#161a22); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:8px 10px; }
+    .res .n { font-size:20px; font-weight:600; font-variant-numeric: tabular-nums; }
+    .res .l { font-size:12px; opacity:.7; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Confidence Interval Calculator</h1>
+      <p>Compute a confidence interval for a population mean from a sample mean, standard deviation, and size. For samples of 30 or more the calculator uses the normal (z) critical value; for smaller samples with an unknown population standard deviation it uses the t distribution (Cornish–Fisher approximation). Enter a confidence level (90 / 95 / 98 / 99 % or custom) to get the margin of error and the lower and upper bounds, plus the standard error and critical value used. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="grid">
+        <div><label for="mean">Sample mean</label><input type="number" id="mean" step="any" value="100"></div>
+        <div><label for="sd">Sample standard deviation</label><input type="number" id="sd" min="0" step="any" value="15"></div>
+        <div><label for="n">Sample size (n)</label><input type="number" id="n" min="1" step="1" value="40"></div>
+        <div><label for="cl">Confidence level (%)</label><input type="number" id="cl" min="1" max="99.9" step="0.1" value="95"></div>
+      </div>
+
+      <div class="big" id="ci">—</div>
+      <div class="sub" id="sub">Enter the sample statistics.</div>
+
+      <div class="results" id="results"></div>
+
+      <p class="note" id="note">Standard error = sd ÷ √n. For n ≥ 30 the critical value is the normal quantile z = Φ⁻¹(1 − α/2), computed by Newton's method on the error-function CDF (matches standard tables to ~1e-6). For n &lt; 30 the critical value is the t quantile with ν = n − 1 degrees of freedom, approximated by the Cornish–Fisher expansion (accurate to a few thousandths at common levels); a z-based interval would be too narrow for small samples. Margin of error = critical × SE. The interval is mean ± margin. This is a statistical estimate, not a guarantee. Runs locally.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var meanEl = document.getElementById("mean");
+    var sdEl = document.getElementById("sd");
+    var nEl = document.getElementById("n");
+    var clEl = document.getElementById("cl");
+    var ciEl = document.getElementById("ci");
+    var subEl = document.getElementById("sub");
+    var resultsEl = document.getElementById("results");
+
+    function num(el) { var v = parseFloat(el.value); return isFinite(v) ? v : NaN; }
+    function r1(n) { return Math.round(n * 1000) / 1000; }
+
+    // Abramowitz & Stegun 7.1.26 erf (max error 1.5e-7).
+    function erf(x) {
+      var sign = 1;
+      if (x < 0) { sign = -1; x = -x; }
+      var t = 1 / (1 + 0.3275911 * x);
+      var y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x);
+      return sign * y;
+    }
+    var SQRT2 = Math.SQRT2;
+    function normCdf(z) { return 0.5 * (1 + erf(z / SQRT2)); }
+    function normPdf(z) { return Math.exp(-z * z / 2) / Math.sqrt(2 * Math.PI); }
+
+    // Inverse normal CDF via Newton's method.
+    function normInv(p) {
+      if (!(p > 0 && p < 1)) return NaN;
+      // Reasonable start: Wilson-Hilferty-ish / just 0.
+      var z = 0;
+      for (var i = 0; i < 60; i++) {
+        var f = normCdf(z) - p;
+        var d = normPdf(z);
+        if (d < 1e-15) break;
+        var step = f / d;
+        z -= step;
+        if (Math.abs(step) < 1e-12) break;
+      }
+      return z;
+    }
+
+    // Inverse t CDF via Cornish-Fisher expansion (approximation).
+    // t_{nu}(p) ~ z + (z^3+z)/(4 nu) + (5 z^5 + 16 z^3 + 3 z)/(96 nu^2) + (3 z^7 + 19 z^5 + 17 z^3 - 15 z)/(384 nu^3)
+    function tInv(p, nu) {
+      var z = normInv(p);
+      if (!isFinite(z)) return NaN;
+      var z2 = z * z, z3 = z2 * z, z5 = z3 * z2, z7 = z5 * z2;
+      var t = z
+        + (z3 + z) / (4 * nu)
+        + (5 * z5 + 16 * z3 + 3 * z) / (96 * nu * nu)
+        + (3 * z7 + 19 * z5 + 17 * z3 - 15 * z) / (384 * nu * nu * nu);
+      return t;
+    }
+
+    function compute() {
+      var mean = num(meanEl);
+      var sd = num(sdEl);
+      var n = Math.floor(num(nEl));
+      var cl = num(clEl);
+
+      if (!isFinite(mean) || !isFinite(sd) || !isFinite(n) || !isFinite(cl) || sd < 0 || n < 1 || cl <= 0 || cl >= 100) {
+        ciEl.textContent = "—";
+        subEl.textContent = "Enter valid statistics (sd ≥ 0, n ≥ 1, 0 < CL < 100).";
+        resultsEl.innerHTML = "";
+        return;
+      }
+
+      var alpha = 1 - cl / 100;
+      var p = 1 - alpha / 2;
+      var nu = n - 1;
+      var useT = (n < 30);
+      var crit = useT ? tInv(p, nu) : normInv(p);
+      var critLabel = useT ? ("t (df=" + nu + ")") : "z";
+      var se = sd / Math.sqrt(n);
+      var me = crit * se;
+      var lo = mean - me;
+      var hi = mean + me;
+
+      ciEl.textContent = "[" + r1(lo) + ", " + r1(hi) + "]";
+      subEl.textContent = "± " + r1(me) + " · " + cl + "% confidence · " + (useT ? "t-interval" : "z-interval");
+
+      var html = "";
+      html += '<div class="res"><div class="n">' + r1(me) + '</div><div class="l">margin of error</div></div>';
+      html += '<div class="res"><div class="n">' + r1(se) + '</div><div class="l">standard error</div></div>';
+      html += '<div class="res"><div class="n">' + r1(crit) + '</div><div class="l">critical value (' + critLabel + ')</div></div>';
+      html += '<div class="res"><div class="n">' + r1(lo) + '</div><div class="l">lower bound</div></div>';
+      html += '<div class="res"><div class="n">' + r1(hi) + '</div><div class="l">upper bound</div></div>';
+      resultsEl.innerHTML = html;
+    }
+
+    [meanEl, sdEl, nEl, clEl].forEach(function (el) {
+      el.addEventListener("input", compute);
+      el.addEventListener("change", compute);
+    });
+
+    compute();
+  })();
+  </script>
+</body>
+</html>
