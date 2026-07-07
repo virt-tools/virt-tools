@@ -971,6 +971,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-04T23:40:00Z",
   },
   {
+    slug: "break-even",
+    name: "Break-Even Calculator",
+    description: "Find the break-even point for a product or service: the units you must sell to cover your costs. Enter fixed costs, price per unit, and variable cost per unit to get the contribution margin per unit and as a ratio, the break-even unit count (rounded up) and revenue, and — optionally, at a given sales level — the profit at that volume and the margin of safety. All arithmetic runs locally in your browser.",
+    category: "Finance",
+    icon: "📈",
+    added: "2026-07-07T06:00:00Z",
+  },
+  {
     slug: "combinatorics",
     name: "Combinatorics Calculator",
     description: "Count arrangements and selections of items. Given a total of n items and a choice of r, compute permutations P(n,r), permutations with repetition (n^r), combinations C(n,r), combinations with repetition (multisets, C(n+r−1,r)), and the factorial of n. All arithmetic uses big integers, so the results are exact — even for values like C(100,50) that overflow ordinary floating point. Everything runs locally in your browser.",
