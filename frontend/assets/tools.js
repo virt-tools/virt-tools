@@ -787,6 +787,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-04T07:00:00Z",
   },
   {
+    slug: "geohash",
+    name: "Geohash Encoder / Decoder",
+    description: "Encode a latitude/longitude pair to a geohash or decode a geohash back to its centre and bounding box. The encoder interleaves the bits of longitude and latitude (longitude first), five bits per base32 character, using the standard geohash alphabet that omits a, i, l, and o. Decoding returns the cell's bounding box and centre point; each extra character roughly halves one dimension's cell width, and locations sharing a prefix are neighbours. Everything runs locally in your browser.",
+    category: "Geography",
+    icon: "🗺️",
+    added: "2026-07-07T15:00:00Z",
+  },
+  {
     slug: "chmod-calculator",
     name: "Unix File Permissions (chmod) Calculator",
     description: "Convert between numeric octal notation (e.g. 755 or 4755) and symbolic notation (e.g. rwxr-xr-x or rwsr-xr-x), with full support for the setuid, setgid and sticky special bits. Pure bit arithmetic, in your browser.",
