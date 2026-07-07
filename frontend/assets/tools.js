@@ -1067,6 +1067,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-07T20:00:00Z",
   },
   {
+    slug: "unit-price",
+    name: "Unit Price / Best Buy Calculator",
+    description: "Compare products by price per unit to find the best buy — converts mass, volume, length, and count units to a common base within each family and highlights the cheapest option. Runs in your browser.",
+    category: "Finance",
+    icon: "🛒",
+    added: "2026-07-07T21:00:00Z",
+  },
+  {
     slug: "break-even",
     name: "Break-Even Calculator",
     description: "Find the break-even point for a product or service: the units you must sell to cover your costs. Enter fixed costs, price per unit, and variable cost per unit to get the contribution margin per unit and as a ratio, the break-even unit count (rounded up) and revenue, and — optionally, at a given sales level — the profit at that volume and the margin of safety. All arithmetic runs locally in your browser.",

@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Unit Price / Best Buy Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    table.items { width:100%; border-collapse:collapse; margin:8px 0; }
+    table.items th, table.items td { padding:6px 8px; text-align:left; font-size:13px; border-bottom:1px solid var(--border,#2a2f3a); }
+    table.items th { font-weight:600; opacity:.8; }
+    table.items td input, table.items td select { width:100%; box-sizing:border-box; font-size:13px; }
+    table.items td.num { width:80px; }
+    table.items td.ppu { width:130px; text-align:right; font-variant-numeric:tabular-nums; opacity:.9; }
+    table.items tr.best td { background: rgba(110,168,254,.12); }
+    table.items tr.best td.ppu { font-weight:600; opacity:1; }
+    table.items td.act { width:36px; text-align:center; }
+    button.del { border:1px solid var(--border,#2a2f3a); background:transparent; color:inherit; border-radius:5px; cursor:pointer; padding:2px 7px; font-size:14px; line-height:1; }
+    .row-btn { display:flex; gap:8px; flex-wrap:wrap; margin:8px 0; }
+    button.do { border:1px solid var(--border,#2a2f3a); background:transparent; color:inherit; border-radius:6px; padding:6px 14px; cursor:pointer; font-size:13px; }
+    button.do.primary { background: var(--accent,#6ea8fe); color:#08101f; border-color:transparent; }
+    .sub { text-align:center; opacity:.85; font-size:14px; margin:8px 0; }
+    .err { color:#f0a36e; font-size:13px; margin:6px 0; }
+    optgroup { font-style:normal; opacity:.9; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Unit Price / Best Buy Calculator</h1>
+      <p>Compare products by price per unit to find the best buy. Enter each option's price, quantity, and unit; the calculator converts everything to a common base (grams, millilitres, metres, or each) within a unit family and highlights the cheapest. Handles mass, volume, length, and count — mix kilograms with pounds, litres with fluid ounces, dozens with singles. Runs entirely in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <table class="items">
+        <thead><tr><th>Product</th><th class="num">Price</th><th class="num">Qty</th><th>Unit</th><th class="ppu">Price / unit</th><th class="act"></th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+
+      <div class="row-btn">
+        <button type="button" class="do" id="add">+ Add product</button>
+        <button type="button" class="do" id="reset">Reset</button>
+      </div>
+
+      <div class="err" id="err"></div>
+      <div class="sub" id="sub">Add products to compare.</div>
+
+      <p class="note" style="margin-top:12px;">Price per unit = price ÷ (quantity × unit factor), where the factor converts each unit to a family base (mass→g, volume→ml, length→m, count→each). Only products in the same unit family are compared — you can't rank a kilogram of flour against a litre of milk. Units: <strong>mass</strong> g, kg, oz, lb · <strong>volume</strong> ml, l, fl oz, cup, pint, gallons · <strong>length</strong> mm, cm, m, in, ft, yd · <strong>count</strong> each, dozen, pack. Runs locally.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var UNITS = {
+      "g": { fam: "mass", factor: 1, label: "g" },
+      "kg": { fam: "mass", factor: 1000, label: "kg" },
+      "oz": { fam: "mass", factor: 28.349523125, label: "oz" },
+      "lb": { fam: "mass", factor: 453.59237, label: "lb" },
+      "ml": { fam: "volume", factor: 1, label: "ml" },
+      "l": { fam: "volume", factor: 1000, label: "l" },
+      "floz": { fam: "volume", factor: 29.5735295625, label: "fl oz" },
+      "cup": { fam: "volume", factor: 236.5882365, label: "cup" },
+      "pint": { fam: "volume", factor: 473.176473, label: "pint" },
+      "gallons": { fam: "volume", factor: 3785.411784, label: "gallon" },
+      "mm": { fam: "length", factor: 0.001, label: "mm" },
+      "cm": { fam: "length", factor: 0.01, label: "cm" },
+      "m": { fam: "length", factor: 1, label: "m" },
+      "in": { fam: "length", factor: 0.0254, label: "in" },
+      "ft": { fam: "length", factor: 0.3048, label: "ft" },
+      "yd": { fam: "length", factor: 0.9144, label: "yd" },
+      "each": { fam: "count", factor: 1, label: "each" },
+      "dozen": { fam: "count", factor: 12, label: "dozen" },
+      "pack": { fam: "count", factor: 1, label: "pack" }
+    };
+    var BASE = { mass: "g", volume: "ml", length: "m", count: "each" };
+
+    function pricePerBase(price, qty, factor) {
+      if (!(price >= 0) || !(qty > 0) || !(factor > 0)) return null;
+      return price / (qty * factor);
+    }
+
+    var rowsEl = document.getElementById("rows");
+    var addBtn = document.getElementById("add");
+    var resetBtn = document.getElementById("reset");
+    var errEl = document.getElementById("err");
+    var subEl = document.getElementById("sub");
+    var seed = 0;
+    function nextId() { return "u" + (++seed) + "-" + Math.random().toString(36).slice(2, 6); }
+
+    var PRESETS = [
+      ["Brand A", 4.99, 2, "kg"],
+      ["Brand B", 3.49, 1, "lb"],
+      ["Brand C", 12, 1, "oz"]
+    ];
+
+    function unitOptions(selected) {
+      var fams = { mass: "Mass", volume: "Volume", length: "Length", count: "Count" };
+      var html = "";
+      Object.keys(fams).forEach(function (fam) {
+        html += '<optgroup label="' + fams[fam] + '">';
+        Object.keys(UNITS).forEach(function (k) {
+          if (UNITS[k].fam === fam) {
+            html += '<option value="' + k + '"' + (k === selected ? " selected" : "") + ">" + UNITS[k].label + "</option>";
+          }
+        });
+        html += "</optgroup>";
+      });
+      return html;
+    }
+
+    function addRow(name, price, qty, unit) {
+      var id = nextId();
+      var tr = document.createElement("tr");
+      tr.dataset.id = id;
+      tr.innerHTML =
+        '<td><input type="text" class="c-name" placeholder="Product" value="' + (name || "") + '"></td>' +
+        '<td class="num"><input type="number" class="c-price" min="0" step="0.01" value="' + (price === undefined ? "" : price) + '" style="text-align:right"></td>' +
+        '<td class="num"><input type="number" class="c-qty" min="0" step="0.01" value="' + (qty === undefined ? "" : qty) + '" style="text-align:right"></td>' +
+        '<td><select class="c-unit">' + unitOptions(unit || "kg") + '</select></td>' +
+        '<td class="ppu">—</td>' +
+        '<td class="act"><button type="button" class="del" title="Remove">×</button></td>';
+      rowsEl.appendChild(tr);
+      tr.querySelector(".c-name").addEventListener("input", compute);
+      tr.querySelector(".c-price").addEventListener("input", compute);
+      tr.querySelector(".c-qty").addEventListener("input", compute);
+      tr.querySelector(".c-unit").addEventListener("change", compute);
+      tr.querySelector(".del").addEventListener("click", function () { tr.remove(); compute(); });
+    }
+
+    function readRows() {
+      var items = [];
+      rowsEl.querySelectorAll("tr").forEach(function (tr) {
+        var p = parseFloat(tr.querySelector(".c-price").value);
+        var q = parseFloat(tr.querySelector(".c-qty").value);
+        var u = tr.querySelector(".c-unit").value;
+        items.push({ tr: tr, price: isFinite(p) ? p : null, qty: isFinite(q) ? q : null, unit: u });
+      });
+      return items;
+    }
+
+    function money(n) {
+      if (!isFinite(n)) return "—";
+      if (n >= 1000) return "$" + n.toFixed(0);
+      if (n >= 1) return "$" + n.toFixed(2);
+      return "$" + n.toFixed(4);
+    }
+
+    function compute() {
+      errEl.textContent = "";
+      var items = readRows();
+      // determine dominant family (first valid item's family)
+      var fam = null;
+      var computed = [];
+      items.forEach(function (it) {
+        var u = UNITS[it.unit];
+        var ppu = null;
+        if (u && it.price !== null && it.qty !== null) {
+          ppu = pricePerBase(it.price, it.qty, u.factor);
+        }
+        it.ppu = ppu;
+        it.fam = u ? u.fam : null;
+        if (fam === null && it.fam) fam = it.fam;
+        computed.push(it);
+      });
+      // mark ppu cell; flag best within fam
+      var bestIdx = -1, bestPPU = Infinity;
+      computed.forEach(function (it, i) {
+        var cell = it.tr.querySelector(".ppu");
+        it.tr.classList.remove("best");
+        if (it.ppu === null) { cell.textContent = "—"; return; }
+        if (it.fam !== fam) { cell.textContent = "(other family)"; return; }
+        cell.textContent = money(it.ppu) + "/" + (BASE[fam] || "");
+        if (it.ppu < bestPPU) { bestPPU = it.ppu; bestIdx = i; }
+      });
+      if (bestIdx >= 0) computed[bestIdx].tr.classList.add("best");
+
+      var sameCount = computed.filter(function (it) { return it.ppu !== null && it.fam === fam; }).length;
+      if (sameCount === 0) {
+        subEl.textContent = items.length ? "Enter a price and quantity for at least one product." : "Add products to compare.";
+      } else {
+        subEl.textContent = sameCount + " product" + (sameCount === 1 ? "" : "s") + " compared by " + (BASE[fam] || "unit") + " — cheapest highlighted.";
+      }
+    }
+
+    addBtn.addEventListener("click", function () { addRow("", "", "", "kg"); compute(); });
+    resetBtn.addEventListener("click", function () {
+      rowsEl.innerHTML = "";
+      PRESETS.forEach(function (p) { addRow(p[0], p[1], p[2], p[3]); });
+      compute();
+    });
+
+    PRESETS.forEach(function (p) { addRow(p[0], p[1], p[2], p[3]); });
+    compute();
+  })();
+  </script>
+</body>
+</html>
