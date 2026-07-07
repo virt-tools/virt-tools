@@ -1059,6 +1059,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-04T23:40:00Z",
   },
   {
+    slug: "discount-calculator",
+    name: "Discount Calculator",
+    description: "Apply a single or stacked discounts to a price, optionally add sales tax, and see the sale price, savings and effective percent-off. Reverse mode finds the discount between an original and a sale price. Runs in your browser.",
+    category: "Finance",
+    icon: "🏷️",
+    added: "2026-07-07T20:00:00Z",
+  },
+  {
     slug: "break-even",
     name: "Break-Even Calculator",
     description: "Find the break-even point for a product or service: the units you must sell to cover your costs. Enter fixed costs, price per unit, and variable cost per unit to get the contribution margin per unit and as a ratio, the break-even unit count (rounded up) and revenue, and — optionally, at a given sales level — the profit at that volume and the margin of safety. All arithmetic runs locally in your browser.",
