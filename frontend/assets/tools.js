@@ -1203,6 +1203,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-07T03:00:00Z",
   },
   {
+    slug: "water-intake",
+    name: "Water Intake Calculator",
+    description: "Estimate a daily water intake goal from body weight (~35 ml/kg) with adjustments for activity level, hot-weather exposure, and pregnancy or lactation. Shows litres, millilitres, US fluid ounces, and glasses. Runs in your browser.",
+    category: "Health",
+    icon: "💧",
+    added: "2026-07-08T00:00:00Z",
+  },
+  {
     slug: "quadratic-solver",
     name: "Quadratic Equation Solver",
     description: "Solve a quadratic equation ax² + bx + c = 0. Enter the three coefficients and get the discriminant, the roots (two distinct real, one repeated real, or a complex-conjugate pair), the vertex and axis of symmetry of the parabola, and the factored form when the roots are real. A built-in check evaluates the polynomial at each root so you can confirm the result, and the linear case (a = 0) is handled too. Everything runs locally in your browser.",
