@@ -387,6 +387,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-06T14:00:00Z",
   },
   {
+    slug: "css-filter",
+    name: "CSS Filter Generator",
+    description: "Build a CSS filter declaration visually with sliders for blur, brightness, contrast, grayscale, hue-rotate, invert, opacity, saturate, and sepia. A live preview updates as you drag, and the ready-to-copy filter: string lists only the functions you've changed from their defaults, so it stays clean. Reset clears everything. Everything runs locally in your browser.",
+    category: "Design",
+    icon: "🌈",
+    added: "2026-07-07T16:00:00Z",
+  },
+  {
     slug: "regex-tester",
     name: "Regex Tester",
     description: "Build and test JavaScript regular expressions — live matches, capture groups and flags, in-browser.",
