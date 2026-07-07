@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Fuel Cost Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .seg { display:inline-flex; border:1px solid var(--border,#2a2f3a); border-radius:8px; overflow:hidden; margin-bottom:12px; }
+    .seg button { border:none; border-radius:0; background:transparent; color:inherit; padding:6px 14px; cursor:pointer; font-size:13px; }
+    .seg button.active { background: var(--accent,#6ea8fe); color:#08101f; }
+    .grid2 { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px; margin:8px 0; }
+    label.f { font-size:13px; opacity:.85; display:block; margin-bottom:4px; }
+    .big { font-size:34px; font-weight:700; font-variant-numeric:tabular-nums; text-align:center; margin:10px 0 2px; }
+    .sub { text-align:center; opacity:.85; font-size:14px; margin-bottom:8px; }
+    .results { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px; margin:10px 0; }
+    .res { background:var(--panel-2,#161a22); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:8px 10px; }
+    .res .n { font-size:17px; font-weight:600; font-variant-numeric:tabular-nums; }
+    .res .l { font-size:12px; opacity:.7; }
+    .err { color:#f0a36e; font-size:13px; margin:6px 0; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Fuel Cost Calculator</h1>
+      <p>Estimate the fuel used and cost for a trip. Enter the distance, your vehicle's efficiency, and the fuel price; pick the units (US or UK miles-per-gallon, L/100km, or km/L) and how the price is quoted (per litre or per gallon). The calculator works through litres as a common base so any efficiency unit pairs with any price unit. Runs entirely in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="seg" id="mode">
+        <button type="button" data-m="mpg_us" class="active">US mpg</button>
+        <button type="button" data-m="mpg_uk">UK mpg</button>
+        <button type="button" data-m="l100">L/100km</button>
+        <button type="button" data-m="kml">km/L</button>
+      </div>
+
+      <div class="grid2">
+        <div><label class="f" for="distance">Distance <span id="distUnit">(miles)</span></label><input type="number" id="distance" min="0" step="0.1" value="300"></div>
+        <div><label class="f" for="eff">Efficiency <span id="effUnit">(mpg)</span></label><input type="number" id="eff" min="0" step="0.01" value="30"></div>
+        <div><label class="f" for="price">Fuel price</label><input type="number" id="price" min="0" step="0.001" value="3.00"></div>
+        <div><label class="f" for="priceUnit">Price unit</label>
+          <select id="priceUnit">
+            <option value="per_gal_us">per US gallon</option>
+            <option value="per_gal_uk">per UK gallon</option>
+            <option value="per_l">per litre</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="err" id="err"></div>
+      <div class="big" id="out">—</div>
+      <div class="sub" id="sub">Enter values to estimate trip cost.</div>
+      <div class="results" id="results"></div>
+
+      <p class="note" style="margin-top:12px;">Fuel used is computed in litres (a common base), then cost = litres × price-per-litre. For mpg modes distance is in miles and efficiency in miles per gallon; for L/100km and km/L, distance is in kilometres. Conversions: 1 US gallon = 3.785411784 L, 1 UK gallon = 4.54609 L. This estimates fuel cost only — it ignores traffic, idling, and varying real-world efficiency. Runs locally.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var GAL_US = 3.785411784, GAL_UK = 4.54609;
+    function litresUsed(distance, eff, mode) {
+      if (!(distance >= 0) || !(eff > 0)) return null;
+      if (mode === "mpg_us") return (distance / eff) * GAL_US;
+      if (mode === "mpg_uk") return (distance / eff) * GAL_UK;
+      if (mode === "l100")   return (distance / 100) * eff;
+      if (mode === "kml")    return distance / eff;
+      return null;
+    }
+    function pricePerLitre(price, priceUnit) {
+      if (!(price >= 0)) return null;
+      if (priceUnit === "per_l") return price;
+      if (priceUnit === "per_gal_us") return price / GAL_US;
+      if (priceUnit === "per_gal_uk") return price / GAL_UK;
+      return null;
+    }
+
+    var modeEl = document.getElementById("mode");
+    var distanceEl = document.getElementById("distance");
+    var effEl = document.getElementById("eff");
+    var priceEl = document.getElementById("price");
+    var priceUnitEl = document.getElementById("priceUnit");
+    var distUnitEl = document.getElementById("distUnit");
+    var effUnitEl = document.getElementById("effUnit");
+    var errEl = document.getElementById("err");
+    var out = document.getElementById("out");
+    var sub = document.getElementById("sub");
+    var results = document.getElementById("results");
+
+    var MODE_LABELS = {
+      mpg_us: { dist: "miles", eff: "mpg (US)" },
+      mpg_uk: { dist: "miles", eff: "mpg (UK)" },
+      l100:   { dist: "km", eff: "L/100km" },
+      kml:    { dist: "km", eff: "km/L" }
+    };
+    var mode = "mpg_us";
+
+    function money(n) {
+      if (!isFinite(n)) return "—";
+      return n.toFixed(2);
+    }
+    function vol(n) {
+      if (!isFinite(n)) return "—";
+      return n.toFixed(2);
+    }
+
+    function compute() {
+      errEl.textContent = "";
+      var dist = parseFloat(distanceEl.value);
+      var eff = parseFloat(effEl.value);
+      var price = parseFloat(priceEl.value);
+      var pu = priceUnitEl.value;
+      distUnitEl.textContent = "(" + MODE_LABELS[mode].dist + ")";
+      effUnitEl.textContent = "(" + MODE_LABELS[mode].eff + ")";
+      if (!isFinite(dist) || dist < 0) { out.textContent = "—"; sub.textContent = "Enter a distance."; results.innerHTML = ""; return; }
+      if (!isFinite(eff) || eff <= 0) { out.textContent = "—"; sub.textContent = "Enter an efficiency greater than 0."; results.innerHTML = ""; return; }
+      if (!isFinite(price) || price < 0) { out.textContent = "—"; sub.textContent = "Enter a fuel price."; results.innerHTML = ""; return; }
+      var L = litresUsed(dist, eff, mode);
+      var ppl = pricePerLitre(price, pu);
+      var cost = L * ppl;
+      var galUs = L / GAL_US, galUk = L / GAL_UK;
+      out.textContent = "$" + money(cost);
+      sub.textContent = vol(L) + " L used over " + dist + " " + MODE_LABELS[mode].dist;
+      var html = "";
+      html += '<div class="res"><div class="n">$' + money(cost) + '</div><div class="l">trip cost</div></div>';
+      html += '<div class="res"><div class="n">' + vol(L) + ' L</div><div class="l">fuel used</div></div>';
+      html += '<div class="res"><div class="n">' + vol(galUs) + '</div><div class="l">US gallons</div></div>';
+      html += '<div class="res"><div class="n">' + vol(galUk) + '</div><div class="l">UK gallons</div></div>';
+      html += '<div class="res"><div class="n">$' + ppl.toFixed(3) + '</div><div class="l">per litre</div></div>';
+      html += '<div class="res"><div class="n">$' + money(cost / dist) + '</div><div class="l">per ' + MODE_LABELS[mode].dist + '</div></div>';
+      results.innerHTML = html;
+    }
+
+    modeEl.addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-m]"); if (!b) return;
+      mode = b.getAttribute("data-m");
+      Array.prototype.forEach.call(modeEl.querySelectorAll("button"), function (x) { x.classList.remove("active"); });
+      b.classList.add("active");
+      compute();
+    });
+    [distanceEl, effEl, priceEl, priceUnitEl].forEach(function (el) { el.addEventListener("input", compute); el.addEventListener("change", compute); });
+
+    compute();
+  })();
+  </script>
+</body>
+</html>
