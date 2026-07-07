@@ -539,6 +539,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T11:45:00Z",
   },
   {
+    slug: "gpa-calculator",
+    name: "GPA Calculator",
+    description: "Compute your grade-point average on the 4.0 scale — letter grades with plus/minus or percentages, weighted by credit hours. Live, in your browser.",
+    category: "Math",
+    icon: "🎓",
+    added: "2026-07-07T18:00:00Z",
+  },
+  {
     slug: "slug-generator",
     name: "Slug Generator",
     description: "Turn any text into a clean URL slug — strips accents (NFKD), collapses separators and trims to a length, all in your browser.",
