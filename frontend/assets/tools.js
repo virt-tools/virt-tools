@@ -243,6 +243,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-05T10:00:00Z",
   },
   {
+    slug: "sleep-cycle",
+    name: "Sleep Cycle Calculator",
+    description: "Plan a wake-up or bedtime around 90-minute sleep cycles, since waking at the end of a cycle tends to feel less groggy than mid-cycle. Choose a wake time to see the bedtimes that put you at the end of 3–6 cycles, or choose a bedtime to see the matching wake times. Add a fall-asleep buffer (default 15 minutes) and adjust the cycle length to match your own rhythm. Everything runs locally in your browser.",
+    category: "Time",
+    icon: "😴",
+    added: "2026-07-07T07:00:00Z",
+  },
+  {
     slug: "stopwatch",
     name: "Stopwatch & Countdown Timer",
     description: "A stopwatch with lap timing (split and per-lap times) and a countdown timer that beeps when it reaches zero. Drift-free monotonic clock with a Web Audio alarm. Runs locally.",

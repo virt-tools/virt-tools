@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Sleep Cycle Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .seg { display:inline-flex; border:1px solid var(--border,#2a2f3a); border-radius:8px; overflow:hidden; margin-bottom:10px; }
+    .seg button { border:none; border-radius:0; background:transparent; color:inherit; padding:6px 14px; cursor:pointer; font-size:13px; }
+    .seg button.active { background: var(--accent,#6ea8fe); color:#08101f; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px; margin:10px 0; }
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    input[type="time"] { font-size:15px; padding:6px; }
+    .results { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:10px; margin:10px 0; }
+    .res { background:var(--panel-2,#161a22); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:8px 10px; }
+    .res .n { font-size:20px; font-weight:600; font-variant-numeric: tabular-nums; }
+    .res .l { font-size:12px; opacity:.7; }
+    .res.best { border-color: var(--accent,#6ea8fe); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Sleep Cycle Calculator</h1>
+      <p>Plan a wake-up or bedtime around 90-minute sleep cycles. A typical sleep cycle lasts about 90 minutes, and waking at the end of a cycle (rather than mid-cycle) feels easier. Add a short buffer for falling asleep (default 15 minutes) and the calculator lists the bedtimes that put you at the end of 3–6 cycles for a chosen wake time, or the wake times for 3–6 cycles if you go to bed now or at a set time. Adjust the cycle length and buffer to match your own rhythm. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="seg" id="mode">
+        <button type="button" data-m="wake" class="active">I want to wake at…</button>
+        <button type="button" data-m="bed" class="secondary">I'm going to bed at…</button>
+      </div>
+
+      <div class="grid">
+        <div><label id="timeLabel" for="time">Wake time</label><input type="time" id="time" value="07:00"></div>
+        <div><label for="cycle">Cycle length (min)</label><input type="number" id="cycle" min="60" max="120" step="1" value="90"></div>
+        <div><label for="buffer">Fall-asleep buffer (min)</label><input type="number" id="buffer" min="0" max="60" step="1" value="15"></div>
+      </div>
+
+      <div class="results" id="results"></div>
+
+      <p class="note" id="note">A sleep cycle averages ~90 minutes (it shortens slightly through the night). Most adults need 4–6 cycles (6–9 hours). Waking at a cycle boundary tends to feel less groggy. Suggested times below assume you fall asleep <span id="bufNote">15</span> minutes after lights out. The 6-cycle option is marked as the typical adult target. Runs locally.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var modeEl = document.getElementById("mode");
+    var timeEl = document.getElementById("time");
+    var cycleEl = document.getElementById("cycle");
+    var bufferEl = document.getElementById("buffer");
+    var timeLabel = document.getElementById("timeLabel");
+    var resultsEl = document.getElementById("results");
+    var bufNote = document.getElementById("bufNote");
+
+    var mode = "wake";
+
+    // "HH:MM" -> minutes since midnight (may be outside [0,1440)).
+    function parseHM(s) {
+      var m = /^(\d{1,2}):(\d{2})$/.exec((s || "").trim());
+      if (!m) return null;
+      var h = parseInt(m[1], 10);
+      var mm = parseInt(m[2], 10);
+      if (isNaN(h) || isNaN(mm)) return null;
+      return h * 60 + mm;
+  }
+
+    // minutes since midnight (any) -> "HH:MM" on a 24h clock (wraps).
+    function fmtHM(min) {
+      min = ((Math.round(min) % 1440) + 1440) % 1440;
+      var h = Math.floor(min / 60);
+      var mm = min % 60;
+      function pad(n) { return (n < 10 ? "0" : "") + n; }
+      return pad(h) + ":" + pad(mm);
+    }
+
+    function num(el) { var v = parseInt(el.value, 10); return isFinite(v) ? v : NaN; }
+
+    function compute() {
+      var cycle = num(cycleEl);
+      var buffer = num(bufferEl);
+      bufNote.textContent = isFinite(buffer) ? buffer : 0;
+
+      if (!isFinite(cycle) || cycle <= 0 || !isFinite(buffer) || buffer < 0) {
+        resultsEl.innerHTML = '<div class="res"><div class="n">—</div><div class="l">enter a positive cycle length and buffer</div></div>';
+        return;
+      }
+      var base = parseHM(timeEl.value);
+      if (base === null) {
+        resultsEl.innerHTML = '<div class="res"><div class="n">—</div><div class="l">enter a valid time HH:MM</div></div>';
+        return;
+      }
+
+      var cycles = [6, 5, 4, 3]; // best (most) first
+      var html = "";
+      if (mode === "wake") {
+        // Bedtime = wakeTime - (n*cycle + buffer). Earlier n first? We list most-cycles (latest feasible bed) first.
+        // Sort descending cycles so the latest bedtime (fewest cycles... wait). More cycles = more sleep = earlier bedtime.
+        cycles = [6, 5, 4, 3]; // 6 cycles = earliest bed, most sleep.
+        cycles.forEach(function (n, i) {
+          var bed = base - (n * cycle + buffer);
+          var label = n + " cycles · " + (n * cycle / 60).toFixed(1) + " h sleep";
+          html += '<div class="res' + (n === 6 ? " best" : "") + '"><div class="n">' + fmtHM(bed) + '</div><div class="l">' + label + '</div></div>';
+        });
+      } else {
+        // Wake time = bedtime + buffer + n*cycle.
+        cycles = [6, 5, 4, 3];
+        cycles.forEach(function (n) {
+          var wake = base + buffer + n * cycle;
+          var label = n + " cycles · " + (n * cycle / 60).toFixed(1) + " h sleep";
+          html += '<div class="res' + (n === 6 ? " best" : "") + '"><div class="n">' + fmtHM(wake) + '</div><div class="l">' + label + '</div></div>';
+        });
+      }
+      resultsEl.innerHTML = html;
+    }
+
+    modeEl.addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-m]"); if (!b) return;
+      mode = b.getAttribute("data-m");
+      Array.prototype.forEach.call(modeEl.querySelectorAll("button"), function (x) { x.classList.remove("active"); });
+      b.classList.add("active");
+      timeLabel.textContent = (mode === "wake") ? "Wake time" : "Bedtime";
+      compute();
+    });
+
+    [timeEl, cycleEl, bufferEl].forEach(function (el) {
+      el.addEventListener("input", compute);
+      el.addEventListener("change", compute);
+    });
+
+    compute();
+  })();
+  </script>
+</body>
+</html>
