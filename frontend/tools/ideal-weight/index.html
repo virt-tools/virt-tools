@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Ideal Body Weight Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .seg { display:inline-flex; border:1px solid var(--border,#2a2f3a); border-radius:8px; overflow:hidden; margin-bottom:10px; }
+    .seg button { border:none; border-radius:0; background:transparent; color:inherit; padding:6px 14px; cursor:pointer; font-size:13px; }
+    .seg button.active { background: var(--accent,#6ea8fe); color:#08101f; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; margin:10px 0; }
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    .big { font-size:42px; font-weight:700; font-variant-numeric: tabular-nums; text-align:center; margin:8px 0 2px; }
+    .sub { text-align:center; opacity:.85; font-size:15px; margin-bottom:10px; }
+    .results { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px; margin:10px 0; }
+    .res { background:var(--panel-2,#161a22); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:8px 10px; }
+    .res .n { font-size:20px; font-weight:600; font-variant-numeric: tabular-nums; }
+    .res .l { font-size:12px; opacity:.7; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Ideal Body Weight Calculator</h1>
+      <p>Estimate ideal body weight (IBW) from height and sex using four published clinical formulas — Hamwi (1964), Devine (1974), Robinson (1983), and Miller (1983) — and report the range and average. Formulas compute a target weight for a given height (intended for adults, originally based on actuarial life-insurance data), with separate constants for men and women and a per-inch correction above 5 ft (152 cm). Enter height in centimetres or feet/inches. The results are population averages, not individual medical targets — muscle mass, frame size, and body composition all shift a healthy weight. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="seg" id="sex">
+        <button type="button" data-s="male" class="active">Male</button>
+        <button type="button" data-s="female" class="secondary">Female</button>
+      </div>
+
+      <div class="seg" id="units">
+        <button type="button" data-u="metric" class="active">Metric (cm)</button>
+        <button type="button" data-u="us" class="secondary">U.S. (ft/in)</button>
+      </div>
+
+      <div class="grid" id="inputs"></div>
+
+      <div class="big" id="avg">—</div>
+      <div class="sub" id="sub">Enter your height.</div>
+
+      <div class="results" id="results"></div>
+
+      <p class="note">Formulas give IBW in kg for a height of at least 5 ft (60 in / 152 cm); the per-inch correction is applied for heights above (and, by convention, below) that reference. Devine: men 50 + 2.3×(in−60), women 45.5 + 2.3×(in−60). Robinson: men 52 + 1.9×(in−60), women 49 + 1.7×(in−60). Miller: men 56.2 + 1.41×(in−60), women 53.1 + 1.36×(in−60). Hamwi: men 48 + 2.7×(in−60), women 45.5 + 2.2×(in−60). Range and average across the four formulas. Runs locally.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var sexEl = document.getElementById("sex");
+    var unitsEl = document.getElementById("units");
+    var inputsEl = document.getElementById("inputs");
+    var avgEl = document.getElementById("avg");
+    var subEl = document.getElementById("sub");
+    var resultsEl = document.getElementById("results");
+
+    var sex = "male";
+    var units = "metric";
+    var IN_PER_CM = 1 / 2.54;
+    var LB_PER_KG = 2.2046226218;
+
+    // height stored in inches internally
+    var heightIn = 175 * IN_PER_CM; // default 175 cm
+
+    function buildInputs() {
+      var html = "";
+      if (units === "metric") {
+        var cm = (heightIn / IN_PER_CM).toFixed(1);
+        html += '<div><label for="cm">Height (cm)</label><input type="number" id="cm" min="0" step="0.1" value="' + cm + '"></div>';
+      } else {
+        var ft = Math.floor(heightIn / 12);
+        var inch = Math.round(heightIn - ft * 12);
+        html += '<div><label for="ft">Height (ft)</label><input type="number" id="ft" min="0" step="1" value="' + ft + '"></div>';
+        html += '<div><label for="inch">Height (in)</label><input type="number" id="inch" min="0" max="11" step="1" value="' + inch + '"></div>';
+      }
+      inputsEl.innerHTML = html;
+      Array.prototype.forEach.call(inputsEl.querySelectorAll("input"), function (el) {
+        el.addEventListener("input", compute);
+      });
+    }
+
+    function readHeight() {
+      if (units === "metric") {
+        var cm = parseFloat(document.getElementById("cm").value);
+        if (!isFinite(cm) || cm <= 0) return null;
+        return cm * IN_PER_CM;
+      }
+      var ft = parseFloat(document.getElementById("ft").value);
+      var inch = parseFloat(document.getElementById("inch").value);
+      if (!isFinite(ft) || ft < 0 || !isFinite(inch) || inch < 0) return null;
+      return ft * 12 + inch;
+    }
+
+    // IBW formulas return kg. hIn in inches.
+    function devine(s, hIn) {
+      var base = (s === "male") ? 50 : 45.5;
+      return base + 2.3 * (hIn - 60);
+    }
+    function robinson(s, hIn) {
+      var base = (s === "male") ? 52 : 49;
+      var corr = (s === "male") ? 1.9 : 1.7;
+      return base + corr * (hIn - 60);
+    }
+    function miller(s, hIn) {
+      var base = (s === "male") ? 56.2 : 53.1;
+      var corr = (s === "male") ? 1.41 : 1.36;
+      return base + corr * (hIn - 60);
+    }
+    function hamwi(s, hIn) {
+      var base = (s === "male") ? 48 : 45.5;
+      var corr = (s === "male") ? 2.7 : 2.2;
+      return base + corr * (hIn - 60);
+    }
+
+    function compute() {
+      var h = readHeight();
+      if (h === null || h <= 0) {
+        avgEl.textContent = "—";
+        subEl.textContent = "Enter a positive height.";
+        resultsEl.innerHTML = "";
+        return;
+      }
+      heightIn = h;
+
+      var formulas = [
+        { name: "Hamwi (1964)", kg: hamwi(sex, h) },
+        { name: "Devine (1974)", kg: devine(sex, h) },
+        { name: "Robinson (1983)", kg: robinson(sex, h) },
+        { name: "Miller (1983)", kg: miller(sex, h) }
+      ];
+      var kgs = formulas.map(function (f) { return f.kg; });
+      var min = Math.min.apply(null, kgs);
+      var max = Math.max.apply(null, kgs);
+      var avg = kgs.reduce(function (a, b) { return a + b; }, 0) / kgs.length;
+
+      avgEl.textContent = avg.toFixed(1) + " kg";
+      var hDisp = (units === "metric")
+        ? (h / IN_PER_CM).toFixed(0) + " cm"
+        : Math.floor(h / 12) + "' " + Math.round(h - Math.floor(h / 12) * 12) + '"';
+      subEl.textContent = (sex === "male" ? "Male" : "Female") + " · " + hDisp + " · range " + min.toFixed(1) + "–" + max.toFixed(1) + " kg";
+
+      var html = "";
+      formulas.forEach(function (f) {
+        html += '<div class="res"><div class="n">' + f.kg.toFixed(1) + ' kg</div><div class="l">' + f.name + ' · ' + (f.kg * LB_PER_KG).toFixed(1) + ' lb</div></div>';
+      });
+      html += '<div class="res"><div class="n">' + (avg * LB_PER_KG).toFixed(1) + ' lb</div><div class="l">average (lb)</div></div>';
+      resultsEl.innerHTML = html;
+    }
+
+    sexEl.addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-s]"); if (!b) return;
+      sex = b.getAttribute("data-s");
+      Array.prototype.forEach.call(sexEl.querySelectorAll("button"), function (x) { x.classList.remove("active"); });
+      b.classList.add("active");
+      compute();
+    });
+
+    unitsEl.addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-u]"); if (!b) return;
+      var next = b.getAttribute("data-u");
+      if (next === units) return;
+      // Preserve current height across the unit switch.
+      var h = readHeight();
+      if (h !== null && h > 0) heightIn = h;
+      units = next;
+      Array.prototype.forEach.call(unitsEl.querySelectorAll("button"), function (x) { x.classList.remove("active"); });
+      b.classList.add("active");
+      buildInputs();
+      compute();
+    });
+
+    buildInputs();
+    compute();
+  })();
+  </script>
+</body>
+</html>

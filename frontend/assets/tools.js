@@ -1027,6 +1027,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-06T08:00:00Z",
   },
   {
+    slug: "ideal-weight",
+    name: "Ideal Body Weight Calculator",
+    description: "Estimate ideal body weight from height and sex using four published clinical formulas — Hamwi (1964), Devine (1974), Robinson (1983), and Miller (1983) — with separate constants for men and women and a per-inch correction above 5 ft (152 cm). Reports each formula's result in kg and lb, the range across formulas, and the average. Enter height in centimetres or feet/inches. These are population-average targets derived from actuarial data, not individual medical advice — frame size, muscle mass, and body composition shift a healthy weight. Everything runs locally in your browser.",
+    category: "Health",
+    icon: "⚖️",
+    added: "2026-07-07T05:00:00Z",
+  },
+  {
     slug: "one-rep-max",
     name: "One-Rep Max Calculator",
     description: "Estimate your one-repetition maximum from a weight lifted for a number of reps using six published formulas (Epley, Brzycki, Lander, Lombardi, O'Conner, Wathen), with a per-formula comparison and a percentage-of-1RM table for setting rep targets. Runs locally.",
