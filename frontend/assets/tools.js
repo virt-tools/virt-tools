@@ -547,6 +547,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-07T18:00:00Z",
   },
   {
+    slug: "grade-calculator",
+    name: "Grade Calculator",
+    description: "Weighted-average grade from category scores and weights, plus the score you need on a final exam to hit a target overall grade. Live, in your browser.",
+    category: "Math",
+    icon: "📝",
+    added: "2026-07-07T19:00:00Z",
+  },
+  {
     slug: "slug-generator",
     name: "Slug Generator",
     description: "Turn any text into a clean URL slug — strips accents (NFKD), collapses separators and trims to a length, all in your browser.",
