@@ -363,6 +363,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T04:55:03Z",
   },
   {
+    slug: "bezier-easing",
+    name: "Cubic-Bezier Easing Editor",
+    description: "Edit a CSS cubic-bezier() timing function by dragging its two control points on the curve, or pick a named easing (ease, ease-in, ease-out, ease-in-out, in-back, out-back, and more). The horizontal axis is time and the vertical is progress; control-point x is clamped to [0,1] while y may overshoot for spring-like motion. Edit the four values directly, copy the ready CSS string, and watch a live easing preview animation. Everything runs locally in your browser.",
+    category: "Design",
+    icon: "〰️",
+    added: "2026-07-07T09:00:00Z",
+  },
+  {
     slug: "border-radius-generator",
     name: "Border Radius Generator",
     description: "Set each corner of a CSS border-radius independently in pixels or percent, with optional elliptical horizontal/vertical radii. Live preview and copy-ready CSS. Runs locally.",
