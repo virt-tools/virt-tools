@@ -1139,6 +1139,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-05T03:40:00Z",
   },
   {
+    slug: "cubic-solver",
+    name: "Cubic Equation Solver",
+    description: "Solve a cubic equation ax³ + bx² + cx + d = 0 for its three roots — real or complex — using Cardano's method. Enter the four coefficients; the solver reduces to the depressed cubic t³ + pt + q = 0, classifies the roots from the discriminant (three real, a multiple real root, or one real plus a complex-conjugate pair), uses the trigonometric form when all three roots are real and Cardano's cube-root form otherwise, and shows a residual |P(root)| check for each root. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "³",
+    added: "2026-07-07T13:00:00Z",
+  },
+  {
     slug: "day-of-year",
     name: "Day of Year & ISO Week Number",
     description: "Enter a date (YYYY-MM-DD) to see its weekday, day of the year (1–365 or 1–366 in a leap year), the ISO 8601 week number and ISO year (where week 1 contains the year's first Thursday), days remaining in the year, and whether the year is a leap year. All date arithmetic uses UTC midnight to avoid timezone drift. Everything runs locally in your browser.",
