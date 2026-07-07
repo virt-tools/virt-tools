@@ -1019,6 +1019,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-07T06:00:00Z",
   },
   {
+    slug: "npv-irr",
+    name: "NPV & IRR Calculator",
+    description: "Evaluate an investment from a series of per-period cash flows. Enter the cash flows (the first is usually the initial outlay, a negative number) and a discount rate to get the Net Present Value, and the calculator also finds the Internal Rate of Return — the discount rate at which NPV is zero. NPV sums each cash flow discounted by (1 + r)^t; IRR is found by bisection, which is robust for conventional cash flows (one sign change). Reports the nominal total, period count, and sign changes, and flags flows with no IRR or possibly non-unique IRRs. Everything runs locally in your browser.",
+    category: "Finance",
+    icon: "💱",
+    added: "2026-07-07T12:00:00Z",
+  },
+  {
     slug: "combinatorics",
     name: "Combinatorics Calculator",
     description: "Count arrangements and selections of items. Given a total of n items and a choice of r, compute permutations P(n,r), permutations with repetition (n^r), combinations C(n,r), combinations with repetition (multisets, C(n+r−1,r)), and the factorial of n. All arithmetic uses big integers, so the results are exact — even for values like C(100,50) that overflow ordinary floating point. Everything runs locally in your browser.",

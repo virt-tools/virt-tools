@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>NPV & IRR Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px; margin:10px 0; }
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    textarea { width:100%; font-family: ui-monospace, Menlo, Consolas, monospace; font-size:13px; box-sizing:border-box; }
+    .big { font-size:36px; font-weight:700; font-variant-numeric: tabular-nums; text-align:center; margin:8px 0 2px; }
+    .sub { text-align:center; opacity:.85; font-size:15px; margin-bottom:10px; }
+    .results { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px; margin:10px 0; }
+    .res { background:var(--panel-2,#161a22); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:8px 10px; }
+    .res .n { font-size:20px; font-weight:600; font-variant-numeric: tabular-nums; }
+    .res .l { font-size:12px; opacity:.7; }
+    .err { color:#f0a36e; font-size:13px; margin:6px 0; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>NPV &amp; IRR Calculator</h1>
+      <p>Evaluate an investment from a series of cash flows. Enter one cash flow per period (the first is usually the initial outlay, a negative number), then a discount rate to get the Net Present Value, and the calculator also finds the Internal Rate of Return — the discount rate at which NPV is zero. NPV sums each cash flow discounted by (1 + r)^t; a positive NPV means the investment beats the discount rate. IRR is found by bisection, which is robust for conventional cash flows (one sign change). Use the results as a guide, not financial advice. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <label for="cfs">Cash flows (period 0, 1, 2, … — comma, space, or newline separated)</label>
+      <textarea id="cfs" rows="3" spellcheck="false">-1000, 300, 400, 500, 600</textarea>
+
+      <div class="grid">
+        <div><label for="rate">Discount rate (%)</label><input type="number" id="rate" step="0.01" value="10"></div>
+      </div>
+
+      <div class="err" id="err"></div>
+
+      <div class="big" id="npv">—</div>
+      <div class="sub" id="sub">Enter cash flows and a discount rate.</div>
+
+      <div class="results" id="results"></div>
+
+      <p class="note">NPV = Σ CF_t / (1 + r)^t for t = 0 … n, where r is the discount rate per period. IRR is the r for which NPV = 0, found by bisection over r in [−99.9 %, 1000 %]. For a conventional investment (one outflow then inflows) the NPV falls as r rises, so there is a single IRR. Cash flows with no sign change have no IRR; unconventional flows (multiple sign changes) can have several. Totals are nominal (undiscounted). Runs locally.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var cfsEl = document.getElementById("cfs");
+    var rateEl = document.getElementById("rate");
+    var errEl = document.getElementById("err");
+    var npvEl = document.getElementById("npv");
+    var subEl = document.getElementById("sub");
+    var resultsEl = document.getElementById("results");
+
+    function r2(n) { return Math.round(n * 100) / 100; }
+    function money(n) {
+      if (!isFinite(n)) return "—";
+      var sign = n < 0 ? "-" : "";
+      return sign + "$" + Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function parseNums(s) {
+      var out = [];
+      (s || "").split(/[\s,;]+/).forEach(function (t) {
+        t = t.trim(); if (!t) return;
+        var v = parseFloat(t); if (isFinite(v)) out.push(v);
+      });
+      return out;
+    }
+
+    // NPV at rate r (per period, as a fraction).
+    function npv(cfs, r) {
+      var total = 0;
+      for (var t = 0; t < cfs.length; t++) total += cfs[t] / Math.pow(1 + r, t);
+      return total;
+    }
+
+    // Count sign changes (zeros ignored).
+    function signChanges(cfs) {
+      var changes = 0, prev = 0;
+      for (var i = 0; i < cfs.length; i++) {
+        if (cfs[i] === 0) continue;
+        var s = cfs[i] > 0 ? 1 : -1;
+        if (prev !== 0 && s !== prev) changes++;
+        prev = s;
+      }
+      return changes;
+    }
+
+    // IRR via bisection on NPV(r)=0, r in [rLow, rHigh] (fractions).
+    function irr(cfs) {
+      var rLow = -0.999, rHigh = 10;
+      var fLow = npv(cfs, rLow), fHigh = npv(cfs, rHigh);
+      // Need a sign change in the bracket for bisection.
+      if (fLow * fHigh > 0) return null;
+      for (var i = 0; i < 200; i++) {
+        var mid = (rLow + rHigh) / 2;
+        var fMid = npv(cfs, mid);
+        if (Math.abs(fMid) < 1e-7) return mid;
+        if (fLow * fMid < 0) { rHigh = mid; fHigh = fMid; }
+        else { rLow = mid; fLow = fMid; }
+      }
+      return (rLow + rHigh) / 2;
+    }
+
+    function setError(s) { errEl.textContent = s; }
+    function clearOut() { npvEl.textContent = "—"; subEl.textContent = ""; resultsEl.innerHTML = ""; }
+
+    function compute() {
+      setError("");
+      var cfs = parseNums(cfsEl.value);
+      var ratePct = parseFloat(rateEl.value);
+
+      if (cfs.length < 2) { setError("Enter at least 2 cash flows (an outlay and a return)."); clearOut(); return; }
+      if (!isFinite(ratePct)) { setError("Enter a discount rate (%)."); clearOut(); return; }
+
+      var r = ratePct / 100;
+      var n = npv(cfs, r);
+      var total = cfs.reduce(function (a, b) { return a + b; }, 0);
+
+      var i = irr(cfs);
+      var sc = signChanges(cfs);
+
+      npvEl.textContent = money(n);
+      subEl.textContent = "NPV at " + ratePct + "% over " + (cfs.length - 1) + " periods";
+
+      var html = "";
+      html += '<div class="res"><div class="n">' + money(n) + '</div><div class="l">NPV at ' + ratePct + '%</div></div>';
+      html += '<div class="res"><div class="n">' + (i === null ? "—" : (i * 100).toFixed(2) + "%") + '</div><div class="l">' + (i === null ? "IRR (no single solution)" : "IRR (per period)") + '</div></div>';
+      html += '<div class="res"><div class="n">' + money(total) + '</div><div class="l">nominal total</div></div>';
+      html += '<div class="res"><div class="n">' + (cfs.length - 1) + '</div><div class="l">periods</div></div>';
+      html += '<div class="res"><div class="n">' + sc + '</div><div class="l">sign changes</div></div>';
+      resultsEl.innerHTML = html;
+
+      if (i === null && sc === 0) setError("No sign change in cash flows — there is no IRR (the project never pays back, or never costs).");
+      else if (sc > 1) setError("Note: " + sc + " sign changes — the IRR may not be unique. Bisection returns one root.");
+    }
+
+    [cfsEl, rateEl].forEach(function (el) {
+      el.addEventListener("input", compute);
+    });
+
+    compute();
+  })();
+  </script>
+</body>
+</html>
