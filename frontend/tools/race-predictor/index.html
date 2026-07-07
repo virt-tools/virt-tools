@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Race Time Predictor (Riegel) — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .seg { display:inline-flex; border:1px solid var(--border,#2a2f3a); border-radius:8px; overflow:hidden; margin-bottom:10px; }
+    .seg button { border:none; border-radius:0; background:transparent; color:inherit; padding:6px 14px; cursor:pointer; font-size:13px; }
+    .seg button.active { background: var(--accent,#6ea8fe); color:#08101f; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; margin:10px 0; }
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    .big { font-size:42px; font-weight:700; font-variant-numeric: tabular-nums; text-align:center; margin:8px 0 2px; }
+    .sub { text-align:center; opacity:.85; font-size:15px; margin-bottom:10px; }
+    .results { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:10px; margin:10px 0; }
+    .res { background:var(--panel-2,#161a22); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:8px 10px; }
+    .res .n { font-size:20px; font-weight:600; font-variant-numeric: tabular-nums; }
+    .res .l { font-size:12px; opacity:.7; }
+    .presets { display:flex; flex-wrap:wrap; gap:6px; margin:4px 0 8px; }
+    .presets button { border:1px solid var(--border,#2a2f3a); background:transparent; color:inherit; border-radius:6px; padding:4px 10px; cursor:pointer; font-size:12px; }
+    .presets button.active { background: var(--accent,#6ea8fe); color:#08101f; border-color:transparent; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Race Time Predictor</h1>
+      <p>Predict your finish time for a target race distance from a recent result at another distance, using Riegel's endurance formula T₂ = T₁ × (D₂/D₁)^1.06. Enter a recent race (distance + finish time) and a target distance; get the predicted time, pace, and speed. Supports common race distances (mile, 5K, 10K, half marathon, marathon) and metric or U.S. units. The formula is an approximation that works best for distances within a few-fold of each other; elite runners and short-to-long jumps can deviate. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="seg" id="units">
+        <button type="button" data-u="metric" class="active">Metric (km)</button>
+        <button type="button" data-u="us" class="secondary">U.S. (mi)</button>
+      </div>
+
+      <div class="grid">
+        <div><label for="d1">Recent distance</label><input type="number" id="d1" min="0" step="0.001" value="5"></div>
+        <div><label for="t1">Recent time (hh:mm:ss)</label><input type="text" id="t1" value="0:25:00"></div>
+        <div><label for="d2">Target distance</label><input type="number" id="d2" min="0" step="0.001" value="10"></div>
+      </div>
+
+      <div class="presets" id="presets"></div>
+
+      <div class="big" id="finish">—</div>
+      <div class="sub" id="sub">Enter a recent race and a target distance.</div>
+
+      <div class="results" id="results"></div>
+
+      <p class="note">Riegel's formula (1977/1981): T₂ = T₁ × (D₂/D₁)^1.06, where T and D are time and distance. The exponent 1.06 models the slow-down as distance grows. It is most accurate when the two distances are within roughly a 4× range; predictions for large jumps (e.g. 1 mile → marathon) tend to be optimistic for most runners. Pace is shown per kilometre / per mile. Runs locally.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var unitsEl = document.getElementById("units");
+    var d1El = document.getElementById("d1");
+    var t1El = document.getElementById("t1");
+    var d2El = document.getElementById("d2");
+    var presetsEl = document.getElementById("presets");
+    var finishEl = document.getElementById("finish");
+    var subEl = document.getElementById("sub");
+    var resultsEl = document.getElementById("results");
+
+    var units = "metric";
+    var MI_TO_KM = 1.609344;
+
+    // Common race distances in km.
+    var RACES = [
+      { name: "1 mi", km: 1.609344 },
+      { name: "5K", km: 5 },
+      { name: "10K", km: 10 },
+      { name: "Half marathon", km: 21.0975 },
+      { name: "Marathon", km: 42.195 }
+    ];
+
+    function buildPresets() {
+      var html = "";
+      RACES.forEach(function (r) {
+        html += '<button type="button" data-km="' + r.km + '">' + r.name + '</button>';
+      });
+      presetsEl.innerHTML = html;
+    }
+
+    // Parse "h:mm:ss" / "mm:ss" / "ss" / "m.s" into seconds.
+    function parseTime(s) {
+      if (s === null || s === undefined) return NaN;
+      s = String(s).trim();
+      if (!s) return NaN;
+      // Allow decimal seconds form like "1500.5" or "25:00" or "1:25:00".
+      var parts = s.split(":");
+      var sec = 0;
+      if (parts.length === 1) {
+        sec = parseFloat(parts[0]);
+      } else {
+        for (var i = 0; i < parts.length; i++) {
+          var v = parseFloat(parts[i]);
+          if (!isFinite(v)) return NaN;
+          sec = sec * 60 + v;
+        }
+      }
+      return sec;
+    }
+
+    function fmtTime(sec) {
+      if (!isFinite(sec) || sec < 0) return "—";
+      sec = Math.round(sec);
+      var h = Math.floor(sec / 3600);
+      var m = Math.floor((sec % 3600) / 60);
+      var s = sec % 60;
+      function pad(n) { return (n < 10 ? "0" : "") + n; }
+      if (h > 0) return h + ":" + pad(m) + ":" + pad(s);
+      return m + ":" + pad(s);
+    }
+
+    // Riegel: T2 = T1 * (D2/D1)^1.06 (distances in same unit).
+    function riegel(t1, d1, d2) {
+      if (!(t1 > 0) || !(d1 > 0) || !(d2 > 0)) return null;
+      return t1 * Math.pow(d2 / d1, 1.06);
+    }
+
+    function readDist(el) {
+      var v = parseFloat(el.value);
+      if (!isFinite(v) || v <= 0) return NaN;
+      return (units === "us") ? v * MI_TO_KM : v;
+    }
+
+    function compute() {
+      var t1 = parseTime(t1El.value);
+      var d1 = readDist(d1El);
+      var d2 = readDist(d2El);
+
+      // Highlight matching preset for d2.
+      Array.prototype.forEach.call(presetsEl.querySelectorAll("button"), function (b) {
+        var km = parseFloat(b.getAttribute("data-km"));
+        b.classList.toggle("active", isFinite(d2) && Math.abs(km - d2) < 1e-6);
+      });
+
+      if (!isFinite(t1) || t1 <= 0 || !isFinite(d1) || !isFinite(d2)) {
+        finishEl.textContent = "—";
+        subEl.textContent = "Enter a positive recent time and both distances.";
+        resultsEl.innerHTML = "";
+        return;
+      }
+
+      var t2 = riegel(t1, d1, d2);
+      if (t2 === null) {
+        finishEl.textContent = "—";
+        subEl.textContent = "All values must be positive.";
+        resultsEl.innerHTML = "";
+        return;
+      }
+
+      // Pace per km / per mile, speed.
+      var perKm = t2 / d2; // seconds per km
+      var perMile = t2 / (d2 / MI_TO_KM); // seconds per mile
+      var speedKmh = d2 / (t2 / 3600);
+      var speedMph = speedKmh / MI_TO_KM;
+
+      var distUnit = (units === "metric") ? "km" : "mi";
+      var d1Disp = (units === "metric") ? d1 : d1 / MI_TO_KM;
+      var d2Disp = (units === "metric") ? d2 : d2 / MI_TO_KM;
+      var paceDisp = (units === "metric") ? fmtTime(perKm) : fmtTime(perMile);
+
+      finishEl.textContent = fmtTime(t2);
+      subEl.textContent = d1Disp.toFixed(2) + " " + distUnit + " in " + fmtTime(t1) + " → " + d2Disp.toFixed(2) + " " + distUnit;
+
+      var html = "";
+      html += '<div class="res"><div class="n">' + fmtTime(t2) + '</div><div class="l">predicted time</div></div>';
+      html += '<div class="res"><div class="n">' + paceDisp + '</div><div class="l">pace / ' + distUnit + '</div></div>';
+      html += '<div class="res"><div class="n">' + speedKmh.toFixed(1) + '</div><div class="l">km / h</div></div>';
+      html += '<div class="res"><div class="n">' + speedMph.toFixed(1) + '</div><div class="l">mph</div></div>';
+      resultsEl.innerHTML = html;
+    }
+
+    unitsEl.addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-u]"); if (!b) return;
+      var next = b.getAttribute("data-u");
+      if (next === units) return;
+      // Convert d1 and d2 values.
+      function conv(v) {
+        var n = parseFloat(v);
+        if (!isFinite(n) || n <= 0) return v;
+        return (next === "us") ? (n / MI_TO_KM) : (n * MI_TO_KM);
+      }
+      d1El.value = conv(d1El.value);
+      d2El.value = conv(d2El.value);
+      units = next;
+      Array.prototype.forEach.call(unitsEl.querySelectorAll("button"), function (x) { x.classList.remove("active"); });
+      b.classList.add("active");
+      document.querySelector('label[for="d1"]').textContent = (next === "metric") ? "Recent distance (km)" : "Recent distance (mi)";
+      document.querySelector('label[for="d2"]').textContent = (next === "metric") ? "Target distance (km)" : "Target distance (mi)";
+      compute();
+    });
+
+    presetsEl.addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-km]"); if (!b) return;
+      var km = parseFloat(b.getAttribute("data-km"));
+      var disp = (units === "us") ? (km / MI_TO_KM) : km;
+      // Set d2 to this race distance. If d1 is empty, also set d1 so user has a starting point? Only set d2.
+      d2El.value = (units === "us") ? disp.toFixed(3) : disp;
+      compute();
+    });
+
+    [d1El, d2El].forEach(function (el) { el.addEventListener("input", compute); el.addEventListener("change", compute); });
+    t1El.addEventListener("input", compute);
+
+    buildPresets();
+    compute();
+  })();
+  </script>
+</body>
+</html>

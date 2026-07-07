@@ -923,6 +923,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-04T20:20:00Z",
   },
   {
+    slug: "race-predictor",
+    name: "Race Time Predictor",
+    description: "Predict a finish time for a target race distance from a recent result at another distance using Riegel's endurance formula T₂ = T₁ × (D₂/D₁)^1.06. Enter a recent race (distance and finish time) and a target distance to get the predicted time, pace, and speed. Includes one-click presets for the mile, 5K, 10K, half marathon, and marathon, and a metric / U.S. unit toggle. The exponent models the slow-down as distance grows; it is most accurate when the two distances are within a few-fold of each other. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🏁",
+    added: "2026-07-07T04:00:00Z",
+  },
+  {
     slug: "markdown-table",
     name: "Markdown Table Generator",
     description: "Turn delimited data — comma, tab, pipe, or semicolon — into a clean, GitHub-flavoured Markdown table. Quoted fields (with embedded delimiters, escaped quotes, or newlines) are parsed properly, cells containing pipes are escaped, and you can set per-column alignment (left, centre, right, or none). Ragged rows are padded to the widest row and column widths are computed so everything lines up. Everything runs locally in your browser.",
