@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Chi-Square Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .seg { display:inline-flex; border:1px solid var(--border,#2a2f3a); border-radius:8px; overflow:hidden; margin-bottom:10px; }
+    .seg button { border:none; border-radius:0; background:transparent; color:inherit; padding:6px 14px; cursor:pointer; font-size:13px; }
+    .seg button.active { background: var(--accent,#6ea8fe); color:#08101f; }
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    textarea { width:100%; font-family: ui-monospace, Menlo, Consolas, monospace; font-size:13px; box-sizing:border-box; }
+    .big { font-size:36px; font-weight:700; font-variant-numeric: tabular-nums; text-align:center; margin:8px 0 2px; }
+    .sub { text-align:center; opacity:.85; font-size:15px; margin-bottom:10px; }
+    .results { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px; margin:10px 0; }
+    .res { background:var(--panel-2,#161a22); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:8px 10px; }
+    .res .n { font-size:20px; font-weight:600; font-variant-numeric: tabular-nums; }
+    .res .l { font-size:12px; opacity:.7; }
+    .tbl { width:100%; border-collapse:collapse; margin:8px 0; font-variant-numeric: tabular-nums; font-size:13px; }
+    .tbl th, .tbl td { border:1px solid var(--border,#2a2f3a); padding:4px 8px; text-align:center; }
+    .tbl th { opacity:.65; font-weight:normal; }
+    .tbl td.lab { text-align:left; opacity:.8; }
+    .err { color:#f0a36e; font-size:13px; margin:6px 0; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Chi-Square Calculator</h1>
+      <p>Run a Pearson chi-square (χ²) test of independence on a contingency table, or a goodness-of-fit test comparing observed counts to expected counts. The calculator reports χ², the degrees of freedom, and the p-value (the probability of seeing a χ² at least this large under the null hypothesis). For contingency tables, expected counts are derived from the row and column totals; for goodness-of-fit, you may supply expected counts or let the calculator assume a uniform distribution. The p-value uses the regularized upper incomplete gamma function via series and continued-fraction expansions. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="seg" id="mode">
+        <button type="button" data-m="table" class="active">Contingency table</button>
+        <button type="button" data-m="gof" class="secondary">Goodness of fit</button>
+      </div>
+
+      <div id="tableMode">
+        <label for="rows">Rows (paste tab- or comma-separated counts; one row per line)</label>
+        <textarea id="rows" rows="5" spellcheck="false">20,30,50
+15,35,50</textarea>
+        <p class="note">Each line is a row; cells separated by commas, tabs, or spaces.</p>
+      </div>
+
+      <div id="gofMode" hidden>
+        <label for="obs">Observed counts (comma/space/newline separated)</label>
+        <textarea id="obs" rows="2" spellcheck="false">10, 20, 30, 40</textarea>
+        <label for="exp" style="margin-top:8px">Expected counts (optional — leave blank for uniform)</label>
+        <textarea id="exp" rows="2" spellcheck="false"></textarea>
+      </div>
+
+      <div class="err" id="err"></div>
+
+      <div class="big" id="chi2">—</div>
+      <div class="sub" id="sub">Enter your counts.</div>
+
+      <div class="results" id="results"></div>
+
+      <p class="note">χ² = Σ (O − E)² / E. For a contingency table df = (rows − 1)(cols − 1); for goodness of fit df = (categories − 1) (or minus one more if expected counts were estimated). E for a table cell = (row total × column total) / grand total. The p-value = upper incomplete gamma γ(df/2, χ²/2) / Γ(df/2), computed with series (small χ²) and continued-fraction (large χ²) expansions — values match standard chi-square tables. A small p (e.g. &lt; 0.05) is evidence against the null hypothesis. Runs locally.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var modeEl = document.getElementById("mode");
+    var tableMode = document.getElementById("tableMode");
+    var gofMode = document.getElementById("gofMode");
+    var rowsEl = document.getElementById("rows");
+    var obsEl = document.getElementById("obs");
+    var expEl = document.getElementById("exp");
+    var errEl = document.getElementById("err");
+    var chi2El = document.getElementById("chi2");
+    var subEl = document.getElementById("sub");
+    var resultsEl = document.getElementById("results");
+
+    var mode = "table";
+
+    // ---- Special functions (Numerical Recipes) ----
+    function gammln(xx) {
+      var cof = [76.18009172947146, -86.50532032941677, 24.01409824083091,
+        -1.231739572450155, 0.1208650973866179e-2, -0.5395239384953e-5];
+      var x = xx, y = xx, tmp = x + 5.5;
+      tmp -= (x + 0.5) * Math.log(tmp);
+      var ser = 1.000000000190015;
+      for (var j = 0; j < 6; j++) { y += 1; ser += cof[j] / y; }
+      return -tmp + Math.log(2.5066282746310005 * ser / x);
+    }
+    // lower reg. incomplete gamma P(a,x) via series.
+    function gser(a, x) {
+      var gln = gammln(a);
+      if (x <= 0) return 0;
+      var ap = a, sum = 1 / a, del = sum;
+      for (var n = 0; n < 300; n++) { ap += 1; del *= x / ap; sum += del; if (Math.abs(del) < Math.abs(sum) * 1e-15) break; }
+      return sum * Math.exp(-x + a * Math.log(x) - gln);
+    }
+    // upper reg. incomplete gamma Q(a,x) via continued fraction.
+    function gcf(a, x) {
+      var gln = gammln(a);
+      var b = x + 1 - a, c = 1e30, d = 1 / b, h = d;
+      for (var i = 1; i <= 300; i++) {
+        var an = -i * (i - a);
+        b += 2;
+        d = an * d + b; if (Math.abs(d) < 1e-30) d = 1e-30;
+        c = b + an / c; if (Math.abs(c) < 1e-30) c = 1e-30;
+        d = 1 / d; var del = d * c; h *= del;
+        if (Math.abs(del - 1) < 1e-15) break;
+      }
+      return Math.exp(-x + a * Math.log(x) - gln) * h;
+    }
+    // Q(a,x) = upper incomplete gamma / Gamma(a).
+    function gammq(a, x) {
+      if (x < 0 || a <= 0) return NaN;
+      if (x === 0) return 1;
+      if (x < a + 1) return 1 - gser(a, x);
+      return gcf(a, x);
+    }
+    // chi-square p-value (upper tail): P(χ² > c | df) = gammq(df/2, c/2).
+    function chiSqP(c, df) {
+      if (c <= 0) return 1;
+      if (df <= 0) return NaN;
+      return gammq(df / 2, c / 2);
+    }
+
+    function r1(n) { return Math.round(n * 1000) / 1000; }
+    function fmtP(p) {
+      if (!isFinite(p)) return "—";
+      if (p < 0.0001) return p.toExponential(2);
+      return p.toFixed(4);
+    }
+
+    // Parse a block of numbers (comma/space/tab/newline separated) into numbers.
+    function parseNums(s) {
+      var out = [];
+      (s || "").split(/[\s,;]+/).forEach(function (t) {
+        t = t.trim(); if (!t) return;
+        var v = parseFloat(t); if (isFinite(v)) out.push(v);
+      });
+      return out;
+    }
+
+    // Parse table: lines = rows, each line split into numbers.
+    function parseTable(s) {
+      var rows = [];
+      (s || "").split(/\n/).forEach(function (line) {
+        if (!line.trim()) return;
+        var nums = parseNums(line);
+        if (nums.length) rows.push(nums);
+      });
+      return rows;
+    }
+
+    function setError(s) { errEl.textContent = s; }
+    function clearOut() { chi2El.textContent = "—"; subEl.textContent = ""; resultsEl.innerHTML = ""; }
+
+    function renderTableExpected(rows, colTotals, rowTotals, grand) {
+      var html = '<table class="tbl"><thead><tr><th></th>';
+      for (var c = 0; c < colTotals.length; c++) html += '<th>' + colTotals[c] + '</th>';
+      html += '<th>row</th></tr></thead><tbody>';
+      for (var r = 0; r < rows.length; r++) {
+        html += '<tr><td class="lab">r' + (r + 1) + '</td>';
+        for (var c = 0; c < rows[r].length; c++) {
+          var e = rowTotals[r] * colTotals[c] / grand;
+          html += '<td>' + rows[r][c] + '<br><span style="opacity:.6">(' + e.toFixed(2) + ')</span></td>';
+        }
+        html += '<td>' + rowTotals[r] + '</td></tr>';
+      }
+      html += '<tr><td class="lab">col</td>';
+      colTotals.forEach(function (ct) { html += '<td>' + ct + '</td>'; });
+      html += '<td>' + grand + '</td></tr></tbody></table>';
+      return html;
+    }
+
+    function compute() {
+      setError("");
+      if (mode === "table") {
+        var rows = parseTable(rowsEl.value);
+        if (rows.length < 2) { setError("Enter at least 2 rows."); clearOut(); return; }
+        var cols = rows[0].length;
+        for (var i = 0; i < rows.length; i++) {
+          if (rows[i].length !== cols) { setError("All rows must have the same number of columns."); clearOut(); return; }
+          for (var j = 0; j < cols; j++) if (!(rows[i][j] >= 0)) { setError("Counts must be non-negative."); clearOut(); return; }
+        }
+        var rowTotals = rows.map(function (r) { return r.reduce(function (a, b) { return a + b; }, 0); });
+        var colTotals = [];
+        for (var c = 0; c < cols; c++) {
+          var s = 0; for (var r = 0; r < rows.length; r++) s += rows[r][c]; colTotals[c] = s;
+        }
+        var grand = rowTotals.reduce(function (a, b) { return a + b; }, 0);
+        if (grand <= 0) { setError("Grand total must be positive."); clearOut(); return; }
+
+        var chi = 0;
+        for (var r2 = 0; r2 < rows.length; r2++) {
+          for (var cc = 0; cc < cols; cc++) {
+            var e = rowTotals[r2] * colTotals[cc] / grand;
+            if (e > 0) chi += Math.pow(rows[r2][cc] - e, 2) / e;
+          }
+        }
+        var df = (rows.length - 1) * (cols - 1);
+        var p = chiSqP(chi, df);
+        chi2El.textContent = r1(chi) + "";
+        subEl.textContent = "df = " + df + " · p = " + fmtP(p) + (p < 0.05 ? " · significant at 0.05" : "");
+        var html = "";
+        html += '<div class="res"><div class="n">' + r1(chi) + '</div><div class="l">χ² statistic</div></div>';
+        html += '<div class="res"><div class="n">' + df + '</div><div class="l">degrees of freedom</div></div>';
+        html += '<div class="res"><div class="n">' + fmtP(p) + '</div><div class="l">p-value (upper tail)</div></div>';
+        html += '<div class="res"><div class="n">' + grand + '</div><div class="l">total observations</div></div>';
+        html += '</div>';
+        resultsEl.innerHTML = html + '<div style="margin-top:8px"><strong>Counts (expected in parentheses)</strong>' + renderTableExpected(rows, colTotals, rowTotals, grand) + '</div>';
+      } else {
+        var obs = parseNums(obsEl.value);
+        if (obs.length < 2) { setError("Enter at least 2 observed counts."); clearOut(); return; }
+        for (var k = 0; k < obs.length; k++) if (!(obs[k] >= 0)) { setError("Counts must be non-negative."); clearOut(); return; }
+        var expRaw = parseNums(expEl.value);
+        var exp;
+        if (expRaw.length === 0) {
+          var tot = obs.reduce(function (a, b) { return a + b; }, 0);
+          var uniform = tot / obs.length;
+          exp = obs.map(function () { return uniform; });
+        } else {
+          if (expRaw.length !== obs.length) { setError("Expected counts must match the number of observed (" + obs.length + ")."); clearOut(); return; }
+          exp = expRaw;
+        }
+        for (var m = 0; m < exp.length; m++) if (!(exp[m] > 0)) { setError("Expected counts must be positive."); clearOut(); return; }
+
+        var chi2 = 0;
+        for (var n2 = 0; n2 < obs.length; n2++) chi2 += Math.pow(obs[n2] - exp[n2], 2) / exp[n2];
+        var df2 = obs.length - 1;
+        var p2 = chiSqP(chi2, df2);
+        chi2El.textContent = r1(chi2) + "";
+        subEl.textContent = "df = " + df2 + " · p = " + fmtP(p2) + (p2 < 0.05 ? " · significant at 0.05" : "");
+        var html2 = "";
+        html2 += '<div class="res"><div class="n">' + r1(chi2) + '</div><div class="l">χ² statistic</div></div>';
+        html2 += '<div class="res"><div class="n">' + df2 + '</div><div class="l">degrees of freedom</div></div>';
+        html2 += '<div class="res"><div class="n">' + fmtP(p2) + '</div><div class="l">p-value (upper tail)</div></div>';
+        html2 += '<div class="res"><div class="n">' + obs.reduce(function (a, b) { return a + b; }, 0) + '</div><div class="l">total observations</div></div>';
+        resultsEl.innerHTML = html2;
+      }
+    }
+
+    modeEl.addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-m]"); if (!b) return;
+      mode = b.getAttribute("data-m");
+      Array.prototype.forEach.call(modeEl.querySelectorAll("button"), function (x) { x.classList.remove("active"); });
+      b.classList.add("active");
+      tableMode.hidden = (mode !== "table");
+      gofMode.hidden = (mode !== "gof");
+      compute();
+    });
+
+    [rowsEl, obsEl, expEl].forEach(function (el) {
+      el.addEventListener("input", compute);
+    });
+
+    compute();
+  })();
+  </script>
+</body>
+</html>

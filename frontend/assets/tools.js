@@ -987,6 +987,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-07T08:00:00Z",
   },
   {
+    slug: "chi-square",
+    name: "Chi-Square Calculator",
+    description: "Run a Pearson chi-square (χ²) test. Test independence on a contingency table (paste rows of counts; expected counts come from the row and column totals) or a goodness-of-fit test comparing observed counts to expected counts (uniform if left blank). Reports χ², degrees of freedom, and the p-value via the regularized upper incomplete gamma function computed with series and continued-fraction expansions — values match standard chi-square tables. For contingency tables it also shows each cell's count with its expected value in parentheses. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "χ²",
+    added: "2026-07-07T11:00:00Z",
+  },
+  {
     slug: "work-hours",
     name: "Work Hours Calculator",
     description: "Add up hours worked across clock-in / clock-out entries, with per-entry break deductions and a regular-vs-overtime split. Shifts that cross midnight (an out time earlier than the in time) are handled automatically, breaks can't make a day negative, and you can set the regular-hours threshold per entry (8 hours by default). Totals are shown in hours:minutes and decimal hours. Everything runs locally in your browser.",
