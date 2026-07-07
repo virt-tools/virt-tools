@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Noise Generator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); gap:12px; margin:10px 0; }
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    .kind { display:flex; gap:6px; flex-wrap:wrap; margin:10px 0; }
+    .kind button { flex:1; min-width:90px; }
+    .kind button.active { border-color: var(--accent,#6ea8fe); }
+    .controls { display:flex; gap:10px; flex-wrap:wrap; margin:14px 0; }
+    .controls button { min-width: 100px; }
+    .scope { width:100%; height:110px; background:#08101f; border:1px solid var(--border,#2a2f3a); border-radius:8px; margin-top:8px; }
+    .status { font-size:13px; opacity:.8; margin:6px 0; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Noise Generator</h1>
+      <p>Play continuous white, pink, or brown noise in your browser — useful for sleep, focus, and masking background sound. White noise is flat across frequencies; pink noise falls at 3 dB per octave (balanced, often preferred for sleep); brown noise falls at 6 dB per octave (deeper, rumbling). Built on Web Audio, runs locally with no network.</p>
+    </div>
+
+    <div class="panel">
+      <label>Noise colour</label>
+      <div class="kind" id="kind">
+        <button type="button" data-k="white" class="active">White</button>
+        <button type="button" data-k="pink" class="secondary">Pink</button>
+        <button type="button" data-k="brown" class="secondary">Brown</button>
+      </div>
+
+      <div class="grid">
+        <div>
+          <label for="vol">Volume</label>
+          <input type="range" id="vol" min="0" max="100" value="30">
+        </div>
+        <div>
+          <label for="dur">Duration (seconds, 0 = continuous)</label>
+          <input type="number" id="dur" min="0" max="600" step="1" value="0">
+        </div>
+      </div>
+
+      <div class="controls">
+        <button id="play">Play</button>
+        <button id="stop" class="secondary">Stop</button>
+      </div>
+
+      <div class="status" id="status">Stopped. Start at a low volume to protect your hearing.</div>
+      <canvas id="scope" class="scope"></canvas>
+      <p class="note">White noise: each sample is random and independent — equal energy at every frequency. Pink noise uses a Paul Kellet filter so energy drops 3 dB per octave, sounding balanced. Brown noise integrates white noise for a 6 dB-per-octave drop, a deep rumble. The waveform preview shows a short slice of the generated buffer. Generated locally with Web Audio; nothing is uploaded.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var kindEl = document.getElementById("kind");
+    var volEl = document.getElementById("vol");
+    var durEl = document.getElementById("dur");
+    var playBtn = document.getElementById("play");
+    var stopBtn = document.getElementById("stop");
+    var statusEl = document.getElementById("status");
+    var scope = document.getElementById("scope");
+    var sctx = scope.getContext("2d");
+
+    var kind = "white";
+
+    // Noise generators (pure, tested). Return Float32Array.
+    function whiteNoise(n) {
+      var out = new Float32Array(n);
+      for (var i = 0; i < n; i++) out[i] = Math.random() * 2 - 1;
+      return out;
+    }
+    function pinkNoise(n) {
+      var out = new Float32Array(n);
+      var b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0;
+      for (var i = 0; i < n; i++) {
+        var white = Math.random() * 2 - 1;
+        b0 = 0.99886 * b0 + white * 0.0555179;
+        b1 = 0.99332 * b1 + white * 0.0750759;
+        b2 = 0.96900 * b2 + white * 0.1538520;
+        b3 = 0.86650 * b3 + white * 0.3104856;
+        b4 = 0.55000 * b4 + white * 0.5329522;
+        b5 = -0.76160 * b5 - white * 0.0168980;
+        var pink = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362;
+        b6 = white * 0.115926;
+        out[i] = pink * 0.11;
+      }
+      return out;
+    }
+    function brownNoise(n) {
+      var out = new Float32Array(n);
+      var last = 0;
+      for (var i = 0; i < n; i++) {
+        var white = Math.random() * 2 - 1;
+        last = (last + 0.02 * white) / 1.02;
+        out[i] = last * 3.5;
+      }
+      return out;
+    }
+    function makeBuffer(ctx, k) {
+      var secs = 2;
+      var len = Math.floor(ctx.sampleRate * secs);
+      var buf = ctx.createBuffer(1, len, ctx.sampleRate);
+      var data = buf.getChannelData(0);
+      var src;
+      if (k === "pink") src = pinkNoise(len);
+      else if (k === "brown") src = brownNoise(len);
+      else src = whiteNoise(len);
+      for (var i = 0; i < len; i++) data[i] = src[i];
+      return { buf: buf, preview: src };
+    }
+
+    kindEl.addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-k]");
+      if (!b) return;
+      kind = b.getAttribute("data-k");
+      Array.prototype.forEach.call(kindEl.querySelectorAll("button"), function (x) { x.classList.remove("active"); });
+      b.classList.add("active");
+      drawPreview();
+      // if playing, restart with new colour
+      if (playing) { stop(); play(); }
+    });
+
+    var lastPreview = null;
+    function currentPreview() {
+      if (!audioCtx) return null;
+      var r = makeBuffer(audioCtx, kind);
+      lastPreview = r.preview;
+      return r.buf;
+    }
+
+    function drawPreview() {
+      // draw a representative slice without needing audioCtx (use a fresh generate)
+      var N = 2048;
+      var src;
+      if (kind === "pink") src = pinkNoise(N);
+      else if (kind === "brown") src = brownNoise(N);
+      else src = whiteNoise(N);
+      lastPreview = src;
+      var w = scope.width = scope.clientWidth * (window.devicePixelRatio || 1);
+      var h = scope.height = scope.clientHeight * (window.devicePixelRatio || 1);
+      sctx.clearRect(0, 0, w, h);
+      sctx.strokeStyle = "#6ea8fe";
+      sctx.lineWidth = 1.5;
+      sctx.beginPath();
+      // show a window of 512 samples for shape clarity
+      var window = 512;
+      for (var x = 0; x <= w; x++) {
+        var idx = Math.floor((x / w) * window);
+        var y = src[idx];
+        var py = h / 2 - y * (h / 2) * 0.9;
+        if (x === 0) sctx.moveTo(x, py); else sctx.lineTo(x, py);
+      }
+      sctx.stroke();
+      sctx.strokeStyle = "rgba(110,168,254,.25)";
+      sctx.beginPath();
+      sctx.moveTo(0, h / 2); sctx.lineTo(w, h / 2); sctx.stroke();
+    }
+
+    var audioCtx = null, src = null, gain = null, playing = false, stopTimer = null;
+    function ensureCtx() {
+      if (!audioCtx) {
+        try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+        catch (e) { statusEl.textContent = "Web Audio not supported in this browser."; return false; }
+        gain = audioCtx.createGain();
+        gain.connect(audioCtx.destination);
+        gain.gain.value = 0;
+      }
+      if (audioCtx.state === "suspended") audioCtx.resume();
+      return true;
+    }
+
+    function stop() {
+      if (stopTimer) { clearTimeout(stopTimer); stopTimer = null; }
+      if (src) {
+        try {
+          var now = audioCtx.currentTime;
+          gain.gain.cancelScheduledValues(now);
+          gain.gain.setValueAtTime(gain.gain.value, now);
+          gain.gain.linearRampToValueAtTime(0.0001, now + 0.05);
+          src.stop(now + 0.06);
+        } catch (e) {}
+        src = null;
+      }
+      playing = false;
+      statusEl.textContent = "Stopped.";
+    }
+
+    function play() {
+      if (!ensureCtx()) return;
+      stop();
+      var buf = currentPreview();
+      var vol = parseInt(volEl.value, 10) / 100;
+      var dur = parseFloat(durEl.value) || 0;
+      src = audioCtx.createBufferSource();
+      src.buffer = buf;
+      src.loop = true;
+      src.connect(gain);
+      var now = audioCtx.currentTime;
+      gain.gain.cancelScheduledValues(now);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.linearRampToValueAtTime(Math.max(0.0001, vol), now + 0.05);
+      src.start(now);
+      playing = true;
+      if (dur > 0) {
+        gain.gain.setValueAtTime(Math.max(0.0001, vol), now + dur);
+        gain.gain.linearRampToValueAtTime(0.0001, now + dur + 0.05);
+        src.stop(now + dur + 0.1);
+        stopTimer = setTimeout(function () { stop(); }, (dur + 0.15) * 1000);
+        statusEl.textContent = "Playing " + kind + " noise for " + dur + " s.";
+      } else {
+        statusEl.textContent = "Playing " + kind + " noise. (continuous)";
+      }
+      src.onended = function () { if (playing) { playing = false; statusEl.textContent = "Stopped."; } };
+    }
+
+    volEl.addEventListener("input", function () {
+      if (audioCtx && gain && playing) {
+        var now = audioCtx.currentTime;
+        gain.gain.cancelScheduledValues(now);
+        gain.gain.setValueAtTime(gain.gain.value, now);
+        gain.gain.linearRampToValueAtTime(Math.max(0.0001, parseInt(volEl.value, 10) / 100), now + 0.03);
+      }
+    });
+
+    playBtn.addEventListener("click", play);
+    stopBtn.addEventListener("click", stop);
+    window.addEventListener("resize", drawPreview);
+    drawPreview();
+  })();
+  </script>
+</body>
+</html>

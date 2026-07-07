@@ -291,6 +291,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-05T13:00:00Z",
   },
   {
+    slug: "noise-generator",
+    name: "Noise Generator",
+    description: "Play continuous white, pink, or brown noise for sleep, focus, and sound masking — white is flat, pink falls 3 dB/octave, brown 6 dB/octave. Web Audio, runs locally.",
+    category: "Time",
+    icon: "📺",
+    added: "2026-07-08T02:00:00Z",
+  },
+  {
     slug: "tone-generator",
     name: "Tone Generator",
     description: "Play a pure tone by frequency or musical note, choose a waveform (sine, square, triangle, sawtooth), and sweep across a frequency range. Web Audio, runs locally.",
