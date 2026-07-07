@@ -1235,6 +1235,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-05T05:00:00Z",
   },
   {
+    slug: "pregnancy-due-date",
+    name: "Pregnancy Due Date Calculator",
+    description: "Estimate a pregnancy due date from the first day of the last period using Naegele's rule (LMP + 280 days), with current gestational age, trimester, and a milestone timeline. Runs in your browser.",
+    category: "Time",
+    icon: "🤰",
+    added: "2026-07-07T23:00:00Z",
+  },
+  {
     slug: "trigonometry-calculator",
     name: "Trigonometry Calculator",
     description: "Compute the six trigonometric ratios — sin, cos, tan, cot, sec, and csc — from an angle entered in degrees, radians, or gradians, with the angle also shown converted into all three units. Ratios that are undefined at the angle (for example tan at 90°) are reported as undefined. An inverse mode applies the arc functions (arcsin, arccos, arctan) to a ratio and returns the principal angle in your chosen unit, with domain checks for arcsin and arccos. Everything runs locally in your browser.",
