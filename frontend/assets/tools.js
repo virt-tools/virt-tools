@@ -1099,6 +1099,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-07T12:00:00Z",
   },
   {
+    slug: "roi-payback",
+    name: "ROI & Payback Calculator",
+    description: "Measure return on investment and payback period — periodic mode (cost vs recurring return over a horizon) or one-shot mode (cost vs final value with annualized CAGR). Runs in your browser.",
+    category: "Finance",
+    icon: "📈",
+    added: "2026-07-08T01:00:00Z",
+  },
+  {
     slug: "combinatorics",
     name: "Combinatorics Calculator",
     description: "Count arrangements and selections of items. Given a total of n items and a choice of r, compute permutations P(n,r), permutations with repetition (n^r), combinations C(n,r), combinations with repetition (multisets, C(n+r−1,r)), and the factorial of n. All arithmetic uses big integers, so the results are exact — even for values like C(100,50) that overflow ordinary floating point. Everything runs locally in your browser.",
