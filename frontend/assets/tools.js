@@ -483,6 +483,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T08:15:00Z",
   },
   {
+    slug: "find-replace",
+    name: "Find & Replace Text",
+    description: "Search and replace every match in a block of text — literal or regex with capture groups, case-insensitive, whole-word, multiline and dot-all flags. Runs in your browser.",
+    category: "Text",
+    icon: "✏️",
+    added: "2026-07-07T17:00:00Z",
+  },
+  {
     slug: "cron-explainer",
     name: "Cron Expression Explainer",
     description: "Parse a 5-field cron expression into plain English and list its next fire times — ranges, steps, lists and day names, all in your browser.",

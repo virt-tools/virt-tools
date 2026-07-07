@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Find & Replace Text — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .seg { display:inline-flex; border:1px solid var(--border,#2a2f3a); border-radius:8px; overflow:hidden; margin-bottom:10px; }
+    .seg button { border:none; border-radius:0; background:transparent; color:inherit; padding:6px 14px; cursor:pointer; font-size:13px; }
+    .seg button.active { background: var(--accent,#6ea8fe); color:#08101f; }
+    .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    @media (max-width: 640px) { .grid2 { grid-template-columns:1fr; } }
+    label.f { font-size:13px; opacity:.85; display:block; margin-bottom:4px; }
+    .io textarea { width:100%; box-sizing:border-box; min-height:140px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:13px; resize:vertical; }
+    .row { display:flex; flex-wrap:wrap; gap:10px 18px; align-items:center; margin:8px 0; }
+    label.check { font-size:13px; opacity:.9; display:inline-flex; gap:4px; align-items:center; cursor:pointer; }
+    .find-row { display:flex; align-items:center; gap:6px; }
+    .find-row input { flex:1 1 auto; }
+    .meta { font-size:13px; opacity:.85; margin:8px 0; }
+    .meta .n { font-variant-numeric:tabular-nums; font-weight:600; }
+    .err { color:#f0a36e; font-size:13px; margin:6px 0; }
+    .row-btn { display:flex; gap:8px; flex-wrap:wrap; }
+    button.do { border:1px solid var(--border,#2a2f3a); background:transparent; color:inherit; border-radius:6px; padding:6px 14px; cursor:pointer; font-size:13px; }
+    button.do.primary { background: var(--accent,#6ea8fe); color:#08101f; border-color:transparent; }
+    .hint { font-size:12px; opacity:.7; margin-top:4px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Find &amp; Replace Text</h1>
+      <p>Search a block of text and replace every match — literally, or with full JavaScript regular expressions. Supports capture groups (<code>$1</code>, <code>$2</code>, <code>$&amp;</code>, <code>$&lt;name&gt;</code>), case-insensitivity, whole-word matching, and multiline / dot-all flags. Live count and highlighted preview. Runs entirely in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="seg" id="mode">
+        <button type="button" data-m="literal" class="active">Literal</button>
+        <button type="button" data-m="regex">Regular expression</button>
+      </div>
+
+      <div class="find-row" style="margin-bottom:8px;">
+        <label class="f" for="find" style="margin:0;">Find</label>
+        <input type="text" id="find" placeholder="text or pattern to find" style="flex:1 1 auto;">
+      </div>
+      <div class="find-row" style="margin-bottom:8px;">
+        <label class="f" for="replace" style="margin:0;">Replace</label>
+        <input type="text" id="replace" placeholder="replacement (use $1, $2, $&, $<name>)" style="flex:1 1 auto;">
+      </div>
+
+      <div class="row">
+        <label class="check"><input type="checkbox" id="opt-ci"> Case-insensitive</label>
+        <label class="check"><input type="checkbox" id="opt-ww"> Whole word</label>
+        <label class="check"><input type="checkbox" id="opt-m"> Multiline <code>^$</code></label>
+        <label class="check"><input type="checkbox" id="opt-s"> Dot-all <code>.</code>↵</label>
+        <label class="check"><input type="checkbox" id="opt-u"> Unicode <code>u</code></label>
+      </div>
+
+      <div class="err" id="err"></div>
+      <div class="meta" id="meta">0 matches</div>
+
+      <div class="grid2">
+        <div>
+          <label class="f" for="input">Input text</label>
+          <textarea id="input" class="io" spellcheck="false" placeholder="Paste text here…">The quick brown fox jumps over the lazy dog.
+The quick brown fox.</textarea>
+        </div>
+        <div>
+          <label class="f" for="output">Result</label>
+          <textarea id="output" class="io" spellcheck="false" readonly placeholder="Replaced text appears here…"></textarea>
+        </div>
+      </div>
+
+      <div class="row-btn" style="margin-top:10px;">
+        <button type="button" class="do primary" id="copy">Copy result</button>
+        <button type="button" class="do" id="sendBack">Use result as input</button>
+        <button type="button" class="do" id="clear">Clear</button>
+      </div>
+
+      <p class="note" style="margin-top:14px;">In <strong>Literal</strong> mode the find string is matched as-is — regex metacharacters (<code>. * + ? ( ) [ ] { } | \ ^ $</code>) are escaped. Switch to <strong>Regular expression</strong> to use them and capture groups. The replacement string supports <code>$1</code>–<code>$9</code> (numbered groups), <code>$&amp;</code> (whole match), <code>$`</code> / <code>$'</code> (text before/after), and <code>$&lt;name&gt;</code> (named groups). Every match is replaced at once (global). Runs locally — nothing is sent anywhere.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var modeEl = document.getElementById("mode");
+    var findEl = document.getElementById("find");
+    var replaceEl = document.getElementById("replace");
+    var inputEl = document.getElementById("input");
+    var outputEl = document.getElementById("output");
+    var errEl = document.getElementById("err");
+    var metaEl = document.getElementById("meta");
+    var copyBtn = document.getElementById("copy");
+    var sendBackBtn = document.getElementById("sendBack");
+    var clearBtn = document.getElementById("clear");
+    var optCi = document.getElementById("opt-ci");
+    var optWw = document.getElementById("opt-ww");
+    var optM = document.getElementById("opt-m");
+    var optS = document.getElementById("opt-s");
+    var optU = document.getElementById("opt-u");
+
+    var mode = "literal";
+
+    function escapeRegex(s) {
+      return s.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&");
+    }
+
+    function buildRegex(find) {
+      var flags = "g";
+      if (optCi.checked) flags += "i";
+      if (optM.checked) flags += "m";
+      if (optS.checked) flags += "s";
+      if (optU.checked) flags += "u";
+      var src = (mode === "regex") ? find : escapeRegex(find);
+      if (optWw.checked) src = "\\b(?:" + src + ")\\b";
+      try { return new RegExp(src, flags); }
+      catch (e) { return null; }
+    }
+
+    function htmlEscape(s) {
+      return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    function highlight(text, re) {
+      // Build an HTML preview with matches wrapped in <mark>.
+      if (!re) return htmlEscape(text);
+      var out = "";
+      var last = 0;
+      var m;
+      // Re-set lastIndex defensively (g flag already set).
+      re.lastIndex = 0;
+      while ((m = re.exec(text)) !== null) {
+        out += htmlEscape(text.slice(last, m.index));
+        out += "<mark>" + htmlEscape(m[0]) + "</mark>";
+        last = m.index + m[0].length;
+        if (m[0].length === 0) re.lastIndex++; // avoid zero-width loop
+      }
+      out += htmlEscape(text.slice(last));
+      return out;
+    }
+
+    function compute() {
+      errEl.textContent = "";
+      var text = inputEl.value;
+      var find = findEl.value;
+      var replace = replaceEl.value;
+      outputEl.value = "";
+      if (find === "") { metaEl.innerHTML = "0 matches"; return; }
+      var re = buildRegex(find);
+      if (!re) { errEl.textContent = "Invalid pattern. Check your regex syntax."; metaEl.innerHTML = "0 matches"; return; }
+      var matches = text.match(re);
+      var count = matches ? matches.length : 0;
+      metaEl.innerHTML = '<span class="n">' + count + "</span> match" + (count === 1 ? "" : "es") + " replaced";
+      try {
+        outputEl.value = text.replace(re, replace);
+      } catch (e) {
+        errEl.textContent = "Replacement error: " + e.message;
+      }
+    }
+
+    modeEl.addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-m]"); if (!b) return;
+      mode = b.getAttribute("data-m");
+      Array.prototype.forEach.call(modeEl.querySelectorAll("button"), function (x) { x.classList.remove("active"); });
+      b.classList.add("active");
+      compute();
+    });
+
+    [findEl, replaceEl, inputEl].forEach(function (el) {
+      el.addEventListener("input", compute);
+    });
+    [optCi, optWw, optM, optS, optU].forEach(function (el) {
+      el.addEventListener("change", compute);
+    });
+
+    copyBtn.addEventListener("click", function () {
+      if (navigator.clipboard) navigator.clipboard.writeText(outputEl.value).catch(function () {});
+    });
+    sendBackBtn.addEventListener("click", function () {
+      inputEl.value = outputEl.value;
+      compute();
+    });
+    clearBtn.addEventListener("click", function () {
+      inputEl.value = ""; findEl.value = ""; replaceEl.value = "";
+      outputEl.value = ""; errEl.textContent = ""; metaEl.innerHTML = "0 matches";
+    });
+
+    compute();
+  })();
+  </script>
+</body>
+</html>
