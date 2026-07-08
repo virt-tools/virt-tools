@@ -979,6 +979,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-04T18:20:00Z",
   },
   {
+    slug: "change-maker",
+    name: "Change Maker",
+    description: "Work out the change due from a cash transaction and the fewest U.S. bills and coins to hand back — integer-cent arithmetic with a greedy breakdown across $100–$1 bills and 25¢–1¢ coins. Runs in your browser.",
+    category: "Finance",
+    icon: "💵",
+    added: "2026-07-08T03:00:00Z",
+  },
+  {
     slug: "fuel-cost",
     name: "Fuel Cost Calculator",
     description: "Estimate the fuel used and cost for a trip from distance, vehicle efficiency (US/UK mpg, L/100km, km/L) and fuel price — any efficiency unit pairs with any price unit via a litres base. Runs in your browser.",
