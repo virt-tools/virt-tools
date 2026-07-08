@@ -859,6 +859,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-04T04:20:00Z",
   },
   {
+    slug: "image-color-picker",
+    name: "Image Color Picker",
+    description: "Load an image and click any pixel to sample its exact color — HEX, RGB, HSL, WCAG contrast ratio against a dark background, and nearest primary. Live ×8 magnifier and a clickable history of picks. Runs locally — your image never leaves your browser.",
+    category: "Design",
+    icon: "💉",
+    added: "2026-07-08T16:00:00Z",
+  },
+  {
     slug: "isbn-validator",
     name: "ISBN Validator & Converter",
     description: "Validate an ISBN-10 (mod-11, X check digit) or ISBN-13 (mod-10) checksum and convert between the two — ISBN-13 = 978 + the first 9 digits + a recomputed check digit. Runs entirely in your browser.",

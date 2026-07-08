@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Image Color Picker — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .drop { border:2px dashed var(--border,#2a2f3a); border-radius:12px; padding:28px; text-align:center; cursor:pointer; margin:12px 0; }
+    .drop:hover { border-color:var(--accent,#6ea8fe); }
+    canvas { max-width:100%; height:auto; display:block; margin:12px auto; border:1px solid var(--border,#2a2f3a); border-radius:8px; image-rendering:pixelated; cursor:crosshair; }
+    .swatch { display:flex; align-items:center; gap:14px; margin:14px 0; flex-wrap:wrap; }
+    .swatch .box { width:64px; height:64px; border-radius:10px; border:1px solid var(--border,#2a2f3a); }
+    .vals { font-family:ui-monospace,monospace; font-size:14px; line-height:1.7; }
+    .vals .row { display:flex; align-items:center; gap:8px; }
+    .vals code { background:var(--bg,#14181f); border:1px solid var(--border,#2a2f3a); border-radius:5px; padding:2px 8px; }
+    .vals button { border:1px solid var(--border,#2a2f3a); background:transparent; color:inherit; border-radius:5px; padding:2px 8px; cursor:pointer; font-size:12px; }
+    .history { display:flex; flex-wrap:wrap; gap:6px; margin:10px 0; }
+    .history .c { width:34px; height:34px; border-radius:6px; border:1px solid var(--border,#2a2f3a); cursor:pointer; }
+    .magnify { position:relative; display:inline-block; }
+    #zoom { display:none; position:absolute; pointer-events:none; border:2px solid var(--accent,#6ea8fe); border-radius:6px; box-shadow:0 4px 14px rgba(0,0,0,.5); image-rendering:pixelated; }
+    label.check { font-size:13px; opacity:.9; display:inline-flex; gap:6px; align-items:center; cursor:pointer; margin:8px 0; }
+    .row-btn { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0; }
+    button.do { border:1px solid var(--border,#2a2f3a); background:transparent; color:inherit; border-radius:6px; padding:8px 14px; cursor:pointer; font-size:13px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Image Color Picker</h1>
+      <p>Load an image, then click anywhere on it to sample the exact pixel color. Get the HEX, RGB, and HSL values, the WCAG contrast ratio against a dark background, and the nearest named primary. A live magnifier zooms the pixels under your cursor so you can pick precisely. Everything runs locally in your browser — your image is never uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="drop" id="drop">
+        <strong>Click to choose an image</strong><br>
+        <span style="opacity:.7;font-size:13px">or drop one here — PNG, JPG, GIF, WebP. Stays on your device.</span>
+        <input type="file" id="file" accept="image/*" style="display:none">
+      </div>
+
+      <div id="canvasWrap" style="display:none; text-align:center">
+        <div class="magnify" style="position:relative; display:inline-block">
+          <canvas id="cv"></canvas>
+          <canvas id="zoom" width="120" height="120"></canvas>
+        </div>
+      </div>
+
+      <label class="check"><input type="checkbox" id="contrastChk" checked> Show contrast vs page background</label>
+
+      <div class="swatch" id="swatch" style="display:none">
+        <div class="box" id="box"></div>
+        <div class="vals">
+          <div class="row"><span>HEX</span> <code id="vHex">—</code> <button data-copy="hex">Copy</button></div>
+          <div class="row"><span>RGB</span> <code id="vRgb">—</code> <button data-copy="rgb">Copy</button></div>
+          <div class="row"><span>HSL</span> <code id="vHsl">—</code> <button data-copy="hsl">Copy</button></div>
+          <div class="row"><span>Contrast</span> <code id="vCon">—</code></div>
+          <div class="row"><span>Nearest primary</span> <code id="vNear">—</code></div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="history" id="history"></div>
+        <div class="row-btn">
+          <button type="button" class="do" id="clearHistory">Clear history</button>
+          <button type="button" class="do" id="newImage">Choose another image</button>
+        </div>
+      </div>
+
+      <p class="note">Open an image (it's drawn to an offscreen canvas and read with <code>getImageData</code> — no network round-trip). Hover to see a ×8 zoom of the pixels around the cursor; click to capture the color under the crosshair. The swatch shows HEX, RGB, and HSL plus the <strong>WCAG contrast ratio</strong> of that color against a near-black background (useful for picking legible text colors) and the nearest of the six primary/secondary colors by RGB distance. Recently picked colors are kept as clickable swatches below. Runs locally — the image never leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var drop = document.getElementById("drop");
+    var file = document.getElementById("file");
+    var cv = document.getElementById("cv");
+    var zc = document.getElementById("zoom");
+    var canvasWrap = document.getElementById("canvasWrap");
+    var swatch = document.getElementById("swatch");
+    var box = document.getElementById("box");
+    var vHex = document.getElementById("vHex"), vRgb = document.getElementById("vRgb"), vHsl = document.getElementById("vHsl"), vCon = document.getElementById("vCon"), vNear = document.getElementById("vNear");
+    var historyEl = document.getElementById("history");
+    var contrastChk = document.getElementById("contrastChk");
+    var newImageBtn = document.getElementById("newImage");
+    var clearHistBtn = document.getElementById("clearHistory");
+
+    var ctx = cv.getContext("2d", { willReadFrequently: true });
+    var zctx = zc.getContext("2d");
+    var imageData = null, history = [];
+    var LAST = null;
+
+    function clampByte(n) { return Math.max(0, Math.min(255, Math.round(n))); }
+    function rgbToHex(r, g, b) { function h(n) { var s = clampByte(n).toString(16); return s.length === 1 ? "0" + s : s; } return "#" + h(r) + h(g) + h(b); }
+    function rgbToHsl(r, g, b) {
+      r /= 255; g /= 255; b /= 255;
+      var max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min, h, s, l = (max + min) / 2;
+      if (d === 0) { h = 0; s = 0; }
+      else {
+        s = d / (1 - Math.abs(2 * l - 1));
+        if (max === r) h = ((g - b) / d) % 6;
+        else if (max === g) h = (b - r) / d + 2;
+        else h = (r - g) / d + 4;
+        h *= 60; if (h < 0) h += 360;
+      }
+      return { h: Math.round(h), s: Math.round(s * 100), l: Math.round(l * 100) };
+    }
+    var PRIMARIES = [
+      { name: "red", r: 255, g: 0, b: 0 }, { name: "green", r: 0, g: 255, b: 0 },
+      { name: "blue", r: 0, g: 0, b: 255 }, { name: "yellow", r: 255, g: 255, b: 0 },
+      { name: "cyan", r: 0, g: 255, b: 255 }, { name: "magenta", r: 255, g: 0, b: 255 },
+      { name: "white", r: 255, g: 255, b: 255 }, { name: "black", r: 0, g: 0, b: 0 }
+    ];
+    function nearestColor(rgb) {
+      var best = null, bd = Infinity;
+      for (var i = 0; i < PRIMARIES.length; i++) {
+        var p = PRIMARIES[i];
+        var d = (p.r - rgb.r) * (p.r - rgb.r) + (p.g - rgb.g) * (p.g - rgb.g) + (p.b - rgb.b) * (p.b - rgb.b);
+        if (d < bd) { bd = d; best = p; }
+      }
+      return best.name;
+    }
+    function relLum(r, g, b) { function lin(c) { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); } return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b); }
+    function contrastRatio(a, b) { var la = relLum(a.r, a.g, a.b), lb = relLum(b.r, b.g, b.b); var hi = Math.max(la, lb), lo = Math.min(la, lb); return (hi + 0.05) / (lo + 0.05); }
+
+    function toCanvasCoords(e) {
+      var rect = cv.getBoundingClientRect();
+      var x = Math.floor((e.clientX - rect.left) / rect.width * cv.width);
+      var y = Math.floor((e.clientY - rect.top) / rect.height * cv.height);
+      x = Math.max(0, Math.min(cv.width - 1, x));
+      y = Math.max(0, Math.min(cv.height - 1, y));
+      return { x: x, y: y };
+    }
+
+    function showColor(r, g, b) {
+      LAST = { r: r, g: g, b: b };
+      var hex = rgbToHex(r, g, b);
+      var hsl = rgbToHsl(r, g, b);
+      box.style.background = hex;
+      vHex.textContent = hex;
+      vRgb.textContent = "rgb(" + r + ", " + g + ", " + b + ")";
+      vHsl.textContent = "hsl(" + hsl.h + ", " + hsl.s + "%, " + hsl.l + "%)";
+      if (contrastChk.checked) {
+        var cr = contrastRatio({ r: r, g: g, b: b }, { r: 8, g: 16, b: 31 });
+        vCon.textContent = cr.toFixed(2) + " : 1 (vs #08101f)";
+      } else vCon.textContent = "—";
+      vNear.textContent = nearestColor({ r: r, g: g, b: b });
+      swatch.style.display = "flex";
+      addToHistory(hex);
+    }
+
+    function addToHistory(hex) {
+      if (history[0] === hex) return;
+      history.unshift(hex);
+      if (history.length > 24) history.length = 24;
+      renderHistory();
+    }
+    function renderHistory() {
+      historyEl.innerHTML = "";
+      history.forEach(function (hex) {
+        var d = document.createElement("div");
+        d.className = "c"; d.style.background = hex; d.title = hex;
+        d.addEventListener("click", function () {
+          var rgb = hexToRgb(hex); if (rgb) showColor(rgb.r, rgb.g, rgb.b);
+        });
+        historyEl.appendChild(d);
+      });
+    }
+    function hexToRgb(hex) {
+      var s = String(hex).replace(/^#/, "");
+      if (s.length === 3) s = s[0] + s[0] + s[1] + s[1] + s[2] + s[2];
+      if (!/^[0-9a-fA-F]{6}$/.test(s)) return null;
+      return { r: parseInt(s.slice(0, 2), 16), g: parseInt(s.slice(2, 4), 16), b: parseInt(s.slice(4, 6), 16) };
+    }
+
+    cv.addEventListener("mousemove", function (e) {
+      if (!imageData) return;
+      var c = toCanvasCoords(e);
+      // zoom a 15x15 region into 120x120 (~8x)
+      var size = 15, half = Math.floor(size / 2);
+      zc.style.display = "block";
+      zc.style.left = (e.clientX - cv.getBoundingClientRect().left + 12) + "px";
+      zc.style.top = (e.clientY - cv.getBoundingClientRect().top - 130) + "px";
+      zctx.imageSmoothingEnabled = false;
+      zctx.clearRect(0, 0, 120, 120);
+      zctx.drawImage(cv, c.x - half, c.y - half, size, size, 0, 0, 120, 120);
+    });
+    cv.addEventListener("mouseleave", function () { zc.style.display = "none"; });
+    cv.addEventListener("click", function (e) {
+      if (!imageData) return;
+      var c = toCanvasCoords(e);
+      var i = (c.y * cv.width + c.x) * 4;
+      showColor(imageData.data[i], imageData.data[i + 1], imageData.data[i + 2]);
+    });
+
+    document.querySelectorAll("button[data-copy]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var which = b.getAttribute("data-copy");
+        var txt = which === "hex" ? vHex.textContent : which === "rgb" ? vRgb.textContent : vHsl.textContent;
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt);
+      });
+    });
+    contrastChk.addEventListener("change", function () { if (LAST) showColor(LAST.r, LAST.g, LAST.b); });
+    clearHistBtn.addEventListener("click", function () { history = []; renderHistory(); });
+    newImageBtn.addEventListener("click", function () { file.click(); });
+
+    function loadFile(f) {
+      if (!f || !f.type.startsWith("image/")) return;
+      var reader = new FileReader();
+      reader.onload = function () {
+        var img = new Image();
+        img.onload = function () {
+          // cap dimensions
+          var maxW = 900, w = img.width, h = img.height;
+          if (w > maxW) { h = h * maxW / w; w = maxW; }
+          cv.width = Math.round(w); cv.height = Math.round(h);
+          ctx.drawImage(img, 0, 0, cv.width, cv.height);
+          imageData = ctx.getImageData(0, 0, cv.width, cv.height);
+          drop.style.display = "none";
+          canvasWrap.style.display = "block";
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(f);
+    }
+    file.addEventListener("change", function () { loadFile(file.files[0]); });
+    drop.addEventListener("click", function () { file.click(); });
+    drop.addEventListener("dragover", function (e) { e.preventDefault(); drop.style.borderColor = "var(--accent,#6ea8fe)"; });
+    drop.addEventListener("dragleave", function () { drop.style.borderColor = ""; });
+    drop.addEventListener("drop", function (e) {
+      e.preventDefault(); drop.style.borderColor = "";
+      if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+    });
+  })();
+  </script>
+</body>
+</html>
