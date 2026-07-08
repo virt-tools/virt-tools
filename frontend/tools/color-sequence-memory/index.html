@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Color Sequence Memory — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .board { display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; gap:10px; width:min(420px,92vw); aspect-ratio:1; margin:14px auto; }
+    .pad { border-radius:14px; cursor:pointer; border:1px solid rgba(0,0,0,.3); opacity:.55; transition:opacity 90ms, transform 60ms; user-select:none; }
+    .pad.lit { opacity:1; transform:scale(1.02); }
+    .pad[data-i="0"] { background:#2ecc71; }
+    .pad[data-i="1"] { background:#e63946; }
+    .pad[data-i="2"] { background:#f1c40f; }
+    .pad[data-i="3"] { background:#3498db; }
+    .pad.disabled { pointer-events:none; }
+    .status { text-align:center; font-size:18px; margin:10px 0; min-height:1.4em; }
+    .status b { color:var(--accent,#6ea8fe); }
+    .row-btn { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin:12px 0; }
+    button.do { border:1px solid var(--border,#2a2f3a); background:transparent; color:inherit; border-radius:6px; padding:8px 16px; cursor:pointer; font-size:14px; }
+    button.do.primary { background:var(--accent,#6ea8fe); color:#08101f; border-color:transparent; }
+    .grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; margin:12px 0; }
+    label.f { font-size:13px; opacity:.85; display:block; margin-bottom:4px; }
+    .stats { margin-top:14px; }
+    .stats table { width:100%; border-collapse:collapse; font-size:14px; }
+    .stats th, .stats td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--border,#2a2f3a); }
+    .stats th { opacity:.7; font-weight:500; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Color Sequence Memory</h1>
+      <p>Remember the pattern. The pads light up in a growing sequence — watch closely, then repeat it back by clicking the pads in the same order. Each round adds one more step. Click the wrong pad and the game ends, with your best round recorded. Adjust the starting length and flash speed. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="grid2">
+        <div><label class="f" for="startLen">Starting length</label>
+          <select id="startLen">
+            <option value="1" selected>1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+          </select>
+        </div>
+        <div><label class="f" for="speed">Flash speed</label>
+          <select id="speed">
+            <option value="700">Slow</option>
+            <option value="500" selected>Normal</option>
+            <option value="350">Fast</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="status" id="status">Press Start</div>
+      <div class="board" id="board">
+        <div class="pad disabled" data-i="0"></div>
+        <div class="pad disabled" data-i="1"></div>
+        <div class="pad disabled" data-i="2"></div>
+        <div class="pad disabled" data-i="3"></div>
+      </div>
+
+      <div class="row-btn">
+        <button type="button" class="do primary" id="start">Start</button>
+        <button type="button" class="do" id="reset">Reset</button>
+      </div>
+
+      <div class="stats">
+        <table>
+          <tr><th>Round</th><td id="tRound">—</td><th>Sequence length</th><td id="tLen">—</td><th>Best round</th><td id="tBest">0</td></tr>
+        </table>
+      </div>
+
+      <p class="note">Press Start and watch the pads light up in sequence. When the flashing stops, repeat the pattern by clicking the pads in the same order. Get it right and the next round adds one more step to the end. Click a wrong pad — or out of order — and it's game over; your <strong>best round</strong> is the longest sequence you reproduced correctly. The flash speed shortens slightly as the rounds climb. Runs locally — no data leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var board = document.getElementById("board");
+    var pads = Array.prototype.slice.call(board.querySelectorAll(".pad"));
+    var statusEl = document.getElementById("status");
+    var startBtn = document.getElementById("start");
+    var resetBtn = document.getElementById("reset");
+    var startLenEl = document.getElementById("startLen");
+    var speedEl = document.getElementById("speed");
+
+    var N = 4;
+    var game = null, userInput = [], bestRound = 0, phase = "idle"; // idle | showing | input | over
+    var timers = [];
+
+    function randPad() { return Math.floor(Math.random() * N); }
+    function newGame() {
+      var startLen = parseInt(startLenEl.value, 10) || 1;
+      var seq = [];
+      for (var i = 0; i < startLen; i++) seq.push(randPad());
+      return { sequence: seq, round: startLen };
+    }
+    function nextRound() {
+      game.sequence.push(randPad());
+      game.round++;
+    }
+
+    function clearTimers() { timers.forEach(function (t) { clearTimeout(t); clearInterval(t); }); timers = []; }
+    function setTimer(fn, ms) { var id = setTimeout(fn, ms); timers.push(id); return id; }
+
+    function disablePads(d) { pads.forEach(function (p) { p.classList.toggle("disabled", d); }); }
+    function light(i, ms, cb) {
+      pads[i].classList.add("lit");
+      setTimer(function () { pads[i].classList.remove("lit"); setTimer(cb, ms / 2); }, ms);
+    }
+
+    function showSequence() {
+      phase = "showing";
+      disablePads(true);
+      statusEl.innerHTML = "Round <b>" + game.round + "</b> — watch…";
+      var base = parseInt(speedEl.value, 10) || 500;
+      // speed up slightly with round
+      var flash = Math.max(180, base - (game.round - 1) * 18);
+      var gap = flash * 1.6;
+      var t = 400;
+      game.sequence.forEach(function (p, k) {
+        setTimer(function () { light(p, flash, function () {}); }, t);
+        t += gap;
+      });
+      setTimer(function () {
+        phase = "input";
+        userInput = [];
+        disablePads(false);
+        statusEl.innerHTML = "Round <b>" + game.round + "</b> — your turn (repeat the pattern)";
+      }, t);
+    }
+
+    function onPadClick(i) {
+      if (phase !== "input") return;
+      userInput.push(i);
+      // brief light on tap
+      pads[i].classList.add("lit");
+      setTimeout(function () { pads[i].classList.remove("lit"); }, 150);
+      // check this step
+      var idx = userInput.length - 1;
+      if (userInput[idx] !== game.sequence[idx]) {
+        // wrong
+        gameOver(false);
+        return;
+      }
+      if (userInput.length === game.sequence.length) {
+        // round complete
+        if (game.round > bestRound) bestRound = game.round;
+        renderStats();
+        phase = "wait";
+        disablePads(true);
+        statusEl.innerHTML = "✓ Correct! Next round…";
+        setTimer(function () { nextRound(); renderStats(); showSequence(); }, 900);
+      }
+    }
+
+    function gameOver() {
+      phase = "over";
+      clearTimers();
+      disablePads(true);
+      statusEl.innerHTML = "Game over — reached round <b>" + game.round + "</b>. Best: " + bestRound;
+      startBtn.textContent = "Play again";
+      startBtn.style.display = "inline-block";
+      renderStats();
+    }
+
+    function renderStats() {
+      document.getElementById("tRound").textContent = game ? game.round : "—";
+      document.getElementById("tLen").textContent = game ? game.sequence.length : "—";
+      document.getElementById("tBest").textContent = bestRound;
+    }
+
+    pads.forEach(function (p, i) {
+      p.addEventListener("click", function () { onPadClick(i); });
+    });
+
+    startBtn.addEventListener("click", function () {
+      clearTimers();
+      game = newGame();
+      bestRound = Math.max(bestRound, 0);
+      startBtn.style.display = "none";
+      renderStats();
+      showSequence();
+    });
+    resetBtn.addEventListener("click", function () {
+      clearTimers();
+      game = null; phase = "idle"; userInput = [];
+      disablePads(true);
+      statusEl.textContent = "Press Start";
+      startBtn.textContent = "Start";
+      startBtn.style.display = "inline-block";
+      renderStats();
+    });
+
+    renderStats();
+  })();
+  </script>
+</body>
+</html>
