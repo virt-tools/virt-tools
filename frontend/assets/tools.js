@@ -275,6 +275,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-08T10:00:00Z",
   },
   {
+    slug: "digit-span-test",
+    name: "Digit Span Memory Test",
+    description: "Test your working memory: a sequence of digits flashes, then you type it back. Each level adds a digit; two trials per level. Reports your best span — the longest sequence you reproduced correctly. Runs locally.",
+    category: "Time",
+    icon: "🧠",
+    added: "2026-07-08T11:00:00Z",
+  },
+  {
     slug: "key-code-viewer",
     name: "Key Code Viewer",
     description: "Inspect keyboard event.key, event.code, keyCode and modifier state for any key press. Runs locally.",
