@@ -283,6 +283,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-08T11:00:00Z",
   },
   {
+    slug: "stroop-test",
+    name: "Stroop Test",
+    description: "Measure cognitive interference: a color word appears in a possibly different ink color — pick the ink color, not the word. Reports accuracy and the Stroop effect (incongruent minus congruent reaction time). Runs locally.",
+    category: "Time",
+    icon: "🌈",
+    added: "2026-07-08T12:00:00Z",
+  },
+  {
     slug: "key-code-viewer",
     name: "Key Code Viewer",
     description: "Inspect keyboard event.key, event.code, keyCode and modifier state for any key press. Runs locally.",

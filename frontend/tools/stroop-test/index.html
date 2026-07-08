@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Stroop Test — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .stage { text-align:center; padding:30px 0; min-height:220px; }
+    .word { font-size:64px; font-weight:800; letter-spacing:2px; min-height:1.2em; font-family:ui-sans-serif,system-ui,sans-serif; }
+    .prompt { font-size:15px; opacity:.85; margin-top:6px; min-height:1.4em; }
+    .choices { display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:10px; max-width:560px; margin:18px auto 0; }
+    .choices button { padding:12px; border:1px solid var(--border,#2a2f3a); background:var(--bg,#14181f); color:var(--text,#e6e6e6); border-radius:8px; cursor:pointer; font-size:16px; font-weight:600; }
+    .choices button:hover { border-color:var(--accent,#6ea8fe); }
+    .choices:disabled { pointer-events:none; }
+    .grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; margin:12px 0; }
+    label.f { font-size:13px; opacity:.85; display:block; margin-bottom:4px; }
+    .row-btn { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin:14px 0; }
+    button.do { border:1px solid var(--border,#2a2f3a); background:transparent; color:inherit; border-radius:6px; padding:8px 16px; cursor:pointer; font-size:14px; }
+    button.do.primary { background:var(--accent,#6ea8fe); color:#08101f; border-color:transparent; }
+    .stats { margin-top:16px; }
+    .stats table { width:100%; border-collapse:collapse; font-size:14px; }
+    .stats th, .stats td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--border,#2a2f3a); }
+    .stats th { opacity:.7; font-weight:500; }
+    .progress { font-size:13px; opacity:.75; margin:8px 0; }
+    .result { font-size:17px; margin:10px 0; }
+    .result b { color:var(--accent,#6ea8fe); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Stroop Test</h1>
+      <p>Test your selective attention and cognitive interference. A color word appears printed in a possibly different ink color — pick the button whose label matches the <em>ink color</em>, not the word. When the word and ink match (congruent) it's easy; when they don't (incongruent) your reading reflex fights your color judgment. The measured gap in reaction time is the Stroop effect. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="grid2">
+        <div><label class="f" for="nTrials">Trials</label>
+          <select id="nTrials">
+            <option value="12">12</option>
+            <option value="20" selected>20</option>
+            <option value="40">40</option>
+          </select>
+        </div>
+        <div><label class="f" for="ratio">Congruent ratio</label>
+          <select id="ratio">
+            <option value="0.5" selected>50%</option>
+            <option value="0.25">25%</option>
+            <option value="0">0% (all incongruent)</option>
+            <option value="1">100% (all congruent)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="progress" id="progress"></div>
+      <div class="stage">
+        <div class="word" id="word">Press Start</div>
+        <div class="prompt" id="prompt">Pick the ink color, not the word</div>
+        <div class="choices" id="choices" style="pointer-events:none"></div>
+        <div class="row-btn">
+          <button type="button" class="do primary" id="start">Start</button>
+        </div>
+        <div class="result" id="result"></div>
+      </div>
+
+      <div class="stats">
+        <table>
+          <tr><th>Trial</th><td id="tTrial">—</td><th>Correct</th><td id="tCorrect">0</td><th>Accuracy</th><td id="tAcc">—</td></tr>
+          <tr><th>Mean congruent RT</th><td id="tCon">—</td><th>Mean incongruent RT</th><td id="tInc">—</td><th>Stroop effect</th><td id="tEff">—</td></tr>
+        </table>
+      </div>
+
+      <p class="note">Each trial: a color word (e.g. "RED") appears in some ink color. The six buttons below are labeled with color <em>names</em> in neutral text — click the one whose label names the ink color you see. The classic finding: incongruent trials (word and ink differ) take ~100–200 ms longer and produce more errors than congruent trials, because reading is automatic and interferes with naming the color. The reported <strong>Stroop effect</strong> is the mean RT gap. Runs locally — no data leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var COLORS = [
+      { name: "red", hex: "#e63946" },
+      { name: "green", hex: "#2ecc71" },
+      { name: "blue", hex: "#3498db" },
+      { name: "yellow", hex: "#f1c40f" },
+      { name: "purple", hex: "#9b59b6" },
+      { name: "orange", hex: "#e67e22" }
+    ];
+    var NAMES = COLORS.map(function (c) { return c.name; });
+    function hexFor(name) { for (var i = 0; i < COLORS.length; i++) if (COLORS[i].name === name) return COLORS[i].hex; return null; }
+
+    var wordEl = document.getElementById("word");
+    var promptEl = document.getElementById("prompt");
+    var choicesEl = document.getElementById("choices");
+    var startBtn = document.getElementById("start");
+    var resultEl = document.getElementById("result");
+    var progressEl = document.getElementById("progress");
+    var nTrialsEl = document.getElementById("nTrials");
+    var ratioEl = document.getElementById("ratio");
+
+    var trials = [], results = [], idx = 0, showAt = 0, running = false;
+
+    function makeTrials(n, congruentRatio) {
+      var out = [];
+      for (var i = 0; i < n; i++) {
+        var wordIdx = Math.floor(Math.random() * NAMES.length);
+        var word = NAMES[wordIdx];
+        var congruent = Math.random() < congruentRatio;
+        var ink;
+        if (congruent) ink = word;
+        else { do { ink = NAMES[Math.floor(Math.random() * NAMES.length)]; } while (ink === word); }
+        out.push({ word: word, ink: ink, congruent: congruent });
+      }
+      return out;
+    }
+
+    function buildButtons() {
+      choicesEl.innerHTML = "";
+      NAMES.forEach(function (name) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.textContent = name;
+        b.dataset.c = name;
+        b.addEventListener("click", function () { answer(name); });
+        choicesEl.appendChild(b);
+      });
+    }
+
+    function mean(xs) { if (!xs.length) return null; var s = 0; for (var i = 0; i < xs.length; i++) s += xs[i]; return s / xs.length; }
+    function scoreSession() {
+      var cong = [], incong = [], correct = 0;
+      for (var i = 0; i < results.length; i++) {
+        if (results[i].correct) {
+          correct++;
+          if (results[i].trial.congruent) cong.push(results[i].rt); else incong.push(results[i].rt);
+        }
+      }
+      var mc = mean(cong), mi = mean(incong);
+      return {
+        total: results.length, correct: correct,
+        accuracy: results.length ? correct / results.length : null,
+        meanCongruent: mc, meanIncongruent: mi,
+        interference: (mc !== null && mi !== null) ? mi - mc : null
+      };
+    }
+    function fmt(n) { return n === null ? "—" : Math.round(n) + " ms"; }
+    function fmtPct(n) { return n === null ? "—" : Math.round(n * 100) + "%"; }
+
+    function renderStats() {
+      var sc = scoreSession();
+      document.getElementById("tTrial").textContent = running ? (idx + 1) + " / " + trials.length : (results.length ? results.length + " / " + trials.length : "—");
+      document.getElementById("tCorrect").textContent = sc.correct + " / " + sc.total;
+      document.getElementById("tAcc").textContent = fmtPct(sc.accuracy);
+      document.getElementById("tCon").textContent = fmt(sc.meanCongruent);
+      document.getElementById("tInc").textContent = fmt(sc.meanIncongruent);
+      document.getElementById("tEff").textContent = sc.interference === null ? "—" : (sc.interference >= 0 ? "+" : "") + Math.round(sc.interference) + " ms";
+    }
+
+    function showTrial() {
+      if (idx >= trials.length) { finish(); return; }
+      var tr = trials[idx];
+      wordEl.textContent = tr.word.toUpperCase();
+      wordEl.style.color = hexFor(tr.ink);
+      promptEl.textContent = "Pick the ink color — " + (tr.congruent ? "congruent" : "incongruent");
+      choicesEl.style.pointerEvents = "auto";
+      showAt = performance.now();
+      progressEl.textContent = "Trial " + (idx + 1) + " of " + trials.length;
+      resultEl.textContent = "";
+      renderStats();
+    }
+
+    function answer(name) {
+      if (!running || idx >= trials.length) return;
+      var rt = performance.now() - showAt;
+      var tr = trials[idx];
+      var correct = name === tr.ink;
+      results.push({ trial: tr, answer: name, correct: correct, rt: rt });
+      choicesEl.style.pointerEvents = "none";
+      resultEl.innerHTML = correct ? "✓ Correct" : "✗ The ink was <b>" + tr.ink + "</b> (word said \"" + tr.word + "\")";
+      resultEl.className = "result" + (correct ? "" : "");
+      idx++;
+      setTimeout(showTrial, 650);
+    }
+
+    function start() {
+      var n = parseInt(nTrialsEl.value, 10) || 20;
+      var r = parseFloat(ratioEl.value);
+      trials = makeTrials(n, r);
+      results = []; idx = 0; running = true;
+      startBtn.style.display = "none";
+      resultEl.textContent = "";
+      buildButtons();
+      showTrial();
+    }
+
+    function finish() {
+      running = false;
+      wordEl.textContent = "Done";
+      wordEl.style.color = "";
+      promptEl.textContent = "Test complete";
+      choicesEl.style.pointerEvents = "none";
+      startBtn.textContent = "Restart";
+      startBtn.style.display = "inline-block";
+      var sc = scoreSession();
+      var effTxt = sc.interference === null ? "" : " Stroop effect: " + (sc.interference >= 0 ? "+" : "") + Math.round(sc.interference) + " ms (incongruent − congruent).";
+      resultEl.innerHTML = "Accuracy <b>" + fmtPct(sc.accuracy) + "</b>." + effTxt;
+      renderStats();
+    }
+
+    startBtn.addEventListener("click", start);
+    buildButtons();
+  })();
+  </script>
+</body>
+</html>
