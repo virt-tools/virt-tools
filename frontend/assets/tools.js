@@ -227,6 +227,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-05T07:00:00Z",
   },
   {
+    slug: "strip-html-tags",
+    name: "Strip HTML Tags",
+    description: "Remove all HTML tags and get the plain text back — optionally turn block elements into line breaks, decode entities, collapse whitespace, and extract the list of links. Drops scripts, styles, and comments. Runs locally.",
+    category: "Text",
+    icon: "✂️",
+    added: "2026-07-08T18:00:00Z",
+  },
+  {
     slug: "css-formatter",
     name: "CSS Formatter",
     description: "Pretty-print or minify CSS — nested at-rules, calc(), strings and combinators handled. Runs locally.",
