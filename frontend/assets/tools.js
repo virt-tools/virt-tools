@@ -411,6 +411,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-08T21:00:00Z",
   },
   {
+    slug: "paper-sizes",
+    name: "Paper Size Reference",
+    description: "Look up standard paper sizes: the ISO 216 A, B, and C series (A0–A10, B0–B10, C0–C10) plus North American sizes (Letter, Legal, Tabloid, Statement, Executive), ANSI (A–E), and architectural (Arch A–E1). Each row shows exact millimetre dimensions, the equivalent in inches, area, and aspect ratio. Filter by name or series. Everything runs locally in your browser.",
+    category: "Data",
+    icon: "📄",
+    added: "2026-07-08T23:00:00Z",
+  },
+  {
     slug: "dice-roller",
     name: "Dice Roller",
     description: "Roll dice with notation — 4d6kh3, 2d20+5, 3d8dl1. Sums individual dice and a 10k-roll distribution. Runs locally.",
