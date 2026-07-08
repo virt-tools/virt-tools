@@ -267,6 +267,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-06T15:00:00Z",
   },
   {
+    slug: "reaction-time-tester",
+    name: "Reaction Time Tester",
+    description: "Measure your reaction time in milliseconds — wait for green then click as fast as you can. Tracks mean, median, fastest, consistency, and false starts across trials. Runs locally.",
+    category: "Time",
+    icon: "⚡",
+    added: "2026-07-08T10:00:00Z",
+  },
+  {
     slug: "key-code-viewer",
     name: "Key Code Viewer",
     description: "Inspect keyboard event.key, event.code, keyCode and modifier state for any key press. Runs locally.",

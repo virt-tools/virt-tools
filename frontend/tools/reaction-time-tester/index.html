@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Reaction Time Tester — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .pad { width:100%; min-height:320px; border-radius:14px; display:flex; align-items:center; justify-content:center; text-align:center; cursor:pointer; user-select:none; border:1px solid var(--border,#2a2f3a); transition:background 60ms linear; font-size:20px; padding:16px; box-sizing:border-box; }
+    .pad.idle { background:#1a2230; color:var(--text,#e6e6e6); }
+    .pad.wait { background:#7a2b2b; color:#fff; }
+    .pad.go { background:#2f7d3f; color:#fff; }
+    .pad.too { background:#5a3b7a; color:#fff; }
+    .pad .big { font-size:30px; font-weight:700; display:block; margin-bottom:6px; }
+    .pad .sm { font-size:14px; opacity:.85; }
+    .stats { margin:14px 0; }
+    .stats table { width:100%; border-collapse:collapse; font-size:14px; }
+    .stats th, .stats td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--border,#2a2f3a); }
+    .stats th { opacity:.7; font-weight:500; }
+    .trials { display:flex; flex-wrap:wrap; gap:6px; margin:10px 0; }
+    .chip { padding:4px 10px; border-radius:14px; font-size:13px; border:1px solid var(--border,#2a2f3a); }
+    .chip.false { color:#ff8a8a; border-color:#5a2b2b; }
+    .chip.slow { opacity:.6; }
+    .row-btn { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0; }
+    button.do { border:1px solid var(--border,#2a2f3a); background:transparent; color:inherit; border-radius:6px; padding:8px 16px; cursor:pointer; font-size:14px; }
+    button.do.primary { background:var(--accent,#6ea8fe); color:#08101f; border-color:transparent; }
+    .rating { font-size:18px; margin:8px 0; }
+    .rating b { color:var(--accent,#6ea8fe); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Reaction Time Tester</h1>
+      <p>Measure how fast you react. Wait for the panel to turn green, then click as quickly as you can — your reaction time in milliseconds is recorded for each trial. Click too early and it counts as a false start. Run several trials and see your mean, median, fastest, and consistency. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="pad idle" id="pad">
+        <div>
+          <span class="big" id="padBig">Click to start</span>
+          <span class="sm" id="padSm">A trial begins when you click here</span>
+        </div>
+      </div>
+
+      <div class="row-btn">
+        <button type="button" class="do" id="reset">Reset session</button>
+      </div>
+
+      <div class="rating" id="rating"></div>
+      <div class="trials" id="trials"></div>
+      <div class="stats">
+        <table>
+          <tr><th>Trials</th><td id="tTrials">0</td><th>Valid</th><td id="tValid">0</td><th>False starts</th><td id="tFalse">0</td></tr>
+          <tr><th>Mean</th><td id="tMean">—</td><th>Median</th><td id="tMedian">—</td><th>Std dev</th><td id="tStd">—</td></tr>
+          <tr><th>Fastest</th><td id="tMin">—</td><th>Slowest</th><td id="tMax">—</td><th>Rating</th><td id="tRating">—</td></tr>
+        </table>
+      </div>
+
+      <p class="note">Each trial: the panel turns <span style="color:#d96666">red</span> (wait), then after a random 1.2–4.2 s delay it turns <span style="color:#5fc77a">green</span> — click immediately. Reaction time is the delay between green and your click. Times under 100 ms are false starts (you anticipated the green); times over 1 s count as valid but inattentive. Reaction time naturally varies with age, fatigue, and stimulus; typical median is 200–300 ms. Runs locally — no data leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var pad = document.getElementById("pad");
+    var padBig = document.getElementById("padBig");
+    var padSm = document.getElementById("padSm");
+    var resetBtn = document.getElementById("reset");
+    var ratingEl = document.getElementById("rating");
+    var trialsEl = document.getElementById("trials");
+
+    var times = []; // all recorded (ms), false starts recorded as the raw too-fast value but flagged
+    var state = "idle"; // idle | waiting | go | too
+    var goAt = 0, timer = null, startedAt = 0;
+
+    // stats helpers (verified)
+    function mean(xs) { if (!xs.length) return null; var s = 0; for (var i = 0; i < xs.length; i++) s += xs[i]; return s / xs.length; }
+    function median(xs) { if (!xs.length) return null; var a = xs.slice().sort(function (p, q) { return p - q; }); var n = a.length; return n % 2 === 1 ? a[(n - 1) / 2] : (a[n / 2 - 1] + a[n / 2]) / 2; }
+    function stddev(xs) { if (xs.length < 2) return null; var m = mean(xs); var s = 0; for (var i = 0; i < xs.length; i++) s += (xs[i] - m) * (xs[i] - m); return Math.sqrt(s / xs.length); }
+    function minOf(xs) { if (!xs.length) return null; var m = xs[0]; for (var i = 1; i < xs.length; i++) if (xs[i] < m) m = xs[i]; return m; }
+    function maxOf(xs) { if (!xs.length) return null; var m = xs[0]; for (var i = 1; i < xs.length; i++) if (xs[i] > m) m = xs[i]; return m; }
+    function classify(t) { if (t < 100) return "false_start"; if (t > 1000) return "slow"; return "valid"; }
+    function validTimes() { return times.filter(function (t, i) { return flags[i] !== "false_start"; }); }
+    var flags = [];
+    function rating(med) {
+      if (med === null) return "—";
+      if (med < 200) return "Elite";
+      if (med < 250) return "Very fast";
+      if (med < 300) return "Fast";
+      if (med < 350) return "Average";
+      if (med < 450) return "Below average";
+      return "Slow";
+    }
+    function fmt(n) { return n === null || n === undefined ? "—" : Math.round(n) + " ms"; }
+
+    function render() {
+      var v = validTimes();
+      document.getElementById("tTrials").textContent = times.length;
+      document.getElementById("tValid").textContent = v.length;
+      document.getElementById("tFalse").textContent = times.length - v.length;
+      document.getElementById("tMean").textContent = fmt(mean(v));
+      var med = median(v);
+      document.getElementById("tMedian").textContent = fmt(med);
+      document.getElementById("tStd").textContent = fmt(stddev(v));
+      document.getElementById("tMin").textContent = fmt(minOf(v));
+      document.getElementById("tMax").textContent = fmt(maxOf(v));
+      var r = rating(med);
+      document.getElementById("tRating").textContent = r;
+      ratingEl.innerHTML = v.length ? "Median reaction time: <b>" + fmt(med) + "</b> — " + r : "";
+
+      // chips
+      trialsEl.innerHTML = "";
+      for (var i = 0; i < times.length; i++) {
+        var c = document.createElement("span");
+        var cls = "chip" + (flags[i] === "false_start" ? " false" : flags[i] === "slow" ? " slow" : "");
+        c.className = cls;
+        c.textContent = flags[i] === "false_start" ? "false start" : Math.round(times[i]) + " ms";
+        trialsEl.appendChild(c);
+      }
+    }
+
+    function setPad(cls, big, sm) {
+      pad.className = "pad " + cls;
+      padBig.textContent = big;
+      padSm.textContent = sm;
+    }
+
+    function armWait() {
+      state = "waiting";
+      setPad("wait", "Wait for green…", "Don't click yet");
+      var delay = 1200 + Math.random() * 3000;
+      timer = setTimeout(function () {
+        state = "go";
+        goAt = performance.now();
+        setPad("go", "CLICK!", "Now — as fast as you can");
+      }, delay);
+    }
+
+    pad.addEventListener("click", function () {
+      if (state === "idle" || state === "too") {
+        armWait();
+      } else if (state === "waiting") {
+        // false start
+        clearTimeout(timer);
+        state = "too";
+        times.push(0); flags.push("false_start");
+        render();
+        setPad("too", "Too early!", "Click to try again");
+      } else if (state === "go") {
+        var rt = performance.now() - goAt;
+        times.push(rt);
+        flags.push(classify(rt));
+        render();
+        // brief result then re-arm
+        state = "idle";
+        var ms = Math.round(rt);
+        setPad("idle", ms + " ms", "Click for next trial");
+      }
+    });
+
+    resetBtn.addEventListener("click", function () {
+      clearTimeout(timer);
+      times = []; flags = [];
+      state = "idle";
+      setPad("idle", "Click to start", "A trial begins when you click here");
+      render();
+    });
+
+    render();
+  })();
+  </script>
+</body>
+</html>
