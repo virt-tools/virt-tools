@@ -275,6 +275,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-08T10:00:00Z",
   },
   {
+    slug: "click-speed-test",
+    name: "Click Speed Test (CPS)",
+    description: "Measure how many clicks per second you can sustain — pick a duration, click as fast as you can, and see average CPS, peak 1-second burst, a per-second bar chart, and click consistency. Runs locally.",
+    category: "Time",
+    icon: "🖱️",
+    added: "2026-07-08T14:00:00Z",
+  },
+  {
     slug: "digit-span-test",
     name: "Digit Span Memory Test",
     description: "Test your working memory: a sequence of digits flashes, then you type it back. Each level adds a digit; two trials per level. Reports your best span — the longest sequence you reproduced correctly. Runs locally.",

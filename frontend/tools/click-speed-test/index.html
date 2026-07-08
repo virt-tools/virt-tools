@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Click Speed Test (CPS) — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .pad { width:100%; min-height:280px; border-radius:14px; display:flex; align-items:center; justify-content:center; text-align:center; cursor:pointer; user-select:none; border:1px solid var(--border,#2a2f3a); font-size:20px; padding:16px; box-sizing:border-box; transition:background 60ms; position:relative; }
+    .pad.idle { background:#1a2230; color:var(--text,#e6e6e6); }
+    .pad.live { background:#243a4e; color:#fff; }
+    .pad.done { background:#1d2e1f; color:#fff; }
+    .pad .big { font-size:40px; font-weight:800; display:block; }
+    .pad .sm { font-size:14px; opacity:.85; margin-top:6px; }
+    .bar { height:80px; display:flex; align-items:flex-end; gap:4px; margin:14px 0; }
+    .bar .b { flex:1; background:var(--accent,#6ea8fe); border-radius:4px 4px 0 0; min-height:2px; opacity:.85; transition:height 120ms; }
+    .grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; margin:12px 0; }
+    label.f { font-size:13px; opacity:.85; display:block; margin-bottom:4px; }
+    .row-btn { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0; }
+    button.do { border:1px solid var(--border,#2a2f3a); background:transparent; color:inherit; border-radius:6px; padding:8px 16px; cursor:pointer; font-size:14px; }
+    button.do.primary { background:var(--accent,#6ea8fe); color:#08101f; border-color:transparent; }
+    .stats { margin-top:14px; }
+    .stats table { width:100%; border-collapse:collapse; font-size:14px; }
+    .stats th, .stats td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--border,#2a2f3a); }
+    .stats th { opacity:.7; font-weight:500; }
+    .timer { font-size:18px; margin:8px 0; opacity:.85; min-height:1.2em; }
+    .rating { font-size:18px; margin:8px 0; }
+    .rating b { color:var(--accent,#6ea8fe); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Click Speed Test (CPS)</h1>
+      <p>Measure how many times you can click per second. Pick a test duration, then click the pad as fast as you can until the timer ends — your clicks-per-second average, peak 1-second burst, and a per-second bar chart are reported. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="grid2">
+        <div><label class="f" for="dur">Test duration</label>
+          <select id="dur">
+            <option value="5" selected>5 seconds</option>
+            <option value="10">10 seconds</option>
+            <option value="20">20 seconds</option>
+            <option value="30">30 seconds (kohi-style)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="timer" id="timer">Click the pad to start</div>
+      <div class="pad idle" id="pad">
+        <div>
+          <span class="big" id="padBig">Click to start</span>
+          <span class="sm" id="padSm">Then keep clicking as fast as you can</span>
+        </div>
+      </div>
+
+      <div class="bar" id="bar"></div>
+
+      <div class="row-btn">
+        <button type="button" class="do" id="reset">Reset</button>
+      </div>
+
+      <div class="rating" id="rating"></div>
+      <div class="stats">
+        <table>
+          <tr><th>Total clicks</th><td id="tTotal">0</td><th>Duration</th><td id="tDur">—</td><th>Average CPS</th><td id="tCps">—</td></tr>
+          <tr><th>Peak 1-s burst</th><td id="tPeak">—</td><th>Mean gap</th><td id="tGap">—</td><th>Consistency (std dev)</th><td id="tStd">—</td></tr>
+        </table>
+      </div>
+
+      <p class="note">Choose a duration, then click the pad — the first click starts the timer. Keep clicking as fast as you can until it ends. <strong>Average CPS</strong> = total clicks ÷ duration. <strong>Peak burst</strong> is the most clicks you landed within any one-second window. The bar chart shows clicks per second. Gaps between clicks give a consistency figure (lower std dev = steadier rhythm). Common benchmarks: ~6 CPS average, ~8–10 CPS peak for fast clickers. Runs locally — no data leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var pad = document.getElementById("pad");
+    var padBig = document.getElementById("padBig");
+    var padSm = document.getElementById("padSm");
+    var timerEl = document.getElementById("timer");
+    var resetBtn = document.getElementById("reset");
+    var durEl = document.getElementById("dur");
+    var barEl = document.getElementById("bar");
+    var ratingEl = document.getElementById("rating");
+
+    var clicks = [], startAt = 0, duration = 5, running = false, done = false, raf = null, endAt = 0;
+
+    function mean(xs) { if (!xs.length) return null; var s = 0; for (var i = 0; i < xs.length; i++) s += xs[i]; return s / xs.length; }
+    function stddev(xs) { if (xs.length < 2) return null; var m = mean(xs); var s = 0; for (var i = 0; i < xs.length; i++) s += (xs[i] - m) * (xs[i] - m); return Math.sqrt(s / xs.length); }
+    function intervals() { var out = []; for (var i = 1; i < clicks.length; i++) out.push(clicks[i] - clicks[i - 1]); return out; }
+    function peakBurst(windowMs) {
+      if (!clicks.length) return 0;
+      var best = 0, left = 0;
+      for (var right = 0; right < clicks.length; right++) {
+        while (clicks[right] - clicks[left] >= windowMs) left++;
+        var c = right - left + 1; if (c > best) best = c;
+      }
+      return best;
+    }
+    function perSecond() {
+      var buckets = new Array(duration).fill(0);
+      for (var i = 0; i < clicks.length; i++) {
+        var sec = Math.floor((clicks[i] - startAt) / 1000);
+        if (sec >= 0 && sec < duration) buckets[sec]++;
+      }
+      return buckets;
+    }
+    function rating(cpsVal) {
+      if (cpsVal === null) return "—";
+      if (cpsVal < 4) return "Slow";
+      if (cpsVal < 6) return "Average";
+      if (cpsVal < 8) return "Fast";
+      if (cpsVal < 10) return "Very fast";
+      if (cpsVal < 12) return "Elite";
+      return "Inhuman";
+    }
+    function fmt(n) { return n === null ? "—" : Math.round(n) + " ms"; }
+
+    function renderBar() {
+      var buckets = perSecond();
+      var max = 1; for (var i = 0; i < buckets.length; i++) if (buckets[i] > max) max = buckets[i];
+      barEl.innerHTML = "";
+      for (var k = 0; k < buckets.length; k++) {
+        var b = document.createElement("div");
+        b.className = "b";
+        b.style.height = (buckets[k] / max * 80) + "px";
+        b.title = "Second " + (k + 1) + ": " + buckets[k] + " clicks";
+        barEl.appendChild(b);
+      }
+    }
+
+    function renderStats() {
+      var cpsVal = clicks.length ? clicks.length / duration : null;
+      document.getElementById("tTotal").textContent = clicks.length;
+      document.getElementById("tDur").textContent = duration + " s";
+      document.getElementById("tCps").textContent = cpsVal === null ? "—" : cpsVal.toFixed(2);
+      document.getElementById("tPeak").textContent = clicks.length ? peakBurst(1000) + " clicks" : "—";
+      var ivs = intervals();
+      document.getElementById("tGap").textContent = fmt(mean(ivs));
+      document.getElementById("tStd").textContent = fmt(stddev(ivs));
+      ratingEl.innerHTML = done && cpsVal !== null ? "Average <b>" + cpsVal.toFixed(2) + " CPS</b> — " + rating(cpsVal) : "";
+    }
+
+    function setPad(cls, big, sm) { pad.className = "pad " + cls; padBig.textContent = big; padSm.textContent = sm; }
+
+    function tick() {
+      if (!running) return;
+      var now = performance.now();
+      var left = Math.max(0, (endAt - now) / 1000);
+      timerEl.textContent = left.toFixed(1) + " s remaining · " + clicks.length + " clicks";
+      renderBar();
+      renderStats();
+      if (now >= endAt) { finish(); return; }
+      raf = requestAnimationFrame(tick);
+    }
+
+    function start() {
+      duration = parseInt(durEl.value, 10) || 5;
+      clicks = []; running = true; done = false;
+      startAt = performance.now();
+      endAt = startAt + duration * 1000;
+      setPad("live", "CLICK!", "Keep going as fast as you can");
+      clicks.push(0); // first click counts
+      tick();
+    }
+
+    function finish() {
+      running = false; done = true;
+      if (raf) cancelAnimationFrame(raf);
+      var cpsVal = clicks.length / duration;
+      setPad("done", clicks.length + " clicks", "Average " + cpsVal.toFixed(2) + " CPS — click Reset to retry");
+      timerEl.textContent = "Done";
+      renderBar(); renderStats();
+    }
+
+    pad.addEventListener("click", function () {
+      if (!running && !done) { start(); return; }
+      if (running) {
+        clicks.push(performance.now() - startAt);
+      }
+    });
+    pad.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+
+    resetBtn.addEventListener("click", function () {
+      if (raf) cancelAnimationFrame(raf);
+      running = false; done = false; clicks = [];
+      setPad("idle", "Click to start", "Then keep clicking as fast as you can");
+      timerEl.textContent = "Click the pad to start";
+      barEl.innerHTML = "";
+      ratingEl.textContent = "";
+      renderStats();
+    });
+
+    durEl.addEventListener("change", function () { if (!running) { duration = parseInt(durEl.value, 10) || 5; renderStats(); } });
+
+    renderStats();
+  })();
+  </script>
+</body>
+</html>
