@@ -611,6 +611,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T11:10:00Z",
   },
   {
+    slug: "line-number-tool",
+    name: "Line Number Tool",
+    description: "Add, remove, or renumber sequential line numbers on a list. Add with a chosen start, step, and separator; remove leading number prefixes (1. / 2) / 3: …); or renumber keeping each line's separator style and filling gaps. Runs locally.",
+    category: "Text",
+    icon: "🔢",
+    added: "2026-07-08T19:00:00Z",
+  },
+  {
     slug: "percentage-calculator",
     name: "Percentage Calculator",
     description: "Work out percentages, percent change and value adjustments — what is X% of Y, X is what % of Y, percent change, and value ± X%. Live, in your browser.",
