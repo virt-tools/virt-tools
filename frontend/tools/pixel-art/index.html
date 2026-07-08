@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Pixel Art Editor — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .layout { display:grid; grid-template-columns: 1fr 200px; gap:16px; margin:12px 0; }
+    @media (max-width: 720px) { .layout { grid-template-columns: 1fr; } }
+    canvas { width:100%; height:auto; max-width:520px; background:#08101f; border:1px solid var(--border,#2a2f3a); border-radius:10px; display:block; touch-action:none; cursor:crosshair; }
+    .tools label { font-size:13px; opacity:.85; display:block; margin-bottom:4px; }
+    .tools .row { margin:10px 0; }
+    .pal { display:grid; grid-template-columns:repeat(6,1fr); gap:4px; }
+    .pal .sw { width:100%; aspect-ratio:1; border-radius:5px; border:2px solid transparent; cursor:pointer; }
+    .pal .sw.active { border-color: var(--text,#e6e6e6); }
+    .tools input[type="color"] { width:100%; height:30px; border:1px solid var(--border,#2a2f3a); border-radius:6px; background:transparent; cursor:pointer; }
+    .seg { display:inline-flex; border:1px solid var(--border,#2a2f3a); border-radius:8px; overflow:hidden; width:100%; }
+    .seg button { flex:1; border:none; border-radius:0; background:transparent; color:inherit; padding:6px 8px; cursor:pointer; font-size:12px; }
+    .seg button.active { background: var(--accent,#6ea8fe); color:#08101f; }
+    .row-btn { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+    button.do { border:1px solid var(--border,#2a2f3a); background:transparent; color:inherit; border-radius:6px; padding:6px 12px; cursor:pointer; font-size:13px; }
+    button.do.primary { background: var(--accent,#6ea8fe); color:#08101f; border-color:transparent; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Pixel Art Editor</h1>
+      <p>Draw pixel art in your browser on an adjustable grid. Pick a colour, paint cells by clicking or dragging, erase, or flood-fill a region. Export the finished art as a PNG or a scalable SVG. Everything stays local — your canvas never leaves your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="layout">
+        <canvas id="cv" width="512" height="512"></canvas>
+        <div class="tools">
+          <div class="row"><label for="size">Grid size</label>
+            <select id="size">
+              <option value="8">8 × 8</option>
+              <option value="16" selected>16 × 16</option>
+              <option value="24">24 × 24</option>
+              <option value="32">32 × 32</option>
+            </select>
+          </div>
+          <div class="row"><label>Tool</label>
+            <div class="seg" id="tool">
+              <button type="button" data-t="paint" class="active">Paint</button>
+              <button type="button" data-t="erase">Erase</button>
+              <button type="button" data-t="fill">Fill</button>
+            </div>
+          </div>
+          <div class="row"><label>Palette</label>
+            <div class="pal" id="pal"></div>
+          </div>
+          <div class="row"><label for="custom">Custom colour</label>
+            <input type="color" id="custom" value="#6ea8fe">
+          </div>
+          <div class="row"><label for="showGrid">Show grid lines</label>
+            <input type="checkbox" id="showGrid" checked>
+          </div>
+          <div class="row-btn">
+            <button type="button" class="do" id="clear">Clear</button>
+            <button type="button" class="do primary" id="dlPng">PNG</button>
+            <button type="button" class="do" id="dlSvg">SVG</button>
+          </div>
+        </div>
+      </div>
+
+      <p class="note">Paint with click or drag; the Fill tool flood-fills the connected region of the same colour under the cursor. Erase clears a cell. The grid is square (8–32 cells per side); PNG exports at the displayed resolution, SVG is scalable and includes only the filled cells over a dark background. Runs locally.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var cv = document.getElementById("cv");
+    var ctx = cv.getContext("2d");
+    var sizeEl = document.getElementById("size");
+    var toolEl = document.getElementById("tool");
+    var palEl = document.getElementById("pal");
+    var customEl = document.getElementById("custom");
+    var showGridEl = document.getElementById("showGrid");
+    var clearBtn = document.getElementById("clear");
+    var dlPng = document.getElementById("dlPng");
+    var dlSvg = document.getElementById("dlSvg");
+
+    var PALETTE = ["#e63946","#f1c40f","#2ecc71","#1abc9c","#3498db","#9b59b6",
+                   "#e67e22","#ecf0f1","#7f8c8d","#2c3e50","#000000","#ff79c6"];
+
+    var N = 16;
+    var grid = new Array(N * N).fill(null);
+    var color = "#e63946";
+    var tool = "paint";
+    var drawing = false;
+
+    function idx(x, y) { return y * N + x; }
+    function floodFill(sx, sy, newColor) {
+      var i0 = idx(sx, sy);
+      var target = grid[i0];
+      if (target === newColor) return;
+      var stack = [i0];
+      while (stack.length) {
+        var i = stack.pop();
+        if (grid[i] !== target) continue;
+        grid[i] = newColor;
+        var x = i % N, y = Math.floor(i / N);
+        if (x > 0) stack.push(i - 1);
+        if (x < N - 1) stack.push(i + 1);
+        if (y > 0) stack.push(i - N);
+        if (y < N - 1) stack.push(i + N);
+      }
+    }
+
+    function cellPx() { return cv.width / N; }
+
+    function render() {
+      var cs = cellPx();
+      ctx.clearRect(0, 0, cv.width, cv.height);
+      ctx.fillStyle = "#08101f";
+      ctx.fillRect(0, 0, cv.width, cv.height);
+      for (var y = 0; y < N; y++) {
+        for (var x = 0; x < N; x++) {
+          var c = grid[idx(x, y)];
+          if (c) { ctx.fillStyle = c; ctx.fillRect(x * cs, y * cs, cs, cs); }
+        }
+      }
+      if (showGridEl.checked) {
+        ctx.strokeStyle = "rgba(255,255,255,.08)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (var k = 1; k < N; k++) {
+          ctx.moveTo(k * cs, 0); ctx.lineTo(k * cs, cv.height);
+          ctx.moveTo(0, k * cs); ctx.lineTo(cv.width, k * cs);
+        }
+        ctx.stroke();
+      }
+    }
+
+    function paintAt(clientX, clientY) {
+      var rect = cv.getBoundingClientRect();
+      var cs = cv.width / N;
+      var x = Math.floor((clientX - rect.left) / rect.width * N);
+      var y = Math.floor((clientY - rect.top) / rect.height * N);
+      if (x < 0 || y < 0 || x >= N || y >= N) return;
+      if (tool === "fill") { floodFill(x, y, color); render(); return; }
+      var val = tool === "erase" ? null : color;
+      if (grid[idx(x, y)] === val) return;
+      grid[idx(x, y)] = val;
+      render();
+    }
+
+    function pointerDown(e) {
+      drawing = true;
+      paintAt(e.clientX, e.clientY);
+      e.preventDefault();
+    }
+    function pointerMove(e) {
+      if (drawing && tool !== "fill") paintAt(e.clientX, e.clientY);
+    }
+    function pointerUp() { drawing = false; }
+
+    cv.addEventListener("pointerdown", pointerDown);
+    cv.addEventListener("pointermove", pointerMove);
+    window.addEventListener("pointerup", pointerUp);
+
+    function buildPalette() {
+      palEl.innerHTML = "";
+      PALETTE.forEach(function (c) {
+        var d = document.createElement("div");
+        d.className = "sw" + (c === color ? " active" : "");
+        d.style.background = c;
+        d.title = c;
+        d.addEventListener("click", function () {
+          color = c; customEl.value = c;
+          Array.prototype.forEach.call(palEl.querySelectorAll(".sw"), function (x) { x.classList.remove("active"); });
+          d.classList.add("active");
+        });
+        palEl.appendChild(d);
+      });
+    }
+
+    customEl.addEventListener("input", function () {
+      color = customEl.value;
+      Array.prototype.forEach.call(palEl.querySelectorAll(".sw"), function (x) { x.classList.remove("active"); });
+    });
+    toolEl.addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-t]"); if (!b) return;
+      tool = b.getAttribute("data-t");
+      Array.prototype.forEach.call(toolEl.querySelectorAll("button"), function (x) { x.classList.remove("active"); });
+      b.classList.add("active");
+    });
+    sizeEl.addEventListener("change", function () {
+      N = parseInt(sizeEl.value, 10);
+      grid = new Array(N * N).fill(null);
+      render();
+    });
+    showGridEl.addEventListener("change", render);
+    clearBtn.addEventListener("click", function () { grid = new Array(N * N).fill(null); render(); });
+
+    dlPng.addEventListener("click", function () {
+      var a = document.createElement("a");
+      a.href = cv.toDataURL("image/png"); a.download = "pixel-art.png";
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    });
+    dlSvg.addEventListener("click", function () {
+      var cell = 16, W = N * cell;
+      var s = '<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + W + '" viewBox="0 0 ' + W + ' ' + W + '">\n<rect width="100%" height="100%" fill="#08101f"/>\n';
+      for (var y = 0; y < N; y++) for (var x = 0; x < N; x++) {
+        var c = grid[idx(x, y)];
+        if (c) s += '<rect x="' + (x * cell) + '" y="' + (y * cell) + '" width="' + cell + '" height="' + cell + '" fill="' + c + '"/>\n';
+      }
+      s += "</svg>\n";
+      var blob = new Blob([s], { type: "image/svg+xml" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url; a.download = "pixel-art.svg"; document.body.appendChild(a); a.click();
+      document.body.removeChild(a); setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    });
+
+    buildPalette();
+    render();
+  })();
+  </script>
+</body>
+</html>

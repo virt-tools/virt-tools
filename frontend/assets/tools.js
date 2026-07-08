@@ -35,6 +35,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T03:27:17Z",
   },
   {
+    slug: "pixel-art",
+    name: "Pixel Art Editor",
+    description: "Draw pixel art on an adjustable grid with paint, eraser and flood-fill, then export PNG or SVG.",
+    category: "Design",
+    icon: "🖌️",
+    added: "2026-07-08T07:00:00Z",
+  },
+  {
     slug: "base64",
     name: "Base64 Encode / Decode",
     description: "Encode text to Base64 or decode it back. Runs locally, nothing sent anywhere.",
