@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Tap Tempo / BPM Tapper — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .stage { text-align:center; padding:16px 0; }
+    .big { font-size:84px; font-weight:800; color:var(--accent,#6ea8fe); line-height:1; }
+    .mark { font-size:20px; opacity:.85; margin-top:6px; }
+    .tap { width:min(420px,92%); min-height:140px; border-radius:14px; background:#1a2230; border:1px solid var(--border,#2a2f3a); color:var(--text,#e6e6e6); font-size:24px; font-weight:700; cursor:pointer; user-select:none; margin:16px auto; display:flex; align-items:center; justify-content:center; transition:transform 60ms, background 60ms; }
+    .tap:active { transform:scale(.985); background:#222d40; }
+    .tap kbd { display:block; font-size:14px; font-weight:500; opacity:.7; margin-top:8px; }
+    .row-btn { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin:12px 0; }
+    button.do { border:1px solid var(--border,#2a2f3a); background:transparent; color:inherit; border-radius:6px; padding:8px 16px; cursor:pointer; font-size:14px; }
+    label.check { font-size:13px; opacity:.9; display:inline-flex; gap:6px; align-items:center; cursor:pointer; margin:8px 12px 8px 0; }
+    .stats { margin-top:14px; }
+    .stats table { width:100%; border-collapse:collapse; font-size:14px; }
+    .stats th, .stats td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--border,#2a2f3a); }
+    .stats th { opacity:.7; font-weight:500; }
+    .dots { display:flex; gap:6px; flex-wrap:wrap; justify-content:center; margin:10px 0; min-height:16px; }
+    .dot { width:8px; height:8px; border-radius:50%; background:#2a3142; }
+    .dot.on { background:var(--accent,#6ea8fe); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Tap Tempo / BPM Tapper</h1>
+      <p>Find the tempo of a song by tapping. Tap the button (or press the spacebar) in time with the beat and the BPM updates live from the intervals between your taps. The last 8 intervals are averaged for responsiveness, and the tempo snaps to common values when you're close. Shows the Italian tempo marking too. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="stage">
+        <div class="big" id="bpm">—</div>
+        <div class="mark" id="mark">BPM</div>
+        <div class="dots" id="dots"></div>
+        <button type="button" class="tap" id="tap">TAP<kbd>or press the Space bar</kbd></button>
+        <div class="row-btn">
+          <button type="button" class="do" id="reset">Reset</button>
+          <label class="check"><input type="checkbox" id="snapChk" checked> Snap to common tempo</label>
+        </div>
+      </div>
+
+      <div class="stats">
+        <table>
+          <tr><th>Taps</th><td id="tTaps">0</td><th>Intervals used</th><td id="tUsed">0</td><th>Mean interval</th><td id="tMean">—</td></tr>
+          <tr><th>Median interval</th><td id="tMed">—</td><th>Raw BPM</th><td id="tRaw">—</td><th>Snapped</th><td id="tSnap">—</td></tr>
+        </table>
+      </div>
+
+      <p class="note">Tap in time with the beat — each tap records a timestamp and the BPM comes from <code>60000 / meanInterval</code> (the average gap between your last few taps). A pause longer than 2 s starts a fresh run, so you can re-tap a different passage without resetting. <strong>Snap</strong> rounds to the nearest whole BPM and, if you're within 0.5 BPM of a common tempo (60, 80, 120, 128, 140, 160…), jumps to it. The Italian marking (Largo, Adagio, Andante, Allegro, Presto…) is a qualitative label for the raw value. Runs locally — no data leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var bpmEl = document.getElementById("bpm");
+    var markEl = document.getElementById("mark");
+    var tapBtn = document.getElementById("tap");
+    var resetBtn = document.getElementById("reset");
+    var snapChk = document.getElementById("snapChk");
+    var dotsEl = document.getElementById("dots");
+
+    var taps = [];
+    var RESET_MS = 2000;
+    var USE_LAST = 8;
+
+    function intervals(arr) {
+      var out = []; for (var i = 1; i < arr.length; i++) out.push(arr[i] - arr[i - 1]); return out;
+    }
+    function mean(xs) { if (!xs.length) return null; var s = 0; for (var i = 0; i < xs.length; i++) s += xs[i]; return s / xs.length; }
+    function median(xs) { if (!xs.length) return null; var a = xs.slice().sort(function (p, q) { return p - q; }); var n = a.length; return n % 2 === 1 ? a[(n - 1) / 2] : (a[n / 2 - 1] + a[n / 2]) / 2; }
+    function filterTaps(arr, resetMs) {
+      if (arr.length < 2) return arr.slice();
+      var cut = 0;
+      for (var i = 1; i < arr.length; i++) if (arr[i] - arr[i - 1] > resetMs) cut = i;
+      return arr.slice(cut);
+    }
+    function rawBpm(arr) {
+      if (arr.length < 2) return null;
+      var ivs = intervals(arr);
+      if (ivs.length > USE_LAST) ivs = ivs.slice(ivs.length - USE_LAST);
+      var m = mean(ivs);
+      return m <= 0 ? null : 60000 / m;
+    }
+    function snap(b, tolerance) {
+      if (b === null) return null;
+      tolerance = tolerance || 0.5;
+      var common = [60, 70, 80, 90, 100, 110, 120, 128, 130, 140, 144, 150, 160, 170, 180, 200];
+      var best = b;
+      for (var i = 0; i < common.length; i++) if (Math.abs(common[i] - b) <= tolerance) { best = common[i]; break; }
+      return Math.round(best);
+    }
+    function tempoMark(b) {
+      if (b === null) return "—";
+      if (b < 24) return "Larghissimo";
+      if (b < 40) return "Grave";
+      if (b < 60) return "Lento";
+      if (b < 66) return "Larghetto";
+      if (b < 76) return "Adagio";
+      if (b < 108) return "Andante";
+      if (b < 120) return "Moderato";
+      if (b < 156) return "Allegro";
+      if (b < 176) return "Vivace";
+      if (b < 200) return "Presto";
+      return "Prestissimo";
+    }
+    function fmt(n) { return n === null ? "—" : Math.round(n) + " ms"; }
+
+    function render() {
+      var filtered = filterTaps(taps, RESET_MS);
+      var ivs = intervals(filtered);
+      var used = ivs.length > USE_LAST ? ivs.slice(ivs.length - USE_LAST) : ivs;
+      var raw = rawBpm(filtered);
+      var snapped = snapChk.checked ? snap(raw) : (raw === null ? null : Math.round(raw));
+      bpmEl.textContent = snapped === null ? "—" : snapped;
+      markEl.textContent = tempoMark(raw);
+      document.getElementById("tTaps").textContent = filtered.length;
+      document.getElementById("tUsed").textContent = used.length;
+      document.getElementById("tMean").textContent = fmt(mean(used));
+      document.getElementById("tMed").textContent = fmt(median(used));
+      document.getElementById("tRaw").textContent = raw === null ? "—" : Math.round(raw) + " bpm";
+      document.getElementById("tSnap").textContent = snapped === null ? "—" : snapped + " bpm";
+
+      // dots: one per used interval, lit
+      dotsEl.innerHTML = "";
+      var n = Math.min(used.length, USE_LAST);
+      for (var i = 0; i < USE_LAST; i++) {
+        var d = document.createElement("span");
+        d.className = "dot" + (i < n ? " on" : "");
+        dotsEl.appendChild(d);
+      }
+    }
+
+    function tap() {
+      var now = performance.now();
+      // reset if last tap was a long pause ago
+      if (taps.length && now - taps[taps.length - 1] > RESET_MS) taps = [];
+      taps.push(now);
+      render();
+    }
+
+    tapBtn.addEventListener("click", tap);
+    resetBtn.addEventListener("click", function () { taps = []; render(); });
+    snapChk.addEventListener("change", render);
+    document.addEventListener("keydown", function (e) {
+      if (e.code === "Space" || e.key === " ") {
+        e.preventDefault();
+        // ignore if focus is on a checkbox/button to avoid double trigger with click
+        tap();
+      }
+    });
+
+    render();
+  })();
+  </script>
+</body>
+</html>

@@ -323,6 +323,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-05T13:00:00Z",
   },
   {
+    slug: "tap-tempo",
+    name: "Tap Tempo / BPM Tapper",
+    description: "Find a song's tempo by tapping in time with the beat — BPM updates live from the average interval of your last taps, with snap to common tempos and an Italian tempo marking. Runs locally.",
+    category: "Time",
+    icon: "🥁",
+    added: "2026-07-08T13:00:00Z",
+  },
+  {
     slug: "noise-generator",
     name: "Noise Generator",
     description: "Play continuous white, pink, or brown noise for sleep, focus, and sound masking — white is flat, pink falls 3 dB/octave, brown 6 dB/octave. Web Audio, runs locally.",
