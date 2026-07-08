@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Typing Speed Test — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .target {
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: 18px; line-height: 1.7;
+      background: var(--panel-2,#161a22);
+      border: 1px solid var(--border,#2a2f3a);
+      border-radius: 10px;
+      padding: 16px 18px;
+      margin: 10px 0;
+      letter-spacing: .2px;
+      user-select: none;
+    }
+    .target .ch { color: var(--text-dim,#8b93a7); transition: background .05s; border-radius: 2px; }
+    .target .ch.ok { color: var(--text,#e6e6e6); }
+    .target .ch.bad { color: #f0a36e; background: rgba(240,163,110,.18); }
+    .target .ch.cur { border-bottom: 2px solid var(--accent,#6ea8fe); }
+    .target .sp { white-space: pre; }
+    #typed {
+      width: 100%; box-sizing: border-box;
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: 16px; padding: 10px 12px;
+      margin-top: 6px;
+    }
+    .stats { display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:10px; margin:12px 0; }
+    .stat { background:var(--panel-2,#161a22); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:8px 10px; text-align:center; }
+    .stat .n { font-size:22px; font-weight:700; font-variant-numeric:tabular-nums; }
+    .stat .l { font-size:12px; opacity:.7; }
+    .row-btn { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0; }
+    button.do { border:1px solid var(--border,#2a2f3a); background:transparent; color:inherit; border-radius:6px; padding:7px 14px; cursor:pointer; font-size:13px; }
+    button.do.primary { background: var(--accent,#6ea8fe); color:#08101f; border-color:transparent; }
+    .hint { font-size:13px; opacity:.75; margin:6px 0; }
+    .done { font-size:18px; font-weight:600; text-align:center; margin:8px 0; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Typing Speed Test</h1>
+      <p>Measure your typing speed and accuracy. Type the displayed text as quickly and correctly as you can; the timer starts on your first keystroke and stops when you finish. See your gross and net words-per-minute (1 word = 5 characters) and accuracy in real time. Everything runs locally — your typing never leaves your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="target" id="target"></div>
+      <input type="text" id="typed" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Click here and start typing…">
+
+      <div class="stats">
+        <div class="stat"><div class="n" id="sWpm">0</div><div class="l">gross WPM</div></div>
+        <div class="stat"><div class="n" id="sNet">0</div><div class="l">net WPM</div></div>
+        <div class="stat"><div class="n" id="sAcc">100%</div><div class="l">accuracy</div></div>
+        <div class="stat"><div class="n" id="sTime">0.0s</div><div class="l">elapsed</div></div>
+        <div class="stat"><div class="n" id="sProg">0%</div><div class="l">complete</div></div>
+      </div>
+
+      <div class="row-btn">
+        <button type="button" class="do primary" id="newText">New text</button>
+        <button type="button" class="do" id="reset">Reset</button>
+      </div>
+
+      <div class="done" id="done"></div>
+      <p class="note">WPM uses the standard 5-characters-per-word definition: gross WPM = (characters typed ÷ 5) ÷ minutes; net WPM subtracts errors. Accuracy = correct characters ÷ total typed. The timer starts on the first keystroke and stops when your input reaches the end of the text. Runs locally.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var SAMPLES = [
+      "The quick brown fox jumps over the lazy dog while a gentle breeze rustles the autumn leaves.",
+      "Pack my box with five dozen liquor jugs, said the merchant as he counted every single one.",
+      "She sells seashells by the seashore, collecting curious specimens from the morning tide pools.",
+      "To type well is to think clearly; let your fingers follow the rhythm of the words on the page.",
+      "A journey of a thousand miles begins with a single step, and so does every great idea in turn."
+    ];
+
+    var targetEl = document.getElementById("target");
+    var typedEl = document.getElementById("typed");
+    var sWpm = document.getElementById("sWpm");
+    var sNet = document.getElementById("sNet");
+    var sAcc = document.getElementById("sAcc");
+    var sTime = document.getElementById("sTime");
+    var sProg = document.getElementById("sProg");
+    var newTextBtn = document.getElementById("newText");
+    var resetBtn = document.getElementById("reset");
+    var doneEl = document.getElementById("done");
+
+    var target = "";
+    var startTime = null;
+    var finished = false;
+    var timer = null;
+
+    function wpm(correctChars, minutes) {
+      if (!(minutes > 0) || !(correctChars >= 0)) return 0;
+      return (correctChars / 5) / minutes;
+    }
+    function accuracyPct(correctChars, totalChars) {
+      if (!(totalChars > 0) || !(correctChars >= 0) || correctChars > totalChars) return 100;
+      return (correctChars / totalChars) * 100;
+    }
+    function compareChars(typed, tgt) {
+      var len = Math.min(typed.length, tgt.length);
+      var correct = 0, incorrect = 0;
+      for (var i = 0; i < len; i++) {
+        if (typed.charAt(i) === tgt.charAt(i)) correct++;
+        else incorrect++;
+      }
+      if (typed.length > tgt.length) incorrect += typed.length - tgt.length;
+      return { correct: correct, incorrect: incorrect, total: typed.length };
+    }
+
+    function renderTarget(typed) {
+      typed = typed || "";
+      var html = "";
+      for (var i = 0; i < target.length; i++) {
+        var ch = target.charAt(i);
+        var cls = "ch";
+        if (i < typed.length) cls += (typed.charAt(i) === ch ? " ok" : " bad");
+        else if (i === typed.length) cls += " cur";
+        if (ch === " ") { html += '<span class="' + cls + ' sp"> </span>'; }
+        else { html += '<span class="' + cls + '">' + ch + '</span>'; }
+      }
+      targetEl.innerHTML = html;
+    }
+
+    function elapsedMinutes() {
+      if (startTime === null) return 0;
+      return (Date.now() - startTime) / 60000;
+    }
+    function elapsedSeconds() {
+      if (startTime === null) return 0;
+      return (Date.now() - startTime) / 1000;
+    }
+
+    function updateStats(typed) {
+      var c = compareChars(typed, target);
+      var mins = elapsedMinutes();
+      var gross = wpm(c.correct + (c.total - c.correct), mins); // gross uses all typed chars
+      // gross WPM = (all typed chars)/5/min ; net = (correct - incorrect)/5/min
+      var grossAll = wpm(c.total, mins);
+      var net = mins > 0 ? Math.max(0, (c.correct - c.incorrect) / 5) / mins : 0;
+      var acc = accuracyPct(c.correct, c.total);
+      sWpm.textContent = Math.round(grossAll);
+      sNet.textContent = Math.round(net);
+      sAcc.textContent = (c.total === 0 ? 100 : acc).toFixed(0) + "%";
+      sTime.textContent = elapsedSeconds().toFixed(1) + "s";
+      sProg.textContent = Math.round((typed.length / target.length) * 100) + "%";
+    }
+
+    function tick() {
+      updateStats(typedEl.value);
+    }
+
+    function finish() {
+      finished = true;
+      if (timer) { clearInterval(timer); timer = null; }
+      typedEl.disabled = true;
+      var c = compareChars(typedEl.value, target);
+      var mins = elapsedMinutes();
+      var grossAll = wpm(c.total, mins);
+      var net = Math.max(0, (c.correct - c.incorrect) / 5) / mins;
+      var acc = accuracyPct(c.correct, c.total);
+      doneEl.textContent = "Done! " + Math.round(grossAll) + " gross WPM · " + Math.round(net) + " net WPM · " + acc.toFixed(1) + "% accuracy in " + elapsedSeconds().toFixed(1) + "s";
+    }
+
+    function startSample() {
+      finished = false;
+      startTime = null;
+      if (timer) { clearInterval(timer); timer = null; }
+      doneEl.textContent = "";
+      typedEl.disabled = false;
+      typedEl.value = "";
+      target = SAMPLES[Math.floor(Math.random() * SAMPLES.length)];
+      renderTarget("");
+      updateStats("");
+      typedEl.focus();
+    }
+
+    typedEl.addEventListener("input", function () {
+      if (finished) return;
+      if (startTime === null && typedEl.value.length > 0) {
+        startTime = Date.now();
+        timer = setInterval(tick, 100);
+      }
+      var typed = typedEl.value;
+      // prevent typing past the target
+      if (typed.length > target.length) {
+        typed = typed.slice(0, target.length);
+        typedEl.value = typed;
+      }
+      renderTarget(typed);
+      updateStats(typed);
+      if (typed.length >= target.length) finish();
+    });
+
+    newTextBtn.addEventListener("click", startSample);
+    resetBtn.addEventListener("click", startSample);
+    startSample();
+  })();
+  </script>
+</body>
+</html>

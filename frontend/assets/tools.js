@@ -467,6 +467,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T06:43:16Z",
   },
   {
+    slug: "typing-test",
+    name: "Typing Speed Test",
+    description: "Measure your typing speed and accuracy — type the displayed text and see live gross and net WPM (5 chars per word) and accuracy, with per-character highlighting. Runs in your browser.",
+    category: "Text",
+    icon: "⌨️",
+    added: "2026-07-08T04:00:00Z",
+  },
+  {
     slug: "image-converter",
     name: "Image Converter & Resizer",
     description: "Convert an image between PNG, JPEG and WebP and resize it — all in your browser, the image never leaves your device.",
