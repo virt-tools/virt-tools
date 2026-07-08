@@ -1403,6 +1403,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-06T20:00:00Z",
   },
   {
+    slug: "spirograph",
+    name: "Spirograph Generator",
+    description: "Draw hypotrochoid and epitrochoid spirograph curves from the fixed and rolling circle radii and pen offset — auto-closes after the fewest whole revolutions, with presets and SVG download. Runs in your browser.",
+    category: "Math",
+    icon: "🌀",
+    added: "2026-07-08T05:00:00Z",
+  },
+  {
     slug: "semver-toolkit",
     name: "SemVer Toolkit",
     description: "Parse, compare, range-check, sort, and bump Semantic Versioning 2.0.0 strings. Parse a version into its major, minor, patch, pre-release and build parts; compare two versions with full pre-release precedence (numeric identifiers numerically, alphanumeric lexically, a pre-release ranking below its release); check a version against an npm-style range (^, ~, >, >=, <, <=, =, x-ranges, and || unions) with the standard pre-release inclusion rule; sort a list of versions ascending or descending; and bump major, minor, patch, or pre-release levels. Everything runs locally in your browser.",

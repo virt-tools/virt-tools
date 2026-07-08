@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Spirograph Generator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .seg { display:inline-flex; border:1px solid var(--border,#2a2f3a); border-radius:8px; overflow:hidden; margin-bottom:12px; }
+    .seg button { border:none; border-radius:0; background:transparent; color:inherit; padding:6px 14px; cursor:pointer; font-size:13px; }
+    .seg button.active { background: var(--accent,#6ea8fe); color:#08101f; }
+    .layout { display:grid; grid-template-columns: 1fr 240px; gap:16px; margin:12px 0; }
+    @media (max-width: 720px) { .layout { grid-template-columns: 1fr; } }
+    canvas { width:100%; height:auto; background:#08101f; border:1px solid var(--border,#2a2f3a); border-radius:10px; display:block; }
+    .controls label { font-size:13px; opacity:.85; display:flex; justify-content:space-between; margin-bottom:2px; }
+    .controls .row { margin:10px 0; }
+    .controls input[type="range"] { width:100%; }
+    .controls .val { font-variant-numeric: tabular-nums; opacity:.7; }
+    .controls input[type="color"] { width:100%; height:30px; border:1px solid var(--border,#2a2f3a); border-radius:6px; background:transparent; cursor:pointer; }
+    .presets { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0; }
+    .presets button { border:1px solid var(--border,#2a2f3a); background:transparent; color:inherit; border-radius:6px; padding:4px 8px; cursor:pointer; font-size:12px; }
+    .presets button.active { border-color: var(--accent,#6ea8fe); }
+    .row-btn { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+    button.do { border:1px solid var(--border,#2a2f3a); background:transparent; color:inherit; border-radius:6px; padding:6px 14px; cursor:pointer; font-size:13px; }
+    button.do.primary { background: var(--accent,#6ea8fe); color:#08101f; border-color:transparent; }
+    .meta { font-size:13px; opacity:.8; margin:6px 0; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Spirograph Generator</h1>
+      <p>Draw classic spirograph curves — hypotrochoids (inner rolling) and epitrochoids (outer rolling) — by adjusting the fixed circle radius R, the rolling circle radius r, and the pen offset d. The curve auto-closes after the fewest whole revolutions, and you can download the result as an SVG. Everything is computed and rendered locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="seg" id="mode">
+        <button type="button" data-m="hypo" class="active">Hypotrochoid</button>
+        <button type="button" data-m="epi">Epitrochoid</button>
+      </div>
+
+      <div class="layout">
+        <canvas id="cv" width="640" height="640"></canvas>
+        <div class="controls">
+          <div class="presets" id="presets"></div>
+          <div class="row"><label>R — fixed circle <span class="val" id="vR">220</span></label><input type="range" id="R" min="20" max="300" step="1" value="220"></div>
+          <div class="row"><label>r — rolling circle <span class="val" id="vr">65</span></label><input type="range" id="r" min="5" max="200" step="1" value="65"></div>
+          <div class="row"><label>d — pen offset <span class="val" id="vd">80</span></label><input type="range" id="d" min="1" max="200" step="1" value="80"></div>
+          <div class="row"><label>Line width <span class="val" id="vlw">1.5</span></label><input type="range" id="lw" min="0.5" max="6" step="0.5" value="1.5"></div>
+          <div class="row"><label>Colour</label><input type="color" id="color" value="#6ea8fe"></div>
+          <div class="meta" id="meta">—</div>
+          <div class="row-btn">
+            <button type="button" class="do primary" id="download">Download SVG</button>
+          </div>
+        </div>
+      </div>
+
+      <p class="note">A <strong>hypotrochoid</strong> traces a point fixed inside a circle of radius r rolling inside a fixed circle of radius R: x = (R−r)·cos t + d·cos((R−r)/r·t), y = (R−r)·sin t − d·sin((R−r)/r·t). An <strong>epitrochoid</strong> rolls outside: x = (R+r)·cos t − d·cos((R+r)/r·t). The curve closes after r ÷ gcd(R∓r, r) revolutions, so the drawing is always a complete figure. Download gives a scalable SVG with the exact same path. Runs locally.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var cv = document.getElementById("cv");
+    var ctx = cv.getContext("2d");
+    var modeEl = document.getElementById("mode");
+    var REl = document.getElementById("R");
+    var rEl = document.getElementById("r");
+    var dEl = document.getElementById("d");
+    var lwEl = document.getElementById("lw");
+    var colorEl = document.getElementById("color");
+    var vR = document.getElementById("vR");
+    var vr = document.getElementById("vr");
+    var vd = document.getElementById("vd");
+    var vlw = document.getElementById("vlw");
+    var meta = document.getElementById("meta");
+    var presetsEl = document.getElementById("presets");
+    var dlBtn = document.getElementById("download");
+
+    var PRESETS = [
+      { name: "Rose 5", type: "hypo", R: 220, r: 44, d: 80 },
+      { name: "Flower", type: "hypo", R: 220, r: 65, d: 80 },
+      { name: "Star", type: "hypo", R: 220, r: 73, d: 110 },
+      { name: "Gear", type: "epi", R: 180, r: 60, d: 50 },
+      { name: "Petal", type: "epi", R: 200, r: 50, d: 90 },
+      { name: "Dense", type: "hypo", R: 240, r: 91, d: 120 }
+    ];
+
+    var type = "hypo";
+    var lastPath = "";
+
+    function gcd(a, b) {
+      a = Math.abs(Math.round(a)); b = Math.abs(Math.round(b));
+      while (b) { var t = b; b = a % b; a = t; }
+      return a || 1;
+    }
+    function pointAt(t, R, r, d) {
+      if (type === "epi") {
+        var k = (R + r) / r;
+        return { x: (R + r) * Math.cos(t) - d * Math.cos(k * t), y: (R + r) * Math.sin(t) - d * Math.sin(k * t) };
+      }
+      var kh = (R - r) / r;
+      return { x: (R - r) * Math.cos(t) + d * Math.cos(kh * t), y: (R - r) * Math.sin(t) - d * Math.sin(kh * t) };
+    }
+    function revolutions(R, r) {
+      var inner = type === "epi" ? (R + r) : (R - r);
+      return r / gcd(inner, r);
+    }
+
+    function buildPath() {
+      var R = parseFloat(REl.value);
+      var r = parseFloat(rEl.value);
+      var d = parseFloat(dEl.value);
+      var revs = revolutions(R, r);
+      var stepsPerRev = 400;
+      var n = Math.max(60, Math.round(stepsPerRev * revs));
+      var tMax = 2 * Math.PI * revs;
+      var pts = [];
+      for (var i = 0; i <= n; i++) {
+        var t = (i / n) * tMax;
+        pts.push(pointAt(t, R, r, d));
+      }
+      // bounds
+      var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      for (var j = 0; j < pts.length; j++) {
+        if (pts[j].x < minX) minX = pts[j].x;
+        if (pts[j].x > maxX) maxX = pts[j].x;
+        if (pts[j].y < minY) minY = pts[j].y;
+        if (pts[j].y > maxY) maxY = pts[j].y;
+      }
+      var w = maxX - minX || 1, h = maxY - minY || 1;
+      var scale = Math.min(cv.width, cv.height) / (Math.max(w, h) * 1.05);
+      var cx = cv.width / 2, cy = cv.height / 2;
+      var mx = (minX + maxX) / 2, my = (minY + maxY) / 2;
+      var dStr = "";
+      for (var k = 0; k < pts.length; k++) {
+        var px = cx + (pts[k].x - mx) * scale;
+        var py = cy + (pts[k].y - my) * scale;
+        dStr += (k === 0 ? "M" : "L") + px.toFixed(2) + " " + py.toFixed(2) + " ";
+      }
+      dStr += "Z";
+      lastPath = dStr;
+      return { dStr: dStr, revs: revs, points: pts.length };
+    }
+
+    function render() {
+      vR.textContent = REl.value;
+      vr.textContent = rEl.value;
+      vd.textContent = dEl.value;
+      vlw.textContent = lwEl.value;
+      var info = buildPath();
+      ctx.clearRect(0, 0, cv.width, cv.height);
+      ctx.lineWidth = parseFloat(lwEl.value);
+      ctx.strokeStyle = colorEl.value;
+      var p = new Path2D(info.dStr);
+      ctx.stroke(p);
+      meta.textContent = info.revs + " revolutions · " + (info.points - 1) + " points";
+    }
+
+    function buildSVG() {
+      var c = colorEl.value;
+      var lw = parseFloat(lwEl.value);
+      return '<?xml version="1.0" encoding="UTF-8"?>\n' +
+        '<svg xmlns="http://www.w3.org/2000/svg" width="' + cv.width + '" height="' + cv.height + '" viewBox="0 0 ' + cv.width + ' ' + cv.height + '">\n' +
+        '<rect width="100%" height="100%" fill="#08101f"/>\n' +
+        '<path d="' + lastPath + '" fill="none" stroke="' + c + '" stroke-width="' + lw + '" stroke-linejoin="round"/>\n' +
+        '</svg>\n';
+    }
+
+    dlBtn.addEventListener("click", function () {
+      var blob = new Blob([buildSVG()], { type: "image/svg+xml" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url; a.download = "spirograph.svg"; document.body.appendChild(a); a.click();
+      document.body.removeChild(a); setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    });
+
+    modeEl.addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-m]"); if (!b) return;
+      type = b.getAttribute("data-m");
+      Array.prototype.forEach.call(modeEl.querySelectorAll("button"), function (x) { x.classList.remove("active"); });
+      b.classList.add("active");
+      render();
+    });
+
+    function renderPresets() {
+      presetsEl.innerHTML = "";
+      PRESETS.forEach(function (p) {
+        var b = document.createElement("button");
+        b.type = "button"; b.textContent = p.name;
+        b.addEventListener("click", function () {
+          type = p.type;
+          Array.prototype.forEach.call(modeEl.querySelectorAll("button"), function (x) { x.classList.remove("active"); });
+          modeEl.querySelector('button[data-m="' + p.type + '"]').classList.add("active");
+          REl.value = p.R; rEl.value = p.r; dEl.value = p.d;
+          render();
+        });
+        presetsEl.appendChild(b);
+      });
+    }
+
+    [REl, rEl, dEl, lwEl, colorEl].forEach(function (el) {
+      el.addEventListener("input", render);
+    });
+    window.addEventListener("resize", render);
+    renderPresets();
+    render();
+  })();
+  </script>
+</body>
+</html>
