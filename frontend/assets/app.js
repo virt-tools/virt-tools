@@ -77,7 +77,7 @@
     try { return localStorage.getItem("vt-view") === "recent" ? "recent" : "all"; }
     catch (e) { return "all"; }
   })();
-  var searchInput = null, emptyNote = null, catalogMount = null;
+  var searchInput = null, emptyNote = null, catalogMount = null, countEl = null;
 
   // Relative "added X ago" label, with the exact ISO timestamp as a tooltip so
   // the precise add time is available on hover without crowding the card.
@@ -169,6 +169,13 @@
       visibleCount += seen;
     }
     if (emptyNote) emptyNote.hidden = visibleCount !== 0;
+    if (countEl) {
+      var total = (window.VIRTUAL_TOOLS || []).length;
+      var q = (searchInput ? searchInput.value : "").trim();
+      countEl.textContent = q
+        ? visibleCount + " of " + total + " tools match \"" + q + "\""
+        : total + " tools available";
+    }
   }
 
   function switchView(view) {
@@ -202,6 +209,7 @@
     if (!catalogMount || !window.VIRTUAL_TOOLS) return;
     searchInput = document.getElementById("tool-search");
     emptyNote = document.getElementById("search-empty");
+    countEl = document.getElementById("tool-count");
     renderView();
     wireTabs();
     if (searchInput) searchInput.addEventListener("input", filter);
