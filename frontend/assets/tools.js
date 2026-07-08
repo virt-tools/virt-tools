@@ -1579,6 +1579,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-06T05:00:00Z",
   },
   {
+    slug: "port-reference",
+    name: "Network Port Reference",
+    description: "Look up common TCP and UDP port numbers and the services that use them — well-known ports (20, 21, 22, 25, 53, 80, 443…) plus frequent registered ones like 3306 (MySQL), 5432 (PostgreSQL), 6379 (Redis), 27017 (MongoDB), and 25565 (Minecraft). Each entry shows the port, transport protocol, service name, and a short description. Filter by port, name, or protocol; click a row to copy. Everything runs locally in your browser.",
+    category: "Networking",
+    icon: "🚪",
+    added: "2026-07-09T01:00:00Z",
+  },
+  {
     slug: "recipe-scaler",
     name: "Recipe Scaler",
     description: "Resize a recipe for a different number of servings. Paste your ingredient list, enter the original and desired servings, and each leading quantity is scaled by the ratio — integers, decimals, and fractions (1/2, 1 1/2) all parse. Scaled results render as clean fractions where possible (1 1/2 cups, 3/4 tsp) and lines without a number pass through unchanged (salt to taste). Everything runs locally in your browser.",
