@@ -1011,6 +1011,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-04T15:40:00Z",
   },
   {
+    slug: "inflation-calculator",
+    name: "Inflation Calculator",
+    description: "See how inflation erodes purchasing power over time: future cost, real value in today's money, cumulative inflation, and years to halve (rule of 70). Or work backwards from two prices to find the implied average annual inflation rate. Runs locally.",
+    category: "Finance",
+    icon: "📈",
+    added: "2026-07-08T17:00:00Z",
+  },
+  {
     slug: "effective-rate",
     name: "Effective Annual Rate Calculator",
     description: "Convert between a nominal annual interest rate (APR) and the effective annual rate (EAR, also called APY) for a given compounding frequency. Choose annual, semiannual, quarterly, monthly, biweekly, weekly, daily, continuous, or a custom number of periods per year, then enter the nominal rate to get the EAR or the EAR to back out the nominal rate. The periodic rate is shown too. EAR = (1 + r/n)^n − 1 (or e^r − 1 for continuous compounding); inversion uses the n-th root or the natural log. APR and APY differ because APR is nominal and APY includes compounding. Everything runs locally in your browser.",
