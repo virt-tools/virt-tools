@@ -403,6 +403,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-07T01:00:00Z",
   },
   {
+    slug: "ascii-table",
+    name: "ASCII Table Reference",
+    description: "Browse the full 128-character ASCII set: decimal, hex, octal, 7-bit binary, the character itself, its HTML entity, and the control-character name and description. Filter by code, name, or character; toggle control vs. printable characters. Click a row to copy any of its representations. Everything runs locally in your browser.",
+    category: "Data",
+    icon: "🔣",
+    added: "2026-07-08T21:00:00Z",
+  },
+  {
     slug: "dice-roller",
     name: "Dice Roller",
     description: "Roll dice with notation — 4d6kh3, 2d20+5, 3d8dl1. Sums individual dice and a 10k-roll distribution. Runs locally.",
