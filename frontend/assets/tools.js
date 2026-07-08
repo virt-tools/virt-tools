@@ -1427,6 +1427,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-08T06:00:00Z",
   },
   {
+    slug: "sudoku-solver",
+    name: "Sudoku Solver",
+    description: "Enter a 9×9 Sudoku and solve it with backtracking plus a minimum-remaining-values heuristic; reports whether the puzzle is invalid, unsolvable, or has multiple solutions.",
+    category: "Math",
+    icon: "🔢",
+    added: "2026-07-08T08:00:00Z",
+  },
+  {
     slug: "semver-toolkit",
     name: "SemVer Toolkit",
     description: "Parse, compare, range-check, sort, and bump Semantic Versioning 2.0.0 strings. Parse a version into its major, minor, patch, pre-release and build parts; compare two versions with full pre-release precedence (numeric identifiers numerically, alphanumeric lexically, a pre-release ranking below its release); check a version against an npm-style range (^, ~, >, >=, <, <=, =, x-ranges, and || unions) with the standard pre-release inclusion rule; sort a list of versions ascending or descending; and bump major, minor, patch, or pre-release levels. Everything runs locally in your browser.",
