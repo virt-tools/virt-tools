@@ -1546,4 +1546,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔌",
     added: "2026-07-06T05:00:00Z",
   },
+  {
+    slug: "recipe-scaler",
+    name: "Recipe Scaler",
+    description: "Resize a recipe for a different number of servings. Paste your ingredient list, enter the original and desired servings, and each leading quantity is scaled by the ratio — integers, decimals, and fractions (1/2, 1 1/2) all parse. Scaled results render as clean fractions where possible (1 1/2 cups, 3/4 tsp) and lines without a number pass through unchanged (salt to taste). Everything runs locally in your browser.",
+    category: "Food",
+    icon: "🍳",
+    added: "2026-07-08T19:00:00Z",
+  },
 ];
