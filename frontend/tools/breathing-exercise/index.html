@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Paced Breathing Tool — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .stage { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:340px; margin:8px 0; }
+    .ring-wrap { width:220px; height:220px; display:flex; align-items:center; justify-content:center; position:relative; }
+    .ring { width:80px; height:80px; border-radius:50%; background:radial-gradient(circle at 35% 30%, #8fb8ff, #4a7fe8); box-shadow:0 0 30px rgba(110,168,254,.45); transition:none; }
+    .phase-label { margin-top:22px; font-size:26px; font-weight:600; letter-spacing:1px; min-height:1.2em; color:var(--accent,#6ea8fe); }
+    .count { margin-top:4px; font-size:14px; opacity:.8; min-height:1.2em; }
+    .ctrl { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; margin:10px 0; }
+    label.f { font-size:13px; opacity:.85; display:block; margin-bottom:4px; }
+    .presets { display:flex; gap:8px; flex-wrap:wrap; margin:8px 0; }
+    .presets button { border:1px solid var(--border,#2a2f3a); background:transparent; color:inherit; border-radius:6px; padding:6px 12px; cursor:pointer; font-size:13px; }
+    .presets button.active { background:var(--accent,#6ea8fe); color:#08101f; border-color:transparent; }
+    .row-btn { display:flex; gap:8px; flex-wrap:wrap; margin:12px 0; }
+    button.do { border:1px solid var(--border,#2a2f3a); background:transparent; color:inherit; border-radius:6px; padding:8px 16px; cursor:pointer; font-size:14px; }
+    button.do.primary { background:var(--accent,#6ea8fe); color:#08101f; border-color:transparent; }
+    label.check { font-size:13px; opacity:.9; display:inline-flex; gap:6px; align-items:center; cursor:pointer; margin:6px 0; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Paced Breathing Tool</h1>
+      <p>Slow your breathing with a visual guide. The circle expands as you inhale, holds, contracts as you exhale — follow it at a steady pace. Pick a preset (Box, 4-7-8, Relax, Calm) or set your own phase lengths, then breathe along. Optional audio cues mark each phase change. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="presets" id="presets">
+        <button type="button" data-p="4,4,4,4" class="active">Box 4-4-4-4</button>
+        <button type="button" data-p="4,7,8,0">4-7-8</button>
+        <button type="button" data-p="4,2,6,0">Relax 4-2-6</button>
+        <button type="button" data-p="3,3,3,0">Calm 3-3-3</button>
+      </div>
+      <div class="ctrl">
+        <div><label class="f" for="i">Inhale (s)</label><input type="number" id="i" min="0" max="20" step="1" value="4"></div>
+        <div><label class="f" for="h1">Hold in (s)</label><input type="number" id="h1" min="0" max="20" step="1" value="4"></div>
+        <div><label class="f" for="e">Exhale (s)</label><input type="number" id="e" min="0" max="20" step="1" value="4"></div>
+        <div><label class="f" for="h2">Hold out (s)</label><input type="number" id="h2" min="0" max="20" step="1" value="4"></div>
+      </div>
+      <label class="check"><input type="checkbox" id="audio"> Audio cue on each phase change</label>
+      <div class="row-btn">
+        <button type="button" class="do primary" id="start">Start</button>
+        <button type="button" class="do" id="stop" disabled>Stop</button>
+      </div>
+
+      <div class="stage">
+        <div class="ring-wrap"><div class="ring" id="ring"></div></div>
+        <div class="phase-label" id="phase">Ready</div>
+        <div class="count" id="count">Press Start to begin</div>
+      </div>
+
+      <p class="note">The guide cycles through inhale → hold in → exhale → hold out at the durations you set (a zero-length phase is skipped). The circle's size is interpolated smoothly across the cycle, so it grows, holds, and shrinks in time with each phase. Common patterns: <strong>Box</strong> (4-4-4-4) for focus, <strong>4-7-8</strong> for falling asleep, <strong>Relax</strong> (4-2-6) to unwind. Optional audio uses a short Web Audio beep. Runs locally — no data leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var ring = document.getElementById("ring");
+    var phaseEl = document.getElementById("phase");
+    var countEl = document.getElementById("count");
+    var startBtn = document.getElementById("start");
+    var stopBtn = document.getElementById("stop");
+    var presetsEl = document.getElementById("presets");
+    var audioChk = document.getElementById("audio");
+    var iEl = document.getElementById("i"), h1El = document.getElementById("h1"), eEl = document.getElementById("e"), h2El = document.getElementById("h2");
+
+    var PHASE_LABEL = { inhale: "Inhale", holdIn: "Hold", exhale: "Exhale", holdOut: "Hold" };
+
+    function readSpec() { return [num(iEl), num(h1El), num(eEl), num(h2El)]; }
+    function num(el) { var v = parseInt(el.value, 10); return isNaN(v) || v < 0 ? 0 : Math.min(20, v); }
+
+    function buildCycle(spec) {
+      var names = ["inhale", "holdIn", "exhale", "holdOut"];
+      var phases = [];
+      for (var k = 0; k < 4; k++) if (spec[k] > 0) phases.push({ name: names[k], dur: spec[k] });
+      if (phases.length === 0) phases.push({ name: "inhale", dur: 4 });
+      var total = 0; phases.forEach(function (p) { total += p.dur; });
+      return { phases: phases, total: total };
+    }
+    function scaleForPhase(n) { return n === "inhale" || n === "holdIn" ? 1 : 0; }
+    function stateAt(cycle, t) {
+      if (t < 0) t = 0;
+      var total = cycle.total;
+      var cycleIdx = Math.floor(t / total);
+      var within = t - cycleIdx * total;
+      var acc = 0;
+      for (var i = 0; i < cycle.phases.length; i++) {
+        var p = cycle.phases[i];
+        if (within < acc + p.dur) {
+          return { cycle: cycleIdx, phaseIdx: i, phaseName: p.name, phaseElapsed: within - acc, phaseDur: p.dur, progress: (within - acc) / p.dur, scaleTarget: scaleForPhase(p.name) };
+        }
+        acc += p.dur;
+      }
+      var last = cycle.phases[cycle.phases.length - 1];
+      return { cycle: cycleIdx, phaseIdx: cycle.phases.length - 1, phaseName: last.name, phaseElapsed: last.dur, phaseDur: last.dur, progress: 1, scaleTarget: scaleForPhase(last.name) };
+    }
+    function scaleValueAt(cycle, t) {
+      var st = stateAt(cycle, t), p = st.phaseName, prog = st.progress;
+      if (p === "inhale") return prog;
+      if (p === "holdIn") return 1;
+      if (p === "exhale") return 1 - prog;
+      return 0;
+    }
+
+    var raf = null, startTime = 0, running = false, cycle = null, lastPhaseIdx = -1, actx = null;
+    var MIN = 80, MAX = 200;
+
+    function beep() {
+      try {
+        if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+        var o = actx.createOscillator(), g = actx.createGain();
+        o.frequency.value = 660; o.type = "sine";
+        g.gain.value = 0.0001;
+        o.connect(g); g.connect(actx.destination);
+        var now = actx.currentTime;
+        g.gain.setValueAtTime(0.0001, now);
+        g.gain.exponentialRampToValueAtTime(0.18, now + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+        o.start(now); o.stop(now + 0.24);
+      } catch (e) { /* audio unavailable */ }
+    }
+
+    function renderSize(scale) {
+      var sz = MIN + (MAX - MIN) * scale;
+      ring.style.width = sz + "px";
+      ring.style.height = sz + "px";
+    }
+
+    function tick(now) {
+      if (!running) return;
+      var t = (now - startTime) / 1000;
+      var st = stateAt(cycle, t);
+      renderSize(scaleValueAt(cycle, t));
+      var remaining = Math.ceil(st.phaseDur - st.phaseElapsed);
+      phaseEl.textContent = PHASE_LABEL[st.phaseName];
+      countEl.textContent = "Cycle " + (st.cycle + 1) + " · " + remaining + "s";
+      if (st.phaseIdx !== lastPhaseIdx) {
+        lastPhaseIdx = st.phaseIdx;
+        if (audioChk.checked) beep();
+      }
+      raf = requestAnimationFrame(tick);
+    }
+
+    function start() {
+      cycle = buildCycle(readSpec());
+      running = true;
+      startTime = performance.now();
+      lastPhaseIdx = -1;
+      startBtn.disabled = true; stopBtn.disabled = false;
+      raf = requestAnimationFrame(tick);
+    }
+    function stop() {
+      running = false;
+      if (raf) cancelAnimationFrame(raf);
+      raf = null;
+      startBtn.disabled = false; stopBtn.disabled = true;
+      phaseEl.textContent = "Ready";
+      countEl.textContent = "Press Start to begin";
+      renderSize(0);
+    }
+
+    startBtn.addEventListener("click", start);
+    stopBtn.addEventListener("click", stop);
+
+    presetsEl.addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-p]"); if (!b) return;
+      var parts = b.getAttribute("data-p").split(",").map(Number);
+      iEl.value = parts[0]; h1El.value = parts[1]; eEl.value = parts[2]; h2El.value = parts[3];
+      Array.prototype.forEach.call(presetsEl.querySelectorAll("button"), function (x) { x.classList.remove("active"); });
+      b.classList.add("active");
+      if (running) { stop(); start(); }
+    });
+    [iEl, h1El, eEl, h2El].forEach(function (el) {
+      el.addEventListener("change", function () {
+        Array.prototype.forEach.call(presetsEl.querySelectorAll("button"), function (x) { x.classList.remove("active"); });
+        if (running) { stop(); start(); }
+      });
+    });
+
+    renderSize(0);
+  })();
+  </script>
+</body>
+</html>

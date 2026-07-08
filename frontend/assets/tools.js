@@ -1251,6 +1251,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-08T00:00:00Z",
   },
   {
+    slug: "breathing-exercise",
+    name: "Paced Breathing Tool",
+    description: "A visual breathing guide — the circle expands, holds, and contracts in time with inhale, hold, and exhale phases. Presets for Box, 4-7-8, Relax, and Calm, or set your own durations. Optional audio cues.",
+    category: "Health",
+    icon: "🫁",
+    added: "2026-07-08T09:00:00Z",
+  },
+  {
     slug: "quadratic-solver",
     name: "Quadratic Equation Solver",
     description: "Solve a quadratic equation ax² + bx + c = 0. Enter the three coefficients and get the discriminant, the roots (two distinct real, one repeated real, or a complex-conjugate pair), the vertex and axis of symmetry of the parabola, and the factored form when the roots are real. A built-in check evaluates the polynomial at each root so you can confirm the result, and the linear case (a = 0) is handled too. Everything runs locally in your browser.",
