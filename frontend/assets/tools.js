@@ -1531,6 +1531,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-08T08:00:00Z",
   },
   {
+    slug: "concrete-calculator",
+    name: "Concrete Calculator",
+    description: "Estimate concrete for a slab or a row of post footings. Enter dimensions in feet and inches (or metres and millimetres) to get the volume in cubic feet, cubic yards, and cubic metres, plus the number of 40, 60, or 80 lb pre-mixed bags to buy — rounded up with a waste factor. Slab volume is length × width × thickness; round footings use π r² × depth. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🏗️",
+    added: "2026-07-08T22:00:00Z",
+  },
+  {
     slug: "semver-toolkit",
     name: "SemVer Toolkit",
     description: "Parse, compare, range-check, sort, and bump Semantic Versioning 2.0.0 strings. Parse a version into its major, minor, patch, pre-release and build parts; compare two versions with full pre-release precedence (numeric identifiers numerically, alphanumeric lexically, a pre-release ranking below its release); check a version against an npm-style range (^, ~, >, >=, <, <=, =, x-ranges, and || unions) with the standard pre-release inclusion rule; sort a list of versions ascending or descending; and bump major, minor, patch, or pre-release levels. Everything runs locally in your browser.",
