@@ -1587,6 +1587,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-09T04:00:00Z",
   },
   {
+    slug: "decibel-calculator",
+    name: "Decibel Calculator",
+    description: "Convert between ratios and decibels, switch power levels between dBm / dBW / watts, and combine independent sources. Enter a ratio to get its dB (power uses 10·log, voltage/amplitude uses 20·log) and the inverse, convert dBm to mW/µW/W or a wattage to dBm, add a list of dB gains/losses, or find how many dB N equal sources add (10·log N). Pairs with the Ohm's Law and tone tools for audio, RF, and electronics. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🔊",
+    added: "2026-07-09T05:00:00Z",
+  },
+  {
     slug: "semver-toolkit",
     name: "SemVer Toolkit",
     description: "Parse, compare, range-check, sort, and bump Semantic Versioning 2.0.0 strings. Parse a version into its major, minor, patch, pre-release and build parts; compare two versions with full pre-release precedence (numeric identifiers numerically, alphanumeric lexically, a pre-release ranking below its release); check a version against an npm-style range (^, ~, >, >=, <, <=, =, x-ranges, and || unions) with the standard pre-release inclusion rule; sort a list of versions ascending or descending; and bump major, minor, patch, or pre-release levels. Everything runs locally in your browser.",
