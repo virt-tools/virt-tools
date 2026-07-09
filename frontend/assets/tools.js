@@ -691,6 +691,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:00:00Z",
   },
   {
+    slug: "mock-data-generator",
+    name: "Mock Data Generator",
+    description: "Generate realistic fake records (names, emails, addresses, companies, dates, UUIDs, Luhn-valid cards) from a custom schema with an optional seed for reproducible output. Export JSON, NDJSON, CSV, or SQL. Runs locally — nothing uploaded.",
+    category: "Text",
+    icon: "🗂️",
+    added: "2026-07-09T19:55:00Z",
+  },
+  {
     slug: "hmac-generator",
     name: "HMAC Generator",
     description: "Compute an HMAC signature (SHA-1 / SHA-256 / SHA-384 / SHA-512) from a message and secret via the Web Crypto API — hex or Base64, in your browser.",
