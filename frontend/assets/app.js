@@ -102,7 +102,10 @@
     ).toLowerCase());
     card.appendChild(el("div", { class: "tool-card-icon" }, [t.icon || "🛠️"]));
     card.appendChild(el("div", { class: "tool-card-name" }, [t.name]));
-    card.appendChild(el("div", { class: "tool-card-desc" }, [t.description]));
+    // Description is intentionally not rendered on the card — kept in the
+    // data-search attribute and the registry so search and SEO still work, but
+    // the homepage lists just icon + name (+ "added X ago" in the recent view)
+    // for less clutter and quicker navigation.
     if (t.added) {
       var added = el("div", { class: "tool-card-added", title: t.added }, ["Added " + formatAdded(t.added)]);
       card.appendChild(added);
