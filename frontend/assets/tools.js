@@ -1579,6 +1579,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-09T03:00:00Z",
   },
   {
+    slug: "voltage-divider",
+    name: "Voltage Divider Calculator",
+    description: "Compute the output voltage, current, and power for a resistive voltage divider — purely in your browser.",
+    category: "Math",
+    icon: "⚡",
+    added: "2026-07-09T15:00:00Z",
+  },
+  {
     slug: "resistor-color-code",
     name: "Resistor Color Code",
     description: "Decode a through-hole resistor's color bands into its resistance and tolerance, or encode an ohm value back into 4- or 5-band colors. Pick band colors (or type a value like 4.7k or 0.47) to read the result; standard colors cover digits 0–9, gold and silver multipliers (×0.1 / ×0.01) for sub-ohm values, and tolerances from 0.1% to 20%. Pairs with the Ohm's Law calculator for basic electronics. Everything runs locally in your browser.",
