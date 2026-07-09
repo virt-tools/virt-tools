@@ -114,6 +114,40 @@
             <label class="check"><input type="checkbox" id="monogram" checked> Show monogram badge</label>
           </div>
 
+          <div class="field">
+            <label>Output</label>
+            <div class="seg" id="outMode">
+              <button type="button" data-v="single" class="active">Single card</button>
+              <button type="button" data-v="sheet">Print sheet</button>
+            </div>
+          </div>
+
+          <div id="sheetCfg" style="display:none">
+            <div class="field">
+              <label>Sheet template</label>
+              <select id="sheet">
+                <option value="us-10">US Letter · 2×5 · 3.5×2in — Avery 5371/8371/8871</option>
+                <option value="a4-10">A4 · 2×5 · 85×55mm — Avery L7413/C32011</option>
+                <option value="custom">Custom grid</option>
+              </select>
+            </div>
+            <div class="cols-2" id="customGrid" style="display:none">
+              <div class="field"><label>Columns</label><input type="number" id="cols" value="2" min="1" max="10"></div>
+              <div class="field"><label>Rows</label><input type="number" id="rows" value="5" min="1" max="10"></div>
+            </div>
+            <div class="field" id="pageField" style="display:none">
+              <label>Page size</label>
+              <select id="page">
+                <option value="letter">US Letter (8.5×11in)</option>
+                <option value="a4">A4 (210×297mm)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Gap between cards (mm)</label>
+              <input type="number" id="gap" value="0" min="0" max="20" step="0.5">
+            </div>
+          </div>
+
           <div class="row">
             <button id="download">Download PNG (300 DPI)</button>
           </div>
@@ -126,7 +160,7 @@
         </div>
       </div>
 
-      <p class="note">Renders to an offscreen 300 DPI canvas, then scaled down for the on-screen preview — so what you see is exactly what downloads. Standard bleed/margins aren't applied; leave ~3&nbsp;mm safe padding around your text when printing. No network requests are made.</p>
+      <p class="note">Renders to an offscreen 300 DPI canvas, then scaled down for the on-screen preview — so what you see is exactly what downloads. For print-sheet mode, the cards are centered on a Letter/A4 page at common blank-sheet layouts (Avery 5371/8371/8871, L7413/C32011); registration varies by printer and stock, so <strong>test-print one sheet</strong> and adjust the gap as needed before a full run. Standard bleed/margins aren't applied; leave ~3&nbsp;mm safe padding around your text. No network requests are made.</p>
     </div>
   </main>
 
@@ -146,12 +180,41 @@
       serif: 'Georgia, "Times New Roman", serif',
       mono:  '"Courier New", ui-monospace, monospace'
     };
+    var PAGES = {
+      letter: { w: 215.9, h: 279.4, name: "US Letter" },
+      a4:     { w: 210,   h: 297,   name: "A4" }
+    };
+    // Common blank business-card sheets. Cell layout centered on the page.
+    // Always test-print one sheet before a full run — registration varies by printer/stock.
+    var SHEETS = {
+      "us-10": { page: "letter", cols: 2, rows: 5, cardW: 89, cardH: 51, name: "US Letter · 2×5 · 89×51mm (Avery 5371/8371/8871)" },
+      "a4-10": { page: "a4",     cols: 2, rows: 5, cardW: 85, cardH: 55, name: "A4 · 2×5 · 85×55mm (Avery L7413/C32011)" }
+    };
 
-    var ids = ["name","title","company","phone","email","website","tagline","address","size","font","cBg","cText","cAccent","monogram"];
+    var ids = ["name","title","company","phone","email","website","tagline","address","size","font","cBg","cText","cAccent","monogram","sheet","cols","rows","page","gap"];
     var E = {};
     ids.forEach(function (id) { E[id] = document.getElementById(id); });
     var preview = document.getElementById("preview");
     var dims = document.getElementById("dims");
+    var mode = "single";
+    var outModeBtns = document.getElementById("outMode");
+    var sheetCfg = document.getElementById("sheetCfg");
+    var customGrid = document.getElementById("customGrid");
+    var pageField = document.getElementById("pageField");
+
+    outModeBtns.addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-v]"); if (!b) return;
+      mode = b.getAttribute("data-v");
+      Array.prototype.forEach.call(outModeBtns.querySelectorAll("button"), function (x) { x.classList.toggle("active", x === b); });
+      sheetCfg.style.display = mode === "sheet" ? "block" : "none";
+      render();
+    });
+    E.sheet.addEventListener("change", function () {
+      var custom = E.sheet.value === "custom";
+      customGrid.style.display = custom ? "grid" : "none";
+      pageField.style.display = custom ? "block" : "none";
+      render();
+    });
     var layoutBtns = document.getElementById("layout");
     var layout = "left";
     layoutBtns.addEventListener("click", function (e) {
@@ -295,20 +358,64 @@
       return o;
     }
 
-    function render() {
-      var s = SIZES[E.size.value];
-      var wPx = Math.round(mm(s.w)), hPx = Math.round(mm(s.h));
-      exp.width = wPx; exp.height = hPx;
-      draw(ectx, wPx, hPx, read());
+    function sheetConfig() {
+      var key = E.sheet.value;
+      var gap = parseFloat(E.gap.value) || 0;
+      if (key === "custom") {
+        var s = SIZES[E.size.value];
+        return { page: E.page.value, cols: parseInt(E.cols.value,10) || 1, rows: parseInt(E.rows.value,10) || 1, cardW: s.w, cardH: s.h, gap: gap, name: "Custom " + (parseInt(E.cols.value,10)||1) + "×" + (parseInt(E.rows.value,10)||1) + " · " + s.name };
+      }
+      var sh = SHEETS[key];
+      return { page: sh.page, cols: sh.cols, rows: sh.rows, cardW: sh.cardW, cardH: sh.cardH, gap: gap, name: sh.name };
+    }
 
-      // Preview: scale to fit ~420px wide, keep aspect.
-      var maxW = 420;
-      var pw = Math.min(maxW, wPx), ph = Math.round(hPx * pw / wPx);
-      if (wPx < hPx) { ph = Math.min(maxW, hPx); pw = Math.round(wPx * ph / hPx); } // portrait fit by height
+    function drawSheet(ctx, cfg, vals) {
+      var page = PAGES[cfg.page];
+      var pW = Math.round(mm(page.w)), pH = Math.round(mm(page.h));
+      var cellW = Math.round(mm(cfg.cardW)), cellH = Math.round(mm(cfg.cardH));
+      var gap = mm(cfg.gap);
+      ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, pW, pH);
+      var gridW = cfg.cols * cellW + (cfg.cols - 1) * gap;
+      var gridH = cfg.rows * cellH + (cfg.rows - 1) * gap;
+      var mx = (pW - gridW) / 2, my = (pH - gridH) / 2;
+      for (var r = 0; r < cfg.rows; r++) {
+        for (var c = 0; c < cfg.cols; c++) {
+          var x = Math.round(mx + c * (cellW + gap)), y = Math.round(my + r * (cellH + gap));
+          ctx.save();
+          ctx.beginPath(); ctx.rect(x, y, cellW, cellH); ctx.clip();
+          ctx.translate(x, y);
+          draw(ctx, cellW, cellH, vals);
+          ctx.restore();
+        }
+      }
+      return { pW: pW, pH: pH };
+    }
+
+    function render() {
+      var vals = read();
+      var maxW = 420, wPx, hPx, label;
+      if (mode === "sheet") {
+        var cfg = sheetConfig();
+        var page = PAGES[cfg.page];
+        wPx = Math.round(mm(page.w)); hPx = Math.round(mm(page.h));
+        exp.width = wPx; exp.height = hPx;
+        var info = drawSheet(ectx, cfg, vals);
+        label = cfg.name + " · " + info.pW + " × " + info.pH + " px @ " + DPI + " DPI";
+      } else {
+        var s = SIZES[E.size.value];
+        wPx = Math.round(mm(s.w)); hPx = Math.round(mm(s.h));
+        exp.width = wPx; exp.height = hPx;
+        draw(ectx, wPx, hPx, vals);
+        label = s.name + " · " + wPx + " × " + hPx + " px @ " + DPI + " DPI";
+      }
+      // Preview: scale to fit maxW wide (or by height for portrait pages), keep aspect.
+      var pw, ph;
+      if (wPx >= hPx) { pw = Math.min(maxW, wPx); ph = Math.round(hPx * pw / wPx); }
+      else { ph = Math.min(maxW, hPx); pw = Math.round(wPx * ph / hPx); }
       preview.width = pw; preview.height = ph;
       pctx.clearRect(0, 0, pw, ph);
       pctx.drawImage(exp, 0, 0, pw, ph);
-      dims.textContent = s.name + " · " + wPx + " × " + hPx + " px @ " + DPI + " DPI";
+      dims.textContent = label;
     }
 
     ids.forEach(function (id) {
@@ -317,10 +424,10 @@
     });
 
     document.getElementById("download").addEventListener("click", function () {
-      // Re-render at export res (already current) and download.
+      render(); // ensure export canvas is current
       var a = document.createElement("a");
       a.href = exp.toDataURL("image/png");
-      a.download = "business-card.png";
+      a.download = mode === "sheet" ? "business-card-sheet.png" : "business-card.png";
       document.body.appendChild(a); a.click(); a.remove();
     });
 
