@@ -1659,6 +1659,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-08T19:00:00Z",
   },
   {
+    slug: "abv-calculator",
+    name: "ABV / Brewing Calculator",
+    description: "Estimate a beer's alcohol from its original and final gravity. Enter original gravity (OG) and final gravity (FG) as specific gravity readings (e.g. 1.050 and 1.010) to get alcohol by volume two ways — the simple (OG − FG) × 131.25 estimate and the more accurate Hall formula — plus alcohol by weight, apparent attenuation, the original and final extract in degrees Plato, the real extract, and an estimated calorie count per 12 oz serving. Convert specific gravity to °Plato and back for refractometer work. Pairs with the Recipe Scaler for recipe planning. Everything runs locally in your browser.",
+    category: "Food",
+    icon: "🍺",
+    added: "2026-07-09T09:00:00Z",
+  },
+  {
     slug: "carbon-footprint",
     name: "Carbon Footprint Calculator",
     description: "Estimate your annual CO₂e emissions from electricity, driving, flying, and diet using standard published emission factors (US eGrid 0.385 kg/kWh, gasoline 8.89 kg/gal, diesel 10.16 kg/gal, aviation 0.15 kg/km, plus diet averages). Enter monthly kWh, weekly miles and mpg, yearly flight kilometres, and a diet profile to get your total in tonnes CO₂e/year with a per-source breakdown, a bar comparing you to the US and global averages, and equivalents like the number of mature trees needed to offset a year. Everything runs locally in your browser.",
