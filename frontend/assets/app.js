@@ -32,6 +32,11 @@
     var nav = el("nav", {}, [
       el("a", { href: ROOT }, ["Tools"]),
       el("a", { href: ROOT + "feedback/" }, ["Feedback"]),
+      el("a", {
+        href: "https://github.com/virt-tools/virt-tools",
+        target: "_blank",
+        rel: "noopener noreferrer"
+      }, ["GitHub"]),
     ]);
     var themeBtn = el("button", {
       class: "theme-toggle",
