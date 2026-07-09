@@ -1667,6 +1667,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-04T12:28:00Z",
   },
   {
+    slug: "business-card-designer",
+    name: "Business Card Designer",
+    description: "Design a printable business card — fill in your details, pick colors, font and a layout, and export a high-resolution 300 DPI PNG. Renders locally; nothing is uploaded.",
+    category: "Design",
+    icon: "💳",
+    added: "2026-07-09T19:10:00Z",
+  },
+  {
     slug: "vcard-generator",
     name: "vCard Generator",
     description: "Build a vCard (electronic business card) from contact fields — name, organization and title, phone numbers, emails, URL, address, and note — and download it as a .vcf file or scan an optional QR code to import it on a phone. Produces a vCard 3.0 file with CRLF line endings, 75-octet line folding, and the required escaping of commas, semicolons, backslashes, and newlines. Everything runs locally in your browser — your contact details never leave the page.",
