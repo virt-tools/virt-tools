@@ -1611,6 +1611,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-09T07:00:00Z",
   },
   {
+    slug: "capacitor-code",
+    name: "Capacitor Code Decoder",
+    description: "Read a ceramic capacitor's 3-digit code as a capacitance, or turn a value back into the code. The code's first two digits are significant figures and the third is a power-of-ten multiplier in picofarads — so 104 is 100 nF (0.1 µF), 472 is 4.7 nF, 223 is 22 nF. Sub-10 pF values use R as a decimal point (4R7 = 4.7 pF, R47 = 0.47 pF). Decode any code to pF / nF / µF, encode a value in pF, nF, or µF back to the printed marking, and look up the tolerance letter (F=1%, G=2%, J=5%, K=10%, M=20%, Z=−20/+80%). Pairs with the Resistor Color Code tool for through-hole kit work. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🔌",
+    added: "2026-07-09T08:00:00Z",
+  },
+  {
     slug: "semver-toolkit",
     name: "SemVer Toolkit",
     description: "Parse, compare, range-check, sort, and bump Semantic Versioning 2.0.0 strings. Parse a version into its major, minor, patch, pre-release and build parts; compare two versions with full pre-release precedence (numeric identifiers numerically, alphanumeric lexically, a pre-release ranking below its release); check a version against an npm-style range (^, ~, >, >=, <, <=, =, x-ranges, and || unions) with the standard pre-release inclusion rule; sort a list of versions ascending or descending; and bump major, minor, patch, or pre-release levels. Everything runs locally in your browser.",
