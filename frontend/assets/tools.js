@@ -1595,6 +1595,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-09T05:00:00Z",
   },
   {
+    slug: "wavelength-calculator",
+    name: "Wavelength / Frequency Calculator",
+    description: "Convert between an electromagnetic wave's frequency and its wavelength using λ = c / f (c = 299,792,458 m/s). Enter a frequency in Hz, kHz, MHz, or GHz to get the wavelength in metres, centimetres, millimetres, feet, and inches, plus the quarter-wave and half-wave lengths for antenna work; or enter a wavelength to get the frequency. The frequency is also classified into its ITU band (VLF, LF, MF, HF, VHF, UHF, SHF, EHF…) with common examples like FM radio, WiFi, and ISM bands. Pairs with the Decibel and Ohm's Law tools for RF and electronics. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "📡",
+    added: "2026-07-09T06:00:00Z",
+  },
+  {
     slug: "semver-toolkit",
     name: "SemVer Toolkit",
     description: "Parse, compare, range-check, sort, and bump Semantic Versioning 2.0.0 strings. Parse a version into its major, minor, patch, pre-release and build parts; compare two versions with full pre-release precedence (numeric identifiers numerically, alphanumeric lexically, a pre-release ranking below its release); check a version against an npm-style range (^, ~, >, >=, <, <=, =, x-ranges, and || unions) with the standard pre-release inclusion rule; sort a list of versions ascending or descending; and bump major, minor, patch, or pre-release levels. Everything runs locally in your browser.",
