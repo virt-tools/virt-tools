@@ -1706,4 +1706,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🗺️",
     added: "2026-07-09T12:00:00Z",
   },
+  {
+    slug: "json-to-ts",
+    name: "JSON to TypeScript",
+    description: "Automatically generate TypeScript interfaces from a JSON object — processed locally, nothing uploaded.",
+    category: "Encoding",
+    icon: "🟦",
+    added: "2026-07-09T14:00:00Z",
+  },
 ];
