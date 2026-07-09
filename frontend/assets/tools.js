@@ -1698,4 +1698,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌍",
     added: "2026-07-09T02:30:00Z",
   },
+  {
+    slug: "sitemap-generator",
+    name: "Sitemap Generator",
+    description: "Generate a standards-compliant sitemap.xml file for your website entirely in your browser.",
+    category: "Text",
+    icon: "🗺️",
+    added: "2026-07-09T12:00:00Z",
+  },
 ];
