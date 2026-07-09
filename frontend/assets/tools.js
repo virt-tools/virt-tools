@@ -27,6 +27,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T03:27:17Z",
   },
   {
+    slug: "qr-decoder",
+    name: "QR Code Decoder",
+    description: "Read the text or URL hidden inside a QR code image — upload, drop, or paste a screenshot. Decodes locally, nothing uploaded.",
+    category: "Encoding",
+    icon: "📷",
+    added: "2026-07-09T18:30:00Z",
+  },
+  {
     slug: "color-converter",
     name: "Color Converter",
     description: "Convert colors between HEX, RGB and HSL with a live preview.",

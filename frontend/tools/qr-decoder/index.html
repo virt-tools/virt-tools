@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>QR Code Decoder — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .drop { border:2px dashed var(--border,#2a2f3a); border-radius:12px; padding:28px; text-align:center; cursor:pointer; margin:12px 0; }
+    .drop:hover { border-color:var(--accent,#6ea8fe); }
+    #previewWrap { text-align:center; margin:12px 0; }
+    #preview { max-width:100%; height:auto; display:inline-block; border:1px solid var(--border,#2a2f3a); border-radius:8px; image-rendering:pixelated; }
+    .result { font-family:ui-monospace,monospace; font-size:14px; line-height:1.6; }
+    .result textarea { width:100%; min-height:90px; box-sizing:border-box; font-family:inherit; font-size:14px; resize:vertical; }
+    .result code { background:var(--bg,#14181f); border:1px solid var(--border,#2a2f3a); border-radius:5px; padding:2px 8px; }
+    .status { margin:10px 0; font-size:14px; }
+    .status.ok { color:var(--accent,#6ea8fe); }
+    .status.err { color:#e06c75; }
+    .row-btn { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0; }
+    button.do { border:1px solid var(--border,#2a2f3a); background:transparent; color:inherit; border-radius:6px; padding:8px 14px; cursor:pointer; font-size:13px; }
+    label.check { font-size:13px; opacity:.9; display:inline-flex; gap:6px; align-items:center; cursor:pointer; margin:8px 0; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>QR Code Decoder</h1>
+      <p>Load an image containing a QR code and read the text or URL encoded inside it. Also works from pasted screenshots. Decoding runs entirely in your browser — the image is never uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="drop" id="drop">
+        <strong>Click to choose an image</strong><br>
+        <span style="opacity:.7;font-size:13px">or drop one here, or paste (Ctrl/⌘+V) a screenshot. PNG, JPG, GIF, WebP. Stays on your device.</span>
+        <input type="file" id="file" accept="image/*" style="display:none">
+      </div>
+
+      <div id="previewWrap" style="display:none">
+        <canvas id="preview"></canvas>
+      </div>
+
+      <div class="row-btn">
+        <button type="button" class="do" id="decodeBtn" disabled>Decode again</button>
+        <button type="button" class="do" id="newImage" disabled>Choose another image</button>
+      </div>
+
+      <label class="check"><input type="checkbox" id="invertChk"> Try inverted (dark background) QR codes</label>
+
+      <div class="status" id="status">No image loaded yet.</div>
+
+      <div class="result" id="result" style="display:none">
+        <div class="row"><span style="width:54px">Result</span> <textarea id="out" readonly></textarea></div>
+        <div class="row" style="margin-top:6px; gap:8px">
+          <button type="button" class="do" id="copyBtn">Copy text</button>
+          <a id="openLink" href="#" target="_blank" rel="noopener noreferrer" style="display:none">Open as link ↗</a>
+        </div>
+      </div>
+
+      <p class="note">Library: vendored <code>jsqr.min.js</code> — the image is drawn to a canvas and read with <code>getImageData</code>; no network requests are made. Decoding is attempted on the full-resolution image with both normal and (optionally) inverted luminance.</p>
+    </div>
+  </main>
+
+  <script src="/vendor/jsqr.min.js"></script>
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var drop = document.getElementById("drop");
+    var file = document.getElementById("file");
+    var cv = document.getElementById("preview");
+    var previewWrap = document.getElementById("previewWrap");
+    var decodeBtn = document.getElementById("decodeBtn");
+    var newImage = document.getElementById("newImage");
+    var invertChk = document.getElementById("invertChk");
+    var status = document.getElementById("status");
+    var result = document.getElementById("result");
+    var out = document.getElementById("out");
+    var copyBtn = document.getElementById("copyBtn");
+    var openLink = document.getElementById("openLink");
+    var ctx = cv.getContext("2d", { willReadFrequently: true });
+    var lastImage = null;
+
+    function setStatus(msg, kind) {
+      status.textContent = msg;
+      status.className = "status" + (kind ? " " + kind : "");
+    }
+
+    function isUrl(s) {
+      return /^(https?:\/\/|ftp:\/\/|mailto:|tel:|wifi:|geo:|smsto:|begin-vcard)/i.test(s);
+    }
+
+    function decode() {
+      if (!lastImage) return;
+      // Draw at natural size (capped for performance) and read pixels.
+      var maxDim = 2000, w = lastImage.naturalWidth, h = lastImage.naturalHeight;
+      if (w <= 0 || h <= 0) { setStatus("Could not read image dimensions.", "err"); return; }
+      if (w > maxDim || h > maxDim) {
+        var s = maxDim / Math.max(w, h);
+        w = Math.round(w * s); h = Math.round(h * s);
+      }
+      cv.width = w; cv.height = h;
+      ctx.drawImage(lastImage, 0, 0, w, h);
+      previewWrap.style.display = "block";
+      var imageData = ctx.getImageData(0, 0, w, h);
+      var inv = invertChk.checked ? "attemptBoth" : "dontInvert";
+      var code = null;
+      try {
+        code = jsQR(imageData.data, w, h, { inversionAttempts: inv });
+      } catch (e) {
+        setStatus("Error while decoding: " + e.message, "err");
+        return;
+      }
+      if (code && code.data) {
+        out.value = code.data;
+        result.style.display = "block";
+        setStatus("QR code decoded (" + w + "×" + h + " px).", "ok");
+        if (isUrl(code.data) || /^https?:\/\//i.test(code.data)) {
+          var href = code.data;
+          if (/^[^:]+:/.test(href) && !/^https?:/i.test(href)) {
+            // keep mailto/tel/etc as-is
+          }
+          openLink.href = href;
+          openLink.style.display = "inline-block";
+        } else {
+          openLink.style.display = "none";
+        }
+      } else {
+        result.style.display = "none";
+        setStatus("No QR code found in this image. Try the inverted option, or use a clearer/cropped image.", "err");
+      }
+    }
+
+    function loadFile(f) {
+      if (!f) return;
+      if (!f.type.startsWith("image/") && !/\.(png|jpe?g|gif|webp|bmp)$/i.test(f.name)) {
+        setStatus("Please choose an image file.", "err");
+        return;
+      }
+      var reader = new FileReader();
+      reader.onload = function () {
+        var img = new Image();
+        img.onload = function () {
+          lastImage = img;
+          decodeBtn.disabled = false;
+          newImage.disabled = false;
+          drop.style.display = "none";
+          decode();
+        };
+        img.onerror = function () { setStatus("Could not load that image.", "err"); };
+        img.src = reader.result;
+      };
+      reader.onerror = function () { setStatus("Could not read that file.", "err"); };
+      reader.readAsDataURL(f);
+    }
+
+    file.addEventListener("change", function () { loadFile(file.files[0]); });
+    drop.addEventListener("click", function () { file.click(); });
+    drop.addEventListener("dragover", function (e) { e.preventDefault(); drop.style.borderColor = "var(--accent,#6ea8fe)"; });
+    drop.addEventListener("dragleave", function () { drop.style.borderColor = ""; });
+    drop.addEventListener("drop", function (e) {
+      e.preventDefault();
+      drop.style.borderColor = "";
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+    });
+
+    // Paste a screenshot straight from the clipboard.
+    document.addEventListener("paste", function (e) {
+      var items = e.clipboardData && e.clipboardData.items;
+      if (!items) return;
+      for (var i = 0; i < items.length; i++) {
+        if (items[i].type && items[i].type.startsWith("image/")) {
+          loadFile(items[i].getAsFile());
+          break;
+        }
+      }
+    });
+
+    decodeBtn.addEventListener("click", decode);
+    newImage.addEventListener("click", function () {
+      lastImage = null;
+      previewWrap.style.display = "none";
+      result.style.display = "none";
+      decodeBtn.disabled = true;
+      newImage.disabled = true;
+      drop.style.display = "block";
+      file.value = "";
+      setStatus("No image loaded yet.");
+    });
+    invertChk.addEventListener("change", function () { if (lastImage) decode(); });
+    copyBtn.addEventListener("click", function () {
+      if (!out.value) return;
+      out.select();
+      try { document.execCommand("copy"); } catch (e) {}
+    });
+  })();
+  </script>
+</body>
+</html>
