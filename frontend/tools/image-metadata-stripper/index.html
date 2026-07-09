@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Image Metadata Stripper — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .drop { border:2px dashed var(--border,#2a2f3a); border-radius:12px; padding:28px; text-align:center; cursor:pointer; margin:12px 0; }
+    .drop:hover { border-color:var(--accent,#6ea8fe); }
+    #previewWrap { text-align:center; margin:12px 0; }
+    #preview { max-width:100%; height:auto; max-height:280px; border:1px solid var(--border,#2a2f3a); border-radius:8px; }
+    .info { font-family:ui-monospace,monospace; font-size:13px; line-height:1.7; }
+    .info .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .info code { background:var(--bg,#14181f); border:1px solid var(--border,#2a2f3a); border-radius:5px; padding:2px 8px; }
+    .markers { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0; }
+    .markers .tag { background:rgba(248,113,113,.16); color:var(--bad,#f87171); border:1px solid var(--border,#2a2f3a); border-radius:5px; padding:2px 8px; font-size:12px; }
+    .markers .ok { background:rgba(74,222,128,.16); color:var(--ok,#4ade80); }
+    .status { margin:10px 0; font-size:14px; }
+    .status.ok { color:var(--ok,#4ade80); }
+    .status.err { color:var(--bad,#f87171); }
+    .row-btn { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0; align-items:center; }
+    button.do { border:1px solid var(--border,#2a2f3a); background:transparent; color:inherit; border-radius:6px; padding:8px 14px; cursor:pointer; font-size:13px; }
+    label.check { font-size:13px; opacity:.9; display:inline-flex; gap:6px; align-items:center; cursor:pointer; margin:8px 0; }
+    input[type="range"] { width:160px; vertical-align:middle; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Image Metadata Stripper</h1>
+      <p>Remove EXIF, GPS, XMP, IPTC and other embedded metadata from an image by re-encoding it — so location data, camera info, and timestamps don't leak when you share a photo. The image is decoded and re-drawn to a canvas entirely in your browser; nothing is uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="drop" id="drop">
+        <strong>Click to choose an image</strong><br>
+        <span style="opacity:.7;font-size:13px">or drop one here, or paste (Ctrl/⌘+V) a screenshot. JPEG, PNG, WebP, GIF, BMP. Stays on your device.</span>
+        <input type="file" id="file" accept="image/*" style="display:none">
+      </div>
+
+      <div id="previewWrap" style="display:none">
+        <img id="preview">
+      </div>
+
+      <div class="info" id="info" style="display:none">
+        <div class="row"><span style="width:96px">Original</span> <code id="iName">—</code></div>
+        <div class="row"><span style="width:96px">Format</span> <code id="iType">—</code></div>
+        <div class="row"><span style="width:96px">Dimensions</span> <code id="iDims">—</code></div>
+        <div class="row"><span style="width:96px">File size</span> <code id="iSize">—</code></div>
+        <div class="row" style="margin-top:8px; align-items:flex-start;"><span style="width:96px">Metadata</span>
+          <div>
+            <div class="markers" id="markers"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="opts" style="display:none">
+        <div class="row-btn">
+          <label>Output format
+            <select id="fmt">
+              <option value="image/jpeg" selected>JPEG</option>
+              <option value="image/png">PNG</option>
+              <option value="image/webp">WebP</option>
+            </select>
+          </label>
+          <label id="qWrap">Quality
+            <input type="range" id="quality" min="0.6" max="1" step="0.05" value="0.92">
+            <code id="qVal" style="font-size:12px">92%</code>
+          </label>
+        </div>
+        <div class="row-btn">
+          <button type="button" class="do" id="strip">Strip metadata &amp; download</button>
+          <button type="button" class="do" id="newImage">Choose another image</button>
+        </div>
+        <div class="status" id="status"></div>
+      </div>
+
+      <p class="note">The image is decoded and re-drawn to a fresh canvas, then re-encoded — canvas output never carries the original EXIF/GPS/XMP/IPTC/ICC, so the downloaded copy is metadata-free. Re-encoding to JPEG/WebP is lossy; PNG is lossless (and larger). Animated GIF/WebP collapse to a single frame; color profiles are not preserved. No network requests are made.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var drop = document.getElementById("drop");
+    var fileEl = document.getElementById("file");
+    var preview = document.getElementById("preview");
+    var previewWrap = document.getElementById("previewWrap");
+    var info = document.getElementById("info");
+    var opts = document.getElementById("opts");
+    var status = document.getElementById("status");
+    var iName = document.getElementById("iName");
+    var iType = document.getElementById("iType");
+    var iDims = document.getElementById("iDims");
+    var iSize = document.getElementById("iSize");
+    var markersEl = document.getElementById("markers");
+    var fmt = document.getElementById("fmt");
+    var quality = document.getElementById("quality");
+    var qVal = document.getElementById("qVal");
+    var qWrap = document.getElementById("qWrap");
+    var stripBtn = document.getElementById("strip");
+    var newImage = document.getElementById("newImage");
+
+    var currentFile = null;
+    var currentImg = null; // HTMLImageElement
+    var foundMarkers = [];
+
+    function fmtBytes(n) {
+      if (n < 1024) return n + " B";
+      if (n < 1048576) return (n / 1024).toFixed(1) + " KB";
+      return (n / 1048576).toFixed(2) + " MB";
+    }
+    function setStatus(msg, kind) { status.textContent = msg; status.className = "status" + (kind ? " " + kind : ""); }
+
+    // Scan raw bytes for common metadata signatures.
+    function detectMarkers(buf) {
+      var bytes = new Uint8Array(buf);
+      var found = [];
+      function has(needle) {
+        // simple substring search over bytes
+        for (var i = 0; i + needle.length <= bytes.length; i++) {
+          var ok = true;
+          for (var j = 0; j < needle.length; j++) { if (bytes[i + j] !== needle[j]) { ok = false; break; } }
+          if (ok) return true;
+        }
+        return false;
+      }
+      function ascii(s) { var a = []; for (var k = 0; k < s.length; k++) a.push(s.charCodeAt(k)); return a; }
+      var sigs = [
+        ["EXIF", ascii("Exif")],
+        ["GPS", ascii("GPSInfo")],
+        ["XMP", ascii("http://ns.adobe.com/xap/1.0/")],
+        ["IPTC", ascii("Adobe")],
+        ["ICC profile", ascii("ICC_PROFILE")],
+        ["Photoshop", ascii("Photoshop")],
+        ["PNG text", ascii("tEXt")]
+      ];
+      for (var i = 0; i < sigs.length; i++) if (has(sigs[i][1])) found.push(sigs[i][0]);
+      return found;
+    }
+
+    function loadFile(f) {
+      if (!f) return;
+      if (!f.type.startsWith("image/") && !/\.(png|jpe?g|webp|gif|bmp)$/i.test(f.name)) {
+        setStatus("Please choose an image file.", "err"); return;
+      }
+      currentFile = f;
+      var reader = new FileReader();
+      reader.onload = function () {
+        foundMarkers = detectMarkers(reader.result);
+        var img = new Image();
+        img.onload = function () {
+          currentImg = img;
+          preview.src = img.src;
+          previewWrap.style.display = "block";
+          info.style.display = "block";
+          opts.style.display = "block";
+          iName.textContent = f.name;
+          iType.textContent = f.type || "image/*";
+          iDims.textContent = img.naturalWidth + " × " + img.naturalHeight;
+          iSize.textContent = fmtBytes(f.size);
+          markersEl.innerHTML = "";
+          if (foundMarkers.length) {
+            foundMarkers.forEach(function (m) {
+              var t = document.createElement("span"); t.className = "tag"; t.textContent = m; markersEl.appendChild(t);
+            });
+          } else {
+            var t = document.createElement("span"); t.className = "tag ok"; t.textContent = "none detected"; markersEl.appendChild(t);
+          }
+          setStatus("");
+          drop.style.display = "none";
+        };
+        img.onerror = function () { setStatus("Could not decode that image.", "err"); };
+        img.src = URL.createObjectURL(new Blob([reader.result]));
+      };
+      reader.readAsArrayBuffer(f);
+    }
+
+    function strip() {
+      if (!currentImg) return;
+      try {
+        var c = document.createElement("canvas");
+        c.width = currentImg.naturalWidth; c.height = currentImg.naturalHeight;
+        var ctx = c.getContext("2d");
+        ctx.drawImage(currentImg, 0, 0);
+        var type = fmt.value;
+        var q = (type === "image/jpeg" || type === "image/webp") ? parseFloat(quality.value) : undefined;
+        c.toBlob(function (blob) {
+          if (!blob) { setStatus("Could not re-encode the image.", "err"); return; }
+          var url = URL.createObjectURL(blob);
+          var a = document.createElement("a");
+          var ext = type === "image/png" ? "png" : type === "image/webp" ? "webp" : "jpg";
+          a.href = url; a.download = "clean." + ext;
+          document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+          var delta = currentFile.size - blob.size;
+          var sign = delta >= 0 ? "smaller" : "larger";
+          setStatus("Stripped. Downloaded clean image (" + fmtBytes(blob.size) + ", " + Math.abs(delta / 1024).toFixed(1) + " KB " + sign + " than the " + fmtBytes(currentFile.size) + " original).", "ok");
+        }, type, q);
+      } catch (e) {
+        setStatus("Error: " + e.message, "err");
+      }
+    }
+
+    fileEl.addEventListener("change", function () { loadFile(fileEl.files[0]); });
+    drop.addEventListener("click", function () { fileEl.click(); });
+    drop.addEventListener("dragover", function (e) { e.preventDefault(); drop.style.borderColor = "var(--accent,#6ea8fe)"; });
+    drop.addEventListener("dragleave", function () { drop.style.borderColor = ""; });
+    drop.addEventListener("drop", function (e) {
+      e.preventDefault(); drop.style.borderColor = "";
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+    });
+    document.addEventListener("paste", function (e) {
+      var items = e.clipboardData && e.clipboardData.items; if (!items) return;
+      for (var i = 0; i < items.length; i++) if (items[i].type && items[i].type.startsWith("image/")) { loadFile(items[i].getAsFile()); break; }
+    });
+
+    stripBtn.addEventListener("click", strip);
+    newImage.addEventListener("click", function () {
+      currentFile = null; currentImg = null;
+      previewWrap.style.display = "none"; info.style.display = "none"; opts.style.display = "none";
+      drop.style.display = "block"; fileEl.value = ""; setStatus("");
+    });
+    fmt.addEventListener("change", function () {
+      var lossy = fmt.value === "image/jpeg" || fmt.value === "image/webp";
+      qWrap.style.opacity = lossy ? "1" : ".4";
+      quality.disabled = !lossy;
+    });
+    quality.addEventListener("input", function () { qVal.textContent = Math.round(parseFloat(quality.value) * 100) + "%"; });
+  })();
+  </script>
+</body>
+</html>
