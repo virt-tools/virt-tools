@@ -1635,6 +1635,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-09T11:00:00Z",
   },
   {
+    slug: "led-resistor",
+    name: "LED Resistor Calculator",
+    description: "Pick the right current-limiting resistor for an LED. Enter the supply voltage, the LED's forward voltage (Vf) and forward current (If), and whether the LEDs are wired as one, a series string, or a parallel array, and the tool solves R = (Vsupply − N×Vf) ÷ If to give the exact resistor value, the voltage dropped across it, and the power it must dissipate (so you can pick the right wattage). It also suggests the nearest E12 or E24 standard resistor value. Series strings add forward voltages (one current path); parallel arrays add currents (each LED needs its own resistor in practice — this shows the shared-resistor value and why). Pairs with the Ohm's Law, Resistor Color Code, and AWG tools. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "💡",
+    added: "2026-07-09T12:00:00Z",
+  },
+  {
     slug: "semver-toolkit",
     name: "SemVer Toolkit",
     description: "Parse, compare, range-check, sort, and bump Semantic Versioning 2.0.0 strings. Parse a version into its major, minor, patch, pre-release and build parts; compare two versions with full pre-release precedence (numeric identifiers numerically, alphanumeric lexically, a pre-release ranking below its release); check a version against an npm-style range (^, ~, >, >=, <, <=, =, x-ranges, and || unions) with the standard pre-release inclusion rule; sort a list of versions ascending or descending; and bump major, minor, patch, or pre-release levels. Everything runs locally in your browser.",
