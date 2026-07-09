@@ -1619,6 +1619,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-09T08:00:00Z",
   },
   {
+    slug: "roof-pitch-calculator",
+    name: "Roof Pitch Calculator",
+    description: "Convert a roof pitch between its three common forms and find the rafter length and roof-area factor. Enter a rise-over-run ratio (e.g. 6/12 — 6 inches of rise per foot of run), an angle in degrees, or a percentage slope, and the tool shows all three, the rafter length per foot of horizontal run (sqrt(run² + rise²)), and the roof-area multiplier (sec of the angle, sqrt(1 + ratio²)) for turning a building footprint into the actual roof surface area. A simple gable-roof area estimate multiplies footprint × multiplier. Pairs with the Concrete, Paint, and Tile calculators for the rest of a build. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🏠",
+    added: "2026-07-09T10:00:00Z",
+  },
+  {
     slug: "semver-toolkit",
     name: "SemVer Toolkit",
     description: "Parse, compare, range-check, sort, and bump Semantic Versioning 2.0.0 strings. Parse a version into its major, minor, patch, pre-release and build parts; compare two versions with full pre-release precedence (numeric identifiers numerically, alphanumeric lexically, a pre-release ranking below its release); check a version against an npm-style range (^, ~, >, >=, <, <=, =, x-ranges, and || unions) with the standard pre-release inclusion rule; sort a list of versions ascending or descending; and bump major, minor, patch, or pre-release levels. Everything runs locally in your browser.",
