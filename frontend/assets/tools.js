@@ -1627,6 +1627,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-09T10:00:00Z",
   },
   {
+    slug: "awg-wire-gauge",
+    name: "AWG Wire Gauge Calculator",
+    description: "Look up an American Wire Gauge size's physical dimensions and copper resistance, or find the AWG number for a given diameter. Enter an AWG number (1–40, or 0, 00, 000, 0000 written as 1/0 through 4/0) to get the conductor diameter in inches and millimetres, the cross-section area in mm² and circular mils, and the copper resistance per kilometre and per 1000 feet at 20 °C — using the standard formula d = 0.005 in × 92^((36−n)/39). Or enter a bare wire diameter in mm to find the nearest AWG. Pairs with the Ohm's Law, Resistor Color Code, and Capacitor Code tools for electronics and wiring work. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🔌",
+    added: "2026-07-09T11:00:00Z",
+  },
+  {
     slug: "semver-toolkit",
     name: "SemVer Toolkit",
     description: "Parse, compare, range-check, sort, and bump Semantic Versioning 2.0.0 strings. Parse a version into its major, minor, patch, pre-release and build parts; compare two versions with full pre-release precedence (numeric identifiers numerically, alphanumeric lexically, a pre-release ranking below its release); check a version against an npm-style range (^, ~, >, >=, <, <=, =, x-ranges, and || unions) with the standard pre-release inclusion rule; sort a list of versions ascending or descending; and bump major, minor, patch, or pre-release levels. Everything runs locally in your browser.",

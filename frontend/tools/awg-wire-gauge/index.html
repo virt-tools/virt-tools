@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>AWG Wire Gauge Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .seg { display:flex; gap:6px; flex-wrap:wrap; margin:6px 0 14px; }
+    .seg button { background:var(--bg-elev-2,#1e222b); color:var(--text-dim,#9aa3b2); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:8px 14px; cursor:pointer; font-size:14px; }
+    .seg button.active { background:var(--accent,#6ea8fe); color:#08101f; border-color:transparent; font-weight:600; }
+    .grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; margin:10px 0; }
+    label.f { font-size:13px; opacity:.85; display:block; margin-bottom:4px; }
+    .field { background:var(--bg,#14181f); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:10px; }
+    .field input { width:100%; background:transparent; color:var(--text,#e6e6e6); border:none; font-size:18px; font-family:ui-monospace,monospace; padding:2px 0; outline:none; }
+    .field .unit { font-size:12px; color:var(--text-dim,#9aa3b2); margin-top:6px; }
+    .out { background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:10px; padding:16px; margin:12px 0; }
+    .out .big { font-size:1.7rem; font-weight:800; font-family:ui-monospace,monospace; text-align:center; padding:4px 0 8px; }
+    .out .row { display:flex; justify-content:space-between; align-items:baseline; padding:6px 0; border-bottom:1px solid var(--border,#2a2f3a); font-size:14px; }
+    .out .row:last-child { border-bottom:none; }
+    .out .row .k { color:var(--text-dim,#9aa3b2); }
+    .out .row .v { font-family:ui-monospace,monospace; font-weight:700; color:var(--accent,#6ea8fe); }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    .note b { color:var(--accent,#6ea8fe); }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    h3.sec { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-dim,#9aa3b2); margin:14px 0 6px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>AWG Wire Gauge Calculator</h1>
+      <p>Look up an American Wire Gauge size's diameter, cross-section, and copper resistance — or find the nearest AWG for a given wire diameter. Runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="seg" id="modeSeg">
+        <button type="button" data-m="decode" class="active">AWG number → dimensions</button>
+        <button type="button" data-m="encode">Diameter → AWG</button>
+      </div>
+
+      <div id="pane-decode" class="pane">
+        <div class="grid2">
+          <div class="field">
+            <label class="f">AWG number</label>
+            <input type="text" id="in-awg" placeholder="e.g. 10, 20, 0, 4/0" autocomplete="off">
+            <div class="unit">1–40, or 0 / 00 / 000 / 0000 (1/0 to 4/0)</div>
+          </div>
+        </div>
+        <div class="err" id="d-err"></div>
+        <div class="out" id="d-out"><span style="color:var(--text-dim,#9aa3b2)">Enter an AWG number.</span></div>
+      </div>
+
+      <div id="pane-encode" class="pane" style="display:none">
+        <div class="grid2">
+          <div class="field">
+            <label class="f">Bare wire diameter</label>
+            <input type="text" id="in-dmm" inputmode="decimal" placeholder="e.g. 0.812">
+            <div class="unit">millimetres (mm)</div>
+          </div>
+        </div>
+        <div class="err" id="e-err"></div>
+        <div class="out" id="e-out"><span style="color:var(--text-dim,#9aa3b2)">Enter a diameter in mm.</span></div>
+      </div>
+
+      <p class="note">The American Wire Gauge system sizes solid round wire by the formula <code>d = 0.005 in × 92^((36−n)/39)</code>, where <code>n</code> is the gauge number — bigger numbers mean thinner wire (40 AWG is hair-fine; 4/0 is thick cable). Every 3-gauge step roughly halves the cross-section and doubles the resistance. The resistance values use copper's resistivity at 20 °C (<code>1.724 × 10⁻⁸ Ω·m</code>): <code>R/km ≈ 17.24 ÷ area_mm²</code> and <code>R/1000ft ≈ 5.25 ÷ area_mm²</code>. Ampacity depends on insulation rating, bundling, and ambient temperature and is not shown here. Runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    function awgN(input) {
+      var s = String(input).trim().toUpperCase();
+      var slash = s.match(/^([1-4])\/0$/);
+      if (slash) return 1 - parseInt(slash[1], 10); // 4/0->-3 .. 1/0->0
+      var zeros = s.match(/^(0+)$/);
+      if (zeros) return 1 - zeros[1].length;        // 0->0, 00->-1, 000->-2, 0000->-3
+      var n = parseInt(s, 10);
+      if (!isNaN(n) && s === String(n)) return n;
+      return null;
+    }
+    function awgLabel(n) {
+      if (n < 0) return Math.abs(n) + "/0"; // -3 -> 4/0? abs(-3)=3 -> "3/0"? no, -3 = 4/0
+      // -3 -> 4/0, -2 -> 3/0, -1 -> 2/0, 0 -> 1/0 ... but 0 also means "0 AWG". Convention: 0 is "1/0"? Actually 1/0 = n 0, plain 0 = n 0 too. Ambiguous.
+      return String(n);
+    }
+    function diameterIn(n) { return 0.005 * Math.pow(92, (36 - n) / 39); }
+    function diameterMm(n) { return diameterIn(n) * 25.4; }
+    function areaMils(n) { var d = diameterIn(n) * 1000; return d * d; }
+    function areaMm2(n) { var d = diameterMm(n); return Math.PI / 4 * d * d; }
+    function rPerKm(n) { return 17.24 / areaMm2(n); }
+    function rPerKft(n) { return 5.2547 / areaMm2(n); }
+    function encodeAwg(dMm) { if (!(dMm > 0)) return null; var dIn = dMm / 25.4; var n = 36 - 39 * Math.log(dIn / 0.005) / Math.log(92); var nr = Math.round(n); if (nr < -3 || nr > 40) return null; return nr; }
+    function fmtN(n) {
+      if (n < 0) return (Math.abs(n) + 1) + "/0";   // -3 -> 4/0, -2 -> 3/0, -1 -> 2/0
+      if (n === 0) return "1/0";                    // n=0 is 1/0 in the slash scheme
+      return String(n);
+    }
+    function rnd(x, n) { if (!isFinite(x)) return "—"; var p = Math.pow(10, n); return Math.round(x * p) / p; }
+    function parseNum(s) { if (s == null) return null; s = String(s).trim(); if (!s) return null; var m = s.match(/^([-+0-9.eE]+)/); return m ? parseFloat(m[1]) : null; }
+    function row(k, v) { return '<div class="row"><span class="k">' + k + '</span><span class="v">' + v + '</span></div>'; }
+
+    var mode = "decode";
+    var panes = { decode: document.getElementById("pane-decode"), encode: document.getElementById("pane-encode") };
+    document.querySelectorAll("#modeSeg button").forEach(function (b) {
+      b.addEventListener("click", function () {
+        mode = b.getAttribute("data-m");
+        document.querySelectorAll("#modeSeg button").forEach(function (x) { x.classList.toggle("active", x === b); });
+        Object.keys(panes).forEach(function (k) { panes[k].style.display = (k === mode) ? "" : "none"; });
+      });
+    });
+
+    var inAwg = document.getElementById("in-awg"), dErr = document.getElementById("d-err"), dOut = document.getElementById("d-out");
+    function computeDecode() {
+      dErr.textContent = "";
+      var raw = inAwg.value;
+      if (!raw.trim()) { dOut.innerHTML = '<span style="color:var(--text-dim,#9aa3b2)">Enter an AWG number.</span>'; return; }
+      var n = awgN(raw);
+      if (n == null || n < -3 || n > 40) { dErr.textContent = "Enter a gauge from 4/0 (0000) to 40."; dOut.innerHTML = '<span style="color:var(--text-dim,#9aa3b2)">Out of range.</span>'; return; }
+      var html = '<div class="big">' + fmtN(n) + ' AWG</div>';
+      html += row("Diameter", rnd(diameterMm(n), 4) + " mm  (" + rnd(diameterIn(n), 5) + " in)");
+      html += row("Cross-section area", rnd(areaMm2(n), 4) + " mm²");
+      html += row("Area in circular mils", rnd(areaMils(n), 0) + " cmil");
+      html += row("Copper R per km", rnd(rPerKm(n), 4) + " Ω/km");
+      html += row("Copper R per 1000 ft", rnd(rPerKft(n), 4) + " Ω/1000ft");
+      dOut.innerHTML = html;
+    }
+    inAwg.addEventListener("input", computeDecode);
+
+    var inDmm = document.getElementById("in-dmm"), eErr = document.getElementById("e-err"), eOut = document.getElementById("e-out");
+    function computeEncode() {
+      eErr.textContent = "";
+      var d = parseNum(inDmm.value);
+      if (d == null) { eOut.innerHTML = '<span style="color:var(--text-dim,#9aa3b2)">Enter a diameter in mm.</span>'; return; }
+      if (d <= 0) { eErr.textContent = "Enter a positive diameter."; eOut.innerHTML = '<span style="color:var(--text-dim,#9aa3b2)">Enter a positive value.</span>'; return; }
+      var n = encodeAwg(d);
+      if (n == null) { eErr.textContent = "Diameter out of AWG range (4/0 to 40)."; eOut.innerHTML = '<span style="color:var(--text-dim,#9aa3b2)">Out of range.</span>'; return; }
+      var html = '<div class="big">' + fmtN(n) + ' AWG</div>';
+      html += row("Closest AWG", fmtN(n));
+      html += row("Your diameter", rnd(d, 4) + " mm");
+      html += row("AWG nominal diameter", rnd(diameterMm(n), 4) + " mm");
+      html += row("Cross-section area", rnd(areaMm2(n), 4) + " mm²");
+      html += row("Copper R per km", rnd(rPerKm(n), 4) + " Ω/km");
+      eOut.innerHTML = html;
+    }
+    inDmm.addEventListener("input", computeEncode);
+
+    computeDecode(); computeEncode();
+  })();
+  </script>
+</body>
+</html>
