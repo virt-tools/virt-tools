@@ -1571,6 +1571,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-09T03:00:00Z",
   },
   {
+    slug: "resistor-color-code",
+    name: "Resistor Color Code",
+    description: "Decode a through-hole resistor's color bands into its resistance and tolerance, or encode an ohm value back into 4- or 5-band colors. Pick band colors (or type a value like 4.7k or 0.47) to read the result; standard colors cover digits 0–9, gold and silver multipliers (×0.1 / ×0.01) for sub-ohm values, and tolerances from 0.1% to 20%. Pairs with the Ohm's Law calculator for basic electronics. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🌈",
+    added: "2026-07-09T04:00:00Z",
+  },
+  {
     slug: "semver-toolkit",
     name: "SemVer Toolkit",
     description: "Parse, compare, range-check, sort, and bump Semantic Versioning 2.0.0 strings. Parse a version into its major, minor, patch, pre-release and build parts; compare two versions with full pre-release precedence (numeric identifiers numerically, alphanumeric lexically, a pre-release ranking below its release); check a version against an npm-style range (^, ~, >, >=, <, <=, =, x-ranges, and || unions) with the standard pre-release inclusion rule; sort a list of versions ascending or descending; and bump major, minor, patch, or pre-release levels. Everything runs locally in your browser.",
