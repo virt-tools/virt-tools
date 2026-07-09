@@ -419,6 +419,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-08T23:00:00Z",
   },
   {
+    slug: "periodic-table",
+    name: "Periodic Table",
+    description: "An interactive periodic table of all 118 elements. Each tile shows the atomic number, symbol, name, and atomic mass (or the longest-lived isotope in brackets for radioactive elements), colour-coded by category — alkali metals, alkaline earths, transition metals, post-transition metals, metalloids, nonmetals, halogens, noble gases, lanthanides, and actinides. Click an element for its period, category, and mass, or search by name, symbol, or number to highlight it. Everything runs locally in your browser.",
+    category: "Data",
+    icon: "⚛️",
+    added: "2026-07-09T02:00:00Z",
+  },
+  {
     slug: "dice-roller",
     name: "Dice Roller",
     description: "Roll dice with notation — 4d6kh3, 2d20+5, 3d8dl1. Sums individual dice and a 10k-roll distribution. Runs locally.",
