@@ -1603,6 +1603,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-09T06:00:00Z",
   },
   {
+    slug: "tile-calculator",
+    name: "Tile Calculator",
+    description: "Work out how many tiles a floor or wall job needs. Enter the project dimensions (length and width in feet or metres) and the tile size (in inches, centimetres, or millimetres) plus an optional grout joint width, and the calculator counts how many full tiles fit along each axis — rounding up the partial tile at every edge — to get the base count. Add a waste percentage for cuts and breakage and you get the number to buy, along with the coverage area in square feet and square metres. Pairs with the Concrete and Paint calculators for the rest of the job. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🧱",
+    added: "2026-07-09T07:00:00Z",
+  },
+  {
     slug: "semver-toolkit",
     name: "SemVer Toolkit",
     description: "Parse, compare, range-check, sort, and bump Semantic Versioning 2.0.0 strings. Parse a version into its major, minor, patch, pre-release and build parts; compare two versions with full pre-release precedence (numeric identifiers numerically, alphanumeric lexically, a pre-release ranking below its release); check a version against an npm-style range (^, ~, >, >=, <, <=, =, x-ranges, and || unions) with the standard pre-release inclusion rule; sort a list of versions ascending or descending; and bump major, minor, patch, or pre-release levels. Everything runs locally in your browser.",
