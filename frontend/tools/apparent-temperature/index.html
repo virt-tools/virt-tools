@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Apparent Temperature — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .seg { display:flex; gap:6px; flex-wrap:wrap; margin:6px 0 14px; }
+    .seg button { background:var(--bg-elev-2,#1e222b); color:var(--text-dim,#9aa3b2); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:8px 14px; cursor:pointer; font-size:14px; }
+    .seg button.active { background:var(--accent,#6ea8fe); color:#08101f; border-color:transparent; font-weight:600; }
+    .unit-toggle { display:flex; gap:6px; margin:0 0 14px auto; }
+    .grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:10px 0; }
+    label.f { font-size:13px; opacity:.85; display:block; margin-bottom:4px; }
+    .field { background:var(--bg,#14181f); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:10px; }
+    .field input { width:100%; background:transparent; color:var(--text,#e6e6e6); border:none; font-size:18px; font-family:ui-monospace,monospace; padding:2px 0; outline:none; }
+    .field .unit { font-size:12px; color:var(--text-dim,#9aa3b2); margin-top:4px; }
+    .out { background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:10px; padding:16px; margin:12px 0; }
+    .out .big { font-size:1.9rem; font-weight:800; font-family:ui-monospace,monospace; }
+    .out .sub { color:var(--text-dim,#9aa3b2); margin-top:4px; font-size:14px; }
+    .out .dual { color:var(--text,#e6e6e6); margin-top:2px; font-family:ui-monospace,monospace; }
+    .badge { display:inline-block; font-size:12px; padding:2px 8px; border-radius:20px; margin-left:8px; vertical-align:middle; }
+    .badge.ok { background:rgba(110,168,254,.15); color:var(--accent,#6ea8fe); }
+    .badge.na { background:rgba(154,163,178,.15); color:var(--text-dim,#9aa3b2); }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    .note b { color:var(--accent,#6ea8fe); }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    .topbar { display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px; }
+    .topbar .unit-toggle { margin:0; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Apparent Temperature</h1>
+      <p>How hot or cold it really feels. Heat index for warm humid air, wind chill for cold windy air, and dew point as a comfort indicator. Runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="topbar">
+        <div class="seg" id="metricSeg">
+          <button type="button" data-m="heat" class="active">Heat index</button>
+          <button type="button" data-m="wind">Wind chill</button>
+          <button type="button" data-m="dew">Dew point</button>
+        </div>
+        <div class="seg" id="unitSeg">
+          <button type="button" data-u="C" class="active">°C</button>
+          <button type="button" data-u="F">°F</button>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="field">
+          <label class="f" id="lbl-temp">Air temperature</label>
+          <input type="text" id="in-temp" inputmode="decimal" placeholder="e.g. 32">
+          <div class="unit" id="u-temp">degrees Celsius (°C)</div>
+        </div>
+        <div class="field" id="field-second">
+          <label class="f" id="lbl-second">Relative humidity</label>
+          <input type="text" id="in-second" inputmode="decimal" placeholder="e.g. 80">
+          <div class="unit" id="u-second">percent relative humidity (%)</div>
+        </div>
+      </div>
+
+      <div class="err" id="err"></div>
+      <div class="out" id="out"><span class="sub">Enter values to see the apparent temperature.</span></div>
+
+      <p class="note" id="note">Heat index uses the <b>Rothfusz regression</b> and applies when air temperature is at least <code>27 °C (80 °F)</code> and humidity is <code>≥ 40%</code>. Below those thresholds there is no meaningful heat index — the air just feels close to the thermometer reading. Runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    function cToF(c) { return c * 9 / 5 + 32; }
+    function fToC(f) { return (f - 32) * 5 / 9; }
+    function rnd(x, n) { if (!isFinite(x)) return NaN; var p = Math.pow(10, n); return Math.round(x * p) / p; }
+
+    function dewPoint(Tc, RH) {
+      if (RH <= 0 || !isFinite(Tc)) return NaN;
+      var a = 17.625, b = 243.04;
+      var g = Math.log(RH / 100) + (a * Tc) / (b + Tc);
+      return (b * g) / (a - g);
+    }
+    function windChill(Tc, Vkmh) {
+      if (Tc > 10 || Vkmh <= 4.8) return null;
+      var v16 = Math.pow(Vkmh, 0.16);
+      return 13.12 + 0.6215 * Tc - 11.37 * v16 + 0.3965 * Tc * v16;
+    }
+    function heatIndex(Tc, RH) {
+      var Tf = cToF(Tc);
+      if (Tf < 80 || RH < 40) return null;
+      var hi = -42.379
+        + 2.04901523 * Tf + 10.14333127 * RH - 0.22475541 * Tf * RH
+        - 0.00683783 * Tf * Tf - 0.05481717 * RH * RH
+        + 0.00122874 * Tf * Tf * RH + 0.00085282 * Tf * RH * RH
+        - 0.00000199 * Tf * Tf * RH * RH;
+      return fToC(hi);
+    }
+
+    var metric = "heat";
+    var unit = "C";
+    var inTemp = document.getElementById("in-temp");
+    var inSecond = document.getElementById("in-second");
+    var lblTemp = document.getElementById("lbl-temp");
+    var lblSecond = document.getElementById("lbl-second");
+    var uTemp = document.getElementById("u-temp");
+    var uSecond = document.getElementById("u-second");
+    var fieldSecond = document.getElementById("field-second");
+    var err = document.getElementById("err");
+    var out = document.getElementById("out");
+    var note = document.getElementById("note");
+
+    var NOTES = {
+      heat: "Heat index uses the <b>Rothfusz regression</b> and applies when air temperature is at least <code>27 °C (80 °F)</code> and humidity is <code>≥ 40%</code>. Below those thresholds there is no meaningful heat index — the air just feels close to the thermometer reading. Runs locally — nothing leaves your browser.",
+      wind: "Wind chill uses the <b>NWS / Environment Canada</b> formula and applies for temperatures <code>≤ 10 °C (50 °F)</code> with wind speed <code>&gt; 4.8 km/h (1.5 m/s, ~3 mph)</code>. At warmer temperatures or calm winds the index is not defined — your body can warm the still air around it. Runs locally — nothing leaves your browser.",
+      dew: "Dew point uses the <b>Magnus formula</b> (Alduchov 1996 constants, a=17.625, b=243.04). It is the temperature at which air would saturate at the current humidity. <code>≤ 12 °C</code> feels dry and comfortable; <code>16–20 °C</code> noticeably humid; <code>≥ 24 °C</code> oppressive. Runs locally — nothing leaves your browser."
+    };
+
+    function applyMetric() {
+      if (metric === "heat") {
+        lblTemp.textContent = "Air temperature";
+        lblSecond.textContent = "Relative humidity";
+        inSecond.setAttribute("placeholder", "e.g. 80");
+        uSecond.textContent = "percent relative humidity (%)";
+        fieldSecond.style.display = "";
+      } else if (metric === "wind") {
+        lblTemp.textContent = "Air temperature";
+        lblSecond.textContent = "Wind speed";
+        inSecond.setAttribute("placeholder", "e.g. 20 km/h");
+        uSecond.textContent = unit === "C" ? "kilometres per hour (km/h)" : "still km/h — wind chill is a Celsius-formula index";
+        fieldSecond.style.display = "";
+      } else {
+        lblTemp.textContent = "Air temperature";
+        lblSecond.textContent = "Relative humidity";
+        inSecond.setAttribute("placeholder", "e.g. 70");
+        uSecond.textContent = "percent relative humidity (%)";
+        fieldSecond.style.display = "";
+      }
+      applyUnit();
+      note.innerHTML = NOTES[metric];
+      compute();
+    }
+    function applyUnit() {
+      uTemp.textContent = unit === "C" ? "degrees Celsius (°C)" : "degrees Fahrenheit (°F)";
+      if (metric === "wind") {
+        uSecond.textContent = unit === "C" ? "kilometres per hour (km/h)" : "wind chill is computed in °C — enter wind in km/h";
+      } else {
+        uSecond.textContent = "percent relative humidity (%)";
+      }
+      // unit hints in placeholders
+      inTemp.setAttribute("placeholder", unit === "C" ? "e.g. 32" : "e.g. 90");
+    }
+
+    function parseNum(s) {
+      if (s == null) return NaN;
+      s = String(s).trim();
+      if (!s) return NaN;
+      var m = s.match(/^([-+0-9.eE]+)\s*([a-z%°/]*)$/i);
+      if (!m) return NaN;
+      return parseFloat(m[1]);
+    }
+
+    function fmtTempC(tc) {
+      if (!isFinite(tc)) return "—";
+      if (unit === "C") return rnd(tc, 1) + " °C";
+      return rnd(cToF(tc), 1) + " °F";
+    }
+    function fmtBoth(tc) {
+      if (!isFinite(tc)) return "—";
+      return rnd(tc, 1) + " °C  ·  " + rnd(cToF(tc), 1) + " °F";
+    }
+
+    function compute() {
+      var rawT = inTemp.value;
+      var rawS = inSecond.value;
+      var tIn = parseNum(rawT); // in current unit
+      var sIn = parseNum(rawS);
+      if (isNaN(tIn)) { err.textContent = "Enter a temperature."; out.innerHTML = '<span class="sub">Enter values to see the apparent temperature.</span>'; return; }
+      // convert temp to C
+      var Tc = unit === "C" ? tIn : fToC(tIn);
+      if (metric === "heat") {
+        if (isNaN(sIn) || sIn < 0 || sIn > 100) { err.textContent = "Enter humidity between 0 and 100%."; out.innerHTML = '<span class="sub">Enter values to see the apparent temperature.</span>'; return; }
+        err.textContent = "";
+        var hi = heatIndex(Tc, sIn);
+        if (hi === null) {
+          var threshold = unit === "C" ? "27 °C / 80 °F" : "80 °F (27 °C)";
+          out.innerHTML = '<div class="big">— not applicable <span class="badge na">n/a</span></div><div class="sub">Heat index only applies at ≥ ' + threshold + ' and humidity ≥ 40%. Air feels close to ' + fmtBoth(Tc) + '.</div>';
+          return;
+        }
+        var zone = hi < 27 ? "Caution" : hi < 32 ? "Extreme caution" : hi < 41 ? "Danger" : "Extreme danger";
+        out.innerHTML = '<div class="big">' + fmtTempC(hi) + ' <span class="badge ok">' + zone + '</span></div><div class="dual">' + fmtBoth(hi) + '</div><div class="sub">Apparent ("feels like") temperature at ' + rnd(Tc,1) + ' °C / ' + rnd(cToF(Tc),0) + ' °F and ' + rnd(sIn,0) + '% humidity.</div>';
+      } else if (metric === "wind") {
+        if (isNaN(sIn) || sIn < 0) { err.textContent = "Enter wind speed in km/h (a non-negative number)."; out.innerHTML = '<span class="sub">Enter values to see the apparent temperature.</span>'; return; }
+        err.textContent = "";
+        var wc = windChill(Tc, sIn);
+        if (wc === null) {
+          out.innerHTML = '<div class="big">— not applicable <span class="badge na">n/a</span></div><div class="sub">Wind chill only applies at ≤ 10 °C (50 °F) with wind &gt; 4.8 km/h. Air feels close to ' + fmtBoth(Tc) + '.</div>';
+          return;
+        }
+        out.innerHTML = '<div class="big">' + fmtTempC(wc) + '</div><div class="dual">' + fmtBoth(wc) + '</div><div class="sub">Apparent ("feels like") temperature at ' + rnd(Tc,1) + ' °C / ' + rnd(cToF(Tc),0) + ' °F with wind ' + rnd(sIn,1) + ' km/h.</div>';
+      } else { // dew
+        if (isNaN(sIn) || sIn <= 0 || sIn > 100) { err.textContent = "Enter relative humidity between 0 and 100%."; out.innerHTML = '<span class="sub">Enter values to see the apparent temperature.</span>'; return; }
+        err.textContent = "";
+        var dp = dewPoint(Tc, sIn);
+        if (!isFinite(dp)) { out.innerHTML = '<span class="sub">Could not compute dew point for those inputs.</span>'; return; }
+        var comfort = dp < 12 ? "Dry, comfortable" : dp < 16 ? "Comfortable" : dp < 20 ? "Noticeably humid" : dp < 24 ? "Humid, sticky" : "Oppressive";
+        out.innerHTML = '<div class="big">' + fmtTempC(dp) + ' <span class="badge ok">' + comfort + '</span></div><div class="dual">' + fmtBoth(dp) + '</div><div class="sub">Dew point at ' + rnd(Tc,1) + ' °C / ' + rnd(cToF(Tc),0) + ' °F and ' + rnd(sIn,0) + '% humidity.</div>';
+      }
+    }
+
+    document.querySelectorAll("#metricSeg button").forEach(function (b) {
+      b.addEventListener("click", function () {
+        metric = b.getAttribute("data-m");
+        document.querySelectorAll("#metricSeg button").forEach(function (x) { x.classList.toggle("active", x === b); });
+        applyMetric();
+      });
+    });
+    document.querySelectorAll("#unitSeg button").forEach(function (b) {
+      b.addEventListener("click", function () {
+        unit = b.getAttribute("data-u");
+        document.querySelectorAll("#unitSeg button").forEach(function (x) { x.classList.toggle("active", x === b); });
+        applyUnit();
+        compute();
+      });
+    });
+    inTemp.addEventListener("input", compute);
+    inSecond.addEventListener("input", compute);
+    applyMetric();
+  })();
+  </script>
+</body>
+</html>

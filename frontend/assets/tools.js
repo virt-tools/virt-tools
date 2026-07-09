@@ -1363,6 +1363,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-08T09:00:00Z",
   },
   {
+    slug: "apparent-temperature",
+    name: "Apparent Temperature",
+    description: "How hot or cold does it actually feel? Combine air temperature with humidity to get the heat index (Rothfusz regression) and dew point (Magnus formula), or pair temperature with wind speed for the NWS wind chill. Each metric shows where it applies — heat index for warm humid air, wind chill for cold windy air, dew point as a comfort indicator — and reports conditions in both °C and °F. Everything runs locally in your browser.",
+    category: "Health",
+    icon: "🌡️",
+    added: "2026-07-09T02:00:00Z",
+  },
+  {
     slug: "quadratic-solver",
     name: "Quadratic Equation Solver",
     description: "Solve a quadratic equation ax² + bx + c = 0. Enter the three coefficients and get the discriminant, the roots (two distinct real, one repeated real, or a complex-conjugate pair), the vertex and axis of symmetry of the parabola, and the factored form when the roots are real. A built-in check evaluates the polynomial at each root so you can confirm the result, and the linear case (a = 0) is handled too. Everything runs locally in your browser.",
