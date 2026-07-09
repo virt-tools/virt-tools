@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Zero-Width Text Steganography — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .seg { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
+    .seg button { padding:8px 14px; font-size:0.9rem; }
+    .seg button.active { background:var(--accent,#6ea8fe); color:#0b0d12; border-color:var(--accent,#6ea8fe); }
+    textarea { width:100%; box-sizing:border-box; font-family:ui-monospace,monospace; }
+    .stats { font-size:0.82rem; color:var(--text-dim); margin:6px 0; }
+    .result { font-size:0.82rem; }
+    .result code { background:var(--bg,#14181f); border:1px solid var(--border,#2a2f3a); border-radius:5px; padding:2px 8px; font-family:ui-monospace,monospace; }
+    .note code { font-family:ui-monospace,monospace; }
+    .zw-preview { font-family:ui-monospace,monospace; font-size:13px; white-space:pre-wrap; word-break:break-all; background:var(--bg,#14181f); border:1px dashed var(--border,#2a2f3a); border-radius:8px; padding:10px; margin-top:8px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Zero-Width Text Steganography</h1>
+      <p>Hide a secret message inside ordinary-looking text using invisible Unicode zero-width characters, then reveal it again. The hidden payload is encoded as zero-width chars and slipped into cover text — it looks like the cover but carries a secret. Everything runs locally in your browser; nothing is uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="seg" id="mode">
+        <button type="button" data-v="hide" class="active">Hide</button>
+        <button type="button" data-v="reveal">Reveal</button>
+      </div>
+
+      <!-- HIDE -->
+      <div id="hideBox">
+        <div class="field">
+          <label for="secret">Secret message</label>
+          <textarea id="secret" rows="3" placeholder="Type the message to hide…">The eagle lands at noon.</textarea>
+        </div>
+        <div class="field">
+          <label for="cover">Cover text (what the output looks like)</label>
+          <textarea id="cover" rows="3" placeholder="Innocuous-looking text to wrap the secret in…">Hey, just checking in — hope your week is going well!</textarea>
+        </div>
+        <div class="row">
+          <button id="encode">Encode</button>
+        </div>
+        <div class="stats" id="hideStats"></div>
+        <div class="field">
+          <label>Output (looks like the cover — copy it whole)</label>
+          <textarea id="encoded" rows="4" readonly placeholder="The encoded text appears here…"></textarea>
+        </div>
+        <div class="row" style="margin-top:6px;">
+          <button id="hideCopy" class="secondary">Copy output</button>
+          <button id="hideClear" class="secondary">Clear</button>
+        </div>
+        <div class="zw-preview" id="zwPreview" style="display:none;"></div>
+      </div>
+
+      <!-- REVEAL -->
+      <div id="revealBox" style="display:none;">
+        <div class="field">
+          <label for="input">Paste text that may contain a hidden message</label>
+          <textarea id="input" rows="5" placeholder="Paste the cover text here…"></textarea>
+        </div>
+        <div class="row">
+          <button id="decode">Reveal</button>
+          <button id="revealPaste" class="secondary">Paste from clipboard</button>
+        </div>
+        <div class="stats" id="revealStats"></div>
+        <div class="field">
+          <label>Hidden message</label>
+          <textarea id="decoded" rows="3" readonly placeholder="Revealed message appears here…"></textarea>
+        </div>
+        <div class="row" style="margin-top:6px;">
+          <button id="revealCopy" class="secondary">Copy message</button>
+        </div>
+      </div>
+
+      <p class="note">Encoding: the secret is converted to UTF-8 bytes → bits, mapped to zero-width space (<code>U+200B</code>=0) and zero-width non-joiner (<code>U+200C</code>=1), wrapped with zero-width joiner (<code>U+200D</code>) delimiters, and inserted after the first character of the cover. <strong>Important:</strong> zero-width characters survive plain-text copy/paste, email, and most editors, but some platforms (certain chat apps, web forms, or sanitizers) strip them — if a recipient can't reveal the message, the channel likely removed the invisible chars. Always send as plain text, not rich/HTML text. No network requests are made.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var ZW0 = String.fromCharCode(0x200B); // zero-width space       -> bit 0
+    var ZW1 = String.fromCharCode(0x200C); // zero-width non-joiner  -> bit 1
+    var MARK = String.fromCharCode(0x200D); // zero-width joiner      -> delimiter
+
+    var modeBtns = document.getElementById("mode");
+    var hideBox = document.getElementById("hideBox");
+    var revealBox = document.getElementById("revealBox");
+    var mode = "hide";
+
+    modeBtns.addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-v]"); if (!b) return;
+      mode = b.getAttribute("data-v");
+      Array.prototype.forEach.call(modeBtns.querySelectorAll("button"), function (x) { x.classList.toggle("active", x === b); });
+      hideBox.style.display = mode === "hide" ? "block" : "none";
+      revealBox.style.display = mode === "reveal" ? "block" : "none";
+    });
+
+    function utf8Bytes(str) {
+      // TextEncoder if available, else manual UTF-8
+      if (typeof TextEncoder !== "undefined") return new TextEncoder().encode(str);
+      var bytes = [];
+      for (var i = 0; i < str.length; i++) {
+        var c = str.charCodeAt(i);
+        if (c < 0x80) bytes.push(c);
+        else if (c < 0x800) { bytes.push(0xC0 | (c >> 6), 0x80 | (c & 0x3F)); }
+        else if (c >= 0xD800 && c <= 0xDBFF) { // surrogate pair
+          var c2 = str.charCodeAt(++i); var cp = 0x10000 + ((c & 0x3FF) << 10) + (c2 & 0x3FF);
+          bytes.push(0xF0 | (cp >> 18), 0x80 | ((cp >> 12) & 0x3F), 0x80 | ((cp >> 6) & 0x3F), 0x80 | (cp & 0x3F));
+        } else { bytes.push(0xE0 | (c >> 12), 0x80 | ((c >> 6) & 0x3F), 0x80 | (c & 0x3F)); }
+      }
+      return bytes;
+    }
+    function bytesToUtf8(bytes) {
+      if (typeof TextDecoder !== "undefined") {
+        try { return new TextDecoder("utf-8", { fatal: true }).decode(new Uint8Array(bytes)); } catch (e) { return null; }
+      }
+      // manual fallback
+      var s = "", i = 0;
+      while (i < bytes.length) {
+        var b = bytes[i++];
+        if (b < 0x80) s += String.fromCharCode(b);
+        else if (b < 0xE0) { s += String.fromCharCode(((b & 0x1F) << 6) | (bytes[i++] & 0x3F)); }
+        else if (b < 0xF0) { s += String.fromCharCode(((b & 0x0F) << 12) | ((bytes[i++] & 0x3F) << 6) | (bytes[i++] & 0x3F)); }
+        else {
+          var cp = ((b & 0x07) << 18) | ((bytes[i++] & 0x3F) << 12) | ((bytes[i++] & 0x3F) << 6) | (bytes[i++] & 0x3F);
+          cp -= 0x10000; s += String.fromCharCode(0xD800 + (cp >> 10), 0xDC00 + (cp & 0x3FF));
+        }
+      }
+      return s;
+    }
+
+    function bitsFromBytes(bytes) {
+      var bits = "";
+      for (var i = 0; i < bytes.length; i++) {
+        var b = bytes[i];
+        for (var j = 7; j >= 0; j--) bits += (b >> j) & 1;
+      }
+      return bits;
+    }
+    function bytesFromBits(bits) {
+      if (bits.length % 8 !== 0) return null;
+      var bytes = [];
+      for (var i = 0; i < bits.length; i += 8) {
+        var b = 0;
+        for (var j = 0; j < 8; j++) b = (b << 1) | (bits[i + j] === "1" ? 1 : 0);
+        bytes.push(b);
+      }
+      return bytes;
+    }
+
+    function encode(secret, cover) {
+      var bytes = utf8Bytes(secret);
+      if (!bytes.length) return { out: cover || "", bits: 0 };
+      var bits = bitsFromBytes(bytes);
+      var block = MARK;
+      for (var i = 0; i < bits.length; i++) block += (bits[i] === "1" ? ZW1 : ZW0);
+      block += MARK;
+      var out;
+      if (cover && cover.length) out = cover.charAt(0) + block + cover.slice(1);
+      else out = block; // invisible-only output
+      return { out: out, bits: bits.length };
+    }
+
+    function decode(text) {
+      if (!text) return { msg: null, bits: 0 };
+      var start = text.indexOf(MARK);
+      if (start < 0) return { msg: null, bits: 0 };
+      var end = text.indexOf(MARK, start + 1);
+      if (end < 0) return { msg: null, bits: 0 };
+      var seq = text.slice(start + 1, end);
+      var bits = "";
+      for (var i = 0; i < seq.length; i++) {
+        var ch = seq.charAt(i);
+        if (ch === ZW0) bits += "0";
+        else if (ch === ZW1) bits += "1";
+        else return { msg: null, bits: 0 }; // unexpected char
+      }
+      var bytes = bytesFromBits(bits);
+      if (!bytes) return { msg: null, bits: bits.length };
+      var msg = bytesToUtf8(bytes);
+      return { msg: msg, bits: bits.length };
+    }
+
+    // HIDE wiring
+    var secretEl = document.getElementById("secret");
+    var coverEl = document.getElementById("cover");
+    var encodedEl = document.getElementById("encoded");
+    var hideStats = document.getElementById("hideStats");
+    var hideCopy = document.getElementById("hideCopy");
+    var hideClear = document.getElementById("hideClear");
+    var zwPreview = document.getElementById("zwPreview");
+
+    function doHide() {
+      var secret = secretEl.value;
+      var cover = coverEl.value;
+      var r = encode(secret, cover);
+      encodedEl.value = r.out;
+      var bytes = utf8Bytes(secret).length;
+      hideStats.textContent = r.bits ? ("Encoded " + bytes + " bytes → " + r.bits + " bits in " + (r.out.length - cover.length) + " invisible chars (cover " + cover.length + " → output " + r.out.length + " chars).") : "No secret — output is just the cover.";
+      if (r.out && r.bits) {
+        zwPreview.style.display = "block";
+        zwPreview.textContent = r.out + "  ← (" + (r.out.length - cover.length) + " zero-width chars hidden here)";
+      } else {
+        zwPreview.style.display = "none";
+      }
+    }
+    document.getElementById("encode").addEventListener("click", doHide);
+    hideCopy.addEventListener("click", function () { if (encodedEl.value) { encodedEl.select(); try { document.execCommand("copy"); } catch (e) {} } });
+    hideClear.addEventListener("click", function () { secretEl.value = ""; encodedEl.value = ""; hideStats.textContent = ""; zwPreview.style.display = "none"; doHide(); });
+
+    // REVEAL wiring
+    var inputEl = document.getElementById("input");
+    var decodedEl = document.getElementById("decoded");
+    var revealStats = document.getElementById("revealStats");
+    document.getElementById("decode").addEventListener("click", function () {
+      var r = decode(inputEl.value);
+      if (r.msg != null) { decodedEl.value = r.msg; revealStats.textContent = "Found " + r.bits + " bits → " + utf8Bytes(r.msg).length + " bytes."; }
+      else { decodedEl.value = ""; revealStats.textContent = r.bits ? ("Found " + r.bits + " bits but couldn't decode (corrupted or stripped).") : "No hidden message found in this text."; }
+    });
+    document.getElementById("revealPaste").addEventListener("click", function () {
+      try { navigator.clipboard.readText().then(function (t) { inputEl.value = t; }).catch(function () {}); } catch (e) {}
+    });
+    document.getElementById("revealCopy").addEventListener("click", function () { if (decodedEl.value) { decodedEl.select(); try { document.execCommand("copy"); } catch (e) {} } });
+
+    // Live cross-check: keep a freshly encoded sample in reveal input for convenience
+    doHide();
+  })();
+  </script>
+</body>
+</html>

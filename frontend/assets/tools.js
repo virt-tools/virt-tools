@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-04T02:20:00Z",
   },
   {
+    slug: "zero-width-steganography",
+    name: "Zero-Width Text Steganography",
+    description: "Hide a secret message inside ordinary-looking text using invisible Unicode zero-width characters, then reveal it again. The payload (UTF-8 → bits → zero-width chars) is slipped into cover text; survives plain-text copy/paste. Runs locally — nothing uploaded.",
+    category: "Text",
+    icon: "👁️",
+    added: "2026-07-09T22:40:00Z",
+  },
+  {
     slug: "binary-text",
     name: "Text & Binary / Hex / Octal Converter",
     description: "Convert text to its raw byte representation as binary, hex, octal or decimal — and decode it back. Handles multibyte UTF-8. Runs entirely in your browser.",
