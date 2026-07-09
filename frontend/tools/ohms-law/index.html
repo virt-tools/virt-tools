@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Ohm's Law Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:10px 0; }
+    label.f { font-size:13px; opacity:.85; display:block; margin-bottom:4px; }
+    .field { background:var(--bg,#14181f); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:10px; }
+    .field input { width:100%; background:transparent; color:var(--text,#e6e6e6); border:none; font-size:18px; font-family:ui-monospace,monospace; padding:2px 0; outline:none; }
+    .field .unit { font-size:12px; color:var(--text-dim,#9aa3b2); margin-top:4px; }
+    .field.computed { background:var(--bg-elev-2,#1e222b); }
+    .field.computed input { color:var(--accent,#6ea8fe); font-weight:700; }
+    .hint { font-size:12px; color:var(--text-dim,#9aa3b2); margin:10px 0; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    .note b { color:var(--accent,#6ea8fe); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Ohm's Law Calculator</h1>
+      <p>Enter any two of voltage, current, resistance, and power; the other two are solved instantly. V = I × R and P = V × I. Runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="hint">Enter any <b>two</b> values. Type the unit with SI prefixes — e.g. <code>5V</code>, <code>20mA</code>, <code>4.7kΩ</code>, <code>2.2MΩ</code>, <code>10mW</code>. The two you fill in are inputs; the rest are computed.</div>
+
+      <div class="grid2">
+        <div class="field" data-key="V">
+          <label class="f">Voltage</label>
+          <input type="text" id="in-V" inputmode="decimal" placeholder="e.g. 12V" data-key="V">
+          <div class="unit">volts (V), e.g. 12V, 3.3V</div>
+        </div>
+        <div class="field" data-key="I">
+          <label class="f">Current</label>
+          <input type="text" id="in-I" inputmode="decimal" placeholder="e.g. 20mA" data-key="I">
+          <div class="unit">amps (A), e.g. 2A, 20mA, 500µA</div>
+        </div>
+        <div class="field" data-key="R">
+          <label class="f">Resistance</label>
+          <input type="text" id="in-R" inputmode="decimal" placeholder="e.g. 4.7kΩ" data-key="R">
+          <div class="unit">ohms (Ω), e.g. 220Ω, 4.7kΩ, 1MΩ</div>
+        </div>
+        <div class="field" data-key="P">
+          <label class="f">Power</label>
+          <input type="text" id="in-P" inputmode="decimal" placeholder="e.g. 100mW" data-key="P">
+          <div class="unit">watts (W), e.g. 0.25W, 100mW</div>
+        </div>
+      </div>
+
+      <div class="err" id="err"></div>
+
+      <p class="note">Enter any <b>two</b> known values and the calculator solves the other two using V = I × R and the power equation P = V × I = I² × R = V² ÷ R. Type a unit with an SI prefix to parse it: <code>m</code> (milli, 10⁻³), <code>k</code> (kilo, 10³), <code>M</code> (mega, 10⁶), and <code>µ</code> (micro, 10⁻⁶) for current. A blank or zero-derived field means the value can't be determined from your two inputs (for example, R is undefined when both V and I are zero). Runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var PREFIX = { "":1, "m":1e-3, "k":1e3, "M":1e6, "µ":1e-6, "u":1e-6 };
+    // parse "12V", "20mA", "4.7k", "1M" -> number (base unit). Suffix unit letters ignored.
+    function parseVal(s, key) {
+      if (s == null) return null;
+      s = String(s).trim();
+      if (!s) return null;
+      var m = s.match(/^([-+0-9.eE]+)\s*([mµkM]?)\s*[A-Za-zΩµ]*$/);
+      if (!m) return NaN;
+      var num = parseFloat(m[1]);
+      var pre = m[2] || "";
+      if (!(pre in PREFIX)) return NaN;
+      return num * PREFIX[pre];
+    }
+    // format base-unit number back with a friendly prefix + unit
+    function fmtVal(x, unit) {
+      if (x === null || x === undefined || !isFinite(x)) return "";
+      var a = Math.abs(x);
+      if (a === 0) return "0" + unit;
+      if (a < 1e-3) return rnd(x * 1e6, 4) + "µ" + unit;
+      if (a < 1) return rnd(x * 1e3, 4) + "m" + unit;
+      if (a < 1e3) return rnd(x, 4) + unit;
+      if (a < 1e6) return rnd(x / 1e3, 4) + "k" + unit;
+      return rnd(x / 1e6, 4) + "M" + unit;
+    }
+    function rnd(x, n) { var p = Math.pow(10, n); return Math.round(x * p) / p; }
+
+    var KEYS = ["V","I","R","P"];
+    var UNIT = { V: "V", I: "A", R: "Ω", P: "W" };
+
+    function solveOhm(g) {
+      var known = {};
+      KEYS.forEach(function (k) { if (typeof g[k] === "number" && isFinite(g[k])) known[k] = g[k]; });
+      if (Object.keys(known).length < 2) return known;
+      var changed = true, guard = 0;
+      while (changed && guard++ < 10) {
+        changed = false;
+        if ("V" in known && "I" in known) { if (!("R" in known) && known.I !== 0) { known.R = known.V / known.I; changed = true; } if (!("P" in known)) { known.P = known.V * known.I; changed = true; } }
+        if ("V" in known && "R" in known) { if (!("I" in known)) { known.I = known.V / known.R; changed = true; } if (!("P" in known)) { known.P = known.V * known.V / known.R; changed = true; } }
+        if ("V" in known && "P" in known) { if (!("I" in known) && known.V !== 0) { known.I = known.P / known.V; changed = true; } if (!("R" in known) && known.P !== 0) { known.R = known.V * known.V / known.P; changed = true; } }
+        if ("I" in known && "R" in known) { if (!("V" in known)) { known.V = known.I * known.R; changed = true; } if (!("P" in known)) { known.P = known.I * known.I * known.R; changed = true; } }
+        if ("I" in known && "P" in known) { if (!("V" in known) && known.I !== 0) { known.V = known.P / known.I; changed = true; } if (!("R" in known) && known.I !== 0) { known.R = known.P / (known.I * known.I); changed = true; } }
+        if ("R" in known && "P" in known) { if (!("I" in known) && known.R > 0) { known.I = Math.sqrt(known.P / known.R); changed = true; } if (!("V" in known) && known.R > 0) { known.V = Math.sqrt(known.P * known.R); changed = true; } }
+      }
+      return known;
+    }
+
+    var inputs = {};
+    KEYS.forEach(function (k) { inputs[k] = document.getElementById("in-" + k); });
+
+    function compute(skipKey) {
+      var g = {}, raw = {};
+      KEYS.forEach(function (k) {
+        var v = parseVal(inputs[k].value, k);
+        if (v !== null && !isNaN(v)) { g[k] = v; raw[k] = true; }
+      });
+      var knownCount = Object.keys(g).length;
+      var solved = solveOhm(g);
+      KEYS.forEach(function (k) {
+        var field = inputs[k].closest(".field");
+        if (raw[k]) {
+          field.classList.remove("computed");
+          // leave user input as-is
+        } else if (k in solved && isFinite(solved[k])) {
+          field.classList.add("computed");
+          inputs[k].value = fmtVal(solved[k], UNIT[k]);
+        } else {
+          field.classList.remove("computed");
+          if (skipKey !== k) inputs[k].value = "";
+        }
+      });
+      var err = document.getElementById("err");
+      if (knownCount < 2) err.textContent = knownCount === 0 ? "Enter any two values." : "Enter one more value to solve.";
+      else err.textContent = "";
+    }
+
+    KEYS.forEach(function (k) {
+      inputs[k].addEventListener("input", function () { compute(k); });
+    });
+    compute();
+  })();
+  </script>
+</body>
+</html>
