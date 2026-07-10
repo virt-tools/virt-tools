@@ -1763,6 +1763,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-10T19:30:00Z",
   },
   {
+    slug: "calculus-toolkit",
+    name: "Calculus Toolkit",
+    description: "Numerical calculus on a function f(x): compute definite integrals with Simpson's, trapezoidal, and midpoint rules; estimate the derivative at a point by a central difference (plus a second-derivative estimate); and find a root of f(x) = 0 by bisection (given a bracketing interval) or Newton's method. Expressions use + − * / ^, parentheses, the variable x, constants pi/e/tau, and common functions (sin, cos, exp, ln, sqrt, …) parsed by a safe recursive-descent parser — no eval. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "📈",
+    added: "2026-07-10T20:10:00Z",
+  },
+  {
     slug: "angle-converter",
     name: "Angle Converter",
     description: "Convert an angle between degrees, radians, gradians (gons), turns (revolutions), arcminutes, arcseconds, and NATO mils, and to or from degrees-minutes-seconds (DMS). Enter a value in any unit or as DMS and every other unit is shown at once. A full circle is 360° = 2π rad = 400 grad = 1 turn = 21,600′ = 1,296,000″ = 6,400 mils; values are kept raw (not wrapped to a single turn). Pairs with the Trigonometry Calculator. Everything runs locally in your browser.",
