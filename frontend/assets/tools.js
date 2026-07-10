@@ -931,6 +931,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-04T01:40:00Z",
   },
   {
+    slug: "hamming-code",
+    name: "Hamming Code (7,4) & SECDED",
+    description: "Encode 4 data bits into a 7-bit Hamming(7,4) codeword with three parity bits, and decode a received word — detecting and correcting any single-bit error via the syndrome. Toggle on an overall parity bit for SECDED (Hamming 8,4), which also detects (but cannot correct) double-bit errors. Shows the parity-bit coverage table, the syndrome calculation, and the corrected codeword step by step. Pairs with the CRC32 & Adler-32 checksum tool. Everything runs locally in your browser.",
+    category: "Security",
+    icon: "🛡️",
+    added: "2026-07-10T23:10:00Z",
+  },
+  {
     slug: "vin-decoder",
     name: "VIN Decoder",
     description: "Decode a 17-character Vehicle Identification Number: validate the format (VINs exclude I, O, and Q), verify the position-9 check digit using the standard letter-transliteration and per-position weight table (sum mod 11, X = 10), and break out the WMI (country/region and a manufacturer guess), VDS, model-year code (with its repeating 30-year cycle of plausible years), assembly-plant code, and serial number. Reference data is built in. Everything runs locally in your browser.",
