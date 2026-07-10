@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Poisson Distribution Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .opts { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin:10px 0; font-size:.9rem; }
+    .opts label { display:inline-flex; gap:6px; align-items:center; }
+    .opts input { width:100px; font-family:ui-monospace,monospace; padding:6px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; }
+    .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; margin:10px 0; }
+    .stats .s { background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:10px 12px; }
+    .stats .s .k { color:var(--text-dim,#9aa3b2); font-size:12px; }
+    .stats .s .v { font-family:ui-monospace,monospace; font-weight:700; color:var(--accent,#6ea8fe); font-size:1.05rem; }
+    .big { background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:10px; padding:12px 14px; margin:10px 0; font-size:14px; }
+    .big .row { display:flex; justify-content:space-between; align-items:baseline; padding:6px 0; border-bottom:1px solid var(--border,#2a2f3a); gap:12px; }
+    .big .row:last-child { border-bottom:none; }
+    .big .k { color:var(--text-dim,#9aa3b2); }
+    .big .v { font-family:ui-monospace,monospace; font-weight:700; color:var(--accent,#6ea8fe); }
+    .tbl { width:100%; border-collapse:collapse; margin:8px 0; font-family:ui-monospace,monospace; font-size:13px; }
+    .tbl th, .tbl td { text-align:right; padding:5px 8px; border-bottom:1px solid var(--border,#2a2f3a); }
+    .tbl th { color:var(--text-dim,#9aa3b2); font-weight:600; text-align:left; }
+    .tbl td:first-child, .tbl th:first-child { text-align:left; }
+    .tbl tr.hl td { color:var(--good,#34d399); }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    h3 { margin:18px 0 4px; font-size:.95rem; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Poisson Distribution Calculator</h1>
+      <p>Compute probabilities for a Poisson distribution with mean rate λ: the probability of exactly k events, of at most / at least k events, the cumulative distribution, and the mean, variance, and mode. A table shows the probability mass and cumulative probability around k. Computation is done in log-space so it stays accurate for large λ and k. Pairs with the Binomial and Normal distribution tools. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="opts">
+        <label>λ (mean rate, &gt; 0) <input type="text" id="lambda" inputmode="decimal" value="3" placeholder="e.g. 3"></label>
+        <label>k (count) <input type="text" id="k" inputmode="numeric" value="5" placeholder="e.g. 5"></label>
+      </div>
+
+      <div class="err" id="err"></div>
+
+      <div class="stats" id="stats"></div>
+
+      <h3>Probabilities at k</h3>
+      <div class="big" id="probs"></div>
+
+      <h3>Distribution table</h3>
+      <table class="tbl" id="tbl">
+        <thead><tr><th>k</th><th>P(X = k)</th><th>P(X ≤ k)</th></tr></thead>
+        <tbody id="tbl-body"></tbody>
+      </table>
+
+      <p class="note">Poisson PMF: <code>P(X = k) = e<sup>−λ</sup> λ<sup>k</sup> / k!</code>. Cumulative <code>P(X ≤ k) = Σ P(X = i)</code> for i = 0…k. Computed in log-space (<code>ln P = −λ + k·ln λ − ln(k!)</code>) to avoid factorial overflow, so large λ (e.g. 100) and large k are handled accurately. The mean and variance of a Poisson variable both equal λ; the mode is <code>⌊λ⌋</code> (two adjacent modes when λ is a whole number). The table covers a window around the mean (capped at 60 rows). Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var LN = Math.log, EXP = Math.exp, SQ = Math.sqrt, FLOOR = Math.floor;
+
+    // ln(k!) via Math.lgamma when available, else a running sum is used by callers.
+    function lnFact(k) {
+      if (k < 2) return 0;
+      if (typeof Math.lgamma === "function") return Math.lgamma(k + 1);
+      var s = 0;
+      for (var i = 2; i <= k; i++) s += LN(i);
+      return s;
+    }
+    // log PMF: ln P(X=k) = -λ + k ln λ - ln(k!)
+    function logPmf(lambda, k) {
+      return -lambda + k * LN(lambda) - lnFact(k);
+    }
+    // PMF P(X=k).
+    function pmf(lambda, k) {
+      if (k < 0 || k !== Math.floor(k)) return 0;
+      return EXP(logPmf(lambda, k));
+    }
+    // CDF P(X<=k) by incremental log-sum to avoid underflow for large ranges.
+    function cdf(lambda, k) {
+      k = Math.floor(k);
+      if (k < 0) return 0;
+      // incremental: logPmf(i) = logPmf(i-1) + ln(lambda) - ln(i)
+      var sum = 0, lp = -lambda; // logPmf(0)
+      sum = EXP(lp);
+      for (var i = 1; i <= k; i++) {
+        lp = lp + LN(lambda) - LN(i);
+        sum += EXP(lp);
+        if (sum >= 1) break; // safety for floating drift
+      }
+      return sum > 1 ? 1 : sum;
+    }
+    // Build a table of {k, pmf, cdf} around the mean; window of ±spread, capped.
+    function table(lambda, center, rows) {
+      var half = Math.max(rows / 2 | 0, 5);
+      var lo = Math.max(0, FLOOR(center) - half);
+      var hi = FLOOR(center) + half;
+      // cap absolute span
+      if (hi - lo > rows) hi = lo + rows;
+      var out = [], cum = 0, lp = -lambda; // logPmf(0)
+      // advance logPmf to lo
+      for (var i = 1; i <= lo; i++) lp = lp + LN(lambda) - LN(i);
+      if (lo === 0) lp = -lambda;
+      // compute cdf up to lo-1
+      var c = 0;
+      {
+        var lp0 = -lambda;
+        c = EXP(lp0);
+        for (var j = 1; j < lo; j++) { lp0 = lp0 + LN(lambda) - LN(j); c += EXP(lp0); }
+      }
+      for (var kk = lo; kk <= hi; kk++) {
+        if (kk === 0) lp = -lambda;
+        var p = EXP(lp);
+        c += p;
+        out.push({ k: kk, pmf: p, cdf: c > 1 ? 1 : c });
+        lp = lp + LN(lambda) - LN(kk + 1);
+      }
+      return out;
+    }
+
+    function parseNum(s) { if (s == null) return null; s = String(s).trim(); if (!s) return null; var m = s.match(/^([-+0-9.eE]+)/); return m ? parseFloat(m[1]) : null; }
+    function fmtP(p) { if (p <= 0) return "0"; if (p >= 1) return "1"; if (p < 1e-4) return p.toExponential(3); return String(Math.round(p * 1e6) / 1e6); }
+    function fmtN(x, n) { if (!isFinite(x)) return "—"; return String(Math.round(x * Math.pow(10, n)) / Math.pow(10, n)); }
+
+    var lambdaEl = document.getElementById("lambda");
+    var kEl = document.getElementById("k");
+    var errEl = document.getElementById("err");
+    var statsEl = document.getElementById("stats");
+    var probsEl = document.getElementById("probs");
+    var tblBody = document.getElementById("tbl-body");
+
+    function render() {
+      errEl.textContent = "";
+      statsEl.innerHTML = ""; probsEl.innerHTML = ""; tblBody.innerHTML = "";
+      var lambda = parseNum(lambdaEl.value);
+      var k = parseNum(kEl.value);
+      if (lambda == null || lambda <= 0 || !isFinite(lambda)) { errEl.textContent = "Enter a positive mean rate λ (e.g. 3)."; return; }
+      if (k == null || k < 0 || !isFinite(k)) { errEl.textContent = "Enter a non-negative integer count k (e.g. 5)."; return; }
+      if (k !== Math.floor(k)) { errEl.textContent = "k must be an integer."; return; }
+      k = Math.floor(k);
+
+      var pEq = pmf(lambda, k);
+      var cLe = cdf(lambda, k);              // P(X<=k)
+      var cLt = cdf(lambda, k - 1);          // P(X<k)
+      var pGt = 1 - cLe;                      // P(X>k)
+      var pGe = 1 - cLt;                      // P(X>=k)
+      var mean = lambda, variance = lambda, sd = SQ(lambda);
+      var mode = FLOOR(lambda);
+      var modes = (lambda === FLOOR(lambda)) ? [mode - 1, mode].filter(function (m) { return m >= 0; }) : [mode];
+
+      // stats cards
+      var cards = [
+        ["Mean (μ)", fmtN(mean, 6)],
+        ["Variance (σ²)", fmtN(variance, 6)],
+        ["Std dev (σ)", fmtN(sd, 6)],
+        ["Mode", modes.join(", ")]
+      ];
+      statsEl.innerHTML = cards.map(function (c) { return '<div class="s"><div class="k">' + c[0] + '</div><div class="v">' + c[1] + '</div></div>'; }).join("");
+
+      // probabilities
+      function row(label, val) { return '<div class="row"><span class="k">' + label + '</span><span class="v">' + val + '</span></div>'; }
+      var probs = [
+        ["P(X = " + k + ")", fmtP(pEq)],
+        ["P(X ≤ " + k + ")", fmtP(cLe)],
+        ["P(X < " + k + ")", fmtP(cLt)],
+        ["P(X ≥ " + k + ")", fmtP(pGe)],
+        ["P(X > " + k + ")", fmtP(pGt)]
+      ];
+      probsEl.innerHTML = probs.map(function (r) { return row(r[0], r[1]); }).join("");
+
+      // table
+      var t = table(lambda, lambda, 30);
+      tblBody.innerHTML = t.map(function (r) {
+        return '<tr' + (r.k === k ? ' class="hl"' : '') + '><td>' + r.k + '</td><td>' + fmtP(r.pmf) + '</td><td>' + fmtP(r.cdf) + '</td></tr>';
+      }).join("");
+    }
+
+    [lambdaEl, kEl].forEach(function (el) { el.addEventListener("input", render); el.addEventListener("change", render); });
+    render();
+
+    window.VT_POISSON_TEST = {
+      pmf: pmf, cdf: cdf, logPmf: logPmf, lnFact: lnFact, table: table,
+      fmtP: fmtP
+    };
+  })();
+  </script>
+</body>
+</html>

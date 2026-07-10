@@ -1707,6 +1707,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-05T09:40:00Z",
   },
   {
+    slug: "poisson-distribution",
+    name: "Poisson Distribution Calculator",
+    description: "Work with the Poisson distribution — the count of independent rare events over a fixed interval at mean rate λ. Enter λ and a count k to get the probability mass P(X = k), the cumulative P(X ≤ k), P(X < k), P(X ≥ k), and P(X > k), plus the mean, variance, standard deviation, and mode, with a table of probabilities around the mean. Computation is done in log-space (ln P = −λ + k·ln λ − ln(k!)) so it stays accurate for large λ and k without factorial overflow. Useful for modelling arrivals, defects, and mutations. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "📉",
+    added: "2026-07-11T05:00:00Z",
+  },
+  {
     slug: "amortization-schedule",
     name: "Amortization Schedule Calculator",
     description: "Generate a full loan amortization schedule. Enter the principal, annual interest rate (APR), and term in years, and the calculator works out the fixed monthly payment, then breaks every payment into interest and principal with the remaining balance after each month. Toggle between a month-by-month detail and a yearly summary. A 0% rate is handled as a straight-line payoff. The monthly payment uses the standard amortization formula and every row is computed locally in your browser.",
