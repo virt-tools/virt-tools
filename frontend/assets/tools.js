@@ -1779,6 +1779,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-10T20:50:00Z",
   },
   {
+    slug: "truth-table-generator",
+    name: "Truth Table Generator",
+    description: "Enter a boolean expression and get its full truth table, plus the canonical sum-of-products (DNF) and product-of-sums (CNF) forms and the list of minterm indices. Supports variables, NOT (!), AND (&), OR (|), XOR (^), NAND, NOR, XNOR, implication (->) and biconditional (<->), with parentheses and the constants 0/1/TRUE/FALSE. Rows where the expression is true are highlighted. Capped at 12 variables. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "☑️",
+    added: "2026-07-10T21:30:00Z",
+  },
+  {
     slug: "angle-converter",
     name: "Angle Converter",
     description: "Convert an angle between degrees, radians, gradians (gons), turns (revolutions), arcminutes, arcseconds, and NATO mils, and to or from degrees-minutes-seconds (DMS). Enter a value in any unit or as DMS and every other unit is shown at once. A full circle is 360° = 2π rad = 400 grad = 1 turn = 21,600′ = 1,296,000″ = 6,400 mils; values are kept raw (not wrapped to a single turn). Pairs with the Trigonometry Calculator. Everything runs locally in your browser.",
