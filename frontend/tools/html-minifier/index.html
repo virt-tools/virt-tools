@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>HTML Minifier — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .layout { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
+    @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+    textarea { width:100%; box-sizing:border-box; font-family:ui-monospace,monospace; font-size:12px; min-height:340px; resize:vertical; }
+    .out { font-family:ui-monospace,monospace; font-size:12px; background:var(--bg,#14181f); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:10px; white-space:pre-wrap; word-break:break-word; min-height:340px; max-height:560px; overflow:auto; }
+    .opts { display:flex; gap:16px; flex-wrap:wrap; align-items:center; margin:10px 0; font-size:.85rem; }
+    .opts label { display:inline-flex; gap:6px; align-items:center; cursor:pointer; }
+    .stats { font-size:.82rem; opacity:.75; margin-top:8px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>HTML Minifier</h1>
+      <p>Minify HTML by removing comments, collapsing whitespace, and dropping whitespace that's insignificant at block-element boundaries — while preserving significant inline whitespace and the verbatim contents of <code>&lt;pre&gt;</code>, <code>&lt;textarea&gt;</code>, <code>&lt;script&gt;</code>, and <code>&lt;style&gt;</code>. The reverse of the HTML formatter. Optionally unquote safe attribute values. Everything runs in your browser; nothing is uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="opts">
+        <label><input type="checkbox" id="comments" checked> Remove comments</label>
+        <label><input type="checkbox" id="quotes"> Unquote safe attributes</label>
+        <button id="sample" class="secondary" style="padding:4px 12px;">Sample</button>
+        <button id="copy" class="secondary" style="padding:4px 12px;">Copy</button>
+      </div>
+      <div class="layout">
+        <div>
+          <div class="field"><label for="in">HTML</label></div>
+          <textarea id="in" spellcheck="false"><!DOCTYPE html>
+<html>
+  <head>
+    <title>  Demo  </title>
+    <!-- a comment -->
+  </head>
+  <body>
+    <div class="page">
+      <h1>Hello</h1>
+      <p>A <strong>bold</strong> word and <em>italic</em> too.</p>
+      <pre>  keep
+  spacing  </pre>
+      <script>if (a < b) { c(); }</script>
+    </div>
+  </body>
+</html></textarea>
+        </div>
+        <div>
+          <div class="field"><label>Minified</label></div>
+          <div class="out" id="out"></div>
+          <div class="stats" id="stats"></div>
+        </div>
+      </div>
+      <p class="note">Whitespace between two inline elements (e.g. <code>&lt;span&gt;a&lt;/span&gt; &lt;span&gt;b&lt;/span&gt;</code>) is preserved because it renders. Whitespace at block boundaries (after an opening or before a closing block tag, or between two block elements) is dropped. <code>&lt;pre&gt;</code>/<code>&lt;textarea&gt;</code> keep their whitespace exactly; <code>&lt;script&gt;</code>/<code>&lt;style&gt;</code> are left untouched (minify their contents with the CSS/JS minifiers instead). No network requests are made.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var inEl = document.getElementById("in");
+    var outEl = document.getElementById("out");
+    var statsEl = document.getElementById("stats");
+    var commentsEl = document.getElementById("comments");
+    var quotesEl = document.getElementById("quotes");
+
+    // Elements whose content is raw text — read verbatim until the matching
+    // close tag, and never minify their contents.
+    var RAW = { script: 1, style: 1, pre: 1, textarea: 1 };
+    // Block-level / structural elements: whitespace at their boundaries is
+    // insignificant. Inline elements (span, a, img, input, b, i, em, strong,
+    // code, button, br, …) are NOT here, so whitespace between them is kept.
+    var BLOCK = { html: 1, head: 1, body: 1, title: 1, meta: 1, link: 1, base: 1,
+      div: 1, p: 1, ul: 1, ol: 1, li: 1, dl: 1, dt: 1, dd: 1, table: 1, thead: 1,
+      tbody: 1, tfoot: 1, tr: 1, td: 1, th: 1, colgroup: 1, col: 1, caption: 1,
+      section: 1, article: 1, header: 1, footer: 1, main: 1, aside: 1, nav: 1,
+      figure: 1, figcaption: 1, blockquote: 1, pre: 1, h1: 1, h2: 1, h3: 1,
+      h4: 1, h5: 1, h6: 1, form: 1, fieldset: 1, legend: 1, address: 1, hr: 1,
+      noscript: 1, template: 1, script: 1, style: 1 };
+    function isBlock(name) { return !!BLOCK[name]; }
+
+    // Read a tag starting at index i (the '<'), respecting quoted attribute
+    // values so '>' inside quotes doesn't end the tag early. Returns index
+    // past the closing '>', or -1 if none.
+    function indexOfTagEnd(s, i) {
+      var n = s.length, q = "";
+      for (var j = i + 1; j < n; j++) {
+        var ch = s.charAt(j);
+        if (q) { if (ch === q) q = ""; continue; }
+        if (ch === '"' || ch === "'") { q = ch; continue; }
+        if (ch === ">") return j;
+      }
+      return -1;
+    }
+
+    // Pure: tokenize HTML into tag / text / comment / raw tokens.
+    function tokenize(html) {
+      var toks = [];
+      var i = 0, n = html.length;
+      while (i < n) {
+        if (html.charAt(i) === "<") {
+          if (html.substr(i, 4) === "<!--") {
+            var c = html.indexOf("-->", i + 4); var cend = c < 0 ? n : c + 3;
+            toks.push({ t: "comment", v: html.slice(i, cend) }); i = cend; continue;
+          }
+          if (html.substr(i, 2) === "<!" || html.substr(i, 2) === "<?") {
+            var d = indexOfTagEnd(html, i); var dend = d < 0 ? n : d + 1;
+            toks.push({ t: "tag", raw: html.slice(i, dend), name: "", close: false, selfClose: false }); i = dend; continue;
+          }
+          if (html.charAt(i + 1) === "/") {
+            var e = indexOfTagEnd(html, i); var eend = e < 0 ? n : e + 1;
+            var eraw = html.slice(i, eend);
+            var em = eraw.match(/^<\/\s*([a-zA-Z][a-zA-Z0-9]*)/);
+            toks.push({ t: "tag", raw: eraw, name: em ? em[1].toLowerCase() : "", close: true, selfClose: false });
+            i = eend; continue;
+          }
+          if (/[a-zA-Z]/.test(html.charAt(i + 1))) {
+            var s = indexOfTagEnd(html, i); var send = s < 0 ? n : s + 1;
+            var sraw = html.slice(i, send);
+            var sm = sraw.match(/^<\s*([a-zA-Z][a-zA-Z0-9]*)/);
+            var sname = sm ? sm[1].toLowerCase() : "";
+            var selfClose = sraw.charAt(sraw.length - 2) === "/";
+            toks.push({ t: "tag", raw: sraw, name: sname, close: false, selfClose: selfClose });
+            i = send;
+            if (RAW[sname] && !selfClose) {
+              var rest = html.slice(i);
+              var m = new RegExp("</" + sname + "\\s*>", "i").exec(rest);
+              if (m) {
+                if (m.index > 0) toks.push({ t: "raw", v: rest.slice(0, m.index) });
+                toks.push({ t: "tag", raw: rest.slice(m.index, m.index + m[0].length), name: sname, close: true, selfClose: false });
+                i = i + m.index + m[0].length;
+              } else {
+                if (i < n) toks.push({ t: "raw", v: html.slice(i) });
+                i = n;
+              }
+            }
+            continue;
+          }
+        }
+        var lt = html.indexOf("<", i);
+        var text = lt < 0 ? html.slice(i) : html.slice(i, lt);
+        toks.push({ t: "text", v: text }); i = lt < 0 ? n : lt;
+      }
+      return toks;
+    }
+
+    // Pure: unquote attribute values that are safe to write bare (simple chars
+    // only — a value containing a space, quote, or URL-special char is kept).
+    function unquote(raw) {
+      return raw
+        .replace(/\s([a-zA-Z_:][-a-zA-Z0-9_:]*)\s*=\s*"([A-Za-z0-9_.:-]+)"/g, function (m, name, val) { return " " + name + "=" + val; })
+        .replace(/\s([a-zA-Z_:][-a-zA-Z0-9_:]*)\s*=\s*'([A-Za-z0-9_.:-]+)'/g, function (m, name, val) { return " " + name + "=" + val; });
+    }
+
+    // Pure: minify an HTML string.
+    function minify(html, opts) {
+      opts = opts || {};
+      var toks = tokenize(html);
+      if (!opts.keepComments) {
+        toks = toks.filter(function (tk) { return tk.t !== "comment"; });
+        // Removing a comment can leave two text tokens adjacent (the text that
+        // sat on either side of it). Merge them so block-boundary detection
+        // sees the real neighbouring tags, not a stranded whitespace token.
+        var merged = [];
+        toks.forEach(function (tk) {
+          var last = merged[merged.length - 1];
+          if (tk.t === "text" && last && last.t === "text") last.v += tk.v;
+          else merged.push(tk);
+        });
+        toks = merged;
+      }
+      for (var k = 0; k < toks.length; k++) {
+        var tk = toks[k];
+        if (tk.t !== "text") continue;
+        var prev = toks[k - 1], next = toks[k + 1];
+        var prevBlock = prev ? (prev.t === "tag" && isBlock(prev.name)) : true;
+        var nextBlock = next ? (next.t === "tag" && isBlock(next.name)) : true;
+        if (/^\s*$/.test(tk.v)) {
+          tk.v = (prevBlock || nextBlock) ? "" : " ";
+        } else {
+          var c = tk.v.replace(/\s+/g, " ");
+          if (prevBlock) c = c.replace(/^ /, "");
+          if (nextBlock) c = c.replace(/ $/, "");
+          tk.v = c;
+        }
+      }
+      if (opts.removeQuotes) {
+        toks.forEach(function (tk) { if (tk.t === "tag" && !tk.close) tk.raw = unquote(tk.raw); });
+      }
+      return toks.map(function (tk) { return tk.t === "tag" ? tk.raw : tk.v; }).join("").trim();
+    }
+
+    function render() {
+      var src = inEl.value;
+      var out = minify(src, { keepComments: !commentsEl.checked, removeQuotes: quotesEl.checked });
+      outEl.textContent = out;
+      var before = src.length, after = out.length;
+      var pct = before ? Math.max(0, Math.round((1 - after / before) * 100)) : 0;
+      statsEl.textContent = before ? (after + " chars  ·  " + pct + "% smaller (was " + before + ")") : "";
+    }
+
+    inEl.addEventListener("input", render);
+    commentsEl.addEventListener("change", render);
+    quotesEl.addEventListener("change", render);
+    document.getElementById("sample").addEventListener("click", function () {
+      inEl.value = '<!DOCTYPE html>\n<html lang="en">\n  <head>\n    <meta charset="utf-8">\n    <title>  Hello World  </title>\n    <!-- main stylesheet -->\n    <link rel="stylesheet" href="app.css">\n  </head>\n  <body>\n    <header>\n      <a href="/">Home</a>\n      <a href="/about">About</a>\n    </header>\n    <main>\n      <p>Two <a href="/x">links</a> <a href="/y">here</a>.</p>\n      <pre>line 1\n  line 2</pre>\n    </main>\n  </body>\n</html>\n';
+      render();
+    });
+    document.getElementById("copy").addEventListener("click", function () {
+      var t = outEl.textContent; if (!t) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).catch(function () {});
+      else { try { var ta = document.createElement("textarea"); ta.value = t; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove(); } catch (e) {} }
+    });
+
+    window.VT_HTMLMIN_TEST = { minify: minify, tokenize: tokenize, unquote: unquote, isBlock: isBlock };
+    render();
+  })();
+  </script>
+</body>
+</html>

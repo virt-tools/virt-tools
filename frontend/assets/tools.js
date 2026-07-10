@@ -235,6 +235,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-05T07:00:00Z",
   },
   {
+    slug: "html-minifier",
+    name: "HTML Minifier",
+    description: "Minify HTML by removing comments and collapsing whitespace — dropping the whitespace that's insignificant at block-element boundaries while keeping the spaces between inline elements and the verbatim contents of <pre>, <textarea>, <script>, and <style>. The reverse of the HTML formatter. Optionally unquote safe attribute values. Everything runs in your browser; nothing is uploaded.",
+    category: "Text",
+    icon: "✨",
+    added: "2026-07-10T19:00:00Z",
+  },
+  {
     slug: "strip-html-tags",
     name: "Strip HTML Tags",
     description: "Remove all HTML tags and get the plain text back — optionally turn block elements into line breaks, decode entities, collapse whitespace, and extract the list of links. Drops scripts, styles, and comments. Runs locally.",
