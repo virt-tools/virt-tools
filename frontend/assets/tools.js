@@ -1643,6 +1643,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-11T07:00:00Z",
   },
   {
+    slug: "ideal-gas-law",
+    name: "Ideal Gas Law Calculator",
+    description: "Solve PV = nRT for any one of pressure, volume, amount, or temperature given the other three. Enter three of the four quantities (each with its own unit — Pa, kPa, MPa, bar, atm, mmHg, psi; m³, L, mL, cm³, ft³; mol, mmol; K, °C, °F) and leave the one you want blank: the calculator solves it and shows the result in several equivalent units using R = 8.314 J·mol⁻¹·K⁻¹. Pairs with the Dew Point and Wavelength calculators for science work. Everything runs locally in your browser.",
+    category: "Environment",
+    icon: "🎈",
+    added: "2026-07-10T21:00:00Z",
+  },
+  {
     slug: "quadratic-solver",
     name: "Quadratic Equation Solver",
     description: "Solve a quadratic equation ax² + bx + c = 0. Enter the three coefficients and get the discriminant, the roots (two distinct real, one repeated real, or a complex-conjugate pair), the vertex and axis of symmetry of the parabola, and the factored form when the roots are real. A built-in check evaluates the polynomial at each root so you can confirm the result, and the linear case (a = 0) is handled too. Everything runs locally in your browser.",
