@@ -483,6 +483,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T04:25:40Z",
   },
   {
+    slug: "slugify",
+    name: "Slugify — URL Slug Generator",
+    description: "Turn any text into a clean, URL-safe slug: strips accents, drops punctuation, lowercases, and collapses separators with optional stop-word removal and length cap.",
+    category: "Text",
+    icon: "🔗",
+    added: "2026-07-10T01:00:00Z",
+  },
+  {
     slug: "uuid-generator",
     name: "UUID Generator",
     description: "Generate RFC 4122 v4 UUIDs with crypto.randomUUID — bulk, uppercase, with or without hyphens.",
