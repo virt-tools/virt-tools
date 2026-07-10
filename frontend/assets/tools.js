@@ -1995,6 +1995,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-10T20:00:00Z",
   },
   {
+    slug: "rc-time-constant",
+    name: "RC Time Constant Calculator",
+    description: "Compute the RC time constant τ = R·C and the charging/discharging curves of a series RC circuit. Enter a resistance (10kΩ, 4k7, 1M5, etc.) and a capacitance (µF, nF, pF, F) plus a source or initial voltage to get τ, the low-pass cutoff frequency f_c = 1/(2πRC), the energy stored (½CV²), and a sampled voltage-vs-time table at 0τ…7τ. A time-to-target mode solves the exponential for the exact elapsed time to reach a chosen voltage. Pairs with the Resistor, Capacitor, Inductor, and LC Resonance calculators. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "⏱️",
+    added: "2026-07-10T19:00:00Z",
+  },
+  {
     slug: "tile-calculator",
     name: "Tile Calculator",
     description: "Work out how many tiles a floor or wall job needs. Enter the project dimensions (length and width in feet or metres) and the tile size (in inches, centimetres, or millimetres) plus an optional grout joint width, and the calculator counts how many full tiles fit along each axis — rounding up the partial tile at every edge — to get the base count. Add a waste percentage for cuts and breakage and you get the number to buy, along with the coverage area in square feet and square metres. Pairs with the Concrete and Paint calculators for the rest of the job. Everything runs locally in your browser.",
