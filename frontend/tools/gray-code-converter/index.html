@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Gray Code Converter — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .row { display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+    .row .lbl { min-width:150px; color:var(--text-dim,#9aa3b2); font-size:.85rem; }
+    .row input, .row select { font-family:ui-monospace,monospace; font-size:14px; padding:7px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; }
+    .row input { width:200px; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    .big { font-family:ui-monospace,monospace; font-size:1.1rem; font-weight:700; color:var(--accent,#6ea8fe); margin:10px 0; word-break:break-all; }
+    h3 { margin:16px 0 4px; font-size:.9rem; color:var(--text-dim,#9aa3b2); text-transform:uppercase; letter-spacing:.04em; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; margin:10px 0; }
+    .card { background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:10px 12px; }
+    .card .k { color:var(--text-dim,#9aa3b2); font-size:12px; }
+    .card .v { font-family:ui-monospace,monospace; font-weight:700; color:var(--text,#e6e6e6); font-size:.9rem; margin-top:3px; word-break:break-all; }
+    table.seq { border-collapse:collapse; font-family:ui-monospace,monospace; font-size:.82rem; margin:8px 0; }
+    table.seq th, table.seq td { border:1px solid var(--border,#2a2f3a); padding:4px 10px; text-align:right; }
+    table.seq th { background:var(--bg-elev,#171a21); color:var(--text-dim,#9aa3b2); font-weight:600; text-align:center; }
+    table.seq td.idx { color:var(--text-dim,#9aa3b2); text-align:right; }
+    table.seq td.g { color:var(--accent,#6ea8fe); }
+    .scroll { overflow-x:auto; max-height:340px; overflow-y:auto; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Gray Code Converter</h1>
+      <p>Convert between binary and the reflected binary (Gray) code, generate the n-bit Gray-code sequence, and inspect the single-bit-transition property that makes Gray codes useful for rotary encoders and Karnaugh-map axes. Enter a decimal number, a binary string, or a Gray string and get the conversions at once. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row"><span class="lbl">Bits n</span>
+        <select id="n">
+          <option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option>
+        </select>
+      </div>
+      <div class="row"><span class="lbl">Decimal value</span><input type="text" id="dec" inputmode="numeric" value="5"></div>
+      <div class="row"><span class="lbl">Binary</span><input type="text" id="bin" spellcheck="false"></div>
+      <div class="row"><span class="lbl">Gray</span><input type="text" id="gray" spellcheck="false"></div>
+      <div class="err" id="err"></div>
+
+      <div class="grid" id="grid"></div>
+
+      <h3>n-bit Gray-code sequence <span style="text-transform:none;color:var(--text-dim,#9aa3b2);font-weight:400">(index → Gray → binary)</span></h3>
+      <div class="scroll"><table class="seq" id="seq"></table></div>
+
+      <p class="note"><strong>Gray code</strong> (reflected binary) orders the 2ⁿ values so that successive values differ in exactly one bit — unlike plain binary, where e.g. 3→4 (011→100) flips three bits. <strong>Binary → Gray:</strong> keep the most-significant bit, then each Gray bit g[i] = b[i] XOR b[i−1] — equivalently g = b XOR (b &gt;&gt; 1). <strong>Gray → binary:</strong> the MSB is unchanged, then b[i] = g[i] XOR b[i−1]. The sequence is built by <em>reflection</em>: the n-bit list is the (n−1)-bit list, a copy in reverse with a leading 1 prefixed. Gray codes power rotary shaft encoders (no ambiguous multi-bit transitions at boundaries) and the axes of Karnaugh maps (adjacent cells differ in one variable). Pairs with the Quine-McCluskey minimizer and Hamming code tools. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    function $(id) { return document.getElementById(id); }
+    var nEl = $("n"), decEl = $("dec"), binEl = $("bin"), grayEl = $("gray"), errEl = $("err");
+    var gridEl = $("grid"), seqEl = $("seq");
+
+    // ---- core ----
+    // binary value (integer) -> Gray value (integer): g = b ^ (b >> 1)
+    function binToGray(b) { return b ^ (b >>> 1); }
+    // Gray value (integer) -> binary value (integer): MSB unchanged, then each bit = g ^ prev
+    function grayToBin(g) {
+      var b = g, mask;
+      // propagate: b ^= b >> 1; b ^= b >> 2; b ^= b >> 4; ... (prefix XOR)
+      if (g < 0) g = g >>> 0;
+      b = g;
+      b ^= (b >>> 1);
+      b ^= (b >>> 2);
+      b ^= (b >>> 4);
+      b ^= (b >>> 8);
+      b ^= (b >>> 16);
+      // for up to 32 bits this is enough; for >32 use BigInt path separately
+      return b >>> 0;
+    }
+    // BigInt-safe versions for large n (n up to 12 here so 4096 max — fits in Number, but keep robust)
+    function toBinaryString(v, n) {
+      var s = "";
+      for (var i = n - 1; i >= 0; i--) s += (v >>> i) & 1;
+      return s;
+    }
+    function binStrToVal(s) {
+      var v = 0;
+      for (var i = 0; i < s.length; i++) v = (v << 1) | (s[i] === "1" ? 1 : 0);
+      return v >>> 0;
+    }
+    // generate n-bit Gray sequence: index -> gray value
+    function graySequence(n) {
+      var out = [];
+      var total = 1 << n;
+      for (var i = 0; i < total; i++) out.push(binToGray(i));
+      return out;
+    }
+    // number of bit transitions between successive codes in a sequence
+    function transitions(seq) {
+      var t = 0;
+      for (var i = 1; i < seq.length; i++) t += popcount(seq[i] ^ seq[i - 1]);
+      return t;
+    }
+    function popcount(x) { x = x >>> 0; var c = 0; while (x) { x &= x - 1; c++; } return c; }
+
+    function parseDec(s, max) {
+      if (s == null) return null;
+      s = String(s).trim();
+      if (!s) return null;
+      if (!/^\d+$/.test(s)) return { err: "Enter a non-negative integer." };
+      var v = parseInt(s, 10);
+      if (v > max) return { err: "Value " + v + " exceeds the maximum for n bits (0.." + max + ")." };
+      return v;
+    }
+
+    function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+    function card(k, v) { return '<div class="card"><div class="k">' + k + '</div><div class="v">' + v + '</div></div>'; }
+
+    function render() {
+      errEl.textContent = ""; gridEl.innerHTML = ""; seqEl.innerHTML = "";
+      var n = parseInt(nEl.value, 10);
+      if (!(n >= 1 && n <= 12)) { errEl.textContent = "n must be 1..12."; return; }
+      var max = (1 << n) - 1;
+      var v = parseDec(decEl.value, max);
+      if (v && v.err) { errEl.textContent = "Decimal: " + v.err; return; }
+      if (v == null) { errEl.textContent = "Enter a decimal value (0.." + max + ")."; return; }
+      // derive
+      var bin = toBinaryString(v, n);
+      var g = binToGray(v);
+      var gray = toBinaryString(g, n);
+      var back = grayToBin(g); // round-trip
+      binEl.value = bin;
+      grayEl.value = gray;
+      gridEl.innerHTML = card("Decimal", String(v)) +
+        card("Binary (" + n + " bits)", bin) +
+        card("Gray", gray) +
+        card("Gray → decimal", String(g)) +
+        card("Gray → binary (round-trip)", toBinaryString(back, n));
+      // sequence table
+      var seq = graySequence(n);
+      var maxShown = 4096; // n<=12 -> up to 4096 rows
+      var h = "<tr><th>index</th><th>Gray</th><th>binary</th><th>dec</th></tr>";
+      for (var i = 0; i < seq.length; i++) {
+        h += "<tr><td class='idx'>" + i + "</td><td class='g'>" + toBinaryString(seq[i], n) + "</td><td>" + toBinaryString(i, n) + "</td><td class='idx'>" + seq[i] + "</td></tr>";
+      }
+      seqEl.innerHTML = h;
+      // transition analysis
+      var grayTrans = transitions(seq);
+      // binary sequence transitions for comparison
+      var binSeq = []; for (var k = 0; k < (1 << n); k++) binSeq.push(k);
+      var binTrans = transitions(binSeq);
+      gridEl.innerHTML += card("Gray transitions (cyclic)", grayTrans + (n >= 1 ? " (= 2ⁿ, one per step)" : "")) +
+        card("Binary transitions (cyclic)", binTrans);
+    }
+
+    // editing any of dec/bin/gray updates consistently
+    function fromBin() {
+      var n = parseInt(nEl.value, 10);
+      var s = binEl.value.trim();
+      if (!/^[01]*$/.test(s)) { errEl.textContent = "Binary must be 0/1 only."; return false; }
+      if (s.length !== n) { errEl.textContent = "Binary must be " + n + " bits."; return false; }
+      decEl.value = String(binStrToVal(s));
+      return true;
+    }
+    function fromGray() {
+      var n = parseInt(nEl.value, 10);
+      var s = grayEl.value.trim();
+      if (!/^[01]*$/.test(s)) { errEl.textContent = "Gray must be 0/1 only."; return false; }
+      if (s.length !== n) { errEl.textContent = "Gray must be " + n + " bits."; return false; }
+      var gv = binStrToVal(s);
+      var b = grayToBin(gv);
+      decEl.value = String(b);
+      return true;
+    }
+    binEl.addEventListener("input", function () { if (fromBin()) render(); });
+    grayEl.addEventListener("input", function () { if (fromGray()) render(); });
+
+    var t = null;
+    [nEl, decEl].forEach(function (el) { el.addEventListener("input", function () { clearTimeout(t); t = setTimeout(render, 120); }); el.addEventListener("change", render); });
+    render();
+
+    window.VT_GRAY_TEST = {
+      binToGray: binToGray, grayToBin: grayToBin, graySequence: graySequence,
+      transitions: transitions, popcount: popcount, toBinaryString: toBinaryString, binStrToVal: binStrToVal
+    };
+  })();
+  </script>
+</body>
+</html>

@@ -1811,6 +1811,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-10T23:50:00Z",
   },
   {
+    slug: "gray-code-converter",
+    name: "Gray Code Converter",
+    description: "Convert between binary and the reflected binary (Gray) code (g = b XOR (b >> 1); the inverse propagates the prefix XOR), generate the n-bit Gray-code sequence, and inspect the single-bit-transition property that makes Gray codes useful for rotary encoders and Karnaugh-map axes. Enter a decimal value, binary string, or Gray string and get every form at once. Shows the reflection construction and the transition counts for Gray vs plain binary. Pairs with the Quine-McCluskey minimizer and Hamming code tools. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🔲",
+    added: "2026-07-11T01:10:00Z",
+  },
+  {
     slug: "fibonacci-sequence-calculator",
     name: "Fibonacci & Lucas Sequence Calculator",
     description: "Generate the Fibonacci, Lucas, and Tribonacci sequences and compute individual terms with exact big-integer arithmetic. Find the nth term via fast doubling (O(log n)), list the first N terms, sum the first N terms, test whether a number is a Fibonacci number and find its index, and compare the exact value with Binet's closed-form approximation and the golden-ratio convergence F(n+1)/F(n) -> phi. All arithmetic uses BigInt, so values stay exact even for F(1000) (209 digits). Pairs with the Number Base Converter and Prime tools. Everything runs locally in your browser.",
