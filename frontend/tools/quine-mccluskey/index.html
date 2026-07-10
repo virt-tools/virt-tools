@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Quine-McCluskey Boolean Minimizer — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .row { display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+    .row .lbl { min-width:140px; color:var(--text-dim,#9aa3b2); font-size:.85rem; }
+    .row input, .row select { font-family:ui-monospace,monospace; font-size:14px; padding:6px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; }
+    .row input { width:300px; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    .big { font-family:ui-monospace,monospace; font-size:1.1rem; font-weight:700; color:var(--accent,#6ea8fe); margin:12px 0; word-break:break-all; line-height:1.6; }
+    h3 { margin:16px 0 4px; font-size:.9rem; color:var(--text-dim,#9aa3b2); text-transform:uppercase; letter-spacing:.04em; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    table.qm { border-collapse:collapse; font-family:ui-monospace,monospace; font-size:.82rem; margin:6px 0; }
+    table.qm th, table.qm td { border:1px solid var(--border,#2a2f3a); padding:4px 9px; text-align:center; }
+    table.qm th { background:var(--bg-elev,#171a21); color:var(--text-dim,#9aa3b2); font-weight:600; }
+    table.qm td.ess { color:var(--good,#4ade80); font-weight:700; }
+    table.qm td.x { color:var(--accent,#6ea8fe); }
+    .scroll { overflow-x:auto; }
+    .copybtn { padding:5px 10px; border-radius:6px; border:1px solid var(--border,#2a2f3a); background:var(--bg-elev,#171a21); color:var(--text,#e6e6e6); cursor:pointer; font-size:.8rem; margin-left:8px; }
+    .summary { font-family:ui-monospace,monospace; font-size:.85rem; color:var(--text,#e6e6e6); line-height:1.7; }
+    .summary b { color:var(--accent,#6ea8fe); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Quine-McCluskey Boolean Minimizer</h1>
+      <p>Minimize a sum-of-products boolean function given its minterms (and optional don't-care terms) using the Quine-McCluskey algorithm — the tabular method that is guaranteed to find a minimal two-level SOP form, equivalent to a Karnaugh map but algorithmic and exact. It generates all prime implicants, selects the essential ones, and uses Petrick's method to cover any remaining minterms with the fewest implicants. The prime-implicant chart and each step are shown. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row"><span class="lbl">Variables n</span>
+        <select id="n">
+          <option>2</option><option selected>3</option><option>4</option><option>5</option><option>6</option>
+        </select>
+      </div>
+      <div class="row"><span class="lbl">Minterms Σm</span><input type="text" id="mints" value="1, 3, 5, 7" spellcheck="false"></div>
+      <div class="row"><span class="lbl">Don't-cares d</span><input type="text" id="dcs" value="" placeholder="e.g. 0, 2" spellcheck="false"></div>
+      <div class="err" id="err"></div>
+
+      <h3>Minimized SOP <button class="copybtn" id="copy" type="button">Copy</button></h3>
+      <div class="big" id="out"></div>
+      <div class="summary" id="summary"></div>
+
+      <h3>Prime implicants</h3>
+      <div class="scroll"><table class="qm" id="pis"></table></div>
+
+      <h3>Prime implicant chart</h3>
+      <div class="scroll"><table class="qm" id="chart"></table></div>
+      <div class="summary" id="petrick"></div>
+
+      <p class="note"><strong>Quine-McCluskey</strong> minimizes a boolean function exactly. Step 1 — list every minterm (and don't-care) as an n-bit binary string and repeatedly combine pairs that differ in exactly one bit, replacing that bit with <code>–</code>; terms that combine no further are <strong>prime implicants</strong>. Step 2 — build the <strong>prime implicant chart</strong>: each row is a prime implicant, each column a minterm (don't-cares are not covered). A <strong>essential prime implicant</strong> is the only one covering some minterm — it must be in the answer. Step 3 — if minterms remain, <strong>Petrick's method</strong> ANDs together one (Pᵢ ∨ Pⱼ ∨ …) clause per uncovered minterm, expands the product-of-sums into a sum-of-products of prime-implicant sets, and picks the set with the fewest implicants (and fewest literals), giving a minimal cover. Variables are named A, B, C… with A as the most-significant bit, matching the Truth Table Generator. Pairs with that tool. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var VARS = ["A", "B", "C", "D", "E", "F", "G", "H"];
+
+    // parse a comma/space separated list of integers
+    function parseList(s, max) {
+      if (s == null) return [];
+      s = String(s).trim();
+      if (!s) return [];
+      var parts = s.split(/[,\s]+/).filter(function (p) { return p.length; });
+      var out = [];
+      for (var i = 0; i < parts.length; i++) {
+        if (!/^\d+$/.test(parts[i])) return { err: "Invalid number '" + parts[i] + "'." };
+        var v = parseInt(parts[i], 10);
+        if (v < 0 || v > max) return { err: "Term " + v + " out of range (0.." + max + ")." };
+        out.push(v);
+      }
+      return out;
+    }
+    function toBits(m, n) {
+      var b = [];
+      for (var i = n - 1; i >= 0; i--) b.push((m >> i) & 1); // first bit = MSB (var A)
+      return b;
+    }
+    function bitsStr(bits) { return bits.map(function (b) { return b === "-" ? "-" : b; }).join(""); }
+    function popcount(m) { var c = 0; while (m) { m &= m - 1; c++; } return c; }
+
+    // Combine two term-bit arrays (same dash positions) if they differ in exactly one non-dash bit.
+    function tryCombine(a, b) {
+      var diff = -1;
+      for (var i = 0; i < a.length; i++) {
+        if (a[i] === b[i]) continue;
+        if (a[i] === "-" || b[i] === "-") return null; // dashes must align
+        if (diff !== -1) return null; // more than one difference
+        diff = i;
+      }
+      if (diff === -1) return null; // identical (shouldn't happen with distinct terms)
+      var c = a.slice(); c[diff] = "-";
+      return c;
+    }
+
+    // Quine-McCluskey prime implicant generation.
+    // terms: array of { bits: array, mints: Set<number> }
+    // returns array of prime implicants (those never combined).
+    function primeImplicants(seeds, n) {
+      var primes = [];
+      // current groups: array of terms
+      var current = seeds;
+      while (current.length) {
+        var used = new Array(current.length).fill(false);
+        var next = [];
+        var seen = {}; // dedup by bit string
+        // group by popcount of bits (counting only 1s, dashes excluded) for efficiency
+        var groups = {};
+        for (var i = 0; i < current.length; i++) {
+          var ones = 0;
+          for (var k = 0; k < current[i].bits.length; k++) if (current[i].bits[k] === 1) ones++;
+          (groups[ones] = groups[ones] || []).push(i);
+        }
+        var onesKeys = Object.keys(groups).map(Number).sort(function (a, b) { return a - b; });
+        for (var gi = 0; gi < onesKeys.length - 1; gi++) {
+          var g1 = groups[onesKeys[gi]];
+          var g2 = groups[onesKeys[gi + 1]];
+          if (onesKeys[gi + 1] !== onesKeys[gi] + 1) continue; // only adjacent popcount groups combine
+          for (var a = 0; a < g1.length; a++) {
+            for (var b2 = 0; b2 < g2.length; b2++) {
+              var ia = g1[a], ib = g2[b2];
+              var comb = tryCombine(current[ia].bits, current[ib].bits);
+              if (comb) {
+                used[ia] = true; used[ib] = true;
+                var key = comb.join("");
+                if (!seen[key]) {
+                  seen[key] = true;
+                  var mints = new Set(current[ia].mints);
+                  current[ib].mints.forEach(function (m) { mints.add(m); });
+                  next.push({ bits: comb, mints: mints });
+                }
+              }
+            }
+          }
+        }
+        for (var j = 0; j < current.length; j++) {
+          if (!used[j]) primes.push(current[j]);
+        }
+        current = next;
+      }
+      return primes;
+    }
+
+    // PI chart: rows = primes, cols = minterms (only true minterms, not don't-cares).
+    // returns { chart: matrix boolean[pi][mint], minterms: sorted list, essentials: [pi indices], remaining handled by Petrick }
+    function buildChart(primes, minterms) {
+      var cols = minterms.slice().sort(function (a, b) { return a - b; });
+      var chart = primes.map(function (pi) {
+        return cols.map(function (m) { return pi.mints.has(m); });
+      });
+      // essential PIs: a minterm covered by exactly one PI
+      var essentialSet = {};
+      for (var c = 0; c < cols.length; c++) {
+        var coverCount = 0, coverPi = -1;
+        for (var r = 0; r < primes.length; r++) {
+          if (chart[r][c]) { coverCount++; coverPi = r; }
+        }
+        if (coverCount === 1) essentialSet[coverPi] = true;
+      }
+      var essentials = Object.keys(essentialSet).map(Number).sort(function (a, b) { return a - b; });
+      return { chart: chart, cols: cols, essentials: essentials };
+    }
+
+    // Petrick's method: find a minimal set of non-essential PIs to cover remaining minterms.
+    // candidates: indices into primes[] of non-essential PIs that still cover at least one remaining minterm
+    // remaining: array of minterm column indices still uncovered
+    // Returns array of PI indices (a minimal cover) or null if infeasible.
+    function petrick(primes, chart, cols, essentials) {
+      // minterms already covered by essentials
+      var covered = {};
+      essentials.forEach(function (r) {
+        for (var c = 0; c < cols.length; c++) if (chart[r][c]) covered[c] = true;
+      });
+      var remaining = [];
+      for (var c = 0; c < cols.length; c++) if (!covered[c]) remaining.push(c);
+      if (remaining.length === 0) return [];
+
+      // For each remaining minterm, clause = list of PI indices (non-essential) covering it.
+      var clauses = remaining.map(function (c) {
+        var list = [];
+        for (var r = 0; r < primes.length; r++) {
+          if (essentials.indexOf(r) !== -1) continue;
+          if (chart[r][c]) list.push(r);
+        }
+        return list;
+      });
+      if (clauses.some(function (cl) { return cl.length === 0; })) return null;
+
+      // Petrick expansion: POS of clauses -> SOP of PI-index sets.
+      // Each product is a Set of PI indices. Start with empty product, multiply by each clause.
+      var products = [new Set()];
+      for (var ci = 0; ci < clauses.length; ci++) {
+        var next = [];
+        for (var pi = 0; pi < products.length; pi++) {
+          for (var li = 0; li < clauses[ci].length; li++) {
+            var s = new Set(products[pi]);
+            s.add(clauses[ci][li]);
+            // absorption: skip if s is a superset of an already-collected product
+            next.push(s);
+          }
+        }
+        // simplify: remove products that are supersets of another, and dedup
+        next = simplifyProducts(next);
+        products = next;
+      }
+      // pick product with fewest PIs; tiebreak by fewest total literals (sum of lit counts of PIs)
+      var best = null;
+      function litCount(piIdx) {
+        var l = 0; var b = primes[piIdx].bits;
+        for (var i = 0; i < b.length; i++) if (b[i] !== "-") l++;
+        return l;
+      }
+      for (var p = 0; p < products.length; p++) {
+        var cnt = products[p].size;
+        var lits = 0; products[p].forEach(function (r) { lits += litCount(r); });
+        if (best === null || cnt < best.cnt || (cnt === best.cnt && lits < best.lits)) {
+          best = { cnt: cnt, lits: lits, set: products[p] };
+        }
+      }
+      var arr = [];
+      best.set.forEach(function (r) { arr.push(r); });
+      arr.sort(function (a, b) { return a - b; });
+      return arr;
+    }
+    function simplifyProducts(products) {
+      // dedup by sorted key
+      var map = {};
+      var uniq = [];
+      products.forEach(function (s) {
+        var key = Array.from(s).sort(function (a, b) { return a - b; }).join(",");
+        if (!map[key]) { map[key] = s; uniq.push(s); }
+      });
+      // remove supersets: keep only minimal sets
+      var kept = [];
+      uniq.forEach(function (s) {
+        var isSuperset = false;
+        for (var j = 0; j < uniq.length; j++) {
+          if (uniq[j] === s) continue;
+          if (isSubset(uniq[j], s)) { isSuperset = true; break; } // j ⊂ s -> s is a superset, drop s
+        }
+        if (!isSuperset) kept.push(s);
+      });
+      return kept;
+    }
+    function isSubset(a, b) { // a ⊆ b and a smaller-or-equal
+      if (a.size > b.size) return false;
+      var ret = true; a.forEach(function (v) { if (!b.has(v)) ret = false; });
+      return ret && a.size < b.size; // strict subset
+    }
+
+    // Convert a PI's bit pattern to a product term string.
+    function piToTerm(bits, n) {
+      var lits = [];
+      for (var i = 0; i < n; i++) {
+        if (bits[i] === 1) lits.push(VARS[i]);
+        else if (bits[i] === 0) lits.push("!" + VARS[i]);
+      }
+      if (!lits.length) return "1";
+      return lits.join("");
+    }
+    function piToTermPretty(bits, n) {
+      var lits = [];
+      for (var i = 0; i < n; i++) {
+        if (bits[i] === 1) lits.push(VARS[i]);
+        else if (bits[i] === 0) lits.push("!" + VARS[i]);
+      }
+      if (!lits.length) return "1";
+      return lits.join("·");
+    }
+
+    // Full minimize: returns { sop, pretty, primeImps, essentials, chosen, petrick, cols, err }
+    function minimize(n, minterms, doncares) {
+      var max = (1 << n) - 1;
+      // dedup, validate overlap (a term cannot be both a minterm and a don't-care)
+      var mintSet = {}; minterms.forEach(function (m) { mintSet[m] = true; });
+      var dcSet = {};
+      for (var di = 0; di < doncares.length; di++) {
+        if (mintSet[doncares[di]]) return { err: "Term " + doncares[di] + " is both a minterm and a don't-care." };
+        dcSet[doncares[di]] = true;
+      }
+      if (minterms.length === 0) {
+        return { sop: "0", pretty: "0", primeImps: [], essentials: [], chosen: [], petrick: "", cols: [], isConst: true };
+      }
+      if (minterms.length + doncares.length >= (1 << n)) {
+        // all cells are either minterm or don't-care, and at least one minterm => check if all 2^n are covered
+        var allCovered = true;
+        for (var v = 0; v < (1 << n); v++) if (!mintSet[v] && !dcSet[v]) { allCovered = false; break; }
+        if (allCovered) return { sop: "1", pretty: "1", primeImps: [], essentials: [], chosen: [], petrick: "", cols: minterms.slice().sort(function(a,b){return a-b;}), isConst: true };
+      }
+      // seeds: all minterms + don't-cares
+      var seeds = [];
+      var allTerms = minterms.concat(doncares);
+      var seenSeed = {};
+      allTerms.forEach(function (m) {
+        if (seenSeed[m]) return; seenSeed[m] = true;
+        seeds.push({ bits: toBits(m, n), mints: new Set([m]) });
+      });
+      var primes = primeImplicants(seeds, n);
+      var chartInfo = buildChart(primes, minterms);
+      var pet = petrick(primes, chartInfo.chart, chartInfo.cols, chartInfo.essentials);
+      if (pet === null) return { err: "Could not find a cover (internal error)." };
+      var chosen = chartInfo.essentials.concat(pet);
+      // dedup chosen
+      var chosenSet = {}; chosen = chosen.filter(function (r) { if (chosenSet[r]) return false; chosenSet[r] = true; return true; });
+      chosen.sort(function (a, b) { return a - b; });
+      // build SOP string (plain, for copy)
+      var parts = chosen.map(function (r) { return piToTerm(primes[r].bits, n); });
+      var sop = parts.join(" + ") || "0";
+      var pretty = chosen.map(function (r) { return piToTermPretty(primes[r].bits, n); }).join(" + ") || "0";
+      return { sop: sop, pretty: pretty, primes: primes, essentials: chartInfo.essentials, chosen: chosen, petrick: pet, cols: chartInfo.cols, chart: chartInfo.chart, isConst: false };
+    }
+
+    // Functional check: the chosen PIs must cover every minterm and must NOT cover any
+    // cell that is neither a minterm nor a don't-care. Don't-care cells are unconstrained
+    // (they may be covered or not), so they are skipped here.
+    function verify(n, minterms, doncares, chosen, primes) {
+      var mintSet = {}; minterms.forEach(function (m) { mintSet[m] = true; });
+      var dcSet = {}; doncares.forEach(function (m) { dcSet[m] = true; });
+      var total = 1 << n;
+      for (var v = 0; v < total; v++) {
+        if (dcSet[v]) continue; // don't-care: no constraint
+        // does any chosen PI cover v?
+        var covered = false;
+        for (var i = 0; i < chosen.length; i++) {
+          var b = primes[chosen[i]].bits;
+          var ok = true;
+          for (var k = 0; k < n; k++) {
+            if (b[k] === "-") continue;
+            var bit = (v >> (n - 1 - k)) & 1;
+            if (bit !== b[k]) { ok = false; break; }
+          }
+          if (ok) { covered = true; break; }
+        }
+        var expected = !!mintSet[v];
+        if (covered !== expected) return false;
+      }
+      return true;
+    }
+
+    // ---- DOM ----
+    function $(id) { return document.getElementById(id); }
+    var nEl = $("n"), mintsEl = $("mints"), dcsEl = $("dcs"), errEl = $("err");
+    var outEl = $("out"), summaryEl = $("summary"), pisEl = $("pis"), chartEl = $("chart"), petrickEl = $("petrick");
+    var lastSop = "";
+
+    function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+    function render() {
+      errEl.textContent = ""; outEl.textContent = ""; summaryEl.innerHTML = ""; pisEl.innerHTML = ""; chartEl.innerHTML = ""; petrickEl.innerHTML = "";
+      lastSop = "";
+      var n = parseInt(nEl.value, 10);
+      if (!(n >= 2 && n <= 6)) { errEl.textContent = "n must be 2..6."; return; }
+      var max = (1 << n) - 1;
+      var mints = parseList(mintsEl.value, max);
+      if (mints && mints.err) { errEl.textContent = "Minterms: " + mints.err; return; }
+      var dcs = parseList(dcsEl.value, max);
+      if (dcs && dcs.err) { errEl.textContent = "Don't-cares: " + dcs.err; return; }
+      // dedup minterms
+      var seen = {}; mints = mints.filter(function (m) { if (seen[m]) return false; seen[m] = true; return true; });
+      seen = {}; dcs = dcs.filter(function (m) { if (seen[m]) return false; seen[m] = true; return true; });
+      // overlap check
+      var ms = {}; mints.forEach(function (m) { ms[m] = true; });
+      for (var i = 0; i < dcs.length; i++) if (ms[dcs[i]]) { errEl.textContent = "Term " + dcs[i] + " is both a minterm and a don't-care."; return; }
+
+      var res = minimize(n, mints, dcs);
+      if (res.err) { errEl.textContent = res.err; return; }
+      lastSop = res.sop;
+      outEl.textContent = res.pretty;
+      if (res.isConst) {
+        summaryEl.innerHTML = "Constant function → <b>" + esc(res.pretty) + "</b>.";
+        return;
+      }
+      // verify
+      var valid = verify(n, mints, dcs, res.chosen, res.primes);
+      summaryEl.innerHTML = "Variables: <b>" + VARS.slice(0, n).join(", ") + "</b> (A = MSB) · "
+        + res.primes.length + " prime implicants · "
+        + res.essentials.length + " essential · "
+        + res.chosen.length + " in the cover · "
+        + "covers all " + mints.length + " minterm" + (mints.length === 1 ? "" : "s")
+        + (dcs.length ? " + " + dcs.length + " don't-care" + (dcs.length === 1 ? "" : "s") : "")
+        + ' · <span style="color:' + (valid ? "var(--good,#4ade80)" : "var(--bad,#f87171)") + '">' + (valid ? "✓ verified" : "✗ mismatch") + "</span>";
+
+      // prime implicants table
+      var ph = "<tr><th>#</th><th>term</th><th>pattern</th><th>covers minterms</th></tr>";
+      res.primes.forEach(function (pi, i) {
+        var isChosen = res.chosen.indexOf(i) !== -1;
+        var isEss = res.essentials.indexOf(i) !== -1;
+        var mm = Array.from(pi.mints).sort(function (a, b) { return a - b; }).join(", ");
+        ph += "<tr><td>" + i + "</td><td class='" + (isEss ? "ess" : "") + "'>" + esc(piToTermPretty(pi.bits, n)) + (isEss ? " *" : "") + "</td><td>" + esc(bitsStr(pi.bits)) + "</td><td>" + esc(mm) + "</td></tr>";
+      });
+      pisEl.innerHTML = ph;
+
+      // chart
+      var ch = "<tr><th>PI \\ m</th>";
+      res.cols.forEach(function (m) { ch += "<th>" + m + "</th>"; });
+      ch += "</tr>";
+      res.primes.forEach(function (pi, r) {
+        var isChosen = res.chosen.indexOf(r) !== -1;
+        var isEss = res.essentials.indexOf(r) !== -1;
+        ch += "<tr><td class='" + (isEss ? "ess" : "") + "'>" + esc(piToTermPretty(pi.bits, n)) + (isEss ? " *" : "") + "</td>";
+        res.cols.forEach(function (m, c) {
+          ch += "<td class='x'>" + (res.chart[r][c] ? "✕" : "") + "</td>";
+        });
+        ch += "</tr>";
+      });
+      chartEl.innerHTML = ch;
+
+      // petrick note
+      if (res.petrick.length) {
+        petrickEl.innerHTML = "Petrick's method added <b>" + res.petrick.length + "</b> non-essential prime implicant" + (res.petrick.length === 1 ? "" : "s") + " to cover the remaining minterms (chosen as the fewest-implicant cover).";
+      } else if (res.essentials.length) {
+        petrickEl.innerHTML = "All minterms covered by essential prime implicants — no Petrick step needed.";
+      } else {
+        petrickEl.innerHTML = "No essential prime implicants; Petrick's method selected a minimal cover.";
+      }
+    }
+
+    function copy(text, btn) {
+      if (!text) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () { var o = btn.textContent; btn.textContent = "Copied!"; setTimeout(function () { btn.textContent = o; }, 1200); });
+      }
+    }
+    $("copy").addEventListener("click", function () { copy(lastSop, this); });
+
+    var t = null;
+    [nEl, mintsEl, dcsEl].forEach(function (el) { el.addEventListener("input", function () { clearTimeout(t); t = setTimeout(render, 150); }); el.addEventListener("change", render); });
+    render();
+
+    window.VT_QM_TEST = {
+      minimize: minimize, primeImplicants: primeImplicants, buildChart: buildChart,
+      petrick: petrick, verify: verify, toBits: toBits, tryCombine: tryCombine,
+      piToTerm: piToTerm, VARS: VARS
+    };
+  })();
+  </script>
+</body>
+</html>

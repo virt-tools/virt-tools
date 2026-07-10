@@ -1795,6 +1795,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-10T21:30:00Z",
   },
   {
+    slug: "quine-mccluskey",
+    name: "Quine-McCluskey Boolean Minimizer",
+    description: "Minimize a sum-of-products boolean function given its minterms and optional don't-care terms using the Quine-McCluskey algorithm — the tabular method that is guaranteed to find a minimal two-level SOP form, equivalent to a Karnaugh map but exact and algorithmic. It generates all prime implicants, selects the essential ones, and uses Petrick's method to cover any remaining minterms with the fewest implicants. The prime-implicant chart and each step are shown. Variables A, B, C... with A as the most-significant bit, matching the Truth Table Generator. Pairs with that tool. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🔻",
+    added: "2026-07-10T23:50:00Z",
+  },
+  {
     slug: "fibonacci-sequence-calculator",
     name: "Fibonacci & Lucas Sequence Calculator",
     description: "Generate the Fibonacci, Lucas, and Tribonacci sequences and compute individual terms with exact big-integer arithmetic. Find the nth term via fast doubling (O(log n)), list the first N terms, sum the first N terms, test whether a number is a Fibonacci number and find its index, and compare the exact value with Binet's closed-form approximation and the golden-ratio convergence F(n+1)/F(n) -> phi. All arithmetic uses BigInt, so values stay exact even for F(1000) (209 digits). Pairs with the Number Base Converter and Prime tools. Everything runs locally in your browser.",
