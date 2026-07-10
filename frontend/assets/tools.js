@@ -1747,6 +1747,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-05T05:40:00Z",
   },
   {
+    slug: "vector-calculator",
+    name: "Vector Calculator",
+    description: "Work with 2D and 3D vectors: magnitude, dot and cross products, the angle between two vectors, scalar and vector projections, unit vectors, addition/subtraction, and scalar multiplication. Enter components separated by commas or spaces and switch between 2 and 3 dimensions. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🧭",
+    added: "2026-07-10T19:30:00Z",
+  },
+  {
     slug: "angle-converter",
     name: "Angle Converter",
     description: "Convert an angle between degrees, radians, gradians (gons), turns (revolutions), arcminutes, arcseconds, and NATO mils, and to or from degrees-minutes-seconds (DMS). Enter a value in any unit or as DMS and every other unit is shown at once. A full circle is 360° = 2π rad = 400 grad = 1 turn = 21,600′ = 1,296,000″ = 6,400 mils; values are kept raw (not wrapped to a single turn). Pairs with the Trigonometry Calculator. Everything runs locally in your browser.",
