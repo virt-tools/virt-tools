@@ -2003,6 +2003,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-11T03:00:00Z",
   },
   {
+    slug: "doppler-effect-calculator",
+    name: "Doppler Effect Calculator",
+    description: "Compute the observed frequency of a sound wave when the source and/or observer move through a medium. Enter the source frequency, the speed of sound (presets for air at 0/20 °C, water, steel), and the source and observer speeds each with a toward/away direction to get the observed frequency, the shift, and the ratio using f′ = f·(c + v_o)/(c − v_s). Flags the supersonic case (source at or above the speed of sound) where a shock wave forms and the classical formula breaks down. Pairs with the Note Frequency and Wavelength calculators for acoustics work. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🚑",
+    added: "2026-07-11T01:00:00Z",
+  },
+  {
     slug: "scale-generator",
     name: "Scale & Key Generator",
     description: "List the notes of a scale or mode in 12-tone equal temperament. Pick a root note and a scale — major, natural / harmonic / melodic minor, the seven church modes (Ionian through Locrian), major and minor pentatonic, blues, whole-tone, and chromatic — and see each note's name, MIDI number, and frequency across one octave, plus each degree's semitone interval from the root. The reference pitch (A4) is adjustable. Pairs with the Note Frequency Calculator. Everything runs locally in your browser.",
