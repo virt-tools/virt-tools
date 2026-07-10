@@ -244,9 +244,40 @@
     else document.addEventListener("DOMContentLoaded", fn);
   }
 
+  /* ---- Recently visited tools (client-side only, localStorage) -----------
+   * Records each tool page visit so the feedback page can suggest leaving a
+   * comment about the tool the user just used. Never sent to any server. */
+  function slugFromPath() {
+    var m = location.pathname.match(/\/tools\/([^\/]+)\/?/);
+    return m ? decodeURIComponent(m[1]) : null;
+  }
+  function recordVisit() {
+    var slug = slugFromPath();
+    if (!slug) return;
+    var name = "";
+    var h1 = document.querySelector("main h1, .tool-header h1, h1");
+    if (h1) name = h1.textContent.trim();
+    if (!name) name = (document.title.replace(/\s*—.*$/, "").trim()) || slug;
+    var list;
+    try { list = JSON.parse(localStorage.getItem("vt-recent-tools") || "[]"); }
+    catch (e) { list = []; }
+    if (!Array.isArray(list)) list = [];
+    list = list.filter(function (e) { return e && e.slug !== slug; });
+    list.unshift({ slug: slug, name: name, ts: Date.now() });
+    list = list.slice(0, 8);
+    try { localStorage.setItem("vt-recent-tools", JSON.stringify(list)); } catch (e) {}
+  }
+  function recentTools() {
+    try {
+      var list = JSON.parse(localStorage.getItem("vt-recent-tools") || "[]");
+      return Array.isArray(list) ? list : [];
+    } catch (e) { return []; }
+  }
+
   ready(injectHeader);
   ready(initCatalog);
+  ready(recordVisit);
 
   // Expose helpers for tool pages to reuse.
-  window.VT = { el: el, ready: ready, ROOT: ROOT };
+  window.VT = { el: el, ready: ready, ROOT: ROOT, recentTools: recentTools };
 })();
