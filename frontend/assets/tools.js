@@ -1915,6 +1915,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-10T05:00:00Z",
   },
   {
+    slug: "inductor-series-parallel",
+    name: "Inductor Calculator (Series & Parallel)",
+    description: "Combine inductor values in series or parallel to find the total inductance, or solve for a missing inductor that pairs with a known one to reach a target total. Series sums them (L = L₁ + L₂ + …, totals grow); parallel uses 1/L = 1/L₁ + 1/L₂ + … (the total is always smaller than the smallest member) — the same math as resistors. Optionally enter a frequency to also see the inductive reactance X_L = 2πfL of the combined inductor. Parses H, mH, µH, nH, and pH notation. Pairs with the Resistor and Capacitor Series / Parallel calculators. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🧲",
+    added: "2026-07-10T17:00:00Z",
+  },
+  {
     slug: "gear-ratio-calculator",
     name: "Gear Ratio & RPM Calculator",
     description: "Compute the ratio between two meshing gears or a belt-and-pulley drive and what it does to speed and torque. Enter the tooth counts (or pulley diameters) of the driver and driven members, an input RPM, torque, and efficiency to get the gear ratio, output RPM, and output torque — or solve for the missing member that produces a target ratio. Ratio = driven / driver; output RPM = input × driver / driven; output torque = input × driven / driver × efficiency, so power is conserved (minus losses) as torque rises and speed falls. Pairs with the Resistor and Capacitor series/parallel tools for mechanical reduction. Everything runs locally in your browser.",

@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Inductor Series / Parallel Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .opts { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin:10px 0; font-size:.9rem; }
+    .opts label { display:inline-flex; gap:6px; align-items:center; }
+    .opts input, .opts select { width:120px; font-family:ui-monospace,monospace; padding:6px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; }
+    .opts select { width:auto; font-size:.85rem; }
+    .mode { display:flex; gap:8px; margin:6px 0 8px; flex-wrap:wrap; }
+    .mode button { padding:6px 14px; border-radius:6px; border:1px solid var(--border,#2a2f3a); background:var(--bg-elev,#171a21); color:var(--text-dim,#9aa3b2); cursor:pointer; font-size:.85rem; }
+    .mode button.active { background:var(--accent,#6ea8fe); color:#0b0d12; border-color:var(--accent,#6ea8fe); font-weight:700; }
+    .big { font-family:ui-monospace,monospace; font-size:1.4rem; font-weight:700; color:var(--accent,#6ea8fe); margin:8px 0; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    h3 { margin:18px 0 4px; font-size:.95rem; }
+    .hint { color:var(--text-dim,#9aa3b2); font-size:13px; margin:4px 0; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Inductor Series / Parallel Calculator</h1>
+      <p>Combine inductor values in series or parallel and solve for a missing inductor. Enter a list of inductor values (e.g. <code>10mH, 100µH, 1H</code>) to get the total; or give one known inductor and a target total to find the second inductor needed. Inductors add in series like resistors and combine in parallel via reciprocals — so a parallel total is always smaller than the smallest member. Optionally enter a frequency to also see the inductive reactance X<sub>L</sub> = 2πfL of the combined inductor. Pairs with the Resistor and Capacitor Series / Parallel calculators. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="mode">
+        <button id="mode-combine" class="active" type="button">Combine a list</button>
+        <button id="mode-find" type="button">Find a missing inductor</button>
+      </div>
+
+      <div id="combine-panel">
+        <div class="opts">
+          <label>Inductors <input type="text" id="c-list" value="10mH, 100µH, 1H" style="width:260px"></label>
+          <label>Mode
+            <select id="c-config">
+              <option value="series">Series</option>
+              <option value="parallel">Parallel</option>
+            </select>
+          </label>
+        </div>
+        <div class="opts">
+          <label>Frequency (optional) <input type="text" id="c-freq" inputmode="decimal" value="" placeholder="e.g. 1kHz" style="width:140px"></label>
+        </div>
+        <div class="err" id="c-err"></div>
+        <div class="big" id="c-total"></div>
+        <div class="hint" id="c-detail"></div>
+        <div class="hint" id="c-react"></div>
+      </div>
+
+      <div id="find-panel" style="display:none">
+        <div class="opts">
+          <label>Known inductor <input type="text" id="f-known" value="100µH"></label>
+          <label>Target total <input type="text" id="f-target" value="150µH"></label>
+          <label>Mode
+            <select id="f-config">
+              <option value="series">Series</option>
+              <option value="parallel">Parallel</option>
+            </select>
+          </label>
+        </div>
+        <div class="err" id="f-err"></div>
+        <div class="big" id="f-second"></div>
+        <div class="hint" id="f-detail"></div>
+      </div>
+
+      <p class="note">Series: <code>L = L₁ + L₂ + …</code> (totals grow). Parallel: <code>1/L = 1/L₁ + 1/L₂ + …</code>, so the total is always smaller than the smallest member. To hit a target total from one known inductor: in series add <code>L₂ = L_target − L₁</code> (target must exceed the known); in parallel add <code>L₂ = 1 / (1/L_target − 1/L₁)</code> (the known inductor must be larger than the target). Inductive reactance at frequency f is <code>X_L = 2πfL</code> ohms. Units understood: H, mH, µH/uH, nH, pH. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    // Parse a single inductor value string into henries. Handles 10mH, 100µH, 1uH, 2.2m, 4nH, 1H, etc.
+    function parseL(s) {
+      if (s == null) return null;
+      s = String(s).trim();
+      if (!s) return null;
+      var m = s.match(/^([-+0-9.eE]+)\s*(ph|nh|uh|µh|µ|u|mh|m|h)?$/i);
+      if (!m) return null;
+      var num = parseFloat(m[1]);
+      if (!isFinite(num) || num <= 0) return null;
+      var unit = (m[2] || "h").toLowerCase();
+      var mult = { ph: 1e-12, nh: 1e-9, uh: 1e-6, "µh": 1e-6, "µ": 1e-6, u: 1e-6, mh: 1e-3, m: 1e-3, h: 1 }[unit];
+      if (mult == null) return null;
+      return num * mult;
+    }
+    // Parse a frequency string into Hz. Handles 1k, 1kHz, 1.5MHz, 100, etc.
+    function parseFreq(s) {
+      if (s == null) return null;
+      s = String(s).trim();
+      if (!s) return null;
+      var m = s.match(/^([-+0-9.eE]+)\s*(khz|kh|k|mhz|mh|ghz|gh|hz|h|k|m|g)?$/i);
+      if (!m) return null;
+      var num = parseFloat(m[1]);
+      if (!isFinite(num) || num < 0) return null;
+      var unit = (m[2] || "hz").toLowerCase();
+      var mult = { khz: 1e3, kh: 1e3, k: 1e3, mhz: 1e6, mh: 1e6, m: 1e6, ghz: 1e9, gh: 1e9, g: 1e9, hz: 1, h: 1 }[unit];
+      if (mult == null) return null;
+      return num * mult;
+    }
+    // Parse a comma/space-separated list into henries. Returns {values, errors}.
+    function parseList(s) {
+      var out = [], errs = [];
+      String(s).split(/[,\s]+/).filter(Boolean).forEach(function (tok) {
+        var v = parseL(tok);
+        if (v == null) errs.push(tok);
+        else out.push(v);
+      });
+      return { values: out, errors: errs };
+    }
+    // Series total (henries): sum(L). Same math as resistors.
+    function seriesTotal(values) {
+      var t = 0;
+      for (var i = 0; i < values.length; i++) t += values[i];
+      return t;
+    }
+    // Parallel total (henries): 1 / sum(1/L). Same math as resistors/capacitors-series.
+    function parallelTotal(values) {
+      if (!values.length) return null;
+      var inv = 0;
+      for (var i = 0; i < values.length; i++) inv += 1 / values[i];
+      return 1 / inv;
+    }
+    // Find the second inductor to reach a target total from a known one.
+    function findSecond(known, target, parallel) {
+      if (!(known > 0) || !(target > 0)) return { err: "Known inductor and target must be positive." };
+      if (parallel) {
+        if (known <= target) return { err: "For a parallel pair, the known inductor must be larger than the target total." };
+        return { value: 1 / (1 / target - 1 / known), err: null };
+      } else {
+        if (target <= known) return { err: "For a series pair, the target total must be larger than the known inductor." };
+        return { value: target - known, err: null };
+      }
+    }
+    // Inductive reactance X_L = 2*pi*f*L (ohms).
+    function reactance(f, L) {
+      if (!(f > 0) || !(L > 0)) return null;
+      return 2 * Math.PI * f * L;
+    }
+    // Format an inductance in henries with a sensible unit.
+    function fmtL(h) {
+      if (h == null || !isFinite(h)) return "—";
+      var a = Math.abs(h);
+      if (a === 0) return "0 H";
+      var units = [["H", 1], ["mH", 1e-3], ["µH", 1e-6], ["nH", 1e-9], ["pH", 1e-12]];
+      for (var i = 0; i < units.length; i++) {
+        var name = units[i][0], base = units[i][1];
+        if (a >= base) {
+          var v = Math.round((h / base) * 10000) / 10000;
+          return v.toString() + " " + name;
+        }
+      }
+      return (Math.round(h * 1e12)) + " pH";
+    }
+    // Format a frequency in Hz.
+    function fmtFreq(f) {
+      if (f == null || !isFinite(f)) return "—";
+      var a = Math.abs(f);
+      if (a === 0) return "0 Hz";
+      var units = [["GHz", 1e9], ["MHz", 1e6], ["kHz", 1e3], ["Hz", 1]];
+      for (var i = 0; i < units.length; i++) {
+        if (a >= units[i][1]) return (Math.round((f / units[i][1]) * 10000) / 10000).toString() + " " + units[i][0];
+      }
+      return f.toString() + " Hz";
+    }
+    function r(x, d) { if (!isFinite(x)) return "—"; return (Math.round(x * Math.pow(10, d)) / Math.pow(10, d)).toString(); }
+
+    var modeCombine = document.getElementById("mode-combine");
+    var modeFind = document.getElementById("mode-find");
+    var combinePanel = document.getElementById("combine-panel");
+    var findPanel = document.getElementById("find-panel");
+    var cErr = document.getElementById("c-err"), cTotal = document.getElementById("c-total"), cDetail = document.getElementById("c-detail"), cReact = document.getElementById("c-react");
+    var fErr = document.getElementById("f-err"), fSecond = document.getElementById("f-second"), fDetail = document.getElementById("f-detail");
+
+    function setMode(m) {
+      modeCombine.classList.toggle("active", m === "combine");
+      modeFind.classList.toggle("active", m === "find");
+      combinePanel.style.display = m === "combine" ? "" : "none";
+      findPanel.style.display = m === "find" ? "" : "none";
+      render();
+    }
+
+    function render() {
+      cErr.textContent = ""; cTotal.textContent = ""; cDetail.textContent = ""; cReact.textContent = "";
+      fErr.textContent = ""; fSecond.textContent = ""; fDetail.textContent = "";
+      if (modeCombine.classList.contains("active")) {
+        var pl = parseList(document.getElementById("c-list").value);
+        if (pl.errors.length) { cErr.textContent = "Couldn't parse: " + pl.errors.join(", ") + "."; return; }
+        if (!pl.values.length) { cErr.textContent = "Enter at least one inductor value."; return; }
+        var parallel = document.getElementById("c-config").value === "parallel";
+        var total = parallel ? parallelTotal(pl.values) : seriesTotal(pl.values);
+        cTotal.textContent = "= " + fmtL(total);
+        cDetail.textContent = pl.values.length + " inductor" + (pl.values.length > 1 ? "s" : "") + " in " + (parallel ? "parallel" : "series") +
+          ": " + pl.values.map(fmtL).join(", ");
+        var freq = parseFreq(document.getElementById("c-freq").value);
+        if (freq != null && freq > 0) {
+          var xl = reactance(freq, total);
+          if (xl != null) cReact.textContent = "X_L at " + fmtFreq(freq) + " = 2π·" + fmtFreq(freq) + "·" + fmtL(total) + " ≈ " + r(xl, 4) + " Ω";
+        } else if (document.getElementById("c-freq").value.trim()) {
+          cReact.textContent = "Couldn't parse the frequency (try e.g. 1kHz, 100, 13.56MHz).";
+        }
+      } else {
+        var known = parseL(document.getElementById("f-known").value);
+        var target = parseL(document.getElementById("f-target").value);
+        if (known == null || target == null) { fErr.textContent = "Enter a known inductor and a target total (e.g. 100µH, 150µH)."; return; }
+        var parallel = document.getElementById("f-config").value === "parallel";
+        var res = findSecond(known, target, parallel);
+        if (res.err) { fErr.textContent = res.err; return; }
+        fSecond.textContent = "L₂ = " + fmtL(res.value);
+        fDetail.textContent = "Known " + fmtL(known) + " + " + fmtL(res.value) + " in " + (parallel ? "parallel" : "series") + " → " + fmtL(target);
+      }
+    }
+
+    modeCombine.addEventListener("click", function () { setMode("combine"); });
+    modeFind.addEventListener("click", function () { setMode("find"); });
+    ["c-list","c-config","c-freq","f-known","f-target","f-config"].forEach(function (id) {
+      var el = document.getElementById(id); el.addEventListener("input", render); el.addEventListener("change", render);
+    });
+    render();
+
+    window.VT_IND_TEST = { parseL: parseL, parseFreq: parseFreq, parseList: parseList, seriesTotal: seriesTotal, parallelTotal: parallelTotal, findSecond: findSecond, reactance: reactance, fmtL: fmtL, fmtFreq: fmtFreq };
+  })();
+  </script>
+</body>
+</html>
