@@ -1331,6 +1331,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-10T23:00:00Z",
   },
   {
+    slug: "snells-law-calculator",
+    name: "Snell's Law Calculator",
+    description: "Compute light refraction at an interface with Snell's law n₁·sinθ₁ = n₂·sinθ₂. Find the refraction angle from the incidence angle and two refractive indices using a material-index library (air, water, ice, acrylic, crown and flint glass, sapphire, diamond), or find the critical angle for total internal reflection, or recover an unknown refractive index from the two angles. Flags total internal reflection when the incidence angle exceeds the critical angle going from a dense to a rare medium. Pairs with the Thin Lens Equation and Depth of Field calculators for optics work. Everything runs locally in your browser.",
+    category: "Image",
+    icon: "💎",
+    added: "2026-07-11T04:00:00Z",
+  },
+  {
     slug: "exposure-value-calculator",
     name: "Exposure Value (EV) Calculator",
     description: "Compute photographic exposure value from aperture, shutter speed, and ISO: EV = log₂(N²/t), with EV100 normalised to ISO 100. Solve the shutter at a given aperture from a target EV100, or read off a table of equivalent exposures across every full stop — all combinations at the same EV100 capture the same amount of light. Pairs with the Depth of Field Calculator. Everything runs locally in your browser.",
