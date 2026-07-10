@@ -1907,6 +1907,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-11T03:00:00Z",
   },
   {
+    slug: "scale-generator",
+    name: "Scale & Key Generator",
+    description: "List the notes of a scale or mode in 12-tone equal temperament. Pick a root note and a scale — major, natural / harmonic / melodic minor, the seven church modes (Ionian through Locrian), major and minor pentatonic, blues, whole-tone, and chromatic — and see each note's name, MIDI number, and frequency across one octave, plus each degree's semitone interval from the root. The reference pitch (A4) is adjustable. Pairs with the Note Frequency Calculator. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🎹",
+    added: "2026-07-11T19:00:00Z",
+  },
+  {
     slug: "lc-resonant-calculator",
     name: "LC Resonant Frequency Calculator",
     description: "Calculate the resonant frequency of an LC tank circuit: f = 1 / (2π·√(L·C)). Enter any two of frequency, inductance (H, mH, µH, nH, pH), or capacitance (F, mF, µF, nF, pF) and the third is solved for you — plus the characteristic impedance Z = √(L/C), angular frequency ω = 2π·f, and period T = 1/f. Leave one field blank to solve for it; fill all three to cross-check consistency. Pairs with the Wavelength, Decibel, and Ohm's Law tools for RF and electronics work. Everything runs locally in your browser.",
