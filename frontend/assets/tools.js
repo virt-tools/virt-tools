@@ -1307,6 +1307,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-04T18:20:00Z",
   },
   {
+    slug: "wage-converter",
+    name: "Wage & Salary Converter",
+    description: "Convert a pay rate between hourly, annual, monthly, weekly, biweekly, semimonthly, and daily amounts, or estimate overtime pay. Enter a rate in any pay period and see the equivalent in every other period, given your hours per week and weeks per year. The overtime calculator works out regular and overtime pay (at a configurable multiplier), the weekly and annualized gross, and the effective hourly rate. All figures are pre-tax gross. Pairs with the Compound Interest and Effective Annual Rate tools. Everything runs locally in your browser.",
+    category: "Finance",
+    icon: "💼",
+    added: "2026-07-11T13:00:00Z",
+  },
+  {
     slug: "change-maker",
     name: "Change Maker",
     description: "Work out the change due from a cash transaction and the fewest U.S. bills and coins to hand back — integer-cent arithmetic with a greedy breakdown across $100–$1 bills and 25¢–1¢ coins. Runs in your browser.",
