@@ -23,11 +23,14 @@
     return node;
   }
 
+  // Brand mark: a wrench (this is a tools catalog, after all) — theme-colored via currentColor.
+  var WRENCH_SVG = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>';
+
   function injectHeader() {
     var mount = document.getElementById("site-header");
     if (!mount) return;
     var brand = el("a", { class: "brand", href: ROOT });
-    brand.appendChild(el("span", { class: "brand-mark" }, ["▣"]));
+    brand.appendChild(el("span", { class: "brand-mark", html: WRENCH_SVG }));
     brand.appendChild(el("span", {}, ["Virtual Tools"]));
     var nav = el("nav", {}, [
       el("a", { href: ROOT }, ["Tools"]),
