@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Image Duotone &amp; Color Effects — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .layout { display:grid; grid-template-columns: 1fr 1fr; gap:24px; align-items:start; }
+    @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+    .drop { border:2px dashed var(--border,#2a2f3a); border-radius:12px; padding:20px; text-align:center; cursor:pointer; margin:10px 0; }
+    .drop:hover { border-color:var(--accent,#6ea8fe); }
+    .seg { display:flex; flex-wrap:wrap; gap:6px; }
+    .seg button { padding:6px 12px; font-size:.85rem; }
+    .seg button.active { background:var(--accent,#6ea8fe); color:#0b0d12; border-color:var(--accent,#6ea8fe); }
+    .swatches { display:flex; gap:14px; flex-wrap:wrap; align-items:center; }
+    .swatches label { font-size:.8rem; display:inline-flex; gap:6px; align-items:center; }
+    input[type="color"] { width:42px; height:30px; padding:0; border:1px solid var(--border,#2a2f3a); border-radius:6px; background:none; cursor:pointer; }
+    input[type="range"] { width:150px; vertical-align:middle; }
+    .vval { font-family:ui-monospace,monospace; font-size:12px; opacity:.8; }
+    #previewWrap { text-align:center; }
+    #preview { max-width:100%; height:auto; max-height:380px; border:1px solid var(--border,#2a2f3a); border-radius:8px; }
+    .presets { display:flex; gap:8px; flex-wrap:wrap; margin:6px 0; }
+    .presets button { padding:4px 10px; font-size:.78rem; border:1px solid var(--border,#2a2f3a); background:transparent; color:inherit; border-radius:6px; cursor:pointer; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Image Duotone &amp; Color Effects</h1>
+      <p>Apply duotone and classic color effects to an image and download the result. Duotone maps each pixel's brightness onto a gradient between two colors you choose (Spotify-style); or pick grayscale, sepia, invert, threshold, or posterize. Everything is computed per-pixel on a canvas at the image's full resolution; nothing is uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="layout">
+        <!-- Controls -->
+        <div>
+          <div class="drop" id="drop">
+            <strong>Click to choose an image</strong><br>
+            <span style="opacity:.7;font-size:13px">or drop / paste (Ctrl/⌘+V). PNG, JPG, WebP, GIF, BMP.</span>
+            <input type="file" id="file" accept="image/*" style="display:none">
+          </div>
+
+          <div id="opts" style="display:none">
+            <div class="field">
+              <label>Effect</label>
+              <div class="seg" id="effect">
+                <button type="button" data-v="duotone" class="active">Duotone</button>
+                <button type="button" data-v="grayscale">Grayscale</button>
+                <button type="button" data-v="sepia">Sepia</button>
+                <button type="button" data-v="invert">Invert</button>
+                <button type="button" data-v="threshold">Threshold</button>
+                <button type="button" data-v="posterize">Posterize</button>
+              </div>
+            </div>
+
+            <div id="duoOpts">
+              <div class="presets" id="duoPresets">
+                <button type="button" data-p="classic">Classic</button>
+                <button type="button" data-p="fire">Fire</button>
+                <button type="button" data-p="ocean">Ocean</button>
+                <button type="button" data-p="forest">Forest</button>
+                <button type="button" data-p="candy">Candy</button>
+                <button type="button" data-p="noir">Noir</button>
+              </div>
+              <div class="field swatches">
+                <label>Shadow (dark) <input type="color" id="shadow" value="#1a3b5c"></label>
+                <label>Highlight (light) <input type="color" id="highlight" value="#ffd5a5"></label>
+              </div>
+              <div class="field">
+                <label>Contrast <span class="vval" id="contrastVal">1.0</span></label>
+                <input type="range" id="contrast" min="0.5" max="3" step="0.05" value="1">
+              </div>
+            </div>
+
+            <div id="thrOpts" style="display:none">
+              <div class="field">
+                <label>Threshold <span class="vval" id="thrVal">128</span></label>
+                <input type="range" id="threshold" min="0" max="255" step="1" value="128">
+              </div>
+            </div>
+
+            <div id="postOpts" style="display:none">
+              <div class="field">
+                <label>Levels <span class="vval" id="levelsVal">4</span></label>
+                <input type="range" id="levels" min="2" max="16" step="1" value="4">
+              </div>
+            </div>
+
+            <div class="row" style="margin-top:10px;">
+              <button id="download">Download PNG</button>
+              <button id="newImage" class="secondary">New image</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Preview -->
+        <div id="previewWrap">
+          <canvas id="preview"></canvas>
+          <p class="note" id="hint">Load an image to begin.</p>
+        </div>
+      </div>
+
+      <p class="note">Duotone works by converting each pixel to its brightness, applying an optional contrast S-curve, then sampling that position along a gradient from your shadow color to your highlight color. Grayscale uses the standard luminance weighting (0.299 R + 0.587 G + 0.114 B); sepia applies the classic tone matrix; posterize quantizes each channel to N levels. The result is rendered at full resolution and downloaded losslessly as PNG. No network requests are made.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var drop = document.getElementById("drop");
+    var fileEl = document.getElementById("file");
+    var preview = document.getElementById("preview");
+    var hint = document.getElementById("hint");
+    var pctx = preview.getContext("2d");
+    var opts = document.getElementById("opts");
+    var exp = document.createElement("canvas");
+    var ectx = exp.getContext("2d");
+
+    var effectBtns = document.getElementById("effect");
+    var duoOpts = document.getElementById("duoOpts");
+    var thrOpts = document.getElementById("thrOpts");
+    var postOpts = document.getElementById("postOpts");
+    var shadowEl = document.getElementById("shadow");
+    var highlightEl = document.getElementById("highlight");
+    var contrastEl = document.getElementById("contrast");
+    var contrastVal = document.getElementById("contrastVal");
+    var thrEl = document.getElementById("threshold");
+    var thrVal = document.getElementById("thrVal");
+    var levelsEl = document.getElementById("levels");
+    var levelsVal = document.getElementById("levelsVal");
+    var duoPresets = document.getElementById("duoPresets");
+
+    var effect = "duotone";
+    var baseImg = null;
+
+    function setActive(root, btn) {
+      Array.prototype.forEach.call(root.querySelectorAll("button"), function (x) { x.classList.toggle("active", x === btn); });
+    }
+
+    effectBtns.addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-v]"); if (!b) return;
+      effect = b.getAttribute("data-v");
+      setActive(effectBtns, b);
+      duoOpts.style.display = effect === "duotone" ? "block" : "none";
+      thrOpts.style.display = effect === "threshold" ? "block" : "none";
+      postOpts.style.display = effect === "posterize" ? "block" : "none";
+      render();
+    });
+
+    var PRESETS = {
+      classic: ["#1a3b5c", "#ffd5a5"],
+      fire:    ["#2b0f0f", "#ffd23f"],
+      ocean:   ["#0b3d5c", "#a8e6ff"],
+      forest:  ["#0c291e", "#c7f0a0"],
+      candy:   ["#3a0a4f", "#ff9ec7"],
+      noir:    ["#000000", "#ffffff"]
+    };
+    duoPresets.addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-p]"); if (!b) return;
+      var p = PRESETS[b.getAttribute("data-p")];
+      shadowEl.value = p[0]; highlightEl.value = p[1];
+      render();
+    });
+
+    function loadFile(f) {
+      if (!f || (!f.type.startsWith("image/") && !/\.(png|jpe?g|webp|gif|bmp)$/i.test(f.name))) return;
+      var r = new FileReader();
+      r.onload = function () {
+        var img = new Image();
+        img.onload = function () {
+          baseImg = img; drop.style.display = "none"; hint.style.display = "none"; opts.style.display = "block"; render();
+        };
+        img.src = r.result;
+      };
+      r.readAsDataURL(f);
+    }
+    fileEl.addEventListener("change", function () { loadFile(fileEl.files[0]); });
+    drop.addEventListener("click", function () { fileEl.click(); });
+    drop.addEventListener("dragover", function (e) { e.preventDefault(); drop.style.borderColor = "var(--accent,#6ea8fe)"; });
+    drop.addEventListener("dragleave", function () { drop.style.borderColor = ""; });
+    drop.addEventListener("drop", function (e) { e.preventDefault(); drop.style.borderColor = ""; if (e.dataTransfer && e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]); });
+    document.addEventListener("paste", function (e) {
+      var items = e.clipboardData && e.clipboardData.items; if (!items) return;
+      for (var i = 0; i < items.length; i++) if (items[i].type && items[i].type.startsWith("image/")) { loadFile(items[i].getAsFile()); break; }
+    });
+
+    [contrastEl, thrEl, levelsEl].forEach(function (el) {
+      el.addEventListener("input", function () {
+        contrastVal.textContent = parseFloat(contrastEl.value).toFixed(2);
+        thrVal.textContent = thrEl.value;
+        levelsVal.textContent = levelsEl.value;
+        render();
+      });
+    });
+    [shadowEl, highlightEl].forEach(function (el) { el.addEventListener("input", render); el.addEventListener("change", render); });
+
+    function hexToRgb(hex) {
+      var m = hex.match(/^#([0-9a-f]{6})$/i);
+      if (!m) return [0, 0, 0];
+      var h = m[1];
+      return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+    }
+
+    // luminance 0-255
+    function luma(r, g, b) { return 0.299 * r + 0.587 * g + 0.114 * b; }
+
+    // Pure effect: pix is Uint8ClampedArray RGBA. Returns NEW Uint8ClampedArray.
+    function applyEffect(pix, w, h, mode, opts) {
+      opts = opts || {};
+      var n = pix.length;
+      var out = new Uint8ClampedArray(n);
+      if (mode === "grayscale") {
+        for (var i = 0; i < n; i += 4) {
+          var y = 0.299 * pix[i] + 0.587 * pix[i + 1] + 0.114 * pix[i + 2];
+          out[i] = out[i + 1] = out[i + 2] = y; out[i + 3] = pix[i + 3];
+        }
+      } else if (mode === "sepia") {
+        for (var i = 0; i < n; i += 4) {
+          var r = pix[i], g = pix[i + 1], b = pix[i + 2];
+          out[i] = Math.min(255, 0.393 * r + 0.769 * g + 0.189 * b);
+          out[i + 1] = Math.min(255, 0.349 * r + 0.686 * g + 0.168 * b);
+          out[i + 2] = Math.min(255, 0.272 * r + 0.534 * g + 0.131 * b);
+          out[i + 3] = pix[i + 3];
+        }
+      } else if (mode === "invert") {
+        for (var i = 0; i < n; i += 4) {
+          out[i] = 255 - pix[i]; out[i + 1] = 255 - pix[i + 1]; out[i + 2] = 255 - pix[i + 2]; out[i + 3] = pix[i + 3];
+        }
+      } else if (mode === "threshold") {
+        var thr = (typeof opts.threshold === "number") ? opts.threshold : 128;
+        for (var i = 0; i < n; i += 4) {
+          var y = luma(pix[i], pix[i + 1], pix[i + 2]);
+          var v = y >= thr ? 255 : 0;
+          out[i] = out[i + 1] = out[i + 2] = v; out[i + 3] = pix[i + 3];
+        }
+      } else if (mode === "posterize") {
+        var levels = Math.max(2, opts.levels || 4);
+        var step = 255 / (levels - 1);
+        for (var i = 0; i < n; i += 4) {
+          for (var c = 0; c < 3; c++) {
+            var v = pix[i + c];
+            out[i + c] = Math.round(Math.round(v / step) * step);
+          }
+          out[i + 3] = pix[i + 3];
+        }
+      } else if (mode === "duotone") {
+        var sh = opts.shadow || [0, 0, 0];
+        var hi = opts.highlight || [255, 255, 255];
+        var contrast = opts.contrast || 1;
+        for (var i = 0; i < n; i += 4) {
+          var y = luma(pix[i], pix[i + 1], pix[i + 2]) / 255; // 0..1
+          // contrast S-curve around 0.5
+          var t = (y - 0.5) * contrast + 0.5;
+          if (t < 0) t = 0; if (t > 1) t = 1;
+          out[i] = sh[0] + (hi[0] - sh[0]) * t;
+          out[i + 1] = sh[1] + (hi[1] - sh[1]) * t;
+          out[i + 2] = sh[2] + (hi[2] - sh[2]) * t;
+          out[i + 3] = pix[i + 3];
+        }
+      } else {
+        out.set(pix);
+      }
+      return out;
+    }
+
+    function render() {
+      if (!baseImg) return;
+      var W = baseImg.naturalWidth, H = baseImg.naturalHeight;
+      exp.width = W; exp.height = H;
+      ectx.clearRect(0, 0, W, H);
+      ectx.drawImage(baseImg, 0, 0);
+      var imgData = ectx.getImageData(0, 0, W, H);
+      var opts;
+      if (effect === "duotone") opts = { shadow: hexToRgb(shadowEl.value), highlight: hexToRgb(highlightEl.value), contrast: parseFloat(contrastEl.value) };
+      else if (effect === "threshold") opts = { threshold: parseInt(thrEl.value, 10) };
+      else if (effect === "posterize") opts = { levels: parseInt(levelsEl.value, 10) };
+      var out = applyEffect(imgData.data, W, H, effect, opts);
+      ectx.putImageData(new ImageData(out, W, H), 0, 0);
+      // preview scaled
+      var maxW = 440, pw, ph;
+      if (W >= H) { pw = Math.min(maxW, W); ph = Math.round(H * pw / W); }
+      else { ph = Math.min(maxW, H); pw = Math.round(W * ph / H); }
+      preview.width = pw; preview.height = ph;
+      pctx.clearRect(0, 0, pw, ph);
+      pctx.drawImage(exp, 0, 0, pw, ph);
+      hint.style.display = "none";
+    }
+
+    document.getElementById("download").addEventListener("click", function () {
+      if (!baseImg) return;
+      render();
+      var a = document.createElement("a");
+      a.href = exp.toDataURL("image/png");
+      a.download = effect + ".png";
+      document.body.appendChild(a); a.click(); a.remove();
+    });
+    document.getElementById("newImage").addEventListener("click", function () {
+      baseImg = null; drop.style.display = "block"; hint.style.display = "block"; opts.style.display = "none";
+      pctx.clearRect(0, 0, preview.width, preview.height); fileEl.value = "";
+    });
+
+    window.VT_DUOTONE_TEST = { applyEffect: applyEffect, hexToRgb: hexToRgb, luma: luma, PRESETS: PRESETS };
+  })();
+  </script>
+</body>
+</html>

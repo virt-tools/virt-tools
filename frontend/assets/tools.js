@@ -1091,6 +1091,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-10T04:10:00Z",
   },
   {
+    slug: "image-duotone",
+    name: "Image Duotone & Color Effects",
+    description: "Apply duotone and classic color effects to an image and download the result. Duotone maps each pixel's brightness onto a gradient between two colors you choose (with presets and a contrast curve), or pick grayscale, sepia, invert, threshold, or posterize. Computed per-pixel at full resolution and exported losslessly as PNG. Everything runs locally; nothing is uploaded.",
+    category: "Image",
+    icon: "🎨",
+    added: "2026-07-10T05:00:00Z",
+  },
+  {
     slug: "ascii-art",
     name: "Image to ASCII Art Generator",
     description: "Turn a picture into ASCII art you can copy or download. Pick a character ramp (standard, detailed, blocks, dots, binary or custom), set the output width and flip light/dark for the background. Rec.709 luminance with 2:1 character-aspect correction, all computed locally from a canvas — the image never leaves your browser.",
