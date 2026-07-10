@@ -1115,6 +1115,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-10T06:40:00Z",
   },
   {
+    slug: "css-transform-generator",
+    name: "CSS Transform Generator",
+    description: "Compose CSS transforms with a live preview and copy-ready code — translate, rotate, 3D rotateX/rotateY with perspective, scale (with optional X/Y lock), and skew — plus a visual transform-origin picker. Only the functions you actually change are emitted, so an untouched box outputs transform: none. Everything runs in your browser; nothing is uploaded.",
+    category: "Design",
+    icon: "🔄",
+    added: "2026-07-10T07:30:00Z",
+  },
+  {
     slug: "ascii-art",
     name: "Image to ASCII Art Generator",
     description: "Turn a picture into ASCII art you can copy or download. Pick a character ramp (standard, detailed, blocks, dots, binary or custom), set the output width and flip light/dark for the background. Rec.709 luminance with 2:1 character-aspect correction, all computed locally from a canvas — the image never leaves your browser.",
