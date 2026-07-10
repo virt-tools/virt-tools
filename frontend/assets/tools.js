@@ -1891,6 +1891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-11T09:00:00Z",
   },
   {
+    slug: "capacitor-series-parallel",
+    name: "Capacitor Calculator (Series & Parallel)",
+    description: "Combine capacitor values in series or parallel to find the total capacitance, or solve for a missing capacitor that pairs with a known one to reach a target total. Series uses 1/C = 1/C₁ + 1/C₂ + … (the total is always smaller than the smallest member); parallel sums them. Parses pF, nF, µF, mF, and F notation and formats the result in a sensible unit. Pairs with the Resistor Series / Parallel Calculator. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🔋",
+    added: "2026-07-10T05:00:00Z",
+  },
+  {
     slug: "resistor-color-code",
     name: "Resistor Color Code",
     description: "Decode a through-hole resistor's color bands into its resistance and tolerance, or encode an ohm value back into 4- or 5-band colors. Pick band colors (or type a value like 4.7k or 0.47) to read the result; standard colors cover digits 0–9, gold and silver multipliers (×0.1 / ×0.01) for sub-ohm values, and tolerances from 0.1% to 20%. Pairs with the Ohm's Law calculator for basic electronics. Everything runs locally in your browser.",

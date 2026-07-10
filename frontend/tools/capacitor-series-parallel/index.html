@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Capacitor Series / Parallel Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .opts { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin:10px 0; font-size:.9rem; }
+    .opts label { display:inline-flex; gap:6px; align-items:center; }
+    .opts input, .opts select { width:120px; font-family:ui-monospace,monospace; padding:6px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; }
+    .opts select { width:auto; font-size:.85rem; }
+    .mode { display:flex; gap:8px; margin:6px 0 8px; flex-wrap:wrap; }
+    .mode button { padding:6px 14px; border-radius:6px; border:1px solid var(--border,#2a2f3a); background:var(--bg-elev,#171a21); color:var(--text-dim,#9aa3b2); cursor:pointer; font-size:.85rem; }
+    .mode button.active { background:var(--accent,#6ea8fe); color:#0b0d12; border-color:var(--accent,#6ea8fe); font-weight:700; }
+    .big { font-family:ui-monospace,monospace; font-size:1.4rem; font-weight:700; color:var(--accent,#6ea8fe); margin:8px 0; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    h3 { margin:18px 0 4px; font-size:.95rem; }
+    .hint { color:var(--text-dim,#9aa3b2); font-size:13px; margin:4px 0; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Capacitor Series / Parallel Calculator</h1>
+      <p>Combine capacitor values in series or parallel and solve for a missing capacitor. Enter a list of capacitor values (e.g. <code>10nF, 100nF, 1µF</code>) to get the total; or give one known capacitor and a target total to find the second capacitor needed. Series totals are smaller than the smallest member; parallel totals are the sum. Pairs with the Resistor Series / Parallel Calculator. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="mode">
+        <button id="mode-combine" class="active" type="button">Combine a list</button>
+        <button id="mode-find" type="button">Find a missing capacitor</button>
+      </div>
+
+      <div id="combine-panel">
+        <div class="opts">
+          <label>Capacitors <input type="text" id="c-list" value="10nF, 100nF, 1µF" style="width:260px"></label>
+          <label>Mode
+            <select id="c-config">
+              <option value="parallel">Parallel</option>
+              <option value="series">Series</option>
+            </select>
+          </label>
+        </div>
+        <div class="err" id="c-err"></div>
+        <div class="big" id="c-total"></div>
+        <div class="hint" id="c-detail"></div>
+      </div>
+
+      <div id="find-panel" style="display:none">
+        <div class="opts">
+          <label>Known capacitor <input type="text" id="f-known" value="100nF"></label>
+          <label>Target total <input type="text" id="f-target" value="150nF"></label>
+          <label>Mode
+            <select id="f-config">
+              <option value="parallel">Parallel</option>
+              <option value="series">Series</option>
+            </select>
+          </label>
+        </div>
+        <div class="err" id="f-err"></div>
+        <div class="big" id="f-second"></div>
+        <div class="hint" id="f-detail"></div>
+      </div>
+
+      <p class="note">Parallel: <code>C = C₁ + C₂ + …</code> (totals grow). Series: <code>1/C = 1/C₁ + 1/C₂ + …</code>, so the total is always smaller than the smallest member. To hit a target total from one known capacitor: in parallel add <code>C₂ = C_target − C₁</code>; in series add <code>C₂ = 1 / (1/C_target − 1/C₁)</code> (requires the known capacitor to be larger than the target). Units understood: pF, nF, µF/uF, mF, F. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    // Parse a single capacitor value string into farads. Handles 10nF, 100n, 1uF, 1µF, 2.2n, 4mF, 1F, etc.
+    function parseC(s) {
+      if (s == null) return null;
+      s = String(s).trim();
+      if (!s) return null;
+      var m = s.match(/^([-+0-9.eE]+)\s*(pf|p|nf|n|uf|µf|µ|u|mf|m|f)?$/i);
+      if (!m) return null;
+      var num = parseFloat(m[1]);
+      if (!isFinite(num) || num <= 0) return null;
+      var unit = (m[2] || "f").toLowerCase();
+      var mult = { pf: 1e-12, p: 1e-12, nf: 1e-9, n: 1e-9, uf: 1e-6, "µf": 1e-6, "µ": 1e-6, u: 1e-6, mf: 1e-3, m: 1e-3, f: 1 }[unit];
+      if (mult == null) return null;
+      return num * mult;
+    }
+    // Parse a comma/space-separated list into farads. Returns {values, errors}.
+    function parseList(s) {
+      var out = [], errs = [];
+      String(s).split(/[,\s]+/).filter(Boolean).forEach(function (tok) {
+        var v = parseC(tok);
+        if (v == null) errs.push(tok);
+        else out.push(v);
+      });
+      return { values: out, errors: errs };
+    }
+    // Series total (farads): 1 / sum(1/C).
+    function seriesTotal(values) {
+      if (!values.length) return null;
+      var inv = 0;
+      for (var i = 0; i < values.length; i++) inv += 1 / values[i];
+      return 1 / inv;
+    }
+    // Parallel total (farads): sum(C).
+    function parallelTotal(values) {
+      var t = 0;
+      for (var i = 0; i < values.length; i++) t += values[i];
+      return t;
+    }
+    // Find the second capacitor to reach a target total from a known one.
+    function findSecond(known, target, parallel) {
+      if (!(known > 0) || !(target > 0)) return { err: "Known capacitor and target must be positive." };
+      if (parallel) {
+        if (target <= known) return { err: "For a parallel pair, the target must be larger than the known capacitor." };
+        return { value: target - known, err: null };
+      } else {
+        if (known <= target) return { err: "For a series pair, the known capacitor must be larger than the target total." };
+        return { value: 1 / (1 / target - 1 / known), err: null };
+      }
+    }
+    // Format a capacitance in farads with a sensible unit.
+    function fmtC(f) {
+      if (f == null || !isFinite(f)) return "—";
+      var a = Math.abs(f);
+      if (a === 0) return "0 F";
+      var units = [["F", 1], ["mF", 1e-3], ["µF", 1e-6], ["nF", 1e-9], ["pF", 1e-12]];
+      for (var i = 0; i < units.length; i++) {
+        var name = units[i][0], base = units[i][1];
+        if (a >= base) {
+          var v = Math.round((f / base) * 10000) / 10000;
+          return v.toString() + " " + name;
+        }
+      }
+      return (Math.round(f * 1e12)) + " pF";
+    }
+
+    var modeCombine = document.getElementById("mode-combine");
+    var modeFind = document.getElementById("mode-find");
+    var combinePanel = document.getElementById("combine-panel");
+    var findPanel = document.getElementById("find-panel");
+    var cErr = document.getElementById("c-err"), cTotal = document.getElementById("c-total"), cDetail = document.getElementById("c-detail");
+    var fErr = document.getElementById("f-err"), fSecond = document.getElementById("f-second"), fDetail = document.getElementById("f-detail");
+
+    function setMode(m) {
+      modeCombine.classList.toggle("active", m === "combine");
+      modeFind.classList.toggle("active", m === "find");
+      combinePanel.style.display = m === "combine" ? "" : "none";
+      findPanel.style.display = m === "find" ? "" : "none";
+      render();
+    }
+
+    function render() {
+      cErr.textContent = ""; cTotal.textContent = ""; cDetail.textContent = "";
+      fErr.textContent = ""; fSecond.textContent = ""; fDetail.textContent = "";
+      if (modeCombine.classList.contains("active")) {
+        var pl = parseList(document.getElementById("c-list").value);
+        if (pl.errors.length) { cErr.textContent = "Couldn't parse: " + pl.errors.join(", ") + "."; return; }
+        if (!pl.values.length) { cErr.textContent = "Enter at least one capacitor value."; return; }
+        var parallel = document.getElementById("c-config").value === "parallel";
+        var total = parallel ? parallelTotal(pl.values) : seriesTotal(pl.values);
+        cTotal.textContent = "= " + fmtC(total);
+        cDetail.textContent = pl.values.length + " capacitor" + (pl.values.length > 1 ? "s" : "") + " in " + (parallel ? "parallel" : "series") +
+          ": " + pl.values.map(fmtC).join(", ");
+      } else {
+        var known = parseC(document.getElementById("f-known").value);
+        var target = parseC(document.getElementById("f-target").value);
+        if (known == null || target == null) { fErr.textContent = "Enter a known capacitor and a target total (e.g. 100nF, 150nF)."; return; }
+        var parallel = document.getElementById("f-config").value === "parallel";
+        var res = findSecond(known, target, parallel);
+        if (res.err) { fErr.textContent = res.err; return; }
+        fSecond.textContent = "C₂ = " + fmtC(res.value);
+        fDetail.textContent = "Known " + fmtC(known) + " + " + fmtC(res.value) + " in " + (parallel ? "parallel" : "series") + " → " + fmtC(target);
+      }
+    }
+
+    modeCombine.addEventListener("click", function () { setMode("combine"); });
+    modeFind.addEventListener("click", function () { setMode("find"); });
+    ["c-list","c-config","f-known","f-target","f-config"].forEach(function (id) {
+      var el = document.getElementById(id); el.addEventListener("input", render); el.addEventListener("change", render);
+    });
+    render();
+
+    window.VT_CAP_TEST = { parseC: parseC, parseList: parseList, seriesTotal: seriesTotal, parallelTotal: parallelTotal, findSecond: findSecond, fmtC: fmtC };
+  })();
+  </script>
+</body>
+</html>
