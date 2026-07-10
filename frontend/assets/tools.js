@@ -1099,6 +1099,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-10T05:00:00Z",
   },
   {
+    slug: "image-grid-maker",
+    name: "Image Grid Maker",
+    description: "Combine several images into a single grid — a contact sheet, a before/after strip, or a social collage — with adjustable columns (or auto), cell size, gap, padding, background, rounded corners, and cover/contain fit. Reorder or remove images; export lossless PNG or JPEG. Composited at full source resolution on a canvas; nothing is uploaded.",
+    category: "Image",
+    icon: "▦",
+    added: "2026-07-10T05:50:00Z",
+  },
+  {
     slug: "ascii-art",
     name: "Image to ASCII Art Generator",
     description: "Turn a picture into ASCII art you can copy or download. Pick a character ramp (standard, detailed, blocks, dots, binary or custom), set the output width and flip light/dark for the background. Rec.709 luminance with 2:1 character-aspect correction, all computed locally from a canvas — the image never leaves your browser.",

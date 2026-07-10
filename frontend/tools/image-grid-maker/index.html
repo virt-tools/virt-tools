@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Image Grid Maker — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .layout { display:grid; grid-template-columns: 1fr 1fr; gap:24px; align-items:start; }
+    @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+    .drop { border:2px dashed var(--border,#2a2f3a); border-radius:12px; padding:18px; text-align:center; cursor:pointer; margin:8px 0; }
+    .drop:hover { border-color:var(--accent,#6ea8fe); }
+    .thumbs { display:flex; flex-direction:column; gap:8px; max-height:300px; overflow:auto; margin:8px 0; }
+    .thumb { display:flex; align-items:center; gap:10px; border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:6px; }
+    .thumb img { width:48px; height:48px; object-fit:cover; border-radius:4px; flex:0 0 auto; }
+    .thumb .info { flex:1; min-width:0; font-size:.8rem; }
+    .thumb .info code { font-family:ui-monospace,monospace; }
+    .thumb .btns { display:flex; gap:4px; }
+    .thumb .btns button { padding:2px 8px; font-size:.75rem; }
+    .grid-opts { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    input[type="range"] { width:150px; vertical-align:middle; }
+    input[type="color"] { width:42px; height:30px; padding:0; border:1px solid var(--border,#2a2f3a); border-radius:6px; background:none; cursor:pointer; }
+    .vval { font-family:ui-monospace,monospace; font-size:12px; opacity:.8; }
+    .seg { display:flex; gap:6px; }
+    .seg button { padding:6px 12px; font-size:.85rem; }
+    .seg button.active { background:var(--accent,#6ea8fe); color:#0b0d12; border-color:var(--accent,#6ea8fe); }
+    #previewWrap { text-align:center; }
+    #preview { max-width:100%; height:auto; max-height:420px; border:1px solid var(--border,#2a2f3a); border-radius:8px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Image Grid Maker</h1>
+      <p>Combine several images into a single grid — a contact sheet, a before/after strip, a social-media collage — with adjustable columns, cell size, gap, padding, background, rounded corners, and cover/contain fitting. Everything is composited on a canvas at full source resolution; nothing is uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="layout">
+        <!-- Controls -->
+        <div>
+          <div class="drop" id="drop">
+            <strong>Click to add images</strong> (or drop / paste)<br>
+            <span style="opacity:.7;font-size:13px">Add as many as you like; order is top-left to bottom-right.</span>
+            <input type="file" id="file" accept="image/*" multiple style="display:none">
+          </div>
+          <div class="thumbs" id="thumbs"></div>
+
+          <div class="grid-opts">
+            <div class="field">
+              <label>Columns <span class="vval" id="colsVal">auto</span></label>
+              <input type="range" id="cols" min="0" max="8" step="1" value="0">
+            </div>
+            <div class="field">
+              <label>Cell size (px) <span class="vval" id="cellVal">256</span></label>
+              <input type="range" id="cell" min="64" max="1024" step="32" value="256">
+            </div>
+            <div class="field">
+              <label>Gap (px) <span class="vval" id="gapVal">8</span></label>
+              <input type="range" id="gap" min="0" max="48" step="2" value="8">
+            </div>
+            <div class="field">
+              <label>Padding (px) <span class="vval" id="padVal">12</span></label>
+              <input type="range" id="pad" min="0" max="64" step="2" value="12">
+            </div>
+            <div class="field">
+              <label>Corner radius (px) <span class="vval" id="radVal">0</span></label>
+              <input type="range" id="radius" min="0" max="64" step="2" value="0">
+            </div>
+            <div class="field">
+              <label>Background <input type="color" id="bg" value="#ffffff"></label>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Cell fit</label>
+            <div class="seg" id="fit">
+              <button type="button" data-v="cover" class="active">Cover (fill)</button>
+              <button type="button" data-v="contain">Contain (letterbox)</button>
+            </div>
+          </div>
+
+          <div class="row" style="margin-top:10px;">
+            <button id="download">Download PNG</button>
+            <button id="downloadJpg" class="secondary">JPEG</button>
+            <button id="clear" class="secondary">Clear all</button>
+          </div>
+        </div>
+
+        <!-- Preview -->
+        <div id="previewWrap">
+          <canvas id="preview"></canvas>
+          <p class="note" id="hint">Add images to build a grid.</p>
+        </div>
+      </div>
+
+      <p class="note">Columns = <code>auto</code> picks a near-square grid (<code>ceil(√n)</code>); set a number to force a layout (the last row may be partial). <code>Cover</code> fills each cell and crops overflow; <code>Contain</code> fits the whole image and letterboxes the rest with the background color. The composite is rendered at full cell resolution and exported losslessly as PNG (or JPEG). No network requests are made.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var drop = document.getElementById("drop");
+    var fileEl = document.getElementById("file");
+    var thumbs = document.getElementById("thumbs");
+    var preview = document.getElementById("preview");
+    var hint = document.getElementById("hint");
+    var pctx = preview.getContext("2d");
+    var colsEl = document.getElementById("cols"); var colsVal = document.getElementById("colsVal");
+    var cellEl = document.getElementById("cell"); var cellVal = document.getElementById("cellVal");
+    var gapEl = document.getElementById("gap"); var gapVal = document.getElementById("gapVal");
+    var padEl = document.getElementById("pad"); var padVal = document.getElementById("padVal");
+    var radiusEl = document.getElementById("radius"); var radVal = document.getElementById("radVal");
+    var bgEl = document.getElementById("bg");
+    var fitBtns = document.getElementById("fit");
+
+    var images = []; // { img: HTMLImageElement, name, w, h }
+    var fit = "cover";
+
+    // Pure layout: given count + config, returns { outW, outH, cells: [{x,y,w,h}] }.
+    function computeLayout(count, cellW, cellH, cols, gap, pad) {
+      if (count <= 0) return { outW: 0, outH: 0, cells: [] };
+      cols = (cols && cols > 0) ? cols : Math.max(1, Math.ceil(Math.sqrt(count)));
+      var rows = Math.ceil(count / cols);
+      var outW = pad * 2 + cols * cellW + (cols - 1) * gap;
+      var outH = pad * 2 + rows * cellH + (rows - 1) * gap;
+      var cells = [];
+      for (var i = 0; i < count; i++) {
+        var r = Math.floor(i / cols), c = i % cols;
+        cells.push({
+          x: pad + c * (cellW + gap),
+          y: pad + r * (cellH + gap),
+          w: cellW, h: cellH, index: i
+        });
+      }
+      return { outW: outW, outH: outH, cells: cells, cols: cols, rows: rows };
+    }
+
+    // Draw one image into a cell with cover/contain fit and optional rounded clip.
+    function drawCell(ctx, img, cell, fitMode, radius, bgColor) {
+      var sw = img.naturalWidth || img.width, sh = img.naturalHeight || img.height;
+      ctx.save();
+      if (radius > 0) {
+        roundRectPath(ctx, cell.x, cell.y, cell.w, cell.h, radius);
+        ctx.clip();
+      }
+      if (fitMode === "contain") {
+        // letterbox: fill cell bg, then fit image centered
+        if (bgColor) { ctx.fillStyle = bgColor; ctx.fillRect(cell.x, cell.y, cell.w, cell.h); }
+        var scale = Math.min(cell.w / sw, cell.h / sh);
+        var dw = sw * scale, dh = sh * scale;
+        var dx = cell.x + (cell.w - dw) / 2, dy = cell.y + (cell.h - dh) / 2;
+        ctx.drawImage(img, dx, dy, dw, dh);
+      } else { // cover
+        var scale = Math.max(cell.w / sw, cell.h / sh);
+        var dw = sw * scale, dh = sh * scale;
+        var dx = cell.x + (cell.w - dw) / 2, dy = cell.y + (cell.h - dh) / 2;
+        ctx.drawImage(img, dx, dy, dw, dh);
+      }
+      ctx.restore();
+    }
+    function roundRectPath(ctx, x, y, w, h, r) {
+      r = Math.min(r, w / 2, h / 2);
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+
+    function render() {
+      // re-read controls
+      colsVal.textContent = colsEl.value === "0" ? "auto" : colsEl.value;
+      cellVal.textContent = cellEl.value;
+      gapVal.textContent = gapEl.value;
+      padVal.textContent = padEl.value;
+      radVal.textContent = radiusEl.value;
+      thumbsRender();
+      if (!images.length) {
+        pctx.clearRect(0, 0, preview.width, preview.height);
+        hint.style.display = "block"; hint.textContent = "Add images to build a grid.";
+        return;
+      }
+      hint.style.display = "none";
+      var cfg = computeLayout(images.length, parseInt(cellEl.value, 10), parseInt(cellEl.value, 10),
+        parseInt(colsEl.value, 10), parseInt(gapEl.value, 10), parseInt(padEl.value, 10));
+      var exp = document.createElement("canvas");
+      exp.width = cfg.outW; exp.height = cfg.outH;
+      var ectx = exp.getContext("2d");
+      ectx.fillStyle = bgEl.value; ectx.fillRect(0, 0, cfg.outW, cfg.outH);
+      var radius = parseInt(radiusEl.value, 10);
+      var bg = bgEl.value;
+      for (var i = 0; i < cfg.cells.length; i++) {
+        drawCell(ectx, images[i].img, cfg.cells[i], fit, radius, bg);
+      }
+      // preview scaled to fit ~440
+      var maxW = 440, pw, ph;
+      if (cfg.outW >= cfg.outH) { pw = Math.min(maxW, cfg.outW); ph = Math.round(cfg.outH * pw / cfg.outW); }
+      else { ph = Math.min(maxW, cfg.outH); pw = Math.round(cfg.outW * ph / cfg.outH); }
+      preview.width = pw; preview.height = ph;
+      pctx.clearRect(0, 0, pw, ph);
+      pctx.drawImage(exp, 0, 0, pw, ph);
+      // stash export canvas for download
+      render._exp = exp; render._cfg = cfg;
+    }
+
+    function thumbsRender() {
+      thumbs.innerHTML = "";
+      images.forEach(function (it, i) {
+        var row = document.createElement("div"); row.className = "thumb";
+        var img = document.createElement("img"); img.src = it.img.src;
+        var info = document.createElement("div"); info.className = "info";
+        info.innerHTML = "#" + (i + 1) + " <code>" + it.name + "</code> · " + it.w + "×" + it.h;
+        var btns = document.createElement("div"); btns.className = "btns";
+        var up = document.createElement("button"); up.type = "button"; up.textContent = "▲";
+        up.disabled = (i === 0);
+        up.addEventListener("click", function () { move(i, -1); });
+        var down = document.createElement("button"); down.type = "button"; down.textContent = "▼";
+        down.disabled = (i === images.length - 1);
+        down.addEventListener("click", function () { move(i, 1); });
+        var rm = document.createElement("button"); rm.type = "button"; rm.textContent = "✕";
+        rm.addEventListener("click", function () { images.splice(i, 1); render(); });
+        btns.appendChild(up); btns.appendChild(down); btns.appendChild(rm);
+        row.appendChild(img); row.appendChild(info); row.appendChild(btns);
+        thumbs.appendChild(row);
+      });
+    }
+    function move(i, dir) {
+      var j = i + dir;
+      if (j < 0 || j >= images.length) return;
+      var t = images[i]; images[i] = images[j]; images[j] = t;
+      render();
+    }
+
+    function addFiles(fileList) {
+      var pending = 0, done = 0;
+      Array.prototype.forEach.call(fileList, function (f) {
+        if (!f.type.startsWith("image/") && !/\.(png|jpe?g|webp|gif|bmp)$/i.test(f.name)) return;
+        pending++;
+        var r = new FileReader();
+        r.onload = function () {
+          var img = new Image();
+          img.onload = function () {
+            images.push({ img: img, name: f.name, w: img.naturalWidth, h: img.naturalHeight });
+            if (++done === pending) render();
+          };
+          img.src = r.result;
+        };
+        r.readAsDataURL(f);
+      });
+      if (pending === 0) return;
+    }
+    fileEl.addEventListener("change", function () { addFiles(fileEl.files); fileEl.value = ""; });
+    drop.addEventListener("click", function () { fileEl.click(); });
+    drop.addEventListener("dragover", function (e) { e.preventDefault(); drop.style.borderColor = "var(--accent,#6ea8fe)"; });
+    drop.addEventListener("dragleave", function () { drop.style.borderColor = ""; });
+    drop.addEventListener("drop", function (e) {
+      e.preventDefault(); drop.style.borderColor = "";
+      if (e.dataTransfer && e.dataTransfer.files) addFiles(e.dataTransfer.files);
+    });
+    document.addEventListener("paste", function (e) {
+      var items = e.clipboardData && e.clipboardData.items; if (!items) return;
+      var files = [];
+      for (var i = 0; i < items.length; i++) if (items[i].type && items[i].type.startsWith("image/")) files.push(items[i].getAsFile());
+      if (files.length) addFiles(files);
+    });
+
+    [colsEl, cellEl, gapEl, padEl, radiusEl, bgEl].forEach(function (el) {
+      el.addEventListener("input", render); el.addEventListener("change", render);
+    });
+    fitBtns.addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-v]"); if (!b) return;
+      fit = b.getAttribute("data-v");
+      Array.prototype.forEach.call(fitBtns.querySelectorAll("button"), function (x) { x.classList.toggle("active", x === b); });
+      render();
+    });
+
+    function download(mime, name) {
+      if (!images.length || !render._exp) return;
+      var a = document.createElement("a");
+      a.href = render._exp.toDataURL(mime, mime === "image/jpeg" ? 0.92 : undefined);
+      a.download = name;
+      document.body.appendChild(a); a.click(); a.remove();
+    }
+    document.getElementById("download").addEventListener("click", function () { download("image/png", "grid.png"); });
+    document.getElementById("downloadJpg").addEventListener("click", function () { download("image/jpeg", "grid.jpg"); });
+    document.getElementById("clear").addEventListener("click", function () { images = []; render(); });
+
+    window.VT_GRID_TEST = { computeLayout: computeLayout, drawCell: drawCell, roundRectPath: roundRectPath };
+    render();
+  })();
+  </script>
+</body>
+</html>
