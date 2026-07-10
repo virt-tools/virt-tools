@@ -1635,6 +1635,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-05T05:40:00Z",
   },
   {
+    slug: "angle-converter",
+    name: "Angle Converter",
+    description: "Convert an angle between degrees, radians, gradians (gons), turns (revolutions), arcminutes, arcseconds, and NATO mils, and to or from degrees-minutes-seconds (DMS). Enter a value in any unit or as DMS and every other unit is shown at once. A full circle is 360° = 2π rad = 400 grad = 1 turn = 21,600′ = 1,296,000″ = 6,400 mils; values are kept raw (not wrapped to a single turn). Pairs with the Trigonometry Calculator. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🧭",
+    added: "2026-07-11T01:00:00Z",
+  },
+  {
     slug: "modular-arithmetic",
     name: "Modular Arithmetic Calculator",
     description: "Work with integers modulo m using exact big-integer arithmetic — no floating-point rounding. Enter two integers a and b and a positive modulus m to see residues, sums, differences, products, modular powers, modular inverses, and greatest common divisors, plus the full solution set of the linear congruence a·x ≡ b (mod m). Negative exponents are supported when an inverse exists, and a congruence with multiple solutions lists every distinct residue in [0, m). Everything runs locally in your browser.",
