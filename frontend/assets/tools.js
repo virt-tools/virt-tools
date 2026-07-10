@@ -1291,6 +1291,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-04T17:40:00Z",
   },
   {
+    slug: "depth-of-field-calculator",
+    name: "Depth of Field Calculator",
+    description: "Find the hyperfocal distance and the near and far limits of acceptable focus for a camera lens. Enter focal length, aperture (f-number), and subject distance, then choose a sensor (full frame, APS-C, Micro 4/3, 1″) or a custom circle of confusion. Reports the hyperfocal distance, near and far focus distances, total depth of field, and the DOF in front of and behind the subject, in metres or feet. Uses the standard exact depth-of-field formulas; distances at or beyond the hyperfocal report infinity for the far limit. Everything runs locally in your browser.",
+    category: "Image",
+    icon: "📷",
+    added: "2026-07-11T11:00:00Z",
+  },
+  {
     slug: "tip-split",
     name: "Tip & Bill Split Calculator",
     description: "Work out the tip and split a bill evenly among any number of people — with sales tax, a choice of tipping before or after tax, and an optional round-up so each person pays a whole-dollar amount. All arithmetic is in integer cents, so when a total doesn't divide evenly the odd cent is distributed fairly (a few people pay one cent more) and every share adds back up to the exact total. All math runs locally in your browser.",

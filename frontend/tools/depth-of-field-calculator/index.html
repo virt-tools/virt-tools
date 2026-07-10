@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Depth of Field Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .opts { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin:10px 0; font-size:.9rem; }
+    .opts label { display:inline-flex; gap:6px; align-items:center; }
+    .opts input { width:90px; font-family:ui-monospace,monospace; padding:6px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; }
+    .opts select { padding:6px 8px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; font-size:.85rem; }
+    .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:8px; margin:10px 0; }
+    .stats .s { background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:10px 12px; }
+    .stats .s .k { color:var(--text-dim,#9aa3b2); font-size:12px; }
+    .stats .s .v { font-family:ui-monospace,monospace; font-weight:700; color:var(--accent,#6ea8fe); font-size:1.05rem; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    h3 { margin:18px 0 4px; font-size:.95rem; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Depth of Field Calculator</h1>
+      <p>Find the hyperfocal distance and the near and far limits of acceptable focus for a camera lens. Enter the focal length, aperture (f-number), and subject distance, then choose a sensor or circle of confusion. Reports the hyperfocal distance, the near and far focus distances, the total depth of field, and how much of it lies in front of and behind the subject. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="opts">
+        <label>Focal length <input type="text" id="f" inputmode="decimal" value="50"> mm</label>
+        <label>Aperture f/ <input type="text" id="N" inputmode="decimal" value="8"></label>
+        <label>Subject distance <input type="text" id="dist" inputmode="decimal" value="3">
+          <select id="dunit">
+            <option value="m">m</option>
+            <option value="ft">ft</option>
+          </select>
+        </label>
+      </div>
+
+      <h3>Circle of confusion (sensor)</h3>
+      <div class="opts">
+        <label>Sensor
+          <select id="sensor">
+            <option value="0.030">Full frame (35mm) — 0.030 mm</option>
+            <option value="0.019">APS-C (Canon) — 0.019 mm</option>
+            <option value="0.018">APS-C (Nikon/Sony) — 0.018 mm</option>
+            <option value="0.015">Micro 4/3 — 0.015 mm</option>
+            <option value="0.0066">1″ sensor — 0.0066 mm</option>
+            <option value="custom">Custom…</option>
+          </select>
+        </label>
+        <label id="coc-wrap" style="display:none;">CoC <input type="text" id="coc" inputmode="decimal" value="0.030"> mm</label>
+      </div>
+
+      <div class="err" id="err"></div>
+      <div class="stats" id="stats"></div>
+
+      <p class="note">Hyperfocal <code>H = f²/(N·c) + f</code>. Near limit <code>D<sub>n</sub> = s(H−f)/(H + s − 2f)</code>; far limit <code>D<sub>f</sub> = s(H−f)/(H − s)</code>, taken as infinity when the subject is at or beyond the hyperfocal distance. Distances and the focal length are in the same unit internally (mm); the circle of confusion is in mm. Standard sensor CoC values are presets; enter a custom one for other formats or a personal sharpness standard. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    // Distances expressed in mm internally. 1 ft = 304.8 mm.
+    var FT_MM = 304.8;
+    function ftToMm(x) { return x * FT_MM; }
+    function mmToFt(x) { return x / FT_MM; }
+
+    // Hyperfocal distance (mm). H = f^2/(N*c) + f. f, c in mm.
+    function hyperfocal(f, N, c) { return (f * f) / (N * c) + f; }
+
+    // Near/far limits (mm). s and f in mm. Returns {near, far} (far = Infinity when beyond hyperfocal).
+    function limits(f, N, c, s) {
+      var H = hyperfocal(f, N, c);
+      var num = s * (H - f);
+      var near = num / (H + s - 2 * f);
+      var far;
+      var denom = H - s;
+      if (denom <= 0) far = Infinity;
+      else far = num / denom;
+      if (far < 0) far = Infinity;
+      if (near < 0) near = 0;
+      return { near: near, far: far, H: H };
+    }
+
+    // compute(f_mm, N, s_mm, c) -> full result in mm.
+    function compute(f, N, s, c) {
+      if (!(f > 0) || !(N > 0) || !(s > 0) || !(c > 0) || !isFinite(f) || !isFinite(N) || !isFinite(s) || !isFinite(c))
+        return { err: "Enter positive numbers for focal length, aperture, subject distance, and circle of confusion." };
+      var L = limits(f, N, c, s);
+      var dof = (L.far === Infinity) ? Infinity : (L.far - L.near);
+      var inFront = s - L.near;            // DOF in front of subject
+      var behind = (L.far === Infinity) ? Infinity : (L.far - s);
+      return {
+        hyperfocal: L.H, near: L.near, far: L.far, dof: dof,
+        inFront: inFront, behind: behind, err: null
+      };
+    }
+
+    function parseNum(s) { if (s == null) return null; s = String(s).trim(); if (!s) return null; var m = s.match(/^([-+0-9.eE]+)/); return m ? parseFloat(m[1]) : null; }
+    function fmtMm(mm) {
+      if (!isFinite(mm)) return "∞";
+      var m = mm / 1000;
+      if (m >= 1) return trim(m) + " m";
+      var cm = mm / 10;
+      if (cm >= 1) return trim(cm) + " cm";
+      return trim(mm) + " mm";
+    }
+    function fmtMmDual(mm, unit) {
+      if (!isFinite(mm)) return "∞";
+      if (unit === "ft") return trim(mmToFt(mm)) + " ft  (" + fmtMm(mm) + ")";
+      return fmtMm(mm) + "  (" + trim(mmToFt(mm)) + " ft)";
+    }
+    function trim(x) { return String(Math.round(x * 1000) / 1000); }
+
+    var fEl = document.getElementById("f");
+    var NEl = document.getElementById("N");
+    var distEl = document.getElementById("dist");
+    var dunitEl = document.getElementById("dunit");
+    var sensorEl = document.getElementById("sensor");
+    var cocWrap = document.getElementById("coc-wrap");
+    var cocEl = document.getElementById("coc");
+    var errEl = document.getElementById("err");
+    var statsEl = document.getElementById("stats");
+
+    function currentCoc() {
+      var v = sensorEl.value;
+      if (v === "custom") { cocWrap.style.display = ""; return parseNum(cocEl.value); }
+      cocWrap.style.display = "none";
+      return parseFloat(v);
+    }
+
+    function render() {
+      errEl.textContent = "";
+      statsEl.innerHTML = "";
+      var f = parseNum(fEl.value);
+      var N = parseNum(NEl.value);
+      var d = parseNum(distEl.value);
+      var c = currentCoc();
+      if (f == null) { errEl.textContent = "Enter a focal length in mm."; return; }
+      if (N == null) { errEl.textContent = "Enter an aperture (f-number)."; return; }
+      if (d == null) { errEl.textContent = "Enter the subject distance."; return; }
+      if (c == null) { errEl.textContent = "Enter a circle of confusion (mm)."; return; }
+      var s = dunitEl.value === "ft" ? ftToMm(d) : d * 1000;
+      var res = compute(f, N, s, c);
+      if (res.err) { errEl.textContent = res.err; return; }
+      var unit = dunitEl.value;
+      var cards = [
+        ["Hyperfocal distance", fmtMmDual(res.hyperfocal, unit)],
+        ["Near limit", fmtMmDual(res.near, unit)],
+        ["Far limit", fmtMmDual(res.far, unit)],
+        ["Total depth of field", fmtMmDual(res.dof, unit)],
+        ["In front of subject", fmtMmDual(Math.max(res.inFront, 0), unit)],
+        ["Behind subject", fmtMmDual(res.behind, unit)]
+      ];
+      statsEl.innerHTML = cards.map(function (c) { return '<div class="s"><div class="k">' + c[0] + '</div><div class="v">' + c[1] + '</div></div>'; }).join("");
+    }
+
+    [fEl, NEl, distEl, dunitEl, sensorEl, cocEl].forEach(function (el) { el.addEventListener("input", render); el.addEventListener("change", render); });
+    render();
+
+    window.VT_DOF_TEST = {
+      hyperfocal: hyperfocal, limits: limits, compute: compute,
+      ftToMm: ftToMm, mmToFt: mmToFt, fmtMm: fmtMm
+    };
+  })();
+  </script>
+</body>
+</html>
