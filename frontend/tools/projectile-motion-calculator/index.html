@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Projectile Motion Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .opts { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin:10px 0; font-size:.9rem; }
+    .opts label { display:inline-flex; gap:6px; align-items:center; }
+    .opts input, .opts select { width:110px; font-family:ui-monospace,monospace; padding:6px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; }
+    .opts select { width:auto; font-size:.85rem; }
+    .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; margin:10px 0; }
+    .stats .s { background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:10px 12px; }
+    .stats .s .k { color:var(--text-dim,#9aa3b2); font-size:12px; }
+    .stats .s .v { font-family:ui-monospace,monospace; font-weight:700; color:var(--accent,#6ea8fe); font-size:1.05rem; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    h3 { margin:18px 0 4px; font-size:.95rem; }
+    .tbl { width:100%; border-collapse:collapse; margin:10px 0; font-family:ui-monospace,monospace; font-size:13px; }
+    .tbl th, .tbl td { text-align:right; padding:6px 10px; border-bottom:1px solid var(--border,#2a2f3a); }
+    .tbl th { color:var(--text-dim,#9aa3b2); font-weight:600; text-align:left; }
+    .tbl td:first-child, .tbl th:first-child { text-align:left; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Projectile Motion Calculator</h1>
+      <p>Solve ideal projectile motion (no air resistance). Enter the launch speed, angle, gravity, and an optional launch height to get the range, maximum height, and time of flight, plus the position and velocity at any time and a sampled trajectory table. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="opts">
+        <label>Initial speed v₀ <input type="text" id="v0" inputmode="decimal" value="20"> m/s</label>
+        <label>Angle θ <input type="text" id="angle" inputmode="decimal" value="45"> °</label>
+        <label>Launch height h₀ <input type="text" id="h0" inputmode="decimal" value="0"> m</label>
+        <label>Gravity g
+          <select id="g">
+            <option value="9.81">Earth 9.81</option>
+            <option value="9.8">Earth 9.8</option>
+            <option value="1.62">Moon 1.62</option>
+            <option value="3.71">Mars 3.71</option>
+            <option value="24.79">Jupiter 24.79</option>
+          </select>
+        </label>
+      </div>
+      <div class="err" id="err"></div>
+      <div class="stats" id="stats"></div>
+
+      <h3>At time t</h3>
+      <div class="opts">
+        <label>t = <input type="text" id="tval" inputmode="decimal" value="0.5"> s</label>
+      </div>
+      <div class="stats" id="tstats"></div>
+
+      <h3>Trajectory samples</h3>
+      <div id="table-area"></div>
+
+      <p class="note">Ideal projectile motion ignores air resistance. Horizontal and vertical motions are independent: <code>x(t) = v₀cosθ·t</code>, <code>y(t) = h₀ + v₀sinθ·t − ½gt²</code>. Time of flight solves y(t)=0; range is the horizontal distance at that time; max height is <code>h₀ + (v₀sinθ)²/(2g)</code>. On level ground (h₀=0) the maximum range occurs at 45° and equals <code>v₀²·sin(2θ)/g</code>. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var DEG = Math.PI / 180;
+    // Velocity components from speed and angle (deg).
+    function velocityComponents(v0, angleDeg) {
+      var a = angleDeg * DEG;
+      return { vx: v0 * Math.cos(a), vy: v0 * Math.sin(a) };
+    }
+    // Time of flight: solve h0 + vy*t - 0.5*g*t^2 = 0 for the positive root.
+    function flightTime(v0, angleDeg, g, h0) {
+      if (!(v0 >= 0) || !(g > 0) || !(h0 >= 0)) return { err: "Speed ≥ 0, gravity > 0, height ≥ 0." };
+      if (!(angleDeg >= 0) || !(angleDeg <= 90)) return { err: "Angle must be between 0° and 90°." };
+      var vy = v0 * Math.sin(angleDeg * DEG);
+      // 0.5 g t^2 - vy t - h0 = 0  ->  t = (vy + sqrt(vy^2 + 2 g h0)) / g
+      var disc = vy * vy + 2 * g * h0;
+      if (disc < 0) return { err: "No real flight time." };
+      var t = (vy + Math.sqrt(disc)) / g;
+      return { value: t, err: null };
+    }
+    // Maximum height = h0 + vy^2 / (2g).
+    function maxHeight(v0, angleDeg, g, h0) {
+      if (!(g > 0)) return { err: "Gravity must be positive." };
+      var vy = v0 * Math.sin(angleDeg * DEG);
+      return { value: h0 + (vy * vy) / (2 * g), err: null };
+    }
+    // Horizontal range = vx * flightTime.
+    function range(v0, angleDeg, g, h0) {
+      var ft = flightTime(v0, angleDeg, g, h0);
+      if (ft.err) return { err: ft.err };
+      var vx = v0 * Math.cos(angleDeg * DEG);
+      return { value: vx * ft.value, err: null };
+    }
+    // Position and velocity at time t.
+    function stateAt(v0, angleDeg, g, h0, t) {
+      if (!(t >= 0) || !(g > 0)) return { err: "Time ≥ 0 and gravity > 0." };
+      var vx = v0 * Math.cos(angleDeg * DEG);
+      var vy = v0 * Math.sin(angleDeg * DEG);
+      var x = vx * t;
+      var y = h0 + vy * t - 0.5 * g * t * t;
+      var vyt = vy - g * t;
+      return {
+        x: x, y: y, vx: vx, vy: vyt,
+        speed: Math.sqrt(vx * vx + vyt * vyt),
+        err: null
+      };
+    }
+
+    function parseNum(s) { if (s == null) return null; s = String(s).trim(); if (!s) return null; var m = s.match(/^([-+0-9.eE]+)/); return m ? parseFloat(m[1]) : null; }
+    function r(x, d) { if (!isFinite(x)) return "—"; return (Math.round(x * Math.pow(10, d)) / Math.pow(10, d)).toString(); }
+
+    var v0El = document.getElementById("v0"), angleEl = document.getElementById("angle");
+    var h0El = document.getElementById("h0"), gEl = document.getElementById("g");
+    var tEl = document.getElementById("tval");
+    var errEl = document.getElementById("err"), statsEl = document.getElementById("stats");
+    var tstatsEl = document.getElementById("tstats"), tableArea = document.getElementById("table-area");
+
+    function cards(el, arr) { el.innerHTML = arr.map(function (c) { return '<div class="s"><div class="k">' + c[0] + '</div><div class="v">' + c[1] + '</div></div>'; }).join(""); }
+
+    function render() {
+      errEl.textContent = ""; statsEl.innerHTML = ""; tstatsEl.innerHTML = ""; tableArea.innerHTML = "";
+      var v0 = parseNum(v0El.value), angle = parseNum(angleEl.value), h0 = parseNum(h0El.value), g = parseNum(gEl.value);
+      if (v0 == null || angle == null || h0 == null || g == null) { errEl.textContent = "Enter speed, angle, launch height, and gravity."; return; }
+      var ft = flightTime(v0, angle, g, h0);
+      if (ft.err) { errEl.textContent = ft.err; return; }
+      var rg = range(v0, angle, g, h0);
+      var mh = maxHeight(v0, angle, g, h0);
+      var vc = velocityComponents(v0, angle);
+      cards(statsEl, [
+        ["Time of flight", r(ft.value, 3) + " s"],
+        ["Range", r(rg.value, 3) + " m"],
+        ["Max height", r(mh.value, 3) + " m"],
+        ["v₀ₓ (horizontal)", r(vc.vx, 3) + " m/s"],
+        ["v₀ᵧ (vertical)", r(vc.vy, 3) + " m/s"]
+      ]);
+
+      // at time t
+      var t = parseNum(tEl.value);
+      if (t != null) {
+        if (t < 0 || t > ft.value) { tstatsEl.innerHTML = '<div class="err" style="margin:0">t is outside the flight (0 to ' + r(ft.value, 3) + ' s).</div>'; }
+        else {
+          var s = stateAt(v0, angle, g, h0, t);
+          cards(tstatsEl, [
+            ["Position", "(" + r(s.x, 3) + ", " + r(s.y, 3) + ") m"],
+            ["Velocity", "(" + r(s.vx, 3) + ", " + r(s.vy, 3) + ") m/s"],
+            ["Speed", r(s.speed, 3) + " m/s"]
+          ]);
+        }
+      }
+
+      // sample trajectory table
+      var steps = 8;
+      var html = '<table class="tbl"><thead><tr><th>t (s)</th><th>x (m)</th><th>y (m)</th><th>vₓ</th><th>vᵧ</th><th>speed</th></tr></thead><tbody>';
+      for (var i = 0; i <= steps; i++) {
+        var ti = (ft.value * i) / steps;
+        var st = stateAt(v0, angle, g, h0, ti);
+        html += '<tr><td>' + r(ti, 3) + '</td><td>' + r(st.x, 3) + '</td><td>' + r(Math.max(0, st.y), 3) + '</td><td>' + r(st.vx, 3) + '</td><td>' + r(st.vy, 3) + '</td><td>' + r(st.speed, 3) + '</td></tr>';
+      }
+      html += '</tbody></table>';
+      tableArea.innerHTML = html;
+    }
+
+    [v0El, angleEl, h0El, gEl, tEl].forEach(function (el) { el.addEventListener("input", render); el.addEventListener("change", render); });
+    render();
+
+    window.VT_PROJ_TEST = { velocityComponents: velocityComponents, flightTime: flightTime, maxHeight: maxHeight, range: range, stateAt: stateAt, DEG: DEG };
+  })();
+  </script>
+</body>
+</html>

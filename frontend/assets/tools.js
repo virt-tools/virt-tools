@@ -1947,6 +1947,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-10T13:00:00Z",
   },
   {
+    slug: "projectile-motion-calculator",
+    name: "Projectile Motion Calculator",
+    description: "Solve ideal projectile motion (no air resistance). Enter launch speed, angle, gravity, and an optional launch height to get the range, maximum height, and time of flight, plus the position and velocity at any time and a sampled trajectory table. Horizontal and vertical motions are independent: x = v₀cosθ·t, y = h₀ + v₀sinθ·t − ½gt²; on level ground the max range is at 45° (v₀²·sin(2θ)/g) and complementary angles give equal range. Gravity presets for the Moon, Mars, and Jupiter. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🎯",
+    added: "2026-07-10T15:00:00Z",
+  },
+  {
     slug: "wavelength-calculator",
     name: "Wavelength / Frequency Calculator",
     description: "Convert between an electromagnetic wave's frequency and its wavelength using λ = c / f (c = 299,792,458 m/s). Enter a frequency in Hz, kHz, MHz, or GHz to get the wavelength in metres, centimetres, millimetres, feet, and inches, plus the quarter-wave and half-wave lengths for antenna work; or enter a wavelength to get the frequency. The frequency is also classified into its ITU band (VLF, LF, MF, HF, VHF, UHF, SHF, EHF…) with common examples like FM radio, WiFi, and ISM bands. Pairs with the Decibel and Ohm's Law tools for RF and electronics. Everything runs locally in your browser.",
