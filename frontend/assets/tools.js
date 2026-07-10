@@ -1323,6 +1323,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-11T11:00:00Z",
   },
   {
+    slug: "thin-lens-equation",
+    name: "Thin Lens Equation Calculator",
+    description: "Solve the thin-lens equation 1/f = 1/d_o + 1/d_i for the focal length, object distance, or image distance given the other two. Enter two of the three distances (mm, cm, m, or inches) and leave the one you want blank; the calculator also returns the lens power in dioptres (P = 1/f), the magnification m = −d_i/d_o, and a classification of the image — real/inverted or virtual/upright, enlarged or reduced. Works for both converging (f > 0) and diverging (f < 0) lenses, and flags the object-at-the-focal-point case where the image forms at infinity. Pairs with the Depth of Field and Exposure Value calculators. Everything runs locally in your browser.",
+    category: "Image",
+    icon: "🔍",
+    added: "2026-07-10T23:00:00Z",
+  },
+  {
     slug: "exposure-value-calculator",
     name: "Exposure Value (EV) Calculator",
     description: "Compute photographic exposure value from aperture, shutter speed, and ISO: EV = log₂(N²/t), with EV100 normalised to ISO 100. Solve the shutter at a given aperture from a target EV100, or read off a table of equivalent exposures across every full stop — all combinations at the same EV100 capture the same amount of light. Pairs with the Depth of Field Calculator. Everything runs locally in your browser.",
