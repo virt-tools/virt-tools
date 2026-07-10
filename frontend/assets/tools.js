@@ -291,6 +291,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-06T15:00:00Z",
   },
   {
+    slug: "date-age-calculator",
+    name: "Date & Age Calculator",
+    description: "Find the exact calendar duration between two dates broken down into years, months, and days with totals in days, weeks, and months; work out someone's age from a birthdate (with days to the next birthday); or add and subtract a duration to a date with correct month-end clamping (31 Jan + 1 month = 28 Feb). Uses the stepping convention so month-end spans never produce negative day counts. Everything runs locally in your browser.",
+    category: "Time",
+    icon: "📅",
+    added: "2026-07-10T11:00:00Z",
+  },
+  {
     slug: "reaction-time-tester",
     name: "Reaction Time Tester",
     description: "Measure your reaction time in milliseconds — wait for green then click as fast as you can. Tracks mean, median, fastest, consistency, and false starts across trials. Runs locally.",

@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Date &amp; Age Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .opts { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin:10px 0; font-size:.9rem; }
+    .opts label { display:inline-flex; gap:6px; align-items:center; }
+    .opts input { width:160px; font-family:ui-monospace,monospace; padding:6px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; }
+    .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; margin:10px 0; }
+    .stats .s { background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:10px 12px; }
+    .stats .s .k { color:var(--text-dim,#9aa3b2); font-size:12px; }
+    .stats .s .v { font-family:ui-monospace,monospace; font-weight:700; color:var(--accent,#6ea8fe); font-size:1.05rem; }
+    .mode { display:flex; gap:8px; margin:6px 0 8px; flex-wrap:wrap; }
+    .mode button { padding:6px 14px; border-radius:6px; border:1px solid var(--border,#2a2f3a); background:var(--bg-elev,#171a21); color:var(--text-dim,#9aa3b2); cursor:pointer; font-size:.85rem; }
+    .mode button.active { background:var(--accent,#6ea8fe); color:#0b0d12; border-color:var(--accent,#6ea8fe); font-weight:700; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    h3 { margin:18px 0 4px; font-size:.95rem; }
+    .hint { color:var(--text-dim,#9aa3b2); font-size:13px; margin:4px 0; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Date &amp; Age Calculator</h1>
+      <p>Find the exact calendar duration between two dates broken down into years, months, and days (with totals in days, weeks, and months), work out someone's age from a birthdate, or add and subtract a duration to a date with correct month-end clamping. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="mode">
+        <button id="mode-diff" class="active" type="button">Duration between dates</button>
+        <button id="mode-age" type="button">Age from birthdate</button>
+        <button id="mode-add" type="button">Add / subtract duration</button>
+      </div>
+
+      <div id="diff-panel">
+        <div class="opts">
+          <label>From <input type="date" id="d-from" value="2000-01-01"></label>
+          <label>To <input type="date" id="d-to" value="2026-07-10"></label>
+        </div>
+        <div class="err" id="d-err"></div>
+        <div class="stats" id="d-stats"></div>
+      </div>
+
+      <div id="age-panel" style="display:none">
+        <div class="opts">
+          <label>Birthdate <input type="date" id="a-birth" value="1990-05-15"></label>
+          <label>As of (leave blank for today) <input type="date" id="a-asof"></label>
+        </div>
+        <div class="err" id="a-err"></div>
+        <div class="stats" id="a-stats"></div>
+      </div>
+
+      <div id="add-panel" style="display:none">
+        <div class="opts">
+          <label>Date <input type="date" id="x-date" value="2026-01-31"></label>
+          <label>Years <input type="text" id="x-y" inputmode="decimal" value="0"></label>
+          <label>Months <input type="text" id="x-mo" inputmode="decimal" value="1"></label>
+          <label>Days <input type="text" id="x-d" inputmode="decimal" value="0"></label>
+        </div>
+        <div class="err" id="x-err"></div>
+        <div class="stats" id="x-stats"></div>
+      </div>
+
+      <p class="note">Years/months/days are counted on the calendar: borrowing days from the previous month when the start day exceeds the end day, so 31 Jan + 1 month = 28 (or 29) Feb. Totals (days, weeks, months) are whole-number counts from midnight to midnight. Day-of-week uses your browser's local calendar. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+    var DOW = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+
+    function isLeap(y) { return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0; }
+    // days in month m (1-12) of year y.
+    function daysInMonth(y, m) {
+      var dim = [31, 0, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+      if (m === 2) return isLeap(y) ? 29 : 28;
+      return dim[m - 1];
+    }
+    // Parse "YYYY-MM-DD" into {y,m,d} (1-based month). Returns null if invalid.
+    function parseISO(s) {
+      if (!s) return null;
+      var m = String(s).trim().match(/^(\d{1,4})-(\d{1,2})-(\d{1,2})$/);
+      if (!m) return null;
+      var y = parseInt(m[1], 10), mo = parseInt(m[2], 10), d = parseInt(m[3], 10);
+      if (mo < 1 || mo > 12 || d < 1 || d > daysInMonth(y, mo)) return null;
+      return { y: y, m: mo, d: d };
+    }
+    function toISO(o) { return o.y + "-" + pad(o.m) + "-" + pad(o.d); }
+    function pad(n) { return (n < 10 ? "0" : "") + n; }
+    // Days since the Unix epoch (UTC midnight). Integer.
+    function toDays(o) { return Math.floor(Date.UTC(o.y, o.m - 1, o.d) / 86400000); }
+    function dayOfWeek(o) { return new Date(o.y, o.m - 1, o.d).getDay(); }
+
+    // Add years and months with month-end day clamping (no day arithmetic). Returns {y,m,d}.
+    function clampYM(o, years, months) {
+      var y = o.y + Math.trunc(years);
+      var m = o.m + Math.trunc(months);
+      while (m > 12) { m -= 12; y++; }
+      while (m < 1) { m += 12; y--; }
+      var d = Math.min(o.d, daysInMonth(y, m));
+      return { y: y, m: m, d: d };
+    }
+    // Exact calendar difference a -> b via the stepping convention (largest whole
+    // years, then months, then days), so month-end spans never produce negative days.
+    // Returns {years, months, days, totalDays, totalWeeks, totalMonths, sign}.
+    function diffYMD(a, b) {
+      var sign = 1, x = a, y = b;
+      if (toDays(a) > toDays(b)) { x = b; y = a; sign = -1; }
+      var years = y.y - x.y;
+      var probe = clampYM(x, years, 0);
+      if (toDays(probe) > toDays(y)) { years--; probe = clampYM(x, years, 0); }
+      var months = (y.y - probe.y) * 12 + (y.m - probe.m);
+      var probe2 = clampYM(probe, 0, months);
+      if (toDays(probe2) > toDays(y)) { months--; probe2 = clampYM(probe, 0, months); }
+      var days = toDays(y) - toDays(probe2);
+      var totalDays = toDays(b) - toDays(a);
+      return {
+        years: years, months: months, days: days,
+        totalDays: totalDays, totalWeeks: totalDays / 7,
+        totalMonths: years * 12 + months, sign: sign
+      };
+    }
+    // Add years + months + days to a date with month-end clamping.
+    function addDuration(o, years, months, days) {
+      var base = clampYM(o, years, months);
+      return fromDays(toDays(base) + Math.trunc(days));
+    }
+    // Days-since-epoch -> {y,m,d} (UTC).
+    function fromDays(n) {
+      var ms = n * 86400000;
+      var dt = new Date(ms);
+      return { y: dt.getUTCFullYear(), m: dt.getUTCMonth() + 1, d: dt.getUTCDate() };
+    }
+
+    function parseNum(s) { if (s == null) return null; s = String(s).trim(); if (!s) return null; var m = s.match(/^([-+0-9.eE]+)/); return m ? parseFloat(m[1]) : null; }
+    function fmtTotalDays(n) { return n.toLocaleString() + " days"; }
+
+    var modeDiff = document.getElementById("mode-diff");
+    var modeAge = document.getElementById("mode-age");
+    var modeAdd = document.getElementById("mode-add");
+    var diffPanel = document.getElementById("diff-panel");
+    var agePanel = document.getElementById("age-panel");
+    var addPanel = document.getElementById("add-panel");
+
+    function setMode(m) {
+      modeDiff.classList.toggle("active", m === "diff");
+      modeAge.classList.toggle("active", m === "age");
+      modeAdd.classList.toggle("active", m === "add");
+      diffPanel.style.display = m === "diff" ? "" : "none";
+      agePanel.style.display = m === "age" ? "" : "none";
+      addPanel.style.display = m === "add" ? "" : "none";
+      render();
+    }
+
+    function cards(el, arr) {
+      el.innerHTML = arr.map(function (c) { return '<div class="s"><div class="k">' + c[0] + '</div><div class="v">' + c[1] + '</div></div>'; }).join("");
+    }
+
+    function render() {
+      if (modeDiff.classList.contains("active")) {
+        var a = parseISO(document.getElementById("d-from").value);
+        var b = parseISO(document.getElementById("d-to").value);
+        var err = document.getElementById("d-err");
+        err.textContent = ""; document.getElementById("d-stats").innerHTML = "";
+        if (!a || !b) { err.textContent = "Enter two valid dates (YYYY-MM-DD)."; return; }
+        var r = diffYMD(a, b);
+        cards(document.getElementById("d-stats"), [
+          ["Duration", r.years + " y, " + r.months + " mo, " + r.days + " d"],
+          ["Total days", fmtTotalDays(Math.abs(r.totalDays))],
+          ["Total weeks", (Math.abs(r.totalWeeks)).toFixed(1) + " weeks"],
+          ["Total months", r.totalMonths + " months"],
+          [DOW[dayOfWeek(a)] + " → " + DOW[dayOfWeek(b)], toISO(a) + " → " + toISO(b)]
+        ]);
+      } else if (modeAge.classList.contains("active")) {
+        var birth = parseISO(document.getElementById("a-birth").value);
+        var asofS = document.getElementById("a-asof").value;
+        var err = document.getElementById("a-err");
+        err.textContent = ""; document.getElementById("a-stats").innerHTML = "";
+        if (!birth) { err.textContent = "Enter a valid birthdate."; return; }
+        var now;
+        if (asofS) { now = parseISO(asofS); if (!now) { err.textContent = "Invalid 'as of' date."; return; } }
+        else { var t = new Date(); now = { y: t.getFullYear(), m: t.getMonth() + 1, d: t.getDate() }; }
+        if (toDays(birth) > toDays(now)) { err.textContent = "Birthdate is after the reference date."; return; }
+        var r = diffYMD(birth, now);
+        var nextBday = { y: now.y, m: birth.m, d: birth.d };
+        if (toDays(nextBday) < toDays(now)) nextBday.y = now.y + 1;
+        // clamp birthday day for Feb 29 etc.
+        if (nextBday.d > daysInMonth(nextBday.y, nextBday.m)) nextBday.d = daysInMonth(nextBday.y, nextBday.m);
+        var daysToBday = toDays(nextBday) - toDays(now);
+        cards(document.getElementById("a-stats"), [
+          ["Age", r.years + " years"],
+          ["Exact", r.years + " y, " + r.months + " mo, " + r.days + " d"],
+          ["Total days old", fmtTotalDays(r.totalDays)],
+          ["Next birthday", toISO(nextBday) + " (" + DOW[dayOfWeek(nextBday)] + ")"],
+          ["Days to birthday", daysToBday + " days"]
+        ]);
+      } else {
+        var o = parseISO(document.getElementById("x-date").value);
+        var y = parseNum(document.getElementById("x-y").value);
+        var mo = parseNum(document.getElementById("x-mo").value);
+        var d = parseNum(document.getElementById("x-d").value);
+        var err = document.getElementById("x-err");
+        err.textContent = ""; document.getElementById("x-stats").innerHTML = "";
+        if (!o) { err.textContent = "Enter a valid date."; return; }
+        if (y == null || mo == null || d == null) { err.textContent = "Enter years, months, and days (use 0 or negatives)."; return; }
+        var res = addDuration(o, y, mo, d);
+        cards(document.getElementById("x-stats"), [
+          ["Result", toISO(res)],
+          ["Day of week", DOW[dayOfWeek(res)]],
+          ["Original", toISO(o) + " (" + DOW[dayOfWeek(o)] + ")"],
+          ["Added", (y >= 0 ? "+" : "") + y + "y " + (mo >= 0 ? "+" : "") + mo + "mo " + (d >= 0 ? "+" : "") + d + "d"]
+        ]);
+      }
+    }
+
+    modeDiff.addEventListener("click", function () { setMode("diff"); });
+    modeAge.addEventListener("click", function () { setMode("age"); });
+    modeAdd.addEventListener("click", function () { setMode("add"); });
+    ["d-from","d-to","a-birth","a-asof","x-date","x-y","x-mo","x-d"].forEach(function (id) {
+      var el = document.getElementById(id); el.addEventListener("input", render); el.addEventListener("change", render);
+    });
+    render();
+
+    window.VT_DATE_TEST = { isLeap: isLeap, daysInMonth: daysInMonth, parseISO: parseISO, toISO: toISO, toDays: toDays, fromDays: fromDays, dayOfWeek: dayOfWeek, diffYMD: diffYMD, addDuration: addDuration };
+  })();
+  </script>
+</body>
+</html>
