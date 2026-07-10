@@ -1635,6 +1635,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-05T07:00:00Z",
   },
   {
+    slug: "volume-surface-area",
+    name: "Volume & Surface Area Calculator",
+    description: "Compute the volume and total surface area of common 3D shapes — cube, cuboid (box), sphere, cylinder, cone, square pyramid, and hemisphere — from their dimensions, with the formulas shown. Pick a shape, enter its dimensions, and the volume and total surface area are calculated live. Surface area is the total (a cylinder includes both ends, a cone and pyramid include the base, a hemisphere includes its flat face). Pairs with the Triangle Solver and Trigonometry tools for geometry work. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "📦",
+    added: "2026-07-10T21:00:00Z",
+  },
+  {
     slug: "linear-system-solver",
     name: "Linear System Solver",
     description: "Solve a system of two or three linear equations with exact rational arithmetic — no floating-point rounding, so answers like 5/4 stay exact. Enter the coefficients and right-hand-side values and the solver computes the determinant, classifies the system as having a unique solution, being inconsistent (no solution), or being dependent (infinitely many solutions), and reports each variable as an exact fraction with a decimal approximation when the solution is unique. Everything runs locally in your browser.",
