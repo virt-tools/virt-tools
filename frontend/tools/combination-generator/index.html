@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Permutation &amp; Combination Generator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .layout { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
+    @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+    textarea { width:100%; box-sizing:border-box; font-family:ui-monospace,monospace; font-size:13px; min-height:120px; resize:vertical; }
+    .opts { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin:10px 0; font-size:.85rem; }
+    .opts label { display:inline-flex; gap:6px; align-items:center; cursor:pointer; }
+    .opts input[type=number] { width:70px; font-family:ui-monospace,monospace; padding:4px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; }
+    .opts select { padding:4px 8px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; font-size:.85rem; }
+    .count { font-family:ui-monospace,monospace; font-size:1.05rem; margin:6px 0; }
+    .count b { color:var(--accent,#6ea8fe); }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    .out { font-family:ui-monospace,monospace; font-size:12px; background:var(--bg,#14181f); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:10px; white-space:pre-wrap; word-break:break-word; min-height:260px; max-height:560px; overflow:auto; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Permutation &amp; Combination Generator</h1>
+      <p>List the actual combinations, permutations, or subsets of a set of items — not just the count. Enter your items (comma- or newline-separated), pick a mode, and the tool enumerates every result. Combinations are unordered selections, permutations are ordered, and the "with repetition" variants let an item be used more than once. The companion to the Combinatorics Calculator (which counts these). Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field"><label for="items">Items</label></div>
+      <textarea id="items" spellcheck="false">a, b, c, d</textarea>
+
+      <div class="opts">
+        <label>Mode
+          <select id="mode">
+            <option value="combinations">Combinations (choose r)</option>
+            <option value="permutations">Permutations (choose r, ordered)</option>
+            <option value="permRep">Permutations with repetition</option>
+            <option value="combRep">Combinations with repetition (multisets)</option>
+            <option value="fullPerm">Full permutations (all n!)</option>
+            <option value="powerSet">Power set (all subsets)</option>
+          </select>
+        </label>
+        <label>r <input type="number" id="r" value="2" min="0"></label>
+        <span style="opacity:.6;font-size:.8rem;">(r used for the first four modes)</span>
+      </div>
+
+      <div class="count" id="count"></div>
+      <div class="err" id="err"></div>
+      <div class="layout">
+        <div>
+          <div class="field"><label>Results</label></div>
+          <div class="out" id="out"></div>
+        </div>
+        <div>
+          <div class="field"><label>Notes</label></div>
+          <div class="out" id="notes" style="white-space:normal;font-family:inherit;font-size:13px;"></div>
+        </div>
+      </div>
+      <p class="note">Counts use exact big-integer arithmetic, so they're correct even when astronomical (e.g. <code>P(20,10)</code> or <code>2<sup>30</sup></code>). To keep the page responsive, at most <b>4096</b> results are listed — when there are more, the first 4096 are shown and the count tells you the true total. Duplicate items are kept as you entered them (they count as distinct positions). Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var CAP = 4096;
+
+    function parseItems(s) {
+      if (s == null) return [];
+      return String(s).split(/[\n,]/).map(function (x) { return x.trim(); }).filter(function (x) { return x.length > 0; });
+    }
+
+    // --- generators (lazy, stop via take) ---
+    function* combinations(arr, r) {
+      var n = arr.length;
+      if (r < 0 || r > n) return;
+      if (r === 0) { yield []; return; }
+      var idx = []; for (var i = 0; i < r; i++) idx.push(i);
+      while (true) {
+        yield idx.map(function (i) { return arr[i]; });
+        var i = r - 1;
+        while (i >= 0 && idx[i] === n - r + i) i--;
+        if (i < 0) break;
+        idx[i]++;
+        for (var j = i + 1; j < r; j++) idx[j] = idx[j - 1] + 1;
+      }
+    }
+    function* permutations(arr, r) {
+      var n = arr.length;
+      if (r < 0 || r > n) return;
+      var used = new Array(n).fill(false), cur = [];
+      function* rec() {
+        if (cur.length === r) { yield cur.slice(); return; }
+        for (var i = 0; i < n; i++) { if (used[i]) continue; used[i] = true; cur.push(arr[i]); yield* rec(); cur.pop(); used[i] = false; }
+      }
+      yield* rec();
+    }
+    function* permutationsRep(arr, r) {
+      var n = arr.length;
+      if (r < 0 || n === 0) return;
+      var cur = new Array(r);
+      function* rec(pos) {
+        if (pos === r) { yield cur.slice(); return; }
+        for (var i = 0; i < n; i++) { cur[pos] = arr[i]; yield* rec(pos + 1); }
+      }
+      if (r === 0) { yield []; return; }
+      yield* rec(0);
+    }
+    function* combinationsRep(arr, r) {
+      var n = arr.length;
+      if (r < 0 || n === 0) return;
+      if (r === 0) { yield []; return; }
+      var idx = new Array(r).fill(0);
+      while (true) {
+        yield idx.map(function (i) { return arr[i]; });
+        var i = r - 1;
+        while (i >= 0 && idx[i] === n - 1) i--;
+        if (i < 0) break;
+        idx[i]++;
+        for (var j = i + 1; j < r; j++) idx[j] = idx[i];
+      }
+    }
+    function* fullPermutations(arr) { yield* permutations(arr, arr.length); }
+    function* powerSet(arr) {
+      var n = arr.length;
+      var total = n <= 30 ? (1 << n) : Infinity;
+      for (var mask = 0; mask < total; mask++) {
+        var sub = [];
+        for (var b = 0; b < n; b++) if ((mask >>> b) & 1) sub.push(arr[b]);
+        yield sub;
+      }
+    }
+
+    function take(gen, cap) {
+      var results = [], truncated = false;
+      for (var v of gen) {
+        if (results.length >= cap) { truncated = true; break; }
+        results.push(v);
+      }
+      return { results: results, truncated: truncated };
+    }
+
+    // --- exact big-integer counts ---
+    function factBig(n) { var f = 1n; for (var i = 2n; i <= BigInt(n); i++) f *= i; return f; }
+    function bigCount(mode, n, r) {
+      if (mode === "combinations") return r < 0 || r > n ? 0n : factBig(n) / (factBig(r) * factBig(n - r));
+      if (mode === "permutations") return r < 0 || r > n ? 0n : factBig(n) / factBig(n - r);
+      if (mode === "permRep") return r < 0 ? 0n : BigInt(n) ** BigInt(r);
+      if (mode === "combRep") return r < 0 ? 0n : factBig(n + r - 1) / (factBig(r) * factBig(n - 1));
+      if (mode === "fullPerm") return factBig(n);
+      if (mode === "powerSet") return n <= 1023 ? (1n << BigInt(n)) : 2n ** BigInt(n);
+      return 0n;
+    }
+    function fmtBig(b) { return b.toString(); }
+
+    // Pure: enumerate + count for a mode. Returns {count, results, truncated, err}.
+    function run(mode, items, r) {
+      var n = items.length;
+      if (n === 0) return { err: "Enter at least one item." };
+      if (mode === "powerSet" && n > 30) return { err: "Power set supports up to 30 items (2³⁰ ≈ 1 billion already)." };
+      var rr = Math.floor(r);
+      if (mode !== "fullPerm" && mode !== "powerSet") {
+        if (rr < 0) return { err: "r must be zero or positive." };
+        if ((mode === "combinations" || mode === "permutations") && rr > n) return { err: "r cannot exceed the number of items for this mode." };
+        if ((mode === "permRep" || mode === "combRep") && n === 0) return { err: "Enter at least one item." };
+      }
+      var count = bigCount(mode, n, (mode === "fullPerm" || mode === "powerSet") ? 0 : rr);
+      var gen;
+      if (mode === "combinations") gen = combinations(items, rr);
+      else if (mode === "permutations") gen = permutations(items, rr);
+      else if (mode === "permRep") gen = permutationsRep(items, rr);
+      else if (mode === "combRep") gen = combinationsRep(items, rr);
+      else if (mode === "fullPerm") gen = fullPermutations(items);
+      else gen = powerSet(items);
+      var t = take(gen, CAP);
+      return { count: fmtBig(count), results: t.results, truncated: t.truncated, err: null };
+    }
+
+    var itemsEl = document.getElementById("items");
+    var modeEl = document.getElementById("mode");
+    var rEl = document.getElementById("r");
+    var countEl = document.getElementById("count");
+    var errEl = document.getElementById("err");
+    var outEl = document.getElementById("out");
+    var notesEl = document.getElementById("notes");
+
+    function fmtResult(arr) { return "{" + arr.join(", ") + "}"; }
+
+    function render() {
+      errEl.textContent = "";
+      var items = parseItems(itemsEl.value);
+      var r = parseInt(rEl.value, 10);
+      if (isNaN(r)) r = 0;
+      var res = run(modeEl.value, items, r);
+      if (res.err) {
+        errEl.textContent = res.err;
+        countEl.textContent = "";
+        outEl.textContent = "";
+        notesEl.textContent = "";
+        return;
+      }
+      countEl.innerHTML = "Total: <b>" + res.count + "</b>" + (res.truncated ? " (showing first " + res.results.length + ")" : "");
+      outEl.textContent = res.results.map(fmtResult).join("\n");
+      var notes = "";
+      if (res.truncated) notes += "Truncated: " + res.results.length + " of " + res.count + " results shown. Reduce your items or r to see all.\n\n";
+      var n = items.length;
+      if (modeEl.value === "combinations") notes += "C(" + n + "," + r + ") = " + res.count + " — unordered selections of " + r + " from " + n + ".";
+      else if (modeEl.value === "permutations") notes += "P(" + n + "," + r + ") = " + res.count + " — ordered selections of " + r + " from " + n + ".";
+      else if (modeEl.value === "permRep") notes += n + "^" + r + " = " + res.count + " — ordered, items reusable.";
+      else if (modeEl.value === "combRep") notes += "C(" + n + "+" + r + "−1," + r + ") = " + res.count + " — unordered, items reusable (multisets).";
+      else if (modeEl.value === "fullPerm") notes += n + "! = " + res.count + " — every ordering of all " + n + " items.";
+      else notes += "2^" + n + " = " + res.count + " — every subset (including empty set and full set).";
+      notesEl.textContent = notes;
+    }
+
+    [itemsEl, modeEl, rEl].forEach(function (el) { el.addEventListener("input", render); el.addEventListener("change", render); });
+    render();
+
+    window.VT_COMBGEN_TEST = { run: run, parseItems: parseItems, combinations: combinations, permutations: permutations, permutationsRep: permutationsRep, combinationsRep: combinationsRep, fullPermutations: fullPermutations, powerSet: powerSet, take: take, bigCount: bigCount };
+  })();
+  </script>
+</body>
+</html>

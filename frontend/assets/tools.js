@@ -1451,6 +1451,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-05T00:20:00Z",
   },
   {
+    slug: "combination-generator",
+    name: "Permutation & Combination Generator",
+    description: "List the actual combinations, permutations, or subsets of a set of items — not just the count. Enter your items (comma- or newline-separated), pick a mode — combinations, permutations (ordered), permutations or combinations with repetition, full permutations (all n!), or the power set (all subsets) — and every result is enumerated. Counts use exact big-integer arithmetic, so they stay correct even when astronomical (e.g. 20! or 2^30); listing is capped at 4096 results to keep the page responsive, with the true total shown. The companion to the Combinatorics Calculator (which counts these). Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🔀",
+    added: "2026-07-10T23:00:00Z",
+  },
+  {
     slug: "pascals-triangle",
     name: "Pascal's Triangle Generator",
     description: "Generate Pascal's triangle up to 30 rows — each entry is a binomial coefficient C(n,k), the sum of the two above it. Toggle parity colouring to reveal the Sierpinski triangle and copy any row or the whole triangle. Runs locally.",
