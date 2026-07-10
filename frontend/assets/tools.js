@@ -1771,6 +1771,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-10T20:10:00Z",
   },
   {
+    slug: "rpn-calculator",
+    name: "RPN Calculator",
+    description: "Evaluate expressions in Reverse Polish Notation (postfix) or convert a standard infix expression to RPN with Dijkstra's shunting-yard algorithm and then evaluate it. RPN needs no parentheses — 3 4 + 2 * means (3+4)*2 — and the tool shows the RPN form, the result, and a step-by-step trace of the stack as each token is processed. Supports + − * / % ^, unary minus (so -2^2 = -4), constants pi and e, and functions sin/cos/tan/ln/log/sqrt/exp/abs. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🧮",
+    added: "2026-07-10T20:50:00Z",
+  },
+  {
     slug: "angle-converter",
     name: "Angle Converter",
     description: "Convert an angle between degrees, radians, gradians (gons), turns (revolutions), arcminutes, arcseconds, and NATO mils, and to or from degrees-minutes-seconds (DMS). Enter a value in any unit or as DMS and every other unit is shown at once. A full circle is 360° = 2π rad = 400 grad = 1 turn = 21,600′ = 1,296,000″ = 6,400 mils; values are kept raw (not wrapped to a single turn). Pairs with the Trigonometry Calculator. Everything runs locally in your browser.",

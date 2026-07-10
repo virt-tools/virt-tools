@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>RPN Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .mode { display:flex; gap:8px; margin:6px 0 10px; flex-wrap:wrap; }
+    .mode button { padding:6px 14px; border-radius:6px; border:1px solid var(--border,#2a2f3a); background:var(--bg-elev,#171a21); color:var(--text-dim,#9aa3b2); cursor:pointer; font-size:.85rem; }
+    .mode button.active { background:var(--accent,#6ea8fe); color:#0b0d12; border-color:var(--accent,#6ea8fe); font-weight:700; }
+    .row { display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+    .row .lbl { min-width:140px; color:var(--text-dim,#9aa3b2); font-size:.85rem; }
+    input.expr { width:100%; box-sizing:border-box; font-family:ui-monospace,monospace; font-size:15px; padding:8px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; }
+    .hint { color:var(--text-dim,#9aa3b2); font-size:13px; margin:6px 0; }
+    .big { font-family:ui-monospace,monospace; font-size:1.2rem; font-weight:700; color:var(--accent,#6ea8fe); margin:10px 0; word-break:break-all; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    .rpn { font-family:ui-monospace,monospace; background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:8px 10px; font-size:.9rem; margin:8px 0; word-break:break-all; }
+    .rpn .lbl { color:var(--text-dim,#9aa3b2); }
+    h3 { margin:16px 0 4px; font-size:.9rem; color:var(--text-dim,#9aa3b2); text-transform:uppercase; letter-spacing:.04em; }
+    table.steps { width:100%; border-collapse:collapse; font-size:.82rem; margin-top:6px; }
+    table.steps td, table.steps th { border:1px solid var(--border,#2a2f3a); padding:4px 8px; text-align:left; font-family:ui-monospace,monospace; }
+    table.steps th { background:var(--bg-elev,#171a21); color:var(--text-dim,#9aa3b2); }
+    table.steps .tok { color:var(--accent,#6ea8fe); }
+    table.steps .st { color:var(--text,#e6e6e6); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>RPN Calculator</h1>
+      <p>Evaluate expressions in Reverse Polish Notation (postfix) — or convert a standard infix expression to RPN with Dijkstra's shunting-yard algorithm and then evaluate it. RPN needs no parentheses: <code>3 4 + 2 *</code> means <code>(3+4)*2</code>. The tool shows the RPN form, the result, and a step-by-step trace of the stack as each token is processed, so the evaluation is transparent. Supports + − * / % ^, unary minus, constants <code>pi</code> and <code>e</code>, and functions <code>sin cos tan asin acos atan ln log sqrt cbrt abs exp</code>. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="mode">
+        <button id="m-infix" class="active" type="button">Infix → evaluate</button>
+        <button id="m-rpn" type="button">RPN → evaluate</button>
+      </div>
+
+      <div class="row"><span class="lbl">Expression</span></div>
+      <div class="row"><input type="text" id="expr" class="expr" value="3 + 4 * 2" spellcheck="false" autofocus></div>
+      <div class="hint" id="hint">Infix input — operators + − * / % ^ (right-assoc), parentheses, unary minus, functions, and constants pi/e. Example: <code>(1 + 2) * 3 ^ 2</code>.</div>
+      <div class="err" id="err"></div>
+
+      <div class="rpn" id="rpn"></div>
+      <div class="big" id="res"></div>
+
+      <h3>Stack trace</h3>
+      <table class="steps" id="steps"></table>
+
+      <p class="note"><strong>Reverse Polish Notation</strong> writes the operator after its operands, so evaluation is a single left-to-right pass with a stack: push numbers; on an operator, pop its operands, compute, push the result. There are no precedence rules and no parentheses. The <strong>shunting-yard</strong> algorithm converts the familiar infix form to RPN by emitting numbers immediately and using an operator stack, comparing precedence and associativity (^ is right-associative; the rest are left-associative). Pairs with the Calculus Toolkit and Bitwise Calc. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var CONSTS = { pi: Math.PI, e: Math.E, tau: 2 * Math.PI };
+    var FUNCS = {
+      sin: Math.sin, cos: Math.cos, tan: Math.tan,
+      asin: Math.asin, acos: Math.acos, atan: Math.atan,
+      sinh: Math.sinh, cosh: Math.cosh, tanh: Math.tanh,
+      exp: Math.exp, ln: Math.log, log: Math.log10, log2: Math.log2,
+      sqrt: Math.sqrt, cbrt: Math.cbrt, abs: Math.abs,
+      floor: Math.floor, ceil: Math.ceil, round: Math.round, sign: Math.sign
+    };
+    // precedence; higher binds tighter. Unary +/- share ^'s precedence and are
+    // right-associative, so -2^2 = -(2^2) = -4 (standard math) while 2^-2 = 0.25.
+    var PREC = { "+": 1, "-": 1, "*": 2, "/": 2, "%": 2, "u-": 3, "u+": 3, "^": 3 };
+    var RIGHT = { "^": true, "u-": true, "u+": true };
+
+    // Tokenize an infix or RPN string. Tokens: numbers, identifiers, operators, parens, comma.
+    function tokenize(s) {
+      var toks = [], i = 0, n = s.length;
+      while (i < n) {
+        var c = s[i];
+        if (c === " " || c === "\t") { i++; continue; }
+        if ("+-*/%^(),".indexOf(c) !== -1) { toks.push(c); i++; continue; }
+        if (c >= "0" && c <= "9" || c === ".") {
+          var j = i;
+          while (j < n && ((s[j] >= "0" && s[j] <= "9") || s[j] === ".")) j++;
+          if (j < n && (s[j] === "e" || s[j] === "E")) {
+            j++; if (j < n && (s[j] === "+" || s[j] === "-")) j++;
+            while (j < n && s[j] >= "0" && s[j] <= "9") j++;
+          }
+          toks.push(s.slice(i, j)); i = j; continue;
+        }
+        if (/[a-zA-Z_]/.test(c)) {
+          var k = i;
+          while (k < n && /[a-zA-Z0-9_]/.test(s[k])) k++;
+          toks.push(s.slice(i, k)); i = k; continue;
+        }
+        return { err: "Unexpected character '" + c + "'." };
+      }
+      return toks;
+    }
+
+    // Shunting-yard: infix tokens → RPN tokens (with "u-"/"u+" for unary).
+    function toRpn(toks) {
+      var out = [], ops = [];
+      var prev = null; // previous emitted/handled token type: "num","func","op","(",")",null
+      function isVal(t) {
+        if (t === "(" || t === ")" || t === ",") return false;
+        if ("+-*/%^".indexOf(t) !== -1) return false;
+        if (FUNCS[t]) return false;
+        return true; // number or constant
+      }
+      for (var i = 0; i < toks.length; i++) {
+        var t = toks[i];
+        if (t === ",") { /* argument separator: pop until '(' */ while (ops.length && ops[ops.length - 1] !== "(") out.push(ops.pop()); if (!ops.length) return { err: "Misplaced comma." }; continue; }
+        if (FUNCS[t]) { ops.push(t); continue; }
+        if (isVal(t)) { out.push(t); prev = "num"; continue; }
+        if (t === "(") { ops.push(t); prev = "("; continue; }
+        if (t === ")") {
+          while (ops.length && ops[ops.length - 1] !== "(") out.push(ops.pop());
+          if (!ops.length) return { err: "Mismatched ')'." };
+          ops.pop(); // discard '('
+          // if a function sits on top, emit it
+          if (ops.length && FUNCS[ops[ops.length - 1]]) out.push(ops.pop());
+          prev = ")";
+          continue;
+        }
+        // operator
+        var op = t;
+        if ((op === "+" || op === "-") && (prev === null || prev === "op" || prev === "(" || prev === ",")) {
+          op = (op === "-") ? "u-" : "u+"; // unary
+        }
+        while (ops.length) {
+          var top = ops[ops.length - 1];
+          if (top === "(") break;
+          if (FUNCS[top]) { out.push(ops.pop()); continue; }
+          var topPrec = PREC[top], opPrec = PREC[op];
+          if (topPrec === undefined || opPrec === undefined) break;
+          if (topPrec > opPrec || (topPrec === opPrec && !RIGHT[op])) out.push(ops.pop());
+          else break;
+        }
+        ops.push(op);
+        prev = "op";
+      }
+      while (ops.length) {
+        var o = ops.pop();
+        if (o === "(" || o === ")") return { err: "Mismatched parentheses." };
+        out.push(o);
+      }
+      return { rpn: out };
+    }
+
+    // Evaluate an RPN token array, recording stack steps. Returns { value, steps, err }.
+    function evalRpn(rpn) {
+      var st = [], steps = [];
+      function snap(tok, note) { steps.push({ tok: tok, stack: st.slice(), note: note || "" }); }
+      for (var i = 0; i < rpn.length; i++) {
+        var t = rpn[i];
+        if (t === "u-" || t === "u+") {
+          if (st.length < 1) return { err: "Missing operand for unary " + t + "." };
+          var a = st.pop();
+          var v = t === "u-" ? -a : a;
+          st.push(v); snap(t, "= " + fmt(v));
+          continue;
+        }
+        if ("+-*/%^".indexOf(t) !== -1) {
+          if (st.length < 2) return { err: "Missing operand for '" + t + "'." };
+          var b = st.pop(), a2 = st.pop(), r;
+          switch (t) {
+            case "+": r = a2 + b; break;
+            case "-": r = a2 - b; break;
+            case "*": r = a2 * b; break;
+            case "/": r = a2 / b; break;
+            case "%": r = a2 % b; break;
+            case "^": r = Math.pow(a2, b); break;
+          }
+          st.push(r); snap(t, a2 + " " + t + " " + b + " = " + fmt(r));
+          continue;
+        }
+        if (FUNCS[t]) {
+          if (st.length < 1) return { err: "Missing argument for " + t + "() — only single-argument functions are supported." };
+          var x = st.pop();
+          if (t === "log") { st.push(Math.log10(x)); }
+          else { st.push(FUNCS[t](x)); }
+          snap(t, t + "(" + x + ") = " + fmt(st[st.length - 1]));
+          continue;
+        }
+        // number or constant
+        var val;
+        if (Object.prototype.hasOwnProperty.call(CONSTS, t)) val = CONSTS[t];
+        else { val = parseFloat(t); if (isNaN(val)) return { err: "Unknown token '" + t + "'." }; }
+        st.push(val); snap(t, "push " + fmt(val));
+      }
+      if (st.length !== 1) return { value: st[st.length - 1], stack: st, steps: steps, err: "Expression incomplete — " + st.length + " values left on the stack." };
+      return { value: st[0], steps: steps };
+    }
+
+    function fmt(x) { if (!isFinite(x)) return x > 0 ? "∞" : (x < 0 ? "−∞" : "NaN"); return String(x); }
+
+    // High-level: evaluate an infix string.
+    function evalInfix(expr) {
+      var tk = tokenize(expr);
+      if (tk && tk.err) return { err: tk.err };
+      if (!tk.length) return { err: "Empty expression." };
+      var r = toRpn(tk);
+      if (r.err) return { err: r.err };
+      var e = evalRpn(r.rpn);
+      if (e.err) return { err: e.err, rpn: r.rpn, steps: e.steps, value: e.value };
+      return { value: e.value, rpn: r.rpn, steps: e.steps };
+    }
+    // High-level: evaluate an RPN string directly.
+    function evalRpnString(expr) {
+      var tk = tokenize(expr);
+      if (tk && tk.err) return { err: tk.err };
+      if (!tk.length) return { err: "Empty expression." };
+      // RPN tokens are already in postfix order; unary "-" must be marked.
+      // In pure RPN input a leading "-" after a number is binary; a unary "-" is
+      // ambiguous, so we treat "-" as the binary operator and "neg"/"chs" as unary.
+      var rpn = tk.map(function (t) { if (t === "neg") return "u-"; if (t === "chs") return "u-"; return t; });
+      var e = evalRpn(rpn);
+      return e.err ? { err: e.err, steps: e.steps, value: e.value, rpn: rpn } : { value: e.value, steps: e.steps, rpn: rpn };
+    }
+
+    // ---- DOM ----
+    function $(id) { return document.getElementById(id); }
+    var exprEl = $("expr"), errEl = $("err"), resEl = $("res"), rpnEl = $("rpn"), stepsEl = $("steps");
+    var hintEl = $("hint"), mInfix = $("m-infix"), mRpn = $("m-rpn");
+    var mode = "infix";
+
+    function setMode(m) {
+      mode = m;
+      mInfix.classList.toggle("active", m === "infix");
+      mRpn.classList.toggle("active", m === "rpn");
+      if (m === "infix") { exprEl.value = "3 + 4 * 2"; hintEl.innerHTML = 'Infix input — operators + − * / % ^ (right-assoc), parentheses, unary minus, functions, and constants pi/e. Example: <code>(1 + 2) * 3 ^ 2</code>.'; }
+      else { exprEl.value = "3 4 + 2 *"; hintEl.innerHTML = 'RPN input — space-separated tokens, operators after operands. Use <code>neg</code> for unary negation. Example: <code>3 4 + 2 *</code> = (3+4)*2 = 14.'; }
+      render();
+    }
+    mInfix.addEventListener("click", function () { setMode("infix"); });
+    mRpn.addEventListener("click", function () { setMode("rpn"); });
+
+    function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+    function render() {
+      errEl.textContent = ""; resEl.textContent = ""; rpnEl.innerHTML = ""; stepsEl.innerHTML = "";
+      var out = mode === "infix" ? evalInfix(exprEl.value) : evalRpnString(exprEl.value);
+      if (out.err) errEl.textContent = out.err;
+      if (out.rpn) rpnEl.innerHTML = '<span class="lbl">RPN: </span>' + esc(out.rpn.join(" "));
+      if (out.value !== undefined && isFinite(out.value)) resEl.textContent = "= " + fmt(out.value);
+      else if (out.value !== undefined) resEl.textContent = "= " + fmt(out.value);
+      // steps
+      if (out.steps && out.steps.length) {
+        var h = "<tr><th>#</th><th>Token</th><th>Action</th><th>Stack (bottom → top)</th></tr>";
+        out.steps.forEach(function (s, i) {
+          h += '<tr><td>' + (i + 1) + '</td><td class="tok">' + esc(s.tok) + '</td><td>' + esc(s.note) + '</td><td class="st">' + esc(s.stack.map(fmt).join(" ")) + '</td></tr>';
+        });
+        stepsEl.innerHTML = h;
+      }
+    }
+
+    var t = null;
+    exprEl.addEventListener("input", function () { clearTimeout(t); t = setTimeout(render, 100); });
+    render();
+
+    window.VT_RPN_TEST = {
+      tokenize: tokenize, toRpn: toRpn, evalRpn: evalRpn,
+      evalInfix: evalInfix, evalRpnString: evalRpnString, PREC: PREC, FUNCS: FUNCS, CONSTS: CONSTS
+    };
+  })();
+  </script>
+</body>
+</html>
