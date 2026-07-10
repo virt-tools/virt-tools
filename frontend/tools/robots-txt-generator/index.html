@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>robots.txt Generator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .layout { display:grid; grid-template-columns: 1.4fr 1fr; gap:16px; align-items:start; }
+    @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+    textarea, input[type="text"], input[type="number"] { width:100%; box-sizing:border-box; font-family:ui-monospace,monospace; font-size:12px; padding:6px 8px; border:1px solid var(--border,#2a2f3a); border-radius:6px; background:var(--bg,#14181f); color:inherit; }
+    textarea { resize:vertical; min-height:64px; }
+    .group { border:1px solid var(--border,#2a2f3a); border-radius:10px; padding:10px 12px; margin-bottom:10px; background:rgba(255,255,255,.015); }
+    .group-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+    .group-head .gtitle { font-weight:700; font-size:.85rem; }
+    .group-head button { font-size:.72rem; padding:2px 8px; }
+    .field { margin-top:6px; }
+    .field label { font-size:.72rem; text-transform:uppercase; letter-spacing:.04em; opacity:.7; }
+    .out { font-family:ui-monospace,monospace; font-size:12px; background:var(--bg,#14181f); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:10px; white-space:pre-wrap; word-break:break-word; min-height:300px; }
+    .presets { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
+    .presets button { padding:5px 10px; font-size:.78rem; }
+    .warn { color:#ffd27a; font-size:.8rem; margin-top:6px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>robots.txt Generator</h1>
+      <p>Generate a standards-compliant <code>robots.txt</code> for your site. Build crawl-rule groups per user-agent (allow/disallow path patterns, crawl-delay), reference your sitemap(s), and set a Host directive. Includes presets for <em>allow all</em>, <em>block all</em>, and blocking common AI training crawlers (GPTBot, ClaudeBot, Google-Extended, and more). Pairs with the Sitemap Generator. Everything runs in your browser; nothing is uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="presets">
+        <button type="button" class="secondary" data-preset="allow">Allow all</button>
+        <button type="button" class="secondary" data-preset="block">Block all</button>
+        <button type="button" class="secondary" data-preset="ai">Block AI crawlers</button>
+      </div>
+      <div class="layout">
+        <div id="groups"></div>
+        <div>
+          <button id="addgroup" class="secondary" style="padding:5px 12px;">+ Add group</button>
+          <div class="field" style="margin-top:10px;"><label for="sitemaps">Sitemap URLs (one per line)</label><textarea id="sitemaps" rows="3" spellcheck="false">https://example.com/sitemap.xml</textarea></div>
+          <div class="field"><label for="host">Host directive (optional)</label><input type="text" id="host" spellcheck="false" placeholder="https://example.com"></div>
+          <div class="row" style="justify-content:space-between; margin-top:10px;">
+            <label for="out" style="font-size:.8rem; opacity:.7;">robots.txt</label>
+            <button id="copy" class="secondary" style="padding:4px 12px;">Copy</button>
+          </div>
+          <div class="out" id="out"></div>
+          <div class="warn" id="warn"></div>
+        </div>
+      </div>
+      <p class="note">Each group's User-agent field accepts one agent per line. Path patterns must begin with <code>/</code>. An empty Disallow allows everything for that group. In robots.txt the most specific matching group wins, so list dedicated bot groups before a catch-all <code>*</code> group.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var groupsEl = document.getElementById("groups");
+    var sitemapsEl = document.getElementById("sitemaps");
+    var hostEl = document.getElementById("host");
+    var outEl = document.getElementById("out");
+    var warnEl = document.getElementById("warn");
+
+    // Common AI training crawlers (kept local — no network).
+    var AI_BOTS = [
+      "GPTBot", "ChatGPT-User", "OAI-SearchBot", "ClaudeBot", "Claude-Web",
+      "Google-Extended", "PerplexityBot", "CCBot", "anthropic-ai",
+      "Bytespider", "Amazonbot", "Applebot-Extended", "Meta-ExternalAgent",
+      "ImagesiftBot", "Diffbot", "Omgilibot", "FacebookBot"
+    ];
+
+    function blankGroup() {
+      return { userAgents: ["*"], allow: [], disallow: [], crawlDelay: "" };
+    }
+
+    var state = { groups: [blankGroup()] };
+
+    // Pure: read a textarea (one item per line) into a trimmed, non-empty array.
+    function lines(s) {
+      return String(s || "").split(/\r?\n/).map(function (l) { return l.trim(); }).filter(function (l) { return l.length > 0; });
+    }
+
+    // Pure: build a robots.txt string from a config { groups, sitemaps, host }.
+    // Each group: { userAgents:[], allow:[], disallow:[], crawlDelay:"" }.
+    function buildRobots(config) {
+      var blocks = [];
+      (config.groups || []).forEach(function (g) {
+        var ua = (g.userAgents || []).map(function (a) { return String(a).trim(); }).filter(Boolean);
+        if (!ua.length) return;
+        var ls = [];
+        ua.forEach(function (a) { ls.push("User-agent: " + a); });
+        (g.disallow || []).forEach(function (p) {
+          if (p === "") ls.push("Disallow: ");          // explicit allow-all marker
+          else { var tp = String(p).trim(); if (tp) ls.push("Disallow: " + tp); }
+        });
+        (g.allow || []).forEach(function (p) { var tp = String(p).trim(); if (tp) ls.push("Allow: " + tp); });
+        if (g.crawlDelay != null && String(g.crawlDelay).trim() !== "") ls.push("Crawl-delay: " + String(g.crawlDelay).trim());
+        blocks.push(ls.join("\n"));
+      });
+      // Sitemap and Host lines are global: listed consecutively (no blank
+      // lines between them), separated from the group blocks by one blank line.
+      var tail = [];
+      (config.sitemaps || []).forEach(function (s) { var ts = String(s).trim(); if (ts) tail.push("Sitemap: " + ts); });
+      if (config.host && String(config.host).trim()) tail.push("Host: " + String(config.host).trim());
+      var out = blocks.join("\n\n");
+      if (tail.length) { if (out) out += "\n\n"; out += tail.join("\n"); }
+      return out ? out + "\n" : "";
+    }
+
+    // Pure: sanity-check a config -> array of warning strings.
+    function validate(config) {
+      var w = [];
+      var seenAgent = {};
+      (config.groups || []).forEach(function (g, i) {
+        if (!(g.userAgents || []).filter(Boolean).length) w.push("Group " + (i + 1) + " has no user-agent.");
+        (g.disallow || []).concat(g.allow || []).forEach(function (p) {
+          if (p && p.charAt(0) !== "/") w.push('"' + p + '" (group ' + (i + 1) + ") should start with /");
+        });
+        (g.userAgents || []).forEach(function (ua) {
+          if (ua && seenAgent[ua.toLowerCase()] != null) w.push('"' + ua + '" appears in more than one group — only the first is honored.');
+          else if (ua) seenAgent[ua.toLowerCase()] = 1;
+        });
+        var cd = g.crawlDelay;
+        if (cd && String(cd).trim() !== "" && !/^\d+$/.test(String(cd).trim())) w.push("Crawl-delay (group " + (i + 1) + ") should be a whole number of seconds.");
+      });
+      (config.sitemaps || []).forEach(function (s) {
+        if (s && !/^https?:\/\//i.test(s)) w.push('Sitemap "' + s + '" should be an absolute URL.');
+      });
+      return w;
+    }
+
+    function configFromUI() {
+      var groups = [];
+      groupsEl.querySelectorAll(".group").forEach(function (card) {
+        groups.push({
+          userAgents: lines(card.querySelector(".ua").value),
+          allow: lines(card.querySelector(".al").value),
+          disallow: lines(card.querySelector(".di").value),
+          crawlDelay: card.querySelector(".cd").value
+        });
+      });
+      return { groups: groups, sitemaps: lines(sitemapsEl.value), host: hostEl.value };
+    }
+
+    function renderGroups() {
+      groupsEl.innerHTML = "";
+      state.groups.forEach(function (g, idx) {
+        var card = document.createElement("div");
+        card.className = "group";
+        card.innerHTML =
+          '<div class="group-head"><span class="gtitle">Group ' + (idx + 1) + '</span>' +
+          '<button type="button" class="secondary" data-rm="' + idx + '">Remove</button></div>' +
+          '<div class="field"><label>User-agent(s) (one per line)</label><textarea class="ua" rows="3" spellcheck="false"></textarea></div>' +
+          '<div class="field"><label>Disallow (one path per line)</label><textarea class="di" rows="3" spellcheck="false"></textarea></div>' +
+          '<div class="field"><label>Allow (one path per line)</label><textarea class="al" rows="3" spellcheck="false"></textarea></div>' +
+          '<div class="field"><label>Crawl-delay (seconds)</label><input type="text" class="cd" spellcheck="false"></div>';
+        card.querySelector(".ua").value = (g.userAgents || []).join("\n");
+        card.querySelector(".di").value = (g.disallow || []).join("\n");
+        card.querySelector(".al").value = (g.allow || []).join("\n");
+        card.querySelector(".cd").value = g.crawlDelay || "";
+        card.querySelector("[data-rm]").addEventListener("click", function () {
+          state.groups.splice(idx, 1);
+          if (!state.groups.length) state.groups.push(blankGroup());
+          renderGroups(); render();
+        });
+        ["ua", "di", "al", "cd"].forEach(function (cls) {
+          card.querySelector("." + cls).addEventListener("input", render);
+        });
+        groupsEl.appendChild(card);
+      });
+    }
+
+    function syncStateFromUI() {
+      var cfg = configFromUI();
+      state.groups = cfg.groups; state.sitemaps = cfg.sitemaps; state.host = cfg.host;
+    }
+
+    function render() {
+      var cfg = configFromUI();
+      outEl.textContent = buildRobots(cfg);
+      var w = validate(cfg);
+      warnEl.textContent = w.length ? "⚠ " + w.join("  ") : "";
+    }
+
+    function applyPreset(name) {
+      if (name === "allow") {
+        state.groups = [{ userAgents: ["*"], allow: [], disallow: [""], crawlDelay: "" }];
+      } else if (name === "block") {
+        state.groups = [{ userAgents: ["*"], allow: [], disallow: ["/"], crawlDelay: "" }];
+      } else if (name === "ai") {
+        state.groups = [
+          { userAgents: AI_BOTS.slice(), allow: [], disallow: ["/"], crawlDelay: "" },
+          { userAgents: ["*"], allow: [], disallow: [""], crawlDelay: "" }
+        ];
+      }
+      renderGroups(); render();
+    }
+
+    groupsEl.addEventListener("input", render);
+    sitemapsEl.addEventListener("input", render);
+    hostEl.addEventListener("input", render);
+    document.getElementById("addgroup").addEventListener("click", function () { syncStateFromUI(); state.groups.push(blankGroup()); renderGroups(); render(); });
+    document.querySelectorAll(".presets button").forEach(function (b) {
+      b.addEventListener("click", function () { applyPreset(b.getAttribute("data-preset")); });
+    });
+    document.getElementById("copy").addEventListener("click", function () {
+      var t = outEl.textContent; if (!t) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).catch(function () {});
+      else { try { var ta = document.createElement("textarea"); ta.value = t; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove(); } catch (e) {} }
+    });
+
+    window.VT_ROBOTS_TEST = { buildRobots: buildRobots, validate: validate, lines: lines, AI_BOTS: AI_BOTS };
+    renderGroups(); render();
+  })();
+  </script>
+</body>
+</html>

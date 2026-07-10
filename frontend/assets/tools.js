@@ -1187,6 +1187,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-10T16:30:00Z",
   },
   {
+    slug: "robots-txt-generator",
+    name: "robots.txt Generator",
+    description: "Generate a standards-compliant robots.txt for your site. Build crawl-rule groups per user-agent (allow/disallow path patterns, crawl-delay), reference your sitemap(s), and set a Host directive. Includes presets for allow all, block all, and blocking common AI training crawlers (GPTBot, ClaudeBot, Google-Extended, and more). Pairs with the Sitemap Generator. Everything runs in your browser; nothing is uploaded.",
+    category: "Text",
+    icon: "🤖",
+    added: "2026-07-10T17:10:00Z",
+  },
+  {
     slug: "ascii-art",
     name: "Image to ASCII Art Generator",
     description: "Turn a picture into ASCII art you can copy or download. Pick a character ramp (standard, detailed, blocks, dots, binary or custom), set the output width and flip light/dark for the background. Rec.709 luminance with 2:1 character-aspect correction, all computed locally from a canvas — the image never leaves your browser.",
