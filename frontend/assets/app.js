@@ -124,9 +124,17 @@
   function renderView() {
     catalogMount.innerHTML = "";
     if (currentView === "recent") {
-      // Newest first. Tools without an `added` date sort to the end.
+      // Newest first, by parsed timestamp. Comparing the ISO strings with
+      // localeCompare is not reliable (it can reorder the T/-/: separators
+      // depending on locale), so parse to a Date and compare numerically.
+      // Tools without a parseable `added` date sort to the end.
       var sorted = window.VIRTUAL_TOOLS.slice().sort(function (a, b) {
-        return (b.added || "").localeCompare(a.added || "");
+        var ta = Date.parse(a.added), tb = Date.parse(b.added);
+        var an = isNaN(ta), bn = isNaN(tb);
+        if (an && bn) return 0;
+        if (an) return 1;
+        if (bn) return -1;
+        return tb - ta;
       });
       var grid = el("div", { class: "tool-grid recent-grid" });
       sorted.forEach(function (t) { grid.appendChild(toolCard(t)); });
