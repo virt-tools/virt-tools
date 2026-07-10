@@ -955,6 +955,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-04T02:20:00Z",
   },
   {
+    slug: "classical-ciphers",
+    name: "Classical Ciphers",
+    description: "Encrypt and decrypt text with four pre-computer ciphers: Atbash (the Hebrew letter-reversal cipher, self-reciprocal), ROT47 (rotates printable ASCII 33-126 by 47, a wider self-reciprocal ROT13), Affine (E(x) = a x + b mod 26, a must be coprime with 26; a Caesar cipher is the a=1 special case), and the Rail Fence transposition cipher (zigzag across N rails). Each is invertible and shows its transform. Pairs with the Caesar and Vigenere ciphers. Everything runs locally in your browser.",
+    category: "Text",
+    icon: "📜",
+    added: "2026-07-11T00:40:00Z",
+  },
+  {
     slug: "zero-width-steganography",
     name: "Zero-Width Text Steganography",
     description: "Hide a secret message inside ordinary-looking text using invisible Unicode zero-width characters, then reveal it again. The payload (UTF-8 → bits → zero-width chars) is slipped into cover text; survives plain-text copy/paste. Runs locally — nothing uploaded.",
