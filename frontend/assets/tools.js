@@ -1171,6 +1171,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-10T15:10:00Z",
   },
   {
+    slug: "edit-distance-calculator",
+    name: "Edit Distance & String Similarity",
+    description: "Measure how different two strings are. Computes the Levenshtein edit distance (minimum insertions, deletions, and substitutions), a similarity percentage, and the Hamming distance for equal-length inputs, with a color-coded alignment of the edits. Toggle between character and word granularity. Distinct from the line-based text diff — this is character/token-level. Runs entirely in your browser; nothing is uploaded.",
+    category: "Text",
+    icon: "📏",
+    added: "2026-07-10T15:50:00Z",
+  },
+  {
     slug: "ascii-art",
     name: "Image to ASCII Art Generator",
     description: "Turn a picture into ASCII art you can copy or download. Pick a character ramp (standard, detailed, blocks, dots, binary or custom), set the output width and flip light/dark for the background. Rec.709 luminance with 2:1 character-aspect correction, all computed locally from a canvas — the image never leaves your browser.",

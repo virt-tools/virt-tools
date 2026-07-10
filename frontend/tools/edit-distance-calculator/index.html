@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Edit Distance & String Similarity Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+    textarea, input[type="text"] { width:100%; box-sizing:border-box; font-family:ui-monospace,monospace; font-size:13px; padding:8px 10px; border:1px solid var(--border,#2a2f3a); border-radius:8px; background:var(--bg,#14181f); color:inherit; }
+    .stats { display:flex; gap:18px; flex-wrap:wrap; margin:14px 0; }
+    .stat { background:var(--bg,#14181f); border:1px solid var(--border,#2a2f3a); border-radius:10px; padding:10px 16px; min-width:120px; }
+    .stat .v { font-size:1.6rem; font-weight:700; font-family:ui-monospace,monospace; }
+    .stat .l { font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; opacity:.65; margin-top:2px; }
+    .align { font-family:ui-monospace,monospace; font-size:13px; line-height:1.7; background:var(--bg,#14181f); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:10px 12px; white-space:pre-wrap; word-break:break-word; overflow-x:auto; }
+    .row-label { font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; opacity:.65; margin-bottom:2px; }
+    .tok-eq { opacity:.9; }
+    .tok-rep { background:rgba(255,93,143,.28); border-radius:2px; }
+    .tok-del { background:rgba(255,93,143,.18); border-radius:2px; text-decoration:line-through; }
+    .tok-ins { background:rgba(110,168,254,.22); border-radius:2px; }
+    .seg { padding:1px 0; }
+    .opts { display:flex; gap:14px; align-items:center; flex-wrap:wrap; margin:8px 0; font-size:.85rem; }
+    .opts label { display:inline-flex; gap:6px; align-items:center; cursor:pointer; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Edit Distance & String Similarity</h1>
+      <p>Measure how different two strings are. Computes the <strong>Levenshtein edit distance</strong> (minimum single-character insertions, deletions, and substitutions to turn one string into the other), a similarity percentage, and (for equal-length inputs) the Hamming distance. Shows a color-coded alignment of the edits. Toggle between character and word granularity. Everything runs in your browser; nothing is uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="grid2">
+        <div>
+          <div class="field"><label for="a">String A</label></div>
+          <textarea id="a" rows="4" spellcheck="false">kitten</textarea>
+        </div>
+        <div>
+          <div class="field"><label for="b">String B</label></div>
+          <textarea id="b" rows="4" spellcheck="false">sitting</textarea>
+        </div>
+      </div>
+      <div class="opts">
+        <label><input type="radio" name="mode" value="char" checked> Character</label>
+        <label><input type="radio" name="mode" value="word"> Word</label>
+        <label><input type="checkbox" id="casesens" checked> Case-sensitive</label>
+      </div>
+      <div class="stats" id="stats"></div>
+      <div class="grid2">
+        <div>
+          <div class="row-label">A with edits</div>
+          <div class="align" id="alignA"></div>
+        </div>
+        <div>
+          <div class="row-label">B with edits</div>
+          <div class="align" id="alignB"></div>
+        </div>
+      </div>
+      <p class="note">Legend: unchanged is plain; <span class="tok-rep">substitution</span> changes A into B; <span class="tok-del">deletion</span> removes from A; <span class="tok-ins">insertion</span> adds to B. Word mode treats whitespace-separated tokens as units.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var aEl = document.getElementById("a");
+    var bEl = document.getElementById("b");
+    var statsEl = document.getElementById("stats");
+    var alignA = document.getElementById("alignA");
+    var alignB = document.getElementById("alignB");
+    var casesens = document.getElementById("casesens");
+
+    // Pure: tokenize a string into an array of comparison units.
+    // "char" mode splits into code points (Array.from handles surrogate pairs
+    // so an emoji isn't split in two); "word" mode splits on whitespace.
+    function tokenize(s, mode) {
+      if (mode === "word") return String(s).split(/\s+/).filter(function (w) { return w.length > 0; });
+      return Array.from(String(s));
+    }
+
+    // Pure: Levenshtein edit distance between two token arrays, with a full
+    // backtrace of the operations (equal / replace / delete / insert).
+    function editDistance(A, B) {
+      var m = A.length, n = B.length;
+      var d = [];
+      for (var i = 0; i <= m; i++) { d.push(new Array(n + 1)); d[i][0] = i; }
+      for (var j = 0; j <= n; j++) d[0][j] = j;
+      for (var i = 1; i <= m; i++) {
+        for (var j = 1; j <= n; j++) {
+          var cost = A[i - 1] === B[j - 1] ? 0 : 1;
+          d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+        }
+      }
+      var ops = [];
+      var i = m, j = n;
+      while (i > 0 || j > 0) {
+        if (i > 0 && j > 0 && A[i - 1] === B[j - 1]) { ops.push({ type: "equal", a: A[i - 1], b: B[j - 1] }); i--; j--; }
+        else if (i > 0 && j > 0 && d[i][j] === d[i - 1][j - 1] + 1) { ops.push({ type: "replace", a: A[i - 1], b: B[j - 1] }); i--; j--; }
+        else if (i > 0 && d[i][j] === d[i - 1][j] + 1) { ops.push({ type: "delete", a: A[i - 1], b: null }); i--; }
+        else { ops.push({ type: "insert", a: null, b: B[j - 1] }); j--; }
+      }
+      ops.reverse();
+      return { distance: d[m][n], ops: ops };
+    }
+
+    // Pure: Hamming distance (equal-length only); null otherwise.
+    function hamming(A, B) {
+      if (A.length !== B.length) return null;
+      var h = 0;
+      for (var i = 0; i < A.length; i++) if (A[i] !== B[i]) h++;
+      return h;
+    }
+
+    // Pure: similarity in [0,1] = 1 - distance / max(lenA, lenB) (1 when both empty).
+    function similarity(distance, la, lb) {
+      var mx = Math.max(la, lb);
+      if (mx === 0) return 1;
+      return Math.max(0, 1 - distance / mx);
+    }
+
+    function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+    function render() {
+      var mode = document.querySelector('input[name="mode"]:checked').value;
+      var rawA = aEl.value, rawB = bEl.value;
+      if (!casesens.checked) { rawA = rawA.toLowerCase(); rawB = rawB.toLowerCase(); }
+      var A = tokenize(rawA, mode), B = tokenize(rawB, mode);
+      var res = editDistance(A, B);
+      var sim = similarity(res.distance, A.length, B.length);
+      var ham = hamming(A, B);
+      var sep = mode === "word" ? " " : "";
+      var html = '';
+      html += stat(res.distance, "Edit distance");
+      html += stat((Math.round(sim * 1000) / 10) + "%", "Similarity");
+      if (ham != null) html += stat(ham, "Hamming distance");
+      statsEl.innerHTML = html;
+
+      // Build aligned rows. For word mode, join ops with spaces and render
+      // whole tokens; for char mode, render each token inline.
+      var aHtml = "", bHtml = "";
+      res.ops.forEach(function (op) {
+        var av = op.a == null ? "" : esc(op.a);
+        var bv = op.b == null ? "" : esc(op.b);
+        if (mode === "word") {
+          if (op.type === "equal") { aHtml += '<span class="tok-eq">' + av + sep + '</span>'; bHtml += '<span class="tok-eq">' + bv + sep + '</span>'; }
+          else if (op.type === "replace") { aHtml += '<span class="tok-rep">' + av + sep + '</span>'; bHtml += '<span class="tok-rep">' + bv + sep + '</span>'; }
+          else if (op.type === "delete") { aHtml += '<span class="tok-del">' + av + sep + '</span>'; }
+          else { bHtml += '<span class="tok-ins">' + bv + sep + '</span>'; }
+        } else {
+          if (op.type === "equal") { aHtml += '<span class="tok-eq">' + av + '</span>'; bHtml += '<span class="tok-eq">' + bv + '</span>'; }
+          else if (op.type === "replace") { aHtml += '<span class="tok-rep">' + av + '</span>'; bHtml += '<span class="tok-rep">' + bv + '</span>'; }
+          else if (op.type === "delete") { aHtml += '<span class="tok-del">' + av + '</span>'; }
+          else { bHtml += '<span class="tok-ins">' + bv + '</span>'; }
+        }
+      });
+      alignA.innerHTML = aHtml || '<span class="note">(empty)</span>';
+      alignB.innerHTML = bHtml || '<span class="note">(empty)</span>';
+    }
+
+    function stat(v, l) { return '<div class="stat"><div class="v">' + v + '</div><div class="l">' + l + '</div></div>'; }
+
+    aEl.addEventListener("input", render);
+    bEl.addEventListener("input", render);
+    casesens.addEventListener("change", render);
+    document.querySelectorAll('input[name="mode"]').forEach(function (r) { r.addEventListener("change", render); });
+
+    window.VT_EDITDIST_TEST = { tokenize: tokenize, editDistance: editDistance, hamming: hamming, similarity: similarity };
+    render();
+  })();
+  </script>
+</body>
+</html>
