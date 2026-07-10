@@ -1315,6 +1315,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-11T11:00:00Z",
   },
   {
+    slug: "exposure-value-calculator",
+    name: "Exposure Value (EV) Calculator",
+    description: "Compute photographic exposure value from aperture, shutter speed, and ISO: EV = log₂(N²/t), with EV100 normalised to ISO 100. Solve the shutter at a given aperture from a target EV100, or read off a table of equivalent exposures across every full stop — all combinations at the same EV100 capture the same amount of light. Pairs with the Depth of Field Calculator. Everything runs locally in your browser.",
+    category: "Image",
+    icon: "🌤️",
+    added: "2026-07-10T03:00:00Z",
+  },
+  {
     slug: "tip-split",
     name: "Tip & Bill Split Calculator",
     description: "Work out the tip and split a bill evenly among any number of people — with sales tax, a choice of tipping before or after tax, and an optional round-up so each person pays a whole-dollar amount. All arithmetic is in integer cents, so when a total doesn't divide evenly the odd cent is distributed fairly (a few people pay one cent more) and every share adds back up to the exact total. All math runs locally in your browser.",
