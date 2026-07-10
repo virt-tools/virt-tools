@@ -1147,6 +1147,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-10T10:00:00Z",
   },
   {
+    slug: "css-grid-generator",
+    name: "CSS Grid Generator",
+    description: "Visually build a CSS Grid layout and copy the generated CSS. Set column and row tracks (mix fr, px, %, auto, minmax(), and repeat()), row and column gaps, and item/content alignment, with a live preview of the cells and handy presets. Everything runs in your browser; nothing is uploaded.",
+    category: "Design",
+    icon: "⊞",
+    added: "2026-07-10T12:50:00Z",
+  },
+  {
     slug: "ascii-art",
     name: "Image to ASCII Art Generator",
     description: "Turn a picture into ASCII art you can copy or download. Pick a character ramp (standard, detailed, blocks, dots, binary or custom), set the output width and flip light/dark for the background. Rec.709 luminance with 2:1 character-aspect correction, all computed locally from a canvas — the image never leaves your browser.",
