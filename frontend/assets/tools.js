@@ -491,6 +491,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-06T14:00:00Z",
   },
   {
+    slug: "css-loader-generator",
+    name: "CSS Loader Generator",
+    description: "Pick a spinner style (ring, dual ring, bars, dots, pulse, ripple, flip, grid), tune its size, speed, thickness and colors, and copy the ready-to-paste HTML and CSS. The live preview runs the exact generated CSS — pure keyframe animations, no JavaScript or images. Runs locally; nothing is uploaded.",
+    category: "Design",
+    icon: "🌀",
+    added: "2026-07-10T01:50:00Z",
+  },
+  {
     slug: "css-filter",
     name: "CSS Filter Generator",
     description: "Build a CSS filter declaration visually with sliders for blur, brightness, contrast, grayscale, hue-rotate, invert, opacity, saturate, and sepia. A live preview updates as you drag, and the ready-to-copy filter: string lists only the functions you've changed from their defaults, so it stays clean. Reset clears everything. Everything runs locally in your browser.",
