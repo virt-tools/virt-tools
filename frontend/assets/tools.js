@@ -1763,6 +1763,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-11T05:00:00Z",
   },
   {
+    slug: "exponential-distribution",
+    name: "Exponential Distribution Calculator",
+    description: "Work with the exponential distribution — the model for time between independent events at a constant rate. Enter the rate λ (or mean β = 1/λ) and a value x to get the PDF f(x) = λe^(−λx), the CDF P(X ≤ x), and the survival P(X > x), plus the mean, median, and standard deviation; solve the inverse quantile x = −ln(1 − p)/λ from a probability; and read a CDF table across a range of x. Memoryless: P(X > s+t | X > s) = P(X > t). Pairs with the Poisson Distribution Calculator (counts vs. waiting times). Everything runs locally in your browser.",
+    category: "Math",
+    icon: "⏳",
+    added: "2026-07-10T07:00:00Z",
+  },
+  {
     slug: "amortization-schedule",
     name: "Amortization Schedule Calculator",
     description: "Generate a full loan amortization schedule. Enter the principal, annual interest rate (APR), and term in years, and the calculator works out the fixed monthly payment, then breaks every payment into interest and principal with the remaining balance after each month. Toggle between a month-by-month detail and a yearly summary. A 0% rate is handled as a straight-line payoff. The monthly payment uses the standard amortization formula and every row is computed locally in your browser.",
