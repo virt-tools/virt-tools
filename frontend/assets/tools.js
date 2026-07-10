@@ -1131,6 +1131,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-10T08:20:00Z",
   },
   {
+    slug: "text-shadow-generator",
+    name: "CSS Text Shadow Generator",
+    description: "Build layered CSS text-shadows with a live preview and copy-ready CSS. Stack multiple shadows per layer, or start from a preset — neon glow, retro 3D, soft, outline, emboss, or a stepped long shadow — and tweak each layer's offset, blur, color, and opacity. Everything runs in your browser; nothing is uploaded.",
+    category: "Design",
+    icon: "🔤",
+    added: "2026-07-10T09:10:00Z",
+  },
+  {
     slug: "ascii-art",
     name: "Image to ASCII Art Generator",
     description: "Turn a picture into ASCII art you can copy or download. Pick a character ramp (standard, detailed, blocks, dots, binary or custom), set the output width and flip light/dark for the background. Rec.709 luminance with 2:1 character-aspect correction, all computed locally from a canvas — the image never leaves your browser.",
