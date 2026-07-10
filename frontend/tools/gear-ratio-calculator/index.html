@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Gear Ratio &amp; RPM Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .opts { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin:10px 0; font-size:.9rem; }
+    .opts label { display:inline-flex; gap:6px; align-items:center; }
+    .opts input, .opts select { width:100px; font-family:ui-monospace,monospace; padding:6px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; }
+    .opts select { width:auto; font-size:.85rem; }
+    .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; margin:10px 0; }
+    .stats .s { background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:10px 12px; }
+    .stats .s .k { color:var(--text-dim,#9aa3b2); font-size:12px; }
+    .stats .s .v { font-family:ui-monospace,monospace; font-weight:700; color:var(--accent,#6ea8fe); font-size:1.05rem; }
+    .mode { display:flex; gap:8px; margin:6px 0 8px; flex-wrap:wrap; }
+    .mode button { padding:6px 14px; border-radius:6px; border:1px solid var(--border,#2a2f3a); background:var(--bg-elev,#171a21); color:var(--text-dim,#9aa3b2); cursor:pointer; font-size:.85rem; }
+    .mode button.active { background:var(--accent,#6ea8fe); color:#0b0d12; border-color:var(--accent,#6ea8fe); font-weight:700; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    h3 { margin:18px 0 4px; font-size:.95rem; }
+    .hint { color:var(--text-dim,#9aa3b2); font-size:13px; margin:4px 0; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Gear Ratio &amp; RPM Calculator</h1>
+      <p>Compute the ratio between two meshing gears (or a belt-and-pulley drive) and what it does to speed and torque. Enter the tooth counts (or pulley diameters) of the driver and driven members plus an input RPM and torque to get the gear ratio, output RPM, and output torque with an efficiency loss; or solve for the missing member that produces a target ratio. Pairs with the Resistor and Capacitor series/parallel tools for mechanical reduction. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="mode">
+        <button id="mode-calc" class="active" type="button">Calculate ratio &amp; output</button>
+        <button id="mode-find" type="button">Find a missing member</button>
+      </div>
+
+      <div id="calc-panel">
+        <div class="opts">
+          <label>Kind
+            <select id="c-kind">
+              <option value="teeth">Gears (teeth)</option>
+              <option value="diameter">Pulleys (diameter)</option>
+            </select>
+          </label>
+          <label>Driver <input type="text" id="c-driver" inputmode="decimal" value="20"></label>
+          <label>Driven <input type="text" id="c-driven" inputmode="decimal" value="60"></label>
+          <label>Input RPM <input type="text" id="c-rpm" inputmode="decimal" value="1800"></label>
+          <label>Input torque <input type="text" id="c-tq" inputmode="decimal" value="10"> N·m</label>
+          <label>Efficiency <input type="text" id="c-eff" inputmode="decimal" value="95"> %</label>
+        </div>
+        <div class="err" id="c-err"></div>
+        <div class="stats" id="c-stats"></div>
+        <div class="hint" id="c-hint"></div>
+      </div>
+
+      <div id="find-panel" style="display:none">
+        <div class="opts">
+          <label>Target ratio <input type="text" id="f-ratio" inputmode="decimal" value="3"></label>
+          <label>Known member
+            <select id="f-known-side">
+              <option value="driver">Driver</option>
+              <option value="driven">Driven</option>
+            </select>
+          </label>
+          <label>Known value <input type="text" id="f-known" inputmode="decimal" value="20"></label>
+        </div>
+        <div class="err" id="f-err"></div>
+        <div class="stats" id="f-stats"></div>
+      </div>
+
+      <p class="note">Ratio = driven / driver. A ratio greater than 1 is a speed reducer: the output turns slower but with more torque. Output RPM = input RPM × driver / driven. Output torque = input torque × driven / driver × efficiency. Power is conserved (minus losses): torque rises as speed falls. For belt drives use pulley diameters the same way. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    // Gear/drive ratio = driven / driver.
+    function ratio(driven, driver) {
+      if (!(driven > 0) || !(driver > 0)) return { err: "Driver and driven must be positive." };
+      return { value: driven / driver, err: null };
+    }
+    // Output RPM = input RPM * driver / driven.
+    function outputRpm(inputRpm, driven, driver) {
+      if (!(inputRpm > 0) || !(driven > 0) || !(driver > 0)) return { err: "Input RPM, driver, and driven must be positive." };
+      return { value: inputRpm * driver / driven, err: null };
+    }
+    // Output torque = input torque * ratio * efficiency (efficiency in [0,1]).
+    function outputTorque(inputTq, driven, driver, efficiency) {
+      if (!(inputTq > 0) || !(driven > 0) || !(driver > 0)) return { err: "Input torque, driver, and driven must be positive." };
+      if (!(efficiency >= 0) || !(efficiency <= 1)) return { err: "Efficiency must be between 0 and 1." };
+      return { value: inputTq * (driven / driver) * efficiency, err: null };
+    }
+    // Solve for the missing member that yields a target ratio. ratio = driven/driver.
+    function findMember(targetRatio, knownValue, knownIsDriver) {
+      if (!(targetRatio > 0) || !(knownValue > 0)) return { err: "Target ratio and known value must be positive." };
+      if (knownIsDriver) {
+        // known = driver -> driven = ratio * driver
+        return { value: targetRatio * knownValue, isDriver: false, err: null };
+      } else {
+        // known = driven -> driver = driven / ratio
+        return { value: knownValue / targetRatio, isDriver: true, err: null };
+      }
+    }
+
+    function parseNum(s) { if (s == null) return null; s = String(s).trim(); if (!s) return null; var m = s.match(/^([-+0-9.eE]+)/); return m ? parseFloat(m[1]) : null; }
+    function r(x, d) { if (!isFinite(x)) return "—"; return (Math.round(x * Math.pow(10, d)) / Math.pow(10, d)).toString(); }
+
+    var modeCalc = document.getElementById("mode-calc");
+    var modeFind = document.getElementById("mode-find");
+    var calcPanel = document.getElementById("calc-panel");
+    var findPanel = document.getElementById("find-panel");
+    var cErr = document.getElementById("c-err"), cStats = document.getElementById("c-stats"), cHint = document.getElementById("c-hint");
+    var fErr = document.getElementById("f-err"), fStats = document.getElementById("f-stats");
+
+    function setMode(m) {
+      modeCalc.classList.toggle("active", m === "calc");
+      modeFind.classList.toggle("active", m === "find");
+      calcPanel.style.display = m === "calc" ? "" : "none";
+      findPanel.style.display = m === "find" ? "" : "none";
+      render();
+    }
+
+    function cards(el, arr) {
+      el.innerHTML = arr.map(function (c) { return '<div class="s"><div class="k">' + c[0] + '</div><div class="v">' + c[1] + '</div></div>'; }).join("");
+    }
+
+    function render() {
+      cErr.textContent = ""; cStats.innerHTML = ""; cHint.textContent = "";
+      fErr.textContent = ""; fStats.innerHTML = "";
+      if (modeCalc.classList.contains("active")) {
+        var driver = parseNum(document.getElementById("c-driver").value);
+        var driven = parseNum(document.getElementById("c-driven").value);
+        var rpm = parseNum(document.getElementById("c-rpm").value);
+        var tq = parseNum(document.getElementById("c-tq").value);
+        var effPct = parseNum(document.getElementById("c-eff").value);
+        if (driver == null || driven == null) { cErr.textContent = "Enter the driver and driven values."; return; }
+        var rr = ratio(driven, driver);
+        if (rr.err) { cErr.textContent = rr.err; return; }
+        var unit = document.getElementById("c-kind").value === "teeth" ? "teeth" : "dia";
+        var driverLbl = document.getElementById("c-kind").value === "teeth" ? "T" : "Ø";
+        // rpm
+        var rpmOut = (rpm != null) ? outputRpm(rpm, driven, driver) : null;
+        var tqOut = null;
+        if (tq != null && effPct != null) {
+          tqOut = outputTorque(tq, driven, driver, effPct / 100);
+        }
+        var arr = [["Gear ratio", r(rr.value, 4) + " : 1"]];
+        if (rpmOut && !rpmOut.err) arr.push(["Output RPM", r(rpmOut.value, 2) + " rpm"]);
+        if (tqOut && !tqOut.err) arr.push(["Output torque", r(tqOut.value, 4) + " N·m"]);
+        arr.push(["Speed change", rr.value > 1 ? "reduces " + r(rr.value, 3) + "×" : (rr.value < 1 ? "increases " + r(1 / rr.value, 3) + "×" : "1:1 (none)")]);
+        cards(cStats, arr);
+        if (rpmOut && rpmOut.err) cErr.textContent = rpmOut.err;
+        if (tqOut && tqOut.err && !cErr.textContent) cErr.textContent = tqOut.err;
+        cHint.textContent = "Driver " + driverLbl + driver + " → Driven " + driverLbl + driven + " · ratio = " + r(rr.value, 4);
+      } else {
+        var target = parseNum(document.getElementById("f-ratio").value);
+        var known = parseNum(document.getElementById("f-known").value);
+        var knownIsDriver = document.getElementById("f-known-side").value === "driver";
+        if (target == null || known == null) { fErr.textContent = "Enter a target ratio and a known member value."; return; }
+        var res = findMember(target, known, knownIsDriver);
+        if (res.err) { fErr.textContent = res.err; return; }
+        cards(fStats, [
+          ["Missing member", r(res.value, 4) + (res.isDriver ? " (driver)" : " (driven)")],
+          ["Verified ratio", r(knownIsDriver ? (res.value / known) : (known / res.value), 4) + " : 1"]
+        ]);
+      }
+    }
+
+    modeCalc.addEventListener("click", function () { setMode("calc"); });
+    modeFind.addEventListener("click", function () { setMode("find"); });
+    ["c-kind","c-driver","c-driven","c-rpm","c-tq","c-eff","f-ratio","f-known-side","f-known"].forEach(function (id) {
+      var el = document.getElementById(id); el.addEventListener("input", render); el.addEventListener("change", render);
+    });
+    render();
+
+    window.VT_GEAR_TEST = { ratio: ratio, outputRpm: outputRpm, outputTorque: outputTorque, findMember: findMember };
+  })();
+  </script>
+</body>
+</html>

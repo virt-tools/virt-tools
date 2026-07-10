@@ -1907,6 +1907,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-10T05:00:00Z",
   },
   {
+    slug: "gear-ratio-calculator",
+    name: "Gear Ratio & RPM Calculator",
+    description: "Compute the ratio between two meshing gears or a belt-and-pulley drive and what it does to speed and torque. Enter the tooth counts (or pulley diameters) of the driver and driven members, an input RPM, torque, and efficiency to get the gear ratio, output RPM, and output torque — or solve for the missing member that produces a target ratio. Ratio = driven / driver; output RPM = input × driver / driven; output torque = input × driven / driver × efficiency, so power is conserved (minus losses) as torque rises and speed falls. Pairs with the Resistor and Capacitor series/parallel tools for mechanical reduction. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "⚙️",
+    added: "2026-07-10T09:00:00Z",
+  },
+  {
     slug: "resistor-color-code",
     name: "Resistor Color Code",
     description: "Decode a through-hole resistor's color bands into its resistance and tolerance, or encode an ohm value back into 4- or 5-band colors. Pick band colors (or type a value like 4.7k or 0.47) to read the result; standard colors cover digits 0–9, gold and silver multipliers (×0.1 / ×0.01) for sub-ohm values, and tolerances from 0.1% to 20%. Pairs with the Ohm's Law calculator for basic electronics. Everything runs locally in your browser.",
