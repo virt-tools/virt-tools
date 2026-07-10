@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Note Frequency Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .opts { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin:10px 0; font-size:.9rem; }
+    .opts label { display:inline-flex; gap:6px; align-items:center; }
+    .opts input, .opts select { font-family:ui-monospace,monospace; padding:6px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; }
+    .opts input[type="text"] { width:90px; }
+    .opts input[type="number"] { width:80px; }
+    .opts select { padding:6px 8px; font-size:.85rem; }
+    .mode { display:flex; gap:8px; margin:6px 0 2px; }
+    .mode button { padding:6px 14px; border-radius:6px; border:1px solid var(--border,#2a2f3a); background:var(--bg-elev,#171a21); color:var(--text-dim,#9aa3b2); cursor:pointer; font-size:.85rem; }
+    .mode button.active { background:var(--accent,#6ea8fe); color:#0b0d12; border-color:var(--accent,#6ea8fe); font-weight:700; }
+    .out { background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:10px; padding:14px; margin:10px 0; }
+    .out .row { display:flex; justify-content:space-between; align-items:baseline; padding:7px 0; border-bottom:1px solid var(--border,#2a2f3a); font-size:14px; gap:12px; }
+    .out .row:last-child { border-bottom:none; }
+    .out .row .k { color:var(--text-dim,#9aa3b2); }
+    .out .row .v { font-family:ui-monospace,monospace; font-weight:700; color:var(--accent,#6ea8fe); }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    h3 { margin:18px 0 4px; font-size:.95rem; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Note Frequency Calculator</h1>
+      <p>Convert between a musical note and its frequency in 12-tone equal temperament (A4 = 440 Hz by default, adjustable). Pick a note and octave to get its frequency, MIDI note number, and wavelength in air, or enter a frequency to find the nearest note and how many cents it is off. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="mode">
+        <button id="mode-note" class="active" type="button">Note → frequency</button>
+        <button id="mode-freq" type="button">Frequency → note</button>
+      </div>
+
+      <div id="note-panel">
+        <div class="opts">
+          <label>Note
+            <select id="note">
+              <option value="0">C</option>
+              <option value="1">C♯ / D♭</option>
+              <option value="2">D</option>
+              <option value="3">D♯ / E♭</option>
+              <option value="4">E</option>
+              <option value="5">F</option>
+              <option value="6">F♯ / G♭</option>
+              <option value="7">G</option>
+              <option value="8">G♯ / A♭</option>
+              <option value="9" selected>A</option>
+              <option value="10">A♯ / B♭</option>
+              <option value="11">B</option>
+            </select>
+          </label>
+          <label>Octave
+            <input type="number" id="octave" value="4" min="-5" max="9" step="1">
+          </label>
+        </div>
+      </div>
+
+      <div id="freq-panel" style="display:none">
+        <div class="opts">
+          <label>Frequency (Hz)
+            <input type="text" id="freq" inputmode="decimal" value="440" placeholder="e.g. 440">
+          </label>
+        </div>
+      </div>
+
+      <h3>Reference pitch &amp; speed of sound</h3>
+      <div class="opts">
+        <label>A4 = <input type="number" id="ref" value="440" min="100" max="500" step="0.1"> Hz</label>
+        <label>Speed of sound <input type="number" id="sos" value="343.27" min="100" max="1000" step="0.01"> m/s</label>
+      </div>
+
+      <div class="err" id="err"></div>
+      <div class="out" id="out"><span style="color:var(--text-dim,#9aa3b2)">Enter a note or frequency to convert.</span></div>
+
+      <p class="note">12-tone equal temperament: f = ref × 2<sup>(midi − 69) / 12</sup>, where MIDI note 69 is A4 and the reference is A4's frequency (default 440 Hz). MIDI note 0 is C-1; each octave spans 12 semitones and doubles the frequency. Wavelength uses λ = v / f with the speed of sound in air (default 343.27 m/s at ~20 °C). In the reverse direction, the nearest note is found and the offset is shown in cents (1200 cents per octave, 100 per semitone). Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var NAMES = ["C", "C♯/D♭", "D", "D♯/E♭", "E", "F", "F♯/G♭", "G", "G♯/A♭", "A", "A♯/B♭", "B"];
+    var NAMES_PLAIN = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"];
+
+    // midi = (octave + 1) * 12 + pitchClass. A4 (octave 4, class 9) -> 69.
+    function toMidi(pitchClass, octave) {
+      return (Math.floor(octave) + 1) * 12 + Math.floor(pitchClass);
+    }
+    // midiToFreq: ref is A4 frequency (midi 69).
+    function midiToFreq(midi, ref) {
+      return ref * Math.pow(2, (midi - 69) / 12);
+    }
+    function noteToFreq(pitchClass, octave, ref) {
+      return midiToFreq(toMidi(pitchClass, octave), ref);
+    }
+    // freqToMidi: fractional midi number (continuous), given ref.
+    function freqToMidi(freq, ref) {
+      return 69 + 12 * Math.log2(freq / ref);
+    }
+    // Decompose an integer midi into {pc, octave, name}.
+    function midiToNote(midi) {
+      var pc = ((midi % 12) + 12) % 12;
+      var octave = Math.floor(midi / 12) - 1;
+      return { pc: pc, octave: octave, name: NAMES_PLAIN[pc] + octave };
+    }
+    // freqToNote: nearest note + cents offset.
+    function freqToNote(freq, ref) {
+      var fmidi = freqToMidi(freq, ref);
+      var nearest = Math.round(fmidi);
+      var cents = (fmidi - nearest) * 100;
+      var note = midiToNote(nearest);
+      var exactFreq = midiToFreq(nearest, ref);
+      return { midi: nearest, pc: note.pc, octave: note.octave, name: note.name, cents: cents, exactFreq: exactFreq, fmidi: fmidi };
+    }
+    // wavelength in meters = speed / freq.
+    function wavelength(freq, speed) {
+      return speed / freq;
+    }
+
+    var modeNoteBtn = document.getElementById("mode-note");
+    var modeFreqBtn = document.getElementById("mode-freq");
+    var notePanel = document.getElementById("note-panel");
+    var freqPanel = document.getElementById("freq-panel");
+    var noteEl = document.getElementById("note");
+    var octaveEl = document.getElementById("octave");
+    var freqEl = document.getElementById("freq");
+    var refEl = document.getElementById("ref");
+    var sosEl = document.getElementById("sos");
+    var errEl = document.getElementById("err");
+    var outEl = document.getElementById("out");
+
+    function parseNum(s) { if (s == null) return null; s = String(s).trim(); if (!s) return null; var m = s.match(/^([-+0-9.eE]+)/); return m ? parseFloat(m[1]) : null; }
+
+    function rnd(x, n) { if (!isFinite(x)) return "—"; var p = Math.pow(10, n); return String(Math.round(x * p) / p); }
+    function row(k, v) { return '<div class="row"><span class="k">' + k + '</span><span class="v">' + v + '</span></div>'; }
+
+    function setMode(noteMode) {
+      modeNoteBtn.classList.toggle("active", noteMode);
+      modeFreqBtn.classList.toggle("active", !noteMode);
+      notePanel.style.display = noteMode ? "" : "none";
+      freqPanel.style.display = noteMode ? "none" : "";
+      render();
+    }
+
+    function render() {
+      errEl.textContent = "";
+      var ref = parseNum(refEl.value);
+      var sos = parseNum(sosEl.value);
+      if (ref == null || ref <= 0) { errEl.textContent = "Reference pitch A4 must be a positive number of Hz."; outEl.innerHTML = ""; return; }
+      if (sos == null || sos <= 0) { errEl.textContent = "Speed of sound must be a positive number of m/s."; outEl.innerHTML = ""; return; }
+
+      var noteMode = modeNoteBtn.classList.contains("active");
+      if (noteMode) {
+        var pc = parseInt(noteEl.value, 10);
+        var oct = parseInt(octaveEl.value, 10);
+        if (isNaN(pc) || pc < 0 || pc > 11) { errEl.textContent = "Choose a note."; outEl.innerHTML = ""; return; }
+        if (isNaN(oct)) { errEl.textContent = "Enter an octave number (e.g. 4)."; outEl.innerHTML = ""; return; }
+        var midi = toMidi(pc, oct);
+        var f = midiToFreq(midi, ref);
+        var wl = wavelength(f, sos);
+        var html = "";
+        html += row("Note", NAMES[pc] + oct);
+        html += row("MIDI note number", String(midi));
+        html += row("Frequency", rnd(f, 4) + " Hz");
+        html += row("Wavelength (air)", rnd(wl, 4) + " m  (" + rnd(wl * 100, 2) + " cm)");
+        html += row("Cents from A4", rnd((midi - 69) * 100, 0) + " cents");
+        outEl.innerHTML = html;
+      } else {
+        var f = parseNum(freqEl.value);
+        if (f == null || f <= 0 || !isFinite(f)) { errEl.textContent = "Enter a positive frequency in Hz."; outEl.innerHTML = ""; return; }
+        var info = freqToNote(f, ref);
+        var wl = wavelength(f, sos);
+        var html = "";
+        html += row("Nearest note", info.name);
+        html += row("MIDI note number", String(info.midi));
+        html += row("Exact frequency of that note", rnd(info.exactFreq, 4) + " Hz");
+        html += row("Your frequency", rnd(f, 4) + " Hz");
+        html += row("Cents offset", (info.cents >= 0 ? "+" : "") + rnd(info.cents, 1) + " cents");
+        html += row("Wavelength of your frequency (air)", rnd(wl, 4) + " m  (" + rnd(wl * 100, 2) + " cm)");
+        outEl.innerHTML = html;
+      }
+    }
+
+    modeNoteBtn.addEventListener("click", function () { setMode(true); });
+    modeFreqBtn.addEventListener("click", function () { setMode(false); });
+    [noteEl, octaveEl, freqEl, refEl, sosEl].forEach(function (el) {
+      el.addEventListener("input", render);
+      el.addEventListener("change", render);
+    });
+
+    render();
+    window.VT_NOTE_TEST = {
+      toMidi: toMidi, midiToFreq: midiToFreq, noteToFreq: noteToFreq,
+      freqToMidi: freqToMidi, midiToNote: midiToNote, freqToNote: freqToNote,
+      wavelength: wavelength, NAMES_PLAIN: NAMES_PLAIN
+    };
+  })();
+  </script>
+</body>
+</html>

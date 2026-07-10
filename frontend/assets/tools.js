@@ -1851,6 +1851,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-09T06:00:00Z",
   },
   {
+    slug: "note-frequency-calculator",
+    name: "Note Frequency Calculator",
+    description: "Convert between a musical note and its frequency in 12-tone equal temperament (A4 = 440 Hz by default, adjustable). Pick a note and octave to get its frequency, MIDI note number, and wavelength in air, or enter any frequency to find the nearest note plus its cents offset. A full table from C-1 to B9 is supported, with MIDI note 69 fixed as A4. Pairs with the Wavelength / Frequency and Tone Generator tools. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🎵",
+    added: "2026-07-11T03:00:00Z",
+  },
+  {
     slug: "lc-resonant-calculator",
     name: "LC Resonant Frequency Calculator",
     description: "Calculate the resonant frequency of an LC tank circuit: f = 1 / (2π·√(L·C)). Enter any two of frequency, inductance (H, mH, µH, nH, pH), or capacitance (F, mF, µF, nF, pF) and the third is solved for you — plus the characteristic impedance Z = √(L/C), angular frequency ω = 2π·f, and period T = 1/f. Leave one field blank to solve for it; fill all three to cross-check consistency. Pairs with the Wavelength, Decibel, and Ohm's Law tools for RF and electronics work. Everything runs locally in your browser.",
