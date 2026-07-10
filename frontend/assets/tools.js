@@ -1051,6 +1051,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-10T00:20:00Z",
   },
   {
+    slug: "favicon-generator",
+    name: "Favicon Generator",
+    description: "Turn one image into a complete favicon set — a multi-size .ico, Apple touch icon, Android/PWA icons, and a web app manifest — bundled as a single ZIP ready to drop into your site root. Everything is generated locally on a canvas; nothing is uploaded.",
+    category: "Image",
+    icon: "⭐",
+    added: "2026-07-10T01:05:00Z",
+  },
+  {
     slug: "ascii-art",
     name: "Image to ASCII Art Generator",
     description: "Turn a picture into ASCII art you can copy or download. Pick a character ramp (standard, detailed, blocks, dots, binary or custom), set the output width and flip light/dark for the background. Rec.709 luminance with 2:1 character-aspect correction, all computed locally from a canvas — the image never leaves your browser.",
