@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>CSS Minifier — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .layout { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
+    @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+    textarea { width:100%; box-sizing:border-box; font-family:ui-monospace,monospace; font-size:12px; min-height:320px; resize:vertical; }
+    .out { font-family:ui-monospace,monospace; font-size:12px; background:var(--bg,#14181f); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:10px; white-space:pre-wrap; word-break:break-word; min-height:320px; max-height:560px; overflow:auto; }
+    .opts { display:flex; gap:16px; flex-wrap:wrap; align-items:center; margin:10px 0; font-size:.85rem; }
+    .opts label { display:inline-flex; gap:6px; align-items:center; cursor:pointer; }
+    .stats { font-size:.82rem; opacity:.75; margin-top:8px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>CSS Minifier</h1>
+      <p>Minify CSS by stripping comments, collapsing whitespace, removing unnecessary spaces around <code>&#123;&#125;&nbsp;;&nbsp;:&nbsp;,</code>, and dropping trailing semicolons — while preserving the contents of strings and <code>url()</code> so nothing breaks. The reverse of the CSS formatter. Optionally shorten hex colors (<code>#aabbcc</code> → <code>#abc</code>) and drop leading zeros (<code>0.5em</code> → <code>.5em</code>). Everything runs in your browser; nothing is uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="opts">
+        <label><input type="checkbox" id="comments" checked> Remove comments</label>
+        <label><input type="checkbox" id="hex"> Shorten hex colors</label>
+        <label><input type="checkbox" id="lz"> Remove leading zeros</label>
+        <button id="sample" class="secondary" style="padding:4px 12px;">Sample</button>
+        <button id="copy" class="secondary" style="padding:4px 12px;">Copy</button>
+      </div>
+      <div class="layout">
+        <div>
+          <div class="field"><label for="in">CSS</label></div>
+          <textarea id="in" spellcheck="false">/* Button styles */
+.btn {
+  color: #ffffff;
+  background: #aabbcc url("img x.png");
+  margin: 0px 10px 0px 10px;
+  transition: opacity 0.25s ease;
+  content: "a : b, c";
+}
+.btn:hover { color: #ff0000; }</textarea>
+        </div>
+        <div>
+          <div class="field"><label>Minified</label></div>
+          <div class="out" id="out"></div>
+          <div class="stats" id="stats"></div>
+        </div>
+      </div>
+      <p class="note">Conservative by default: only comments, whitespace, and unnecessary spacing are touched — string and <code>url()</code> contents are preserved verbatim. Hex / leading-zero shortening are opt-in (they're safe for values but can affect unusual unquoted <code>url()</code> filenames, so they're off until you turn them on). No network requests are made.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var inEl = document.getElementById("in");
+    var outEl = document.getElementById("out");
+    var statsEl = document.getElementById("stats");
+    var commentsEl = document.getElementById("comments");
+    var hexEl = document.getElementById("hex");
+    var lzEl = document.getElementById("lz");
+
+    // Pure: minify a non-string chunk (whitespace, delimiters, last-semicolon,
+    // and optionally hex / leading-zero shortening).
+    function minifyText(t, opts) {
+      opts = opts || {};
+      t = t.replace(/\s+/g, " ");
+      t = t.replace(/\s*([{};:,()])\s*/g, "$1"); // spaces around delimiters
+      t = t.replace(/;}/g, "}");                 // trailing semicolon before }
+      if (opts.hex) t = t.replace(/#([0-9a-fA-F])\1([0-9a-fA-F])\2([0-9a-fA-F])\3(?![0-9a-fA-F])/g, "#$1$2$3");
+      if (opts.leadingZero) t = t.replace(/(^|[^\d.])0+\.(\d)/g, "$1.$2");
+      return t;
+    }
+
+    // Pure: minify a CSS string. Walks the input tracking strings (and skipping
+    // comments) so that string/url contents are never altered; only the
+    // non-string chunks are minified.
+    function minify(css, opts) {
+      opts = opts || {};
+      var stripComments = opts.comments !== false;
+      var segs = [];   // alternating chunks: { str: bool, t: string }
+      var i = 0, n = css.length, buf = "";
+      function flush() { if (buf.length) { segs.push({ str: false, t: buf }); buf = ""; } }
+      while (i < n) {
+        var ch = css.charAt(i);
+        if (stripComments && ch === "/" && css.charAt(i + 1) === "*") {
+          // Skip the comment without flushing, so adjacent non-string text
+          // stays in one buffer (and trailing spaces around it still collapse).
+          var end = css.indexOf("*/", i + 2);
+          i = end < 0 ? n : end + 2;
+          continue;
+        }
+        if (ch === '"' || ch === "'") {
+          flush();
+          var quote = ch, start = i; i++;
+          while (i < n) { var c = css.charAt(i); if (c === "\\") { i += 2; continue; } if (c === quote) { i++; break; } i++; }
+          segs.push({ str: true, t: css.slice(start, i) });
+          continue;
+        }
+        buf += ch; i++;
+      }
+      flush();
+      var out = "";
+      for (var k = 0; k < segs.length; k++) {
+        out += segs[k].str ? segs[k].t : minifyText(segs[k].t, opts);
+      }
+      return out.trim();
+    }
+
+    function render() {
+      var src = inEl.value;
+      var opts = { comments: commentsEl.checked, hex: hexEl.checked, leadingZero: lzEl.checked };
+      var out = minify(src, opts);
+      outEl.textContent = out;
+      var before = src.length, after = out.length;
+      var pct = before ? Math.max(0, Math.round((1 - after / before) * 100)) : 0;
+      statsEl.textContent = before ? (after + " chars  ·  " + pct + "% smaller (was " + before + ")") : "";
+    }
+
+    inEl.addEventListener("input", render);
+    [commentsEl, hexEl, lzEl].forEach(function (el) { el.addEventListener("change", render); });
+    document.getElementById("sample").addEventListener("click", function () {
+      inEl.value = '/* Card */\n.card {\n  border-radius: 8px;\n  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);\n  font-family: "Helvetica Neue", Arial, sans-serif;\n  background: #aabbcc;\n  margin: 0px;\n}\n@media (min-width: 768px) {\n  .card { width: 50%; }\n}\n';
+      render();
+    });
+    document.getElementById("copy").addEventListener("click", function () {
+      var t = outEl.textContent; if (!t) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).catch(function () {});
+      else { try { var ta = document.createElement("textarea"); ta.value = t; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove(); } catch (e) {} }
+    });
+
+    window.VT_CSSMIN_TEST = { minify: minify, minifyText: minifyText };
+    render();
+  })();
+  </script>
+</body>
+</html>

@@ -1195,6 +1195,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-10T17:10:00Z",
   },
   {
+    slug: "css-minifier",
+    name: "CSS Minifier",
+    description: "Minify CSS by stripping comments, collapsing whitespace, removing unnecessary spaces around {} ; : , ( ), and dropping trailing semicolons — while preserving the contents of strings and url() so nothing breaks. The reverse of the CSS formatter. Optionally shorten hex colors (#aabbcc → #abc) and drop leading zeros (0.5em → .5em). Everything runs in your browser; nothing is uploaded.",
+    category: "Design",
+    icon: "🗜️",
+    added: "2026-07-10T17:50:00Z",
+  },
+  {
     slug: "ascii-art",
     name: "Image to ASCII Art Generator",
     description: "Turn a picture into ASCII art you can copy or download. Pick a character ramp (standard, detailed, blocks, dots, binary or custom), set the output width and flip light/dark for the background. Rec.709 luminance with 2:1 character-aspect correction, all computed locally from a canvas — the image never leaves your browser.",
