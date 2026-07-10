@@ -1987,6 +1987,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-10T22:00:00Z",
   },
   {
+    slug: "spring-shm-calculator",
+    name: "Spring & SHM Calculator",
+    description: "Solve Hooke's law F = k·x for the spring constant, force, or displacement given the other two (units: N/m, N/cm, lbf/in; N, kN, lbf, kgf; m, cm, mm, in), and compute simple harmonic motion for a mass on a spring — period T = 2π·√(m/k), frequency, angular frequency ω = √(k/m), elastic energy U = ½·k·x², and the maximum velocity and acceleration for a given amplitude. Pairs with the Newton's Second Law and Projectile Motion calculators for mechanics work. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🌀",
+    added: "2026-07-11T00:00:00Z",
+  },
+  {
     slug: "wavelength-calculator",
     name: "Wavelength / Frequency Calculator",
     description: "Convert between an electromagnetic wave's frequency and its wavelength using λ = c / f (c = 299,792,458 m/s). Enter a frequency in Hz, kHz, MHz, or GHz to get the wavelength in metres, centimetres, millimetres, feet, and inches, plus the quarter-wave and half-wave lengths for antenna work; or enter a wavelength to get the frequency. The frequency is also classified into its ITU band (VLF, LF, MF, HF, VHF, UHF, SHF, EHF…) with common examples like FM radio, WiFi, and ISM bands. Pairs with the Decibel and Ohm's Law tools for RF and electronics. Everything runs locally in your browser.",
