@@ -1587,6 +1587,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-09T02:00:00Z",
   },
   {
+    slug: "dew-point-calculator",
+    name: "Dew Point & Humidity Calculator",
+    description: "Compute the dew point, saturation and actual vapor pressure, absolute humidity, and wet-bulb temperature from a temperature and relative humidity. The dew point uses the Magnus equation; vapor pressure uses the August–Roche–Magnus relation; absolute humidity and the wet-bulb follow standard meteorological formulas. Enter °C or °F; results are shown in both. Pairs with the Apparent Temperature tool. Everything runs locally in your browser.",
+    category: "Environment",
+    icon: "💧",
+    added: "2026-07-11T07:00:00Z",
+  },
+  {
     slug: "quadratic-solver",
     name: "Quadratic Equation Solver",
     description: "Solve a quadratic equation ax² + bx + c = 0. Enter the three coefficients and get the discriminant, the roots (two distinct real, one repeated real, or a complex-conjugate pair), the vertex and axis of symmetry of the parabola, and the factored form when the roots are real. A built-in check evaluates the polynomial at each root so you can confirm the result, and the linear case (a = 0) is handled too. Everything runs locally in your browser.",

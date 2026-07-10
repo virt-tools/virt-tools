@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Dew Point &amp; Humidity Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .opts { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin:10px 0; font-size:.9rem; }
+    .opts label { display:inline-flex; gap:6px; align-items:center; }
+    .opts input { width:100px; font-family:ui-monospace,monospace; padding:6px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; }
+    .opts select { padding:6px 8px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; font-size:.85rem; }
+    .out { background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:10px; padding:14px; margin:10px 0; }
+    .out .row { display:flex; justify-content:space-between; align-items:baseline; padding:7px 0; border-bottom:1px solid var(--border,#2a2f3a); font-size:14px; gap:12px; }
+    .out .row:last-child { border-bottom:none; }
+    .out .row .k { color:var(--text-dim,#9aa3b2); }
+    .out .row .v { font-family:ui-monospace,monospace; font-weight:700; color:var(--accent,#6ea8fe); }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    h3 { margin:18px 0 4px; font-size:.95rem; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Dew Point &amp; Humidity Calculator</h1>
+      <p>Compute the dew point, saturation and actual vapor pressure, absolute humidity, and wet-bulb temperature from a temperature and relative humidity. The dew point uses the Magnus equation; vapor pressure uses the August–Roche–Magnus relation; absolute humidity and the wet-bulb follow standard meteorological formulas. Pairs with the Apparent Temperature tool. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="opts">
+        <label>Temperature <input type="text" id="temp" inputmode="decimal" value="20" placeholder="e.g. 20"></label>
+        <select id="unit">
+          <option value="C">°C</option>
+          <option value="F">°F</option>
+        </select>
+        <label>Relative humidity <input type="text" id="rh" inputmode="decimal" value="50" placeholder="0–100"> %</label>
+      </div>
+
+      <div class="err" id="err"></div>
+      <div class="out" id="out"><span style="color:var(--text-dim,#9aa3b2)">Enter a temperature and humidity.</span></div>
+
+      <p class="note">Dew point (Magnus, Alden/Murray constants): <code>α = ln(RH/100) + 17.625·T/(243.04+T)</code>, then <code>Td = 243.04·α / (17.625 − α)</code> in °C. Saturation vapor pressure <code>e_s = 6.1094·e<sup>17.625·T/(243.04+T)</sup> hPa</code>; actual vapor pressure <code>e = (RH/100)·e_s</code>. Absolute humidity <code>AH = 216.7·e / (T+273.15) g/m³</code>. Wet-bulb uses the Stull (2011) empirical formula, valid roughly for 5–99% RH and 5–99 °C; outside that range it is marked as approximate. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    // Magnus constants (Alden/Murray / ASCE).
+    var B = 17.625, C = 243.04;
+
+    function cToF(c) { return c * 9 / 5 + 32; }
+    function fToC(f) { return (f - 32) * 5 / 9; }
+
+    // Saturation vapor pressure over water, hPa (August-Roche-Magnus).
+    function esHPa(Tc) { return 6.1094 * Math.exp(B * Tc / (C + Tc)); }
+    // Dew point in °C from T(°C) and RH(%).
+    function dewPoint(Tc, RH) {
+      if (RH <= 0) return null;
+      var a = Math.log(RH / 100) + B * Tc / (C + Tc);
+      return C * a / (B - a);
+    }
+    // Actual vapor pressure, hPa.
+    function eHPa(Tc, RH) { return (RH / 100) * esHPa(Tc); }
+    // Absolute humidity, g/m^3.
+    function absHumidity(Tc, RH) {
+      var e = eHPa(Tc, RH);
+      return 216.7 * e / (Tc + 273.15);
+    }
+    // Wet-bulb temperature (°C), Stull 2011. Returns null outside the valid range.
+    function wetBulb(Tc, RH) {
+      if (RH < 5 || RH > 99 || Tc < 5 || Tc > 99) return null;
+      var r = RH;
+      return Tc * Math.atan(0.151977 * Math.pow(r + 8.313659, 0.5))
+        + Math.atan(Tc + r)
+        - Math.atan(r - 1.676331)
+        + 0.00391838 * Math.pow(r, 1.5) * Math.atan(0.023101 * r)
+        - 4.686035;
+    }
+
+    // compute(T, unit, RH) -> object with all results (T, Td in °C; °F variants computed in render).
+    function compute(T, unit, RH) {
+      if (unit !== "C" && unit !== "F") return { err: "Unknown unit." };
+      if (!isFinite(T) || !isFinite(RH)) return { err: "Enter numeric values." };
+      if (RH <= 0 || RH > 200) return { err: "Relative humidity must be between 0 and 200% (0–100% normally)." };
+      if (T < -273.15 && unit === "C") return { err: "Temperature is below absolute zero." };
+      var Tc = unit === "C" ? T : fToC(T);
+      if (Tc < -273.15) return { err: "Temperature is below absolute zero." };
+      var es = esHPa(Tc);
+      var e = eHPa(Tc, RH);
+      var td = dewPoint(Tc, RH);
+      var ah = absHumidity(Tc, RH);
+      var tw = wetBulb(Tc, RH);
+      return {
+        Tc: Tc, Td: td, es: es, e: e, ah: ah, tw: tw, RH: RH, err: null
+      };
+    }
+
+    function parseNum(s) { if (s == null) return null; s = String(s).trim(); if (!s) return null; var m = s.match(/^([-+0-9.eE]+)/); return m ? parseFloat(m[1]) : null; }
+    function rnd(x, n) { if (!isFinite(x)) return "—"; var p = Math.pow(10, n); return String(Math.round(x * p) / p); }
+    function row(k, v) { return '<div class="row"><span class="k">' + k + '</span><span class="v">' + v + '</span></div>'; }
+
+    var tempEl = document.getElementById("temp");
+    var unitEl = document.getElementById("unit");
+    var rhEl = document.getElementById("rh");
+    var errEl = document.getElementById("err");
+    var outEl = document.getElementById("out");
+
+    function render() {
+      errEl.textContent = "";
+      var T = parseNum(tempEl.value);
+      var RH = parseNum(rhEl.value);
+      if (T == null) { errEl.textContent = "Enter a temperature."; outEl.innerHTML = ""; return; }
+      if (RH == null) { errEl.textContent = "Enter a relative humidity (%)."; outEl.innerHTML = ""; return; }
+      var res = compute(T, unitEl.value, RH);
+      if (res.err) { errEl.textContent = res.err; outEl.innerHTML = ""; return; }
+      var outC = unitEl.value === "C";
+      var html = "";
+      html += row("Dew point", rnd(outC ? res.Td : cToF(res.Td), 2) + (outC ? " °C" : " °F") + "  (" + rnd(res.Td, 2) + " °C)");
+      html += row("Wet-bulb temp", res.tw == null ? "approx (outside valid range)" : (rnd(outC ? res.tw : cToF(res.tw), 2) + (outC ? " °C" : " °F") + "  (" + rnd(res.tw, 2) + " °C)"));
+      html += row("Saturation vapor pressure", rnd(res.es, 3) + " hPa");
+      html += row("Actual vapor pressure", rnd(res.e, 3) + " hPa");
+      html += row("Absolute humidity", rnd(res.ah, 3) + " g/m³");
+      html += row("Relative humidity", rnd(res.RH, 2) + " %");
+      outEl.innerHTML = html;
+    }
+
+    [tempEl, unitEl, rhEl].forEach(function (el) { el.addEventListener("input", render); el.addEventListener("change", render); });
+    render();
+
+    window.VT_DEW_TEST = {
+      cToF: cToF, fToC: fToC, esHPa: esHPa, dewPoint: dewPoint, eHPa: eHPa,
+      absHumidity: absHumidity, wetBulb: wetBulb, compute: compute
+    };
+  })();
+  </script>
+</body>
+</html>
