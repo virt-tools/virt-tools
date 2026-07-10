@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>VSWR &amp; Return Loss Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .opts { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin:10px 0; font-size:.9rem; }
+    .opts label { display:inline-flex; gap:6px; align-items:center; }
+    .opts input, .opts select { width:110px; font-family:ui-monospace,monospace; padding:6px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; }
+    .opts select { width:auto; font-size:.85rem; }
+    .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; margin:10px 0; }
+    .stats .s { background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:10px 12px; }
+    .stats .s .k { color:var(--text-dim,#9aa3b2); font-size:12px; }
+    .stats .s .v { font-family:ui-monospace,monospace; font-weight:700; color:var(--accent,#6ea8fe); font-size:1.05rem; }
+    .mode { display:flex; gap:8px; margin:6px 0 8px; flex-wrap:wrap; }
+    .mode button { padding:6px 14px; border-radius:6px; border:1px solid var(--border,#2a2f3a); background:var(--bg-elev,#171a21); color:var(--text-dim,#9aa3b2); cursor:pointer; font-size:.85rem; }
+    .mode button.active { background:var(--accent,#6ea8fe); color:#0b0d12; border-color:var(--accent,#6ea8fe); font-weight:700; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>VSWR &amp; Return Loss Calculator</h1>
+      <p>Compute voltage standing wave ratio (VSWR), the reflection coefficient Γ, return loss, and mismatch loss for an RF load. Enter the load impedance (R + jX) and a reference impedance to get Γ and VSWR; or enter forward and reflected power; or start from a VSWR value. Pairs with the Decibel Calculator for RF link budgets. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="mode">
+        <button id="mode-z" class="active" type="button">From load impedance</button>
+        <button id="mode-p" type="button">From forward / reflected power</button>
+        <button id="mode-v" type="button">From VSWR</button>
+      </div>
+
+      <div id="z-panel">
+        <div class="opts">
+          <label>Load R <input type="text" id="z-r" inputmode="decimal" value="75"> Ω</label>
+          <label>Load jX <input type="text" id="z-x" inputmode="decimal" value="0"> Ω</label>
+          <label>Reference Z₀ <input type="text" id="z-z0" inputmode="decimal" value="50"> Ω</label>
+        </div>
+      </div>
+
+      <div id="p-panel" style="display:none">
+        <div class="opts">
+          <label>Forward power <input type="text" id="p-fwd" inputmode="decimal" value="100"></label>
+          <label>Reflected power <input type="text" id="p-refl" inputmode="decimal" value="4"></label>
+          <label>Same units
+            <select id="p-unit"><option value="">(W / mW / etc.)</option></select>
+          </label>
+        </div>
+      </div>
+
+      <div id="v-panel" style="display:none">
+        <div class="opts">
+          <label>VSWR <input type="text" id="v-vswr" inputmode="decimal" value="3"> : 1</label>
+        </div>
+      </div>
+
+      <div class="err" id="err"></div>
+      <div class="stats" id="stats"></div>
+
+      <p class="note">Reflection coefficient <code>Γ = (Z<sub>L</sub> − Z₀) / (Z<sub>L</sub> + Z₀)</code> (complex, with Z<sub>L</sub> = R + jX). VSWR = (1 + |Γ|) / (1 − |Γ|). Return loss = −20·log<sub>10</sub>|Γ| dB. Mismatch loss = −10·log<sub>10</sub>(1 − |Γ|²) dB — the transmission lost to reflection. From power: |Γ|² = P<sub>refl</sub> / P<sub>fwd</sub>. A perfect match is |Γ| = 0, VSWR = 1, infinite return loss. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    // --- complex helpers (a = {re, im}) ---
+    function cmul(a, b) { return { re: a.re * b.re - a.im * b.im, im: a.re * b.im + a.im * b.re }; }
+    function cdiv(a, b) {
+      var d = b.re * b.re + b.im * b.im;
+      if (d === 0) return null;
+      return { re: (a.re * b.re + a.im * b.im) / d, im: (a.im * b.re - a.re * b.im) / d };
+    }
+    function csub(a, b) { return { re: a.re - b.re, im: a.im - b.im }; }
+    function cadd(a, b) { return { re: a.re + b.re, im: a.im + b.im }; }
+    function cabs(a) { return Math.sqrt(a.re * a.re + a.im * a.im); }
+    function cargDeg(a) { return Math.atan2(a.im, a.re) * 180 / Math.PI; }
+
+    // Γ from load impedance (R+jX) and real reference Z0.
+    function gammaFromImpedance(R, X, z0) {
+      if (!(z0 > 0)) return { err: "Reference impedance Z₀ must be positive." };
+      if (!isFinite(R) || !isFinite(X)) return { err: "Load impedance must be numeric." };
+      var zL = { re: R, im: X }, z0c = { re: z0, im: 0 };
+      var num = csub(zL, z0c), den = cadd(zL, z0c);
+      var g = cdiv(num, den);
+      if (!g) return { err: "Division by zero in Γ." };
+      return { re: g.re, im: g.im, mag: cabs(g), phase: cargDeg(g), err: null };
+    }
+    // VSWR from |Γ|. Requires 0 <= gMag < 1.
+    function vswrFromGamma(gMag) {
+      if (!(gMag >= 0) || !(gMag < 1)) return { err: "|Γ| must be in [0, 1) for finite VSWR." };
+      return { value: (1 + gMag) / (1 - gMag), err: null };
+    }
+    // |Γ| from VSWR (s >= 1).
+    function gammaFromVswr(s) {
+      if (!(s >= 1)) return { err: "VSWR must be >= 1." };
+      return { value: (s - 1) / (s + 1), err: null };
+    }
+    // |Γ| from forward/reflected power ratio (|Γ|² = Prefl/Pfwd).
+    function gammaFromPower(fwd, refl) {
+      if (!(fwd > 0) || !(refl >= 0)) return { err: "Forward power must be positive; reflected non-negative." };
+      if (refl > fwd) return { err: "Reflected power cannot exceed forward power." };
+      return { value: Math.sqrt(refl / fwd), err: null };
+    }
+    // Return loss in dB = -20 log10|Γ|.
+    function returnLossDb(gMag) { return -20 * Math.log10(gMag); }
+    // Mismatch loss in dB = -10 log10(1 - |Γ|²).
+    function mismatchLossDb(gMag) { return -10 * Math.log10(1 - gMag * gMag); }
+
+    function parseNum(s) { if (s == null) return null; s = String(s).trim(); if (!s) return null; var m = s.match(/^([-+0-9.eE]+)/); return m ? parseFloat(m[1]) : null; }
+    function r(x, d) { if (!isFinite(x)) return "∞"; return (Math.round(x * Math.pow(10, d)) / Math.pow(10, d)).toString(); }
+    function rDb(x) { if (!isFinite(x)) return "∞ dB"; return (Math.round(x * 100) / 100) + " dB"; }
+
+    var modeZ = document.getElementById("mode-z"), modeP = document.getElementById("mode-p"), modeV = document.getElementById("mode-v");
+    var zPanel = document.getElementById("z-panel"), pPanel = document.getElementById("p-panel"), vPanel = document.getElementById("v-panel");
+    var errEl = document.getElementById("err"), statsEl = document.getElementById("stats");
+
+    function setMode(m) {
+      modeZ.classList.toggle("active", m === "z"); modeP.classList.toggle("active", m === "p"); modeV.classList.toggle("active", m === "v");
+      zPanel.style.display = m === "z" ? "" : "none"; pPanel.style.display = m === "p" ? "" : "none"; vPanel.style.display = m === "v" ? "" : "none";
+      render();
+    }
+    function cards(arr) { statsEl.innerHTML = arr.map(function (c) { return '<div class="s"><div class="k">' + c[0] + '</div><div class="v">' + c[1] + '</div></div>'; }).join(""); }
+
+    function resultsFromGamma(gMag) {
+      var v = vswrFromGamma(gMag);
+      var arr = [["|Γ| (refl. coeff.)", r(gMag, 4)]];
+      if (!v.err) arr.push(["VSWR", v.value === Infinity ? "∞ : 1" : r(v.value, 4) + " : 1"]);
+      arr.push(["Return loss", gMag === 0 ? "∞ dB" : rDb(returnLossDb(gMag))]);
+      arr.push(["Mismatch loss", gMag >= 1 ? "∞ dB" : rDb(mismatchLossDb(gMag))]);
+      return arr;
+    }
+
+    function render() {
+      errEl.textContent = ""; statsEl.innerHTML = "";
+      if (modeZ.classList.contains("active")) {
+        var R = parseNum(document.getElementById("z-r").value);
+        var X = parseNum(document.getElementById("z-x").value);
+        var z0 = parseNum(document.getElementById("z-z0").value);
+        if (R == null || X == null || z0 == null) { errEl.textContent = "Enter load R, jX, and reference Z₀."; return; }
+        var g = gammaFromImpedance(R, X, z0);
+        if (g.err) { errEl.textContent = g.err; return; }
+        var arr = resultsFromGamma(g.mag);
+        arr.unshift(["Γ", r(g.re, 4) + (g.im >= 0 ? " + j" : " − j") + r(Math.abs(g.im), 4)]);
+        arr.splice(2, 0, ["|Γ| ∠", r(g.mag, 4) + " ∠ " + r(g.phase, 2) + "°"]);
+        cards(arr);
+      } else if (modeP.classList.contains("active")) {
+        var fwd = parseNum(document.getElementById("p-fwd").value);
+        var refl = parseNum(document.getElementById("p-refl").value);
+        if (fwd == null || refl == null) { errEl.textContent = "Enter forward and reflected power (same units)."; return; }
+        var g = gammaFromPower(fwd, refl);
+        if (g.err) { errEl.textContent = g.err; return; }
+        cards(resultsFromGamma(g.value));
+      } else {
+        var s = parseNum(document.getElementById("v-vswr").value);
+        if (s == null) { errEl.textContent = "Enter a VSWR (≥ 1)."; return; }
+        var g = gammaFromVswr(s);
+        if (g.err) { errEl.textContent = g.err; return; }
+        cards(resultsFromGamma(g.value));
+      }
+    }
+
+    modeZ.addEventListener("click", function () { setMode("z"); });
+    modeP.addEventListener("click", function () { setMode("p"); });
+    modeV.addEventListener("click", function () { setMode("v"); });
+    ["z-r","z-x","z-z0","p-fwd","p-refl","v-vswr"].forEach(function (id) {
+      var el = document.getElementById(id); el.addEventListener("input", render); el.addEventListener("change", render);
+    });
+    render();
+
+    window.VT_VSWR_TEST = { cmul: cmul, cdiv: cdiv, cabs: cabs, gammaFromImpedance: gammaFromImpedance, vswrFromGamma: vswrFromGamma, gammaFromVswr: gammaFromVswr, gammaFromPower: gammaFromPower, returnLossDb: returnLossDb, mismatchLossDb: mismatchLossDb };
+  })();
+  </script>
+</body>
+</html>

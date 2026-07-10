@@ -1939,6 +1939,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-09T05:00:00Z",
   },
   {
+    slug: "vswr-calculator",
+    name: "VSWR & Return Loss Calculator",
+    description: "Compute voltage standing wave ratio (VSWR), the reflection coefficient Γ, return loss, and mismatch loss for an RF load. Enter the load impedance (R + jX) and a reference impedance Z₀ to get the complex Γ, |Γ|, VSWR, return loss in dB, and mismatch loss; or start from forward and reflected power (|Γ|² = P_refl / P_fwd); or from a VSWR value. Γ = (Z_L − Z₀)/(Z_L + Z₀), VSWR = (1 + |Γ|)/(1 − |Γ|), return loss = −20·log|Γ|, mismatch loss = −10·log(1 − |Γ|²). A perfect match is |Γ| = 0 and VSWR = 1. Pairs with the Decibel Calculator for RF link budgets. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "📡",
+    added: "2026-07-10T13:00:00Z",
+  },
+  {
     slug: "wavelength-calculator",
     name: "Wavelength / Frequency Calculator",
     description: "Convert between an electromagnetic wave's frequency and its wavelength using λ = c / f (c = 299,792,458 m/s). Enter a frequency in Hz, kHz, MHz, or GHz to get the wavelength in metres, centimetres, millimetres, feet, and inches, plus the quarter-wave and half-wave lengths for antenna work; or enter a wavelength to get the frequency. The frequency is also classified into its ITU band (VLF, LF, MF, HF, VHF, UHF, SHF, EHF…) with common examples like FM radio, WiFi, and ISM bands. Pairs with the Decibel and Ohm's Law tools for RF and electronics. Everything runs locally in your browser.",
