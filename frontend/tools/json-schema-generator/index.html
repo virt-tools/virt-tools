@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>JSON Schema Generator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .layout { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
+    @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+    textarea { width:100%; box-sizing:border-box; font-family:ui-monospace,monospace; font-size:12px; min-height:300px; resize:vertical; }
+    .out { font-family:ui-monospace,monospace; font-size:12px; background:var(--bg,#14181f); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:10px; white-space:pre-wrap; word-break:break-word; min-height:300px; max-height:520px; overflow:auto; }
+    .opts { display:flex; gap:16px; flex-wrap:wrap; align-items:center; margin:10px 0; font-size:.85rem; }
+    .opts label { display:inline-flex; gap:6px; align-items:center; cursor:pointer; }
+    .err { color:#ff8aa8; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>JSON Schema Generator</h1>
+      <p>Infer a <strong>JSON Schema (draft-07)</strong> from a sample JSON document. Paste any JSON — object, array, or primitive — and get back a schema with inferred types, nested properties, required keys, and array item schemas (unified across elements, with anyOf for mixed types and merged required sets for arrays of objects). The reverse of the JSON Schema validator. Everything runs in your browser; nothing is uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="opts">
+        <label><input type="checkbox" id="req" checked> Mark all present properties as required</label>
+        <label><input type="checkbox" id="addl"> Set additionalProperties: false</label>
+        <label><input type="checkbox" id="numint"> Treat all numbers as "number" (not integer)</label>
+        <button id="sample" class="secondary" style="padding:4px 12px;">Sample</button>
+        <button id="copy" class="secondary" style="padding:4px 12px;">Copy</button>
+      </div>
+      <div class="layout">
+        <div>
+          <div class="field"><label for="in">JSON</label></div>
+          <textarea id="in" spellcheck="false">{
+  "name": "Ada",
+  "age": 36,
+  "admin": true,
+  "tags": ["math", "logic"],
+  "address": { "city": "London", "zip": "E1" }
+}</textarea>
+        </div>
+        <div>
+          <div class="field"><label>JSON Schema</label></div>
+          <div class="out" id="out"></div>
+        </div>
+      </div>
+      <p class="note">Inference rules: <code>null</code> → <code>{"type":"null"}</code>; integers → <code>integer</code>, other numbers → <code>number</code>; empty arrays → <code>{"type":"array"}</code> with no <code>items</code>; arrays merge element schemas (object properties are unioned, required = properties present in <em>all</em> elements); mixed types in an array become <code>anyOf</code>. Parsing and inference happen locally.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var inEl = document.getElementById("in");
+    var outEl = document.getElementById("out");
+    var reqEl = document.getElementById("req");
+    var addlEl = document.getElementById("addl");
+    var numintEl = document.getElementById("numint");
+
+    // Stable canonical form for comparing schemas (sorted keys, recursively).
+    function canonicalize(v) {
+      if (Array.isArray(v)) return v.map(canonicalize);
+      if (v && typeof v === "object") {
+        var keys = Object.keys(v).sort();
+        var out = {};
+        keys.forEach(function (k) { out[k] = canonicalize(v[k]); });
+        return out;
+      }
+      return v;
+    }
+    function canonical(s) { return JSON.stringify(canonicalize(s)); }
+
+    // Pure: infer a JSON Schema node for a JSON value.
+    function infer(v, opts) {
+      opts = opts || {};
+      if (v === null) return { type: "null" };
+      if (Array.isArray(v)) return inferArray(v, opts);
+      var t = typeof v;
+      if (t === "boolean") return { type: "boolean" };
+      if (t === "number") {
+        if (opts.numbersOnly || !Number.isInteger(v)) return { type: "number" };
+        return { type: "integer" };
+      }
+      if (t === "string") return { type: "string" };
+      if (t === "object") return inferObject(v, opts);
+      return {};
+    }
+
+    function inferObject(o, opts) {
+      var keys = Object.keys(o);
+      var props = {};
+      keys.forEach(function (k) { props[k] = infer(o[k], opts); });
+      var schema = { type: "object" };
+      schema.properties = props;
+      if (opts.required && keys.length) schema.required = keys.slice();
+      if (opts.additionalProperties === false) schema.additionalProperties = false;
+      return schema;
+    }
+
+    function inferArray(arr, opts) {
+      var schema = { type: "array" };
+      if (!arr.length) return schema;
+      var childSchemas = arr.map(function (el) { return infer(el, opts); });
+      schema.items = mergeSchemas(childSchemas);
+      return schema;
+    }
+
+    // Pure: merge a list of schemas into one. Identical schemas collapse to one;
+    // arrays of objects merge their properties; otherwise distinct schemas form anyOf.
+    function mergeSchemas(schemas) {
+      if (!schemas.length) return {};
+      var cans = schemas.map(canonical);
+      if (cans.every(function (c) { return c === cans[0]; })) return schemas[0];
+      var allObjects = schemas.every(function (s) { return s && s.type === "object"; });
+      if (allObjects) return mergeObjects(schemas);
+      var allArrays = schemas.every(function (s) { return s && s.type === "array"; });
+      if (allArrays) {
+        var inner = schemas.flatMap(function (s) { return s.items ? [s.items] : []; });
+        var m = inner.length ? { type: "array", items: mergeSchemas(inner) } : { type: "array" };
+        return m;
+      }
+      var distinct = [], seen = {};
+      schemas.forEach(function (s) { var c = canonical(s); if (!seen[c]) { seen[c] = 1; distinct.push(s); } });
+      return { anyOf: distinct };
+    }
+
+    function mergeObjects(objs) {
+      var keySets = objs.map(function (o) { return Object.keys(o.properties || {}); });
+      var allKeys = {};
+      keySets.forEach(function (ks) { ks.forEach(function (k) { allKeys[k] = 1; }); });
+      var allKeyList = Object.keys(allKeys);
+      var reqKeys = allKeyList.filter(function (k) {
+        return keySets.every(function (ks) { return ks.indexOf(k) !== -1; });
+      });
+      var props = {};
+      allKeyList.forEach(function (k) {
+        var child = objs.filter(function (o) { return o.properties && o.properties[k]; }).map(function (o) { return o.properties[k]; });
+        props[k] = mergeSchemas(child);
+      });
+      var s = { type: "object", properties: props };
+      if (reqKeys.length) s.required = reqKeys;
+      return s;
+    }
+
+    // Pure: build the full draft-07 schema from a JSON value + options.
+    function generate(value, opts) {
+      opts = opts || {};
+      var node = infer(value, opts);
+      var schema = { "$schema": "http://json-schema.org/draft-07/schema#" };
+      Object.keys(node).forEach(function (k) { schema[k] = node[k]; });
+      return schema;
+    }
+
+    function render() {
+      var text = inEl.value.trim();
+      if (!text) { outEl.textContent = ""; outEl.className = "out"; return; }
+      var parsed;
+      try { parsed = JSON.parse(text); }
+      catch (e) { outEl.textContent = "Invalid JSON: " + e.message; outEl.className = "out err"; return; }
+      var opts = {
+        required: reqEl.checked,
+        additionalProperties: addlEl.checked ? false : undefined,
+        numbersOnly: numintEl.checked
+      };
+      var schema = generate(parsed, opts);
+      outEl.textContent = JSON.stringify(schema, null, 2);
+      outEl.className = "out";
+    }
+
+    inEl.addEventListener("input", render);
+    [reqEl, addlEl, numintEl].forEach(function (el) { el.addEventListener("change", render); });
+    document.getElementById("sample").addEventListener("click", function () {
+      inEl.value = '[\n  {"id": 1, "name": "Ada", "active": true},\n  {"id": 2, "name": "Alan", "role": "tester"},\n  {"id": 3}\n]';
+      render();
+    });
+    document.getElementById("copy").addEventListener("click", function () {
+      var t = outEl.textContent; if (!t || outEl.classList.contains("err")) return;
+      function done() { }
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done).catch(function () {});
+      else { try { var ta = document.createElement("textarea"); ta.value = t; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove(); } catch (e) {} }
+    });
+
+    window.VT_JSONSCHEMA_TEST = { infer: infer, generate: generate, mergeSchemas: mergeSchemas, canonicalize: canonicalize, canonical: canonical };
+    render();
+  })();
+  </script>
+</body>
+</html>

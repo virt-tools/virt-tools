@@ -1179,6 +1179,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-10T15:50:00Z",
   },
   {
+    slug: "json-schema-generator",
+    name: "JSON Schema Generator",
+    description: "Infer a JSON Schema (draft-07) from a sample JSON document. Paste any JSON — object, array, or primitive — and get a schema with inferred types, nested properties, required keys, and array item schemas (unified across elements, with anyOf for mixed types and merged required sets for arrays of objects). The reverse of the JSON Schema validator. Everything runs in your browser; nothing is uploaded.",
+    category: "Data",
+    icon: "🧬",
+    added: "2026-07-10T16:30:00Z",
+  },
+  {
     slug: "ascii-art",
     name: "Image to ASCII Art Generator",
     description: "Turn a picture into ASCII art you can copy or download. Pick a character ramp (standard, detailed, blocks, dots, binary or custom), set the output width and flip light/dark for the background. Rec.709 luminance with 2:1 character-aspect correction, all computed locally from a canvas — the image never leaves your browser.",
