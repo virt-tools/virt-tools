@@ -1035,6 +1035,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-04T08:20:00Z",
   },
   {
+    slug: "ieee-754-inspector",
+    name: "IEEE-754 Floating-Point Inspector",
+    description: "Decompose a number into its IEEE-754 representation — sign, exponent, and significand — for both single (32-bit) and double (64-bit) precision, with the full binary layout, hex, the nearest representable value, and the rounding error. Or recover a decimal from a hex or binary bit pattern. Handles zeros, infinities, NaN, and subnormals. Runs entirely in your browser.",
+    category: "Data",
+    icon: "🔢",
+    added: "2026-07-10T18:50:00Z",
+  },
+  {
     slug: "barcode-generator",
     name: "EAN / UPC Barcode Generator",
     description: "Validate or compute the mod-10 check digit for EAN-13, EAN-8 and UPC-A (GTIN) codes, and render the actual bar pattern — start/center/end guards and A/B/C parity patterns per the GS1 standard — to a canvas you can download as a PNG. Generated entirely in your browser.",

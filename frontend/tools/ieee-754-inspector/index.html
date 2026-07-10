@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>IEEE-754 Floating-Point Inspector — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .opts { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin:10px 0; font-size:.9rem; }
+    .opts label { display:inline-flex; gap:6px; align-items:center; color:var(--text-dim,#9aa3b2); }
+    .opts input, .opts select { font-family:ui-monospace,monospace; padding:6px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; }
+    .opts input[type=text] { width:240px; }
+    .mode { display:flex; gap:8px; margin:6px 0 10px; flex-wrap:wrap; }
+    .mode button { padding:6px 14px; border-radius:6px; border:1px solid var(--border,#2a2f3a); background:var(--bg-elev,#171a21); color:var(--text-dim,#9aa3b2); cursor:pointer; font-size:.85rem; }
+    .mode button.active { background:var(--accent,#6ea8fe); color:#0b0d12; border-color:var(--accent,#6ea8fe); font-weight:700; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    .big { font-family:ui-monospace,monospace; font-size:1.05rem; font-weight:700; color:var(--accent,#6ea8fe); margin:10px 0; word-break:break-all; }
+    .bits { font-family:ui-monospace,monospace; font-size:1.05rem; margin:10px 0; word-break:break-all; line-height:1.6; }
+    .bits .s { color:#f87171; }      /* sign */
+    .bits .e { color:#fbbf24; }      /* exponent */
+    .bits .m { color:#6ea8fe; }      /* mantissa */
+    .bits .sep { color:var(--text-dim,#9aa3b2); }
+    .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; margin:10px 0; }
+    .stats .s { background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:10px 12px; }
+    .stats .s .k { color:var(--text-dim,#9aa3b2); font-size:12px; }
+    .stats .s .v { font-family:ui-monospace,monospace; font-weight:700; color:var(--text,#e6e6e6); font-size:.95rem; word-break:break-all; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    h3 { margin:18px 0 4px; font-size:.95rem; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>IEEE-754 Floating-Point Inspector</h1>
+      <p>See exactly how a number is stored in IEEE-754 floating point. Enter a decimal number to decompose it into sign, exponent, and significand for both single (32-bit) and double (64-bit) precision, with the full binary layout, hex, the nearest representable value, and the rounding error. Or go the other way: paste a hex or binary bit pattern to recover the decimal value. Handles zeros, infinities, NaN, and subnormals. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="mode">
+        <button id="mode-dec" class="active" type="button">Decimal → bits</button>
+        <button id="mode-bits" type="button">Bits → decimal</button>
+      </div>
+
+      <div id="dec-panel">
+        <div class="opts">
+          <label>Number <input type="text" id="num" inputmode="decimal" value="0.1"></label>
+        </div>
+        <div class="err" id="dec-err"></div>
+
+        <h3>Single precision (float32, 32 bits)</h3>
+        <div class="bits" id="f32-bits"></div>
+        <div class="big" id="f32-hex"></div>
+        <div class="stats" id="f32-stats"></div>
+
+        <h3>Double precision (float64, 64 bits)</h3>
+        <div class="bits" id="f64-bits"></div>
+        <div class="big" id="f64-hex"></div>
+        <div class="stats" id="f64-stats"></div>
+
+        <div class="stats" id="value-stats"></div>
+      </div>
+
+      <div id="bits-panel" style="display:none">
+        <div class="opts">
+          <label>Bit pattern (hex or binary)
+            <input type="text" id="bits-in" inputmode="text" value="0x3dcccccd" style="width:320px;">
+          </label>
+          <label>Precision
+            <select id="bits-prec">
+              <option value="32">single (32-bit)</option>
+              <option value="64">double (64-bit)</option>
+            </select>
+          </label>
+        </div>
+        <div class="err" id="bits-err"></div>
+        <div class="big" id="bits-dec"></div>
+        <div class="bits" id="bits-layout"></div>
+        <div class="stats" id="bits-stats"></div>
+      </div>
+
+      <p class="note">IEEE-754 stores a float as <code>(−1)<sup>sign</sup> × 1.mantissa × 2<sup>exp−bias</sup></code>. Single precision uses 1 sign bit, 8 exponent bits (bias 127), and 23 mantissa bits; double uses 1, 11 (bias 1023), and 52. The leading <code>1</code> of a normal number is implicit (not stored). Exponent field 0 with a nonzero mantissa is a <em>subnormal</em> (no implied leading 1); all-zero is ±0; all-ones exponent with zero mantissa is ±Infinity; all-ones with nonzero mantissa is NaN. Because most decimals (like 0.1) aren't exact powers of two, they're rounded to the nearest representable value — the inspector shows that rounding error. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    // ---- TypedArray views for bit extraction ----
+    var buf4 = new ArrayBuffer(4), f32 = new Float32Array(buf4), u32 = new Uint32Array(buf4);
+    var buf8 = new ArrayBuffer(8), f64 = new Float64Array(buf8), u32a = new Uint32Array(buf8), bi64 = new BigInt64Array(buf8);
+
+    // Pad a binary string to a given width.
+    function pad(s, w) { s = String(s); while (s.length < w) s = "0" + s; return s; }
+
+    // Decompose a JS number into IEEE-754 float32 parts.
+    // Returns { sign, expBiased, expActual, mant, implied, hex, bin, kind, value }.
+    function toF32Parts(num) {
+      f32[0] = num;
+      var bits = u32[0]; // little-endian: holds the 32 IEEE bits
+      var sign = (bits >>> 31) & 1;
+      var exp = (bits >>> 23) & 0xff;
+      var mant = bits & 0x7fffff;
+      var kind, expActual, implied;
+      if (exp === 0) {
+        if (mant === 0) { kind = sign ? "negative zero" : "zero"; expActual = -126; implied = 0; }
+        else { kind = "subnormal"; expActual = -126; implied = 0; }
+      } else if (exp === 0xff) {
+        if (mant === 0) { kind = sign ? "negative infinity" : "infinity"; expActual = null; implied = null; }
+        else { kind = "NaN"; expActual = null; implied = null; }
+      } else {
+        kind = "normal"; expActual = exp - 127; implied = 1;
+      }
+      var bin = String(sign) + pad(exp.toString(2), 8) + pad(mant.toString(2), 23);
+      var hex = "0x" + bits.toString(16).padStart(8, "0");
+      return { sign: sign, expBiased: exp, expActual: expActual, mant: mant, mantBin: pad(mant.toString(2), 23), implied: implied, hex: hex, bin: bin, kind: kind, value: f32[0], bits: bits };
+    }
+
+    // Decompose a JS number into IEEE-754 float64 parts (uses BigInt for the 52-bit mantissa).
+    function toF64Parts(num) {
+      f64[0] = num;
+      var hi = u32a[1], lo = u32a[0]; // little-endian
+      var sign = (hi >>> 31) & 1;
+      var exp = (hi >>> 20) & 0x7ff;
+      var mantHi = hi & 0xfffff; // top 20 bits
+      var mantLo = lo;            // bottom 32 bits
+      // full 52-bit mantissa as a BigInt
+      var mantBig = (BigInt(mantHi) << 32n) | BigInt(mantLo);
+      var kind, expActual, implied;
+      if (exp === 0) {
+        if (mantBig === 0n) { kind = sign ? "negative zero" : "zero"; expActual = -1022; implied = 0; }
+        else { kind = "subnormal"; expActual = -1022; implied = 0; }
+      } else if (exp === 0x7ff) {
+        if (mantBig === 0n) { kind = sign ? "negative infinity" : "infinity"; expActual = null; implied = null; }
+        else { kind = "NaN"; expActual = null; implied = null; }
+      } else {
+        kind = "normal"; expActual = exp - 1023; implied = 1;
+      }
+      var fullBig = (BigInt(sign) << 63n) | (BigInt(exp) << 52n) | mantBig;
+      var bin = String(sign) + pad(exp.toString(2), 11) + pad(mantBig.toString(2), 52);
+      var hex = "0x" + fullBig.toString(16).padStart(16, "0");
+      return { sign: sign, expBiased: exp, expActual: expActual, mant: mantBig, mantBin: pad(mantBig.toString(2), 52), implied: implied, hex: hex, bin: bin, kind: kind, value: f64[0], bits: fullBig };
+    }
+
+    // Reconstruct a float32 from raw bits (number).
+    function fromF32Bits(bits) { u32[0] = (bits >>> 0); return f32[0]; }
+    // Reconstruct a float64 from a 64-bit BigInt pattern.
+    function fromF64Bits(bigBits) { bi64[0] = BigInt(bigBits); return f64[0]; }
+
+    // Parse a hex or binary string into a BigInt bit pattern of given width.
+    // Accepts: "0x3dcccccd", bare hex "3dcccccd", "0b101...", or a bare all-0/1 string
+    // of exactly `width` bits. Prefixes are detected first so "0b101" isn't misread as hex.
+    function parseBitPattern(str, width) {
+      if (typeof str !== "string") return { err: "Enter a bit pattern." };
+      str = str.trim();
+      if (!str) return { err: "Enter a bit pattern." };
+      var s, isHex = false, isBin = false;
+      if (/^0x[0-9a-f]+$/i.test(str)) { s = str.slice(2); isHex = true; }
+      else if (/^0b[01]+$/i.test(str)) { s = str.slice(2); isBin = true; }
+      else if (/^[01]+$/.test(str)) { s = str; isBin = true; }       // bare binary
+      else if (/^[0-9a-f]+$/i.test(str)) { s = str; isHex = true; }  // bare hex
+      else return { err: "Unrecognized pattern — use hex (0x…) or binary (0b… / 0s and 1s)." };
+
+      var big;
+      if (isHex) {
+        big = BigInt("0x" + s);
+      } else {
+        if (s.length !== width) return { err: "Binary pattern must be exactly " + width + " bits (got " + s.length + ")." };
+        big = BigInt("0b" + s);
+      }
+      var max = width === 32 ? 0xffffffffn : 0xffffffffffffffffn;
+      if (big > max) return { err: "Value too large for " + width + "-bit precision." };
+      return { bits: big };
+    }
+
+    // Format a JS number for display: integers without trailing .0, full precision for floats.
+    function fmtNum(n) {
+      if (Number.isNaN(n)) return "NaN";
+      if (n === Infinity) return "Infinity";
+      if (n === -Infinity) return "-Infinity";
+      if (Object.is(n, -0)) return "-0";
+      if (Number.isInteger(n) && Math.abs(n) < 1e16) return n.toString();
+      return n.toString();
+    }
+
+    // ---- DOM ----
+    var numEl = document.getElementById("num");
+    var decErr = document.getElementById("dec-err");
+    var f32bits = document.getElementById("f32-bits");
+    var f32hex = document.getElementById("f32-hex");
+    var f32stats = document.getElementById("f32-stats");
+    var f64bits = document.getElementById("f64-bits");
+    var f64hex = document.getElementById("f64-hex");
+    var f64stats = document.getElementById("f64-stats");
+    var valueStats = document.getElementById("value-stats");
+    var modeDec = document.getElementById("mode-dec"), modeBits = document.getElementById("mode-bits");
+    var decPanel = document.getElementById("dec-panel"), bitsPanel = document.getElementById("bits-panel");
+    var bitsIn = document.getElementById("bits-in"), bitsPrec = document.getElementById("bits-prec");
+    var bitsErr = document.getElementById("bits-err"), bitsDec = document.getElementById("bits-dec");
+    var bitsLayout = document.getElementById("bits-layout"), bitsStats = document.getElementById("bits-stats");
+
+    function bitSpan(parts, expWidth) {
+      var bin = parts.bin;
+      var s = bin[0], e = bin.slice(1, 1 + expWidth), m = bin.slice(1 + expWidth);
+      return '<span class="s">' + s + '</span><span class="sep"> </span><span class="e">' + e + '</span><span class="sep"> </span><span class="m">' + m + '</span>';
+    }
+    function cards(arr) { return arr.map(function (c) { return '<div class="s"><div class="k">' + c[0] + '</div><div class="v">' + c[1] + '</div></div>'; }).join(""); }
+
+    function renderDec() {
+      decErr.textContent = ""; f32bits.innerHTML = ""; f32hex.textContent = ""; f32stats.innerHTML = "";
+      f64bits.innerHTML = ""; f64hex.textContent = ""; f64stats.innerHTML = ""; valueStats.innerHTML = "";
+      var raw = numEl.value.trim();
+      if (!raw) return;
+      // Accept Infinity, -Infinity, NaN, and numeric forms.
+      var num;
+      if (/^[+-]?infinity$/i.test(raw)) num = raw[0] === "-" ? -Infinity : Infinity;
+      else if (/^nan$/i.test(raw)) num = NaN;
+      else if (/^[+-]?inf$/i.test(raw)) num = raw[0] === "-" ? -Infinity : Infinity;
+      else { num = Number(raw); if (!isFinite(num) && !/^[+-]?infinity/i.test(raw) && raw.toLowerCase() !== "nan") {
+        // Number() may yield 0 for "" or NaN for junk — distinguish.
+        if (Number.isNaN(num)) { decErr.textContent = "Not a valid number."; return; }
+      } }
+      if (Number.isNaN(num) && raw.toLowerCase() !== "nan" && !/^nan$/i.test(raw)) { decErr.textContent = "Not a valid number."; return; }
+
+      var p32 = toF32Parts(num);
+      var p64 = toF64Parts(num);
+
+      f32bits.innerHTML = bitSpan(p32, 8);
+      f32hex.textContent = p32.hex;
+      f32stats.innerHTML = cards([
+        ["Kind", p32.kind],
+        ["Sign", p32.sign === 1 ? "1 (negative)" : "0 (positive)"],
+        ["Exponent (biased)", p32.expBiased + " (=0x" + p32.expBiased.toString(16) + ")"],
+        ["Exponent (actual)", p32.expActual == null ? "—" : "2^" + p32.expActual],
+        ["Mantissa (raw)", p32.mant.toString(2) === "0" ? "0" : p32.mantBin],
+        ["Implied leading 1", p32.implied == null ? "—" : (p32.implied ? "yes" : "no")]
+      ]);
+
+      f64bits.innerHTML = bitSpan(p64, 11);
+      f64hex.textContent = p64.hex;
+      f64stats.innerHTML = cards([
+        ["Kind", p64.kind],
+        ["Sign", p64.sign === 1 ? "1 (negative)" : "0 (positive)"],
+        ["Exponent (biased)", p64.expBiased + " (=0x" + p64.expBiased.toString(16) + ")"],
+        ["Exponent (actual)", p64.expActual == null ? "—" : "2^" + p64.expActual],
+        ["Mantissa (raw)", p64.mant === 0n ? "0" : p64.mantBin],
+        ["Implied leading 1", p64.implied == null ? "—" : (p64.implied ? "yes" : "no")]
+      ]);
+
+      // Nearest representable value + rounding error
+      var v32 = p32.value, v64 = p64.value;
+      var err32 = (num !== 0 && isFinite(num)) ? (v32 - num) : 0;
+      var err64 = (num !== 0 && isFinite(num)) ? (v64 - num) : 0;
+      valueStats.innerHTML = cards([
+        ["float32 nearest", fmtNum(v32)],
+        ["float64 nearest", fmtNum(v64)],
+        ["rounding err (f32)", isFinite(num) && num !== 0 ? (err32 === 0 ? "0 (exact)" : err32.toExponential(4)) : "—"],
+        ["rounding err (f64)", isFinite(num) && num !== 0 ? (err64 === 0 ? "0 (exact)" : err64.toExponential(4)) : "—"]
+      ]);
+    }
+
+    function renderBits() {
+      bitsErr.textContent = ""; bitsDec.textContent = ""; bitsLayout.innerHTML = ""; bitsStats.innerHTML = "";
+      var width = parseInt(bitsPrec.value, 10);
+      var parsed = parseBitPattern(bitsIn.value, width);
+      if (parsed.err) { bitsErr.textContent = parsed.err; return; }
+      var value, parts;
+      if (width === 32) {
+        value = fromF32Bits(Number(parsed.bits));
+        parts = toF32Parts(value);
+      } else {
+        value = fromF64Bits(parsed.bits);
+        parts = toF64Parts(value);
+      }
+      bitsDec.textContent = "decimal value = " + fmtNum(value);
+      bitsLayout.innerHTML = bitSpan(parts, width === 32 ? 8 : 11);
+      bitsStats.innerHTML = cards([
+        ["Kind", parts.kind],
+        ["Hex", parts.hex],
+        ["Sign", parts.sign === 1 ? "1 (negative)" : "0 (positive)"],
+        ["Exponent (biased)", parts.expBiased + ""],
+        ["Exponent (actual)", parts.expActual == null ? "—" : "2^" + parts.expActual],
+        ["Implied leading 1", parts.implied == null ? "—" : (parts.implied ? "yes" : "no")]
+      ]);
+    }
+
+    function setMode(m) {
+      modeDec.classList.toggle("active", m === "dec"); modeBits.classList.toggle("active", m === "bits");
+      decPanel.style.display = m === "dec" ? "" : "none"; bitsPanel.style.display = m === "bits" ? "" : "none";
+      if (m === "dec") renderDec(); else renderBits();
+    }
+    modeDec.addEventListener("click", function () { setMode("dec"); });
+    modeBits.addEventListener("click", function () { setMode("bits"); });
+    numEl.addEventListener("input", renderDec);
+    bitsIn.addEventListener("input", renderBits);
+    bitsPrec.addEventListener("change", renderBits);
+
+    renderDec();
+
+    window.VT_FP_TEST = {
+      toF32Parts: toF32Parts, toF64Parts: toF64Parts,
+      fromF32Bits: fromF32Bits, fromF64Bits: fromF64Bits,
+      parseBitPattern: parseBitPattern, fmtNum: fmtNum, pad: pad
+    };
+  })();
+  </script>
+</body>
+</html>
