@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>JSON Diff — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .pair { display:grid; grid-template-columns: 1fr 1fr; gap:14px; }
+    @media (max-width: 760px) { .pair { grid-template-columns: 1fr; } }
+    textarea { width:100%; box-sizing:border-box; font-family:ui-monospace,monospace; font-size:12px; min-height:240px; resize:vertical; }
+    .opts { display:flex; gap:18px; flex-wrap:wrap; align-items:center; margin:10px 0; font-size:.85rem; }
+    .opts label { display:inline-flex; gap:6px; align-items:center; cursor:pointer; }
+    .summary { font-family:ui-monospace,monospace; font-size:13px; margin:8px 0; }
+    .summary .add { color:var(--ok,#4ade80); } .summary .rem { color:var(--bad,#f87171); } .summary .chg { color:var(--warn,#fbbf24); }
+    .diffrow { display:grid; grid-template-columns: 1fr auto 1fr; gap:8px; align-items:start; padding:4px 6px; border-bottom:1px solid var(--border,#2a2f3a); font-family:ui-monospace,monospace; font-size:12px; }
+    .diffrow.add { background:rgba(74,222,128,0.08); } .diffrow.rem { background:rgba(248,113,113,0.08); } .diffrow.chg { background:rgba(251,191,36,0.08); }
+    .diffrow .path { color:var(--accent,#6ea8fe); word-break:break-all; }
+    .diffrow .val { white-space:pre-wrap; word-break:break-word; }
+    .badge { font-size:10px; padding:2px 6px; border-radius:4px; text-transform:uppercase; font-weight:600; align-self:center; }
+    .badge.add { background:rgba(74,222,128,0.2); color:var(--ok,#4ade80); }
+    .badge.rem { background:rgba(248,113,113,0.2); color:var(--bad,#f87171); }
+    .badge.chg { background:rgba(251,191,36,0.2); color:var(--warn,#fbbf24); }
+    .arrow { align-self:center; opacity:.6; }
+    #diff { max-height:460px; overflow:auto; border:1px solid var(--border,#2a2f3a); border-radius:8px; }
+    .err { color:var(--bad,#f87171); font-family:ui-monospace,monospace; font-size:12px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>JSON Diff</h1>
+      <p>Compare two JSON documents structurally and see exactly what changed, added, or removed — at each JSON path. Unlike a line diff, this understands the structure: re-ordered object keys count as unchanged, array-element changes are attributed to the right index, and nested paths like <code>users[1].name</code> are reported precisely. Everything runs in your browser; nothing is uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="pair">
+        <div>
+          <div class="field"><label for="left">Left JSON</label></div>
+          <textarea id="left" spellcheck="false" placeholder='{ "version": 1, "name": "app" }'></textarea>
+        </div>
+        <div>
+          <div class="field"><label for="right">Right JSON</label></div>
+          <textarea id="right" spellcheck="false" placeholder='{ "version": 2, "name": "app", "env": "prod" }'></textarea>
+        </div>
+      </div>
+
+      <div class="opts">
+        <label><input type="checkbox" id="ignoreArrayOrder"> Ignore array element order (compare as sets)</label>
+        <button id="sample" class="secondary" style="padding:4px 12px;">Load sample</button>
+        <button id="clear" class="secondary" style="padding:4px 12px;">Clear</button>
+        <button id="copy" class="secondary" style="padding:4px 12px;">Copy changes</button>
+      </div>
+
+      <div class="summary" id="summary"></div>
+      <div id="diff"></div>
+      <p class="err" id="err" hidden></p>
+
+      <p class="note">Objects are always compared key-order-insensitively (JSON object order is not semantic). With <strong>Ignore array element order</strong> on, arrays are compared as multisets of their canonicalized elements. Identical inputs report no changes. No network requests are made.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var leftEl = document.getElementById("left");
+    var rightEl = document.getElementById("right");
+    var ignoreArr = document.getElementById("ignoreArrayOrder");
+    var summaryEl = document.getElementById("summary");
+    var diffEl = document.getElementById("diff");
+    var errEl = document.getElementById("err");
+    var copyBtn = document.getElementById("copy");
+
+    // Pure: safe JSON parse.
+    function parseJson(s) {
+      var t = (s || "").trim();
+      if (!t) return { ok: false, error: "empty input" };
+      try { return { ok: true, value: JSON.parse(t) }; }
+      catch (e) { return { ok: false, error: e.message }; }
+    }
+
+    // Pure: type tag distinguishing array/object/primitive/null.
+    function typeOf(v) {
+      if (v === null) return "null";
+      if (Array.isArray(v)) return "array";
+      return typeof v;
+    }
+
+    // Pure: canonical string with object keys sorted recursively (for multiset comparison).
+    function canonicalize(v) {
+      if (Array.isArray(v)) return "[" + v.map(canonicalize).join(",") + "]";
+      if (v !== null && typeof v === "object") {
+        var keys = Object.keys(v).sort();
+        return "{" + keys.map(function (k) { return JSON.stringify(k) + ":" + canonicalize(v[k]); }).join(",") + "}";
+      }
+      return JSON.stringify(v);
+    }
+
+    // Pure: compute structural diff between two parsed values -> flat list of entries.
+    function diff(a, b, opts) {
+      opts = opts || {};
+      var out = [];
+      walk(a, b, [], opts, out);
+      return out;
+    }
+    function walk(a, b, path, opts, out) {
+      var ta = typeOf(a), tb = typeOf(b);
+      if (ta !== tb) { out.push({ path: path.slice(), type: "changed", left: a, right: b }); return; }
+      if (ta === "object") {
+        var seen = {};
+        Object.keys(a).forEach(function (k) { seen[k] = true; });
+        Object.keys(b).forEach(function (k) { seen[k] = true; });
+        var keys = Object.keys(seen).sort();
+        keys.forEach(function (k) {
+          var inA = k in a, inB = k in b;
+          if (inA && !inB) out.push({ path: path.concat(k), type: "removed", left: a[k], right: undefined });
+          else if (!inA && inB) out.push({ path: path.concat(k), type: "added", left: undefined, right: b[k] });
+          else walk(a[k], b[k], path.concat(k), opts, out);
+        });
+        return;
+      }
+      if (ta === "array") {
+        if (opts.ignoreArrayOrder) {
+          if (a.length !== b.length) { out.push({ path: path.slice(), type: "changed", left: a, right: b }); return; }
+          var sa = a.map(canonicalize).sort(), sb = b.map(canonicalize).sort();
+          for (var i = 0; i < sa.length; i++) {
+            if (sa[i] !== sb[i]) { out.push({ path: path.slice(), type: "changed", left: a, right: b }); return; }
+          }
+          return;
+        }
+        var n = Math.max(a.length, b.length);
+        for (var j = 0; j < n; j++) {
+          if (j >= a.length) out.push({ path: path.concat(j), type: "added", left: undefined, right: b[j] });
+          else if (j >= b.length) out.push({ path: path.concat(j), type: "removed", left: a[j], right: undefined });
+          else walk(a[j], b[j], path.concat(j), opts, out);
+        }
+        return;
+      }
+      // primitive (including null)
+      if (a !== b) out.push({ path: path.slice(), type: "changed", left: a, right: b });
+    }
+
+    // Pure: format a path array as $.a.b[0]["weird key"]
+    function formatPath(p) {
+      if (!p || !p.length) return "$";
+      var s = "$";
+      for (var i = 0; i < p.length; i++) {
+        var seg = p[i];
+        if (typeof seg === "number" || /^\d+$/.test(String(seg))) s += "[" + seg + "]";
+        else if (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(seg)) s += "." + seg;
+        else s += "[" + JSON.stringify(seg) + "]";
+      }
+      return s;
+    }
+
+    function trunc(v) {
+      if (v === undefined) return "∅";
+      var s = (typeof v === "string") ? JSON.stringify(v) : JSON.stringify(canonicalizeTo(v));
+      return s.length > 160 ? s.slice(0, 157) + "…" : s;
+    }
+    // canonicalize but keep JSON.stringify semantics for display (sorted keys, pretty-ish)
+    function canonicalizeTo(v) {
+      if (Array.isArray(v)) return v.map(canonicalizeTo);
+      if (v !== null && typeof v === "object") {
+        return Object.keys(v).sort().reduce(function (o, k) { o[k] = canonicalizeTo(v[k]); return o; }, {});
+      }
+      return v;
+    }
+
+    function render() {
+      var L = parseJson(leftEl.value), R = parseJson(rightEl.value);
+      if (!L.ok || !R.ok) {
+        diffEl.innerHTML = ""; summaryEl.textContent = "";
+        errEl.hidden = false; errEl.textContent = (!L.ok ? "Left: " + L.error : "") + (!L.ok && !R.ok ? "  ·  " : "") + (!R.ok ? "Right: " + R.error : "");
+        if (!L.ok || !R.ok) return;
+      }
+      errEl.hidden = true;
+      var entries = diff(L.value, R.value, { ignoreArrayOrder: ignoreArr.checked });
+      var counts = { added: 0, removed: 0, changed: 0 };
+      entries.forEach(function (e) { counts[e.type]++; });
+      if (!entries.length) {
+        summaryEl.innerHTML = '<span style="opacity:.8;">No differences — the two documents are structurally equal.</span>';
+        diffEl.innerHTML = "";
+        return;
+      }
+      summaryEl.innerHTML = '<span class="add">+' + counts.added + ' added</span> · ' +
+        '<span class="rem">−' + counts.removed + ' removed</span> · ' +
+        '<span class="chg">' + counts.changed + ' changed</span> · ' + entries.length + ' total';
+      var html = "";
+      entries.forEach(function (e) {
+        var cls = e.type === "added" ? "add" : e.type === "removed" ? "rem" : "chg";
+        var leftCell = e.type === "added" ? '<span class="val"></span>' : '<span class="val" title="' + esc(trunc(e.left)) + '">' + esc(trunc(e.left)) + '</span>';
+        var rightCell = e.type === "removed" ? '<span class="val"></span>' : '<span class="val" title="' + esc(trunc(e.right)) + '">' + esc(trunc(e.right)) + '</span>';
+        html += '<div class="diffrow ' + cls + '"><span class="path">' + esc(formatPath(e.path)) +
+          ' <span class="badge ' + cls + '">' + e.type + '</span></span>' + leftCell +
+          '<span class="arrow">' + (e.type === "changed" ? "→" : "") + '</span>' + rightCell + '</div>';
+      });
+      diffEl.innerHTML = html;
+      render._entries = entries;
+    }
+    function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+
+    function loadSample() {
+      leftEl.value = JSON.stringify({ version: 1, name: "app", port: 8080, features: ["auth", "logging"], db: { host: "localhost", port: 5432 } }, null, 2);
+      rightEl.value = JSON.stringify({ name: "app", version: 2, port: 8080, features: ["auth", "metrics", "logging"], db: { host: "db.local", port: 5432, ssl: true }, cache: { ttl: 300 } }, null, 2);
+      render();
+    }
+
+    [leftEl, rightEl].forEach(function (el) { el.addEventListener("input", render); });
+    ignoreArr.addEventListener("change", render);
+    document.getElementById("sample").addEventListener("click", loadSample);
+    document.getElementById("clear").addEventListener("click", function () { leftEl.value = ""; rightEl.value = ""; render(); });
+    copyBtn.addEventListener("click", function () {
+      if (!render._entries || !render._entries.length) return;
+      var text = render._entries.map(function (e) {
+        return formatPath(e.path) + "\t" + e.type + "\t" + (e.left === undefined ? "" : JSON.stringify(canonicalizeTo(e.left))) + "\t" + (e.right === undefined ? "" : JSON.stringify(canonicalizeTo(e.right)));
+      }).join("\n");
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).catch(function () {});
+      else { try { var ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove(); } catch (e) {} }
+    });
+
+    window.VT_JSONDIFF_TEST = { parseJson: parseJson, typeOf: typeOf, canonicalize: canonicalize, diff: diff, formatPath: formatPath };
+    loadSample();
+  })();
+  </script>
+</body>
+</html>

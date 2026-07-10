@@ -1139,6 +1139,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-10T09:10:00Z",
   },
   {
+    slug: "json-diff",
+    name: "JSON Diff",
+    description: "Compare two JSON documents structurally and see exactly what changed, added, or removed at each JSON path. Unlike a line diff, this understands the structure: re-ordered object keys count as unchanged, array-element changes are attributed to the right index, and nested paths like $.users[1].name are reported precisely. Optionally ignore array element order (compare as sets). Copy the change list. Runs entirely in your browser; nothing is uploaded.",
+    category: "Data",
+    icon: "⚖️",
+    added: "2026-07-10T10:00:00Z",
+  },
+  {
     slug: "ascii-art",
     name: "Image to ASCII Art Generator",
     description: "Turn a picture into ASCII art you can copy or download. Pick a character ramp (standard, detailed, blocks, dots, binary or custom), set the output width and flip light/dark for the background. Rec.709 luminance with 2:1 character-aspect correction, all computed locally from a canvas — the image never leaves your browser.",
