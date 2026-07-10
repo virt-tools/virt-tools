@@ -23,7 +23,7 @@
           <select id="priority">
             <option>0.1</option>
             <option>0.3</option>
-            <option>0.5 selected</option>
+            <option selected>0.5</option>
             <option>0.7</option>
             <option>0.8</option>
             <option>1.0</option>
@@ -44,6 +44,9 @@
       </div>
       <div class="spacer"></div>
 
+      <label style="font-size:.88rem;"><input type="checkbox" id="boostHome" checked> Mark the homepage (root <code>/</code>) as changing very often — sets it to <code>hourly</code> with priority <code>1.0</code></label>
+      <div class="spacer"></div>
+
       <label for="urls">URLs (one per line)</label>
       <textarea id="urls" style="width:100%; height:200px; margin-bottom:1rem; font-family:monospace;"></textarea>
 
@@ -55,7 +58,7 @@
       <div class="spacer"></div>
       <label for="out">Preview</label>
       <div class="output" id="out" style="white-space:pre-wrap; word-break:break-all; font-family:monospace; opacity:0.8;"></div>
-      <p class="note">Processed locally — no network requests.</p>
+      <p class="note">The homepage of a frequently-updated site changes more often than its subpages, so by default its entry is set to <code>changefreq=hourly</code> and <code>priority=1.0</code> while the other URLs use the values above. <code>lastmod</code> defaults to today. Processed locally — no network requests.</p>
     </div>
   </main>
 
@@ -66,6 +69,7 @@
     var urlsInput = document.getElementById("urls");
     var priorityInput = document.getElementById("priority");
     var freqInput = document.getElementById("freq");
+    var boostInput = document.getElementById("boostHome");
     var lastXml = "";
 
     function escapeXml(unsafe) {
@@ -81,24 +85,50 @@
       });
     }
 
-    function generate() {
-      var urls = urlsInput.value.split("\n").map(function(u) { return u.trim(); }).filter(Boolean);
-      var priority = priorityInput.value;
-      var freq = freqInput.value;
+    // Pure: is this URL the site root (homepage)? Path is "/" or empty.
+    function isHomepage(u) {
+      var path;
+      try { path = new URL(u).pathname; }
+      catch (e) {
+        var m = /^[a-z][a-z0-9+.-]*:\/\//i.exec(u);
+        var rest = m ? u.slice(m[0].length) : u;
+        var slash = rest.indexOf('/');
+        path = slash < 0 ? "" : rest.slice(slash);
+        path = path.split(/[?#]/)[0];
+      }
+      return path === "" || path === "/";
+    }
 
+    // Pure: build a single <url> entry. opts: { freq, priority, boostHome, lastmod }.
+    function buildEntry(url, opts) {
+      opts = opts || {};
+      var freq = opts.freq, priority = opts.priority;
+      if (opts.boostHome && isHomepage(url)) { freq = "hourly"; priority = "1.0"; }
+      var lastmod = opts.lastmod || new Date().toISOString().split('T')[0];
+      var s = '  <url>\n';
+      s += '    <loc>' + escapeXml(url) + '</loc>\n';
+      s += '    <lastmod>' + lastmod + '</lastmod>\n';
+      s += '    <changefreq>' + freq + '</changefreq>\n';
+      s += '    <priority>' + priority + '</priority>\n';
+      s += '  </url>\n';
+      return s;
+    }
+
+    // Pure: build the full sitemap document.
+    function generateSitemap(urls, opts) {
+      opts = opts || {};
       var xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
       xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
-
-      for (var i = 0; i < urls.length; i++) {
-        xml += '  <url>\n';
-        xml += '    <loc>' + escapeXml(urls[i]) + '</loc>\n';
-        xml += '    <lastmod>' + new Date().toISOString().split('T')[0] + '</lastmod>\n';
-        xml += '    <changefreq>' + freq + '</changefreq>\n';
-        xml += '    <priority>' + priority + '</priority>\n';
-        xml += '  </url>\n';
-      }
-
+      for (var i = 0; i < urls.length; i++) xml += buildEntry(urls[i], opts);
       xml += '</urlset>';
+      return xml;
+    }
+
+    function generate() {
+      var urls = urlsInput.value.split("\n").map(function(u) { return u.trim(); }).filter(Boolean);
+      var xml = generateSitemap(urls, {
+        freq: freqInput.value, priority: priorityInput.value, boostHome: boostInput.checked
+      });
       lastXml = xml;
       out.textContent = xml;
     }
@@ -121,10 +151,13 @@
     urlsInput.addEventListener("input", generate);
     priorityInput.addEventListener("change", generate);
     freqInput.addEventListener("change", generate);
+    boostInput.addEventListener("change", generate);
 
     // Initial placeholder
     urlsInput.value = "https://example.com/\nhttps://example.com/about\nhttps://example.com/contact";
     generate();
+
+    window.VT_SITEMAP_TEST = { isHomepage: isHomepage, buildEntry: buildEntry, generateSitemap: generateSitemap, escapeXml: escapeXml };
   })();
   </script>
 </body>
