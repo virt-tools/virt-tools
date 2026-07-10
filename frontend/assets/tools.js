@@ -499,6 +499,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-10T01:50:00Z",
   },
   {
+    slug: "clip-path-generator",
+    name: "CSS Clip-Path Generator",
+    description: "Pick a shape — triangle, polygon, star, arrow, chevron, message bubble, plus, frame, circle, and more — or draw a custom polygon from points, then copy the ready-to-paste clip-path CSS with the -webkit- fallback. The live preview runs the exact generated value; percentage coordinates scale with any element. Runs locally; nothing is uploaded.",
+    category: "Design",
+    icon: "⬟",
+    added: "2026-07-10T02:35:00Z",
+  },
+  {
     slug: "css-filter",
     name: "CSS Filter Generator",
     description: "Build a CSS filter declaration visually with sliders for blur, brightness, contrast, grayscale, hue-rotate, invert, opacity, saturate, and sepia. A live preview updates as you drag, and the ready-to-copy filter: string lists only the functions you've changed from their defaults, so it stays clean. Reset clears everything. Everything runs locally in your browser.",

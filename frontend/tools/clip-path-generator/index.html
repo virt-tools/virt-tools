@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>CSS Clip-Path Generator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .layout { display:grid; grid-template-columns: 320px 1fr; gap:24px; align-items:start; }
+    @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+    .shapes { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+    .shapes button { padding:8px 0; font-size:.78rem; border:1px solid var(--border,#2a2f3a);
+      background:transparent; border-radius:8px; cursor:pointer; color:inherit; }
+    .shapes button.active { border-color:var(--accent,#6ea8fe); color:var(--accent,#6ea8fe); }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    input[type="range"] { width:150px; vertical-align:middle; }
+    .vval { font-family:ui-monospace,monospace; font-size:12px; opacity:.8; }
+    textarea { width:100%; box-sizing:border-box; font-family:ui-monospace,monospace; font-size:12px; }
+    .preview { display:flex; align-items:center; justify-content:center; min-height:280px;
+      background: repeating-conic-gradient(rgba(255,255,255,.04) 0% 25%, transparent 0% 50%) 50% / 20px 20px;
+      border:1px solid var(--border,#2a2f3a); border-radius:12px; padding:20px; }
+    #clip { width:200px; height:200px; background: var(--accent,#6ea8fe);
+      transition: clip-path .12s, -webkit-clip-path .12s; }
+    .code { font-family:ui-monospace,monospace; background:var(--bg,#14181f); border:1px solid var(--border,#2a2f3a);
+      border-radius:8px; padding:10px 12px; white-space:pre-wrap; word-break:break-word; font-size:12px; line-height:1.5; }
+    .swatches label { font-size:.8rem; display:inline-flex; gap:6px; align-items:center; }
+    input[type="color"] { width:42px; height:30px; padding:0; border:1px solid var(--border,#2a2f3a); border-radius:6px; background:none; cursor:pointer; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>CSS Clip-Path Generator</h1>
+      <p>Pick a shape — triangle, polygon, star, arrow, chevron, message bubble, and more — tune it, and copy the ready-to-paste <code>clip-path</code> CSS (with the <code>-webkit-</code> fallback). The preview runs the exact generated value, so what you see is what you get. Everything runs locally in your browser; nothing is uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="layout">
+        <!-- Controls -->
+        <div>
+          <label>Shape</label>
+          <div class="shapes" id="shapes"></div>
+
+          <div id="polyCtrl" class="field" style="margin-top:14px; display:none;">
+            <label>Sides <span class="vval" id="sidesVal">5</span></label>
+            <input type="range" id="sides" min="3" max="12" step="1" value="5">
+          </div>
+          <div id="starCtrl" class="field" style="display:none;">
+            <label>Star points <span class="vval" id="pointsVal">5</span></label>
+            <input type="range" id="points" min="3" max="12" step="1" value="5">
+          </div>
+          <div id="innerCtrl" class="field" style="display:none;">
+            <label>Inner radius <span class="vval" id="innerVal">40%</span></label>
+            <input type="range" id="inner" min="10" max="80" step="1" value="40">
+          </div>
+
+          <div id="customCtrl" class="field" style="display:none;">
+            <label>Custom points (one per line: <code>x% y%</code>)</label>
+            <textarea id="custom" rows="6" placeholder="50% 0%&#10;100% 100%&#10;0% 100%">50% 0%
+100% 100%
+0% 100%</textarea>
+          </div>
+
+          <div class="field" style="margin-top:14px;">
+            <label class="check"><input type="checkbox" id="webkitchk" checked> Include <code>-webkit-</code> fallback</label>
+          </div>
+
+          <div class="field">
+            <label>Preview / output color</label>
+            <div class="swatches">
+              <label>Color<input type="color" id="color" value="#6ea8fe"></label>
+            </div>
+          </div>
+
+          <div class="row" style="margin-top:12px;">
+            <button id="copy">Copy CSS</button>
+          </div>
+        </div>
+
+        <!-- Preview -->
+        <div>
+          <div class="preview"><div id="clip"></div></div>
+          <div class="code" id="code" style="margin-top:10px;"></div>
+        </div>
+      </div>
+
+      <p class="note">Each shape is a single CSS declaration: <code>clip-path: polygon(...)</code> (or <code>circle()</code>/<code>ellipse()</code> for the round shapes). Coordinates are percentages so the clip scales with your element — apply it to any box size. Browser support is broad; the optional <code>-webkit-</code> prefix covers older Safari/iOS. No network requests are made.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    // Shape presets. `kind`: "polygon" (points computed), "star", "circle", "ellipse", "inset", "custom".
+    // build(opts) -> { value: the clip-path value (without the clip-path: prefix), code: full css }
+    var SHAPES = [
+      { key: "triangle", name: "Triangle", kind: "polygon", ctrl: [], pts: [[50,0],[100,100],[0,100]] },
+      { key: "trapezoid", name: "Trapezoid", kind: "polygon", ctrl: [], pts: [[20,0],[80,0],[100,100],[0,100]] },
+      { key: "parallelogram", name: "Parallelogram", kind: "polygon", ctrl: [], pts: [[25,0],[100,0],[75,100],[0,100]] },
+      { key: "rhombus", name: "Rhombus", kind: "polygon", ctrl: [], pts: [[50,0],[100,50],[50,100],[0,50]] },
+      { key: "pentagon", name: "Pentagon", kind: "polygon", ctrl: [], n: 5 },
+      { key: "hexagon", name: "Hexagon", kind: "polygon", ctrl: [], n: 6 },
+      { key: "octagon", name: "Octagon", kind: "polygon", ctrl: [], n: 8 },
+      { key: "star", name: "Star", kind: "star", ctrl: ["points","inner"] },
+      { key: "arrow", name: "Arrow", kind: "polygon", ctrl: [], pts: [[0,40],[60,40],[60,20],[100,50],[60,80],[60,60],[0,60]] },
+      { key: "chevron", name: "Chevron", kind: "polygon", ctrl: [], pts: [[0,0],[75,0],[100,50],[75,100],[0,100],[25,50]] },
+      { key: "message", name: "Message", kind: "polygon", ctrl: [], pts: [[0,0],[100,0],[100,70],[70,70],[55,100],[55,70],[0,70]] },
+      { key: "close", name: "Close (X)", kind: "polygon", ctrl: [], pts: [[20,0],[50,30],[80,0],[100,20],[70,50],[100,80],[80,100],[50,70],[20,100],[0,80],[30,50],[0,20]] },
+      { key: "plus", name: "Plus", kind: "polygon", ctrl: [], pts: [[35,0],[65,0],[65,35],[100,35],[100,65],[65,65],[65,100],[35,100],[35,65],[0,65],[0,35],[35,35]] },
+      { key: "frame", name: "Frame", kind: "inset", ctrl: [] },
+      { key: "circle", name: "Circle", kind: "circle", ctrl: [] },
+      { key: "ellipse", name: "Ellipse", kind: "ellipse", ctrl: [] },
+      { key: "polygon", name: "Polygon", kind: "polygon", ctrl: ["sides"] },
+      { key: "custom", name: "Custom", kind: "custom", ctrl: ["custom"] }
+    ];
+    var byKey = {};
+    SHAPES.forEach(function (s) { byKey[s.key] = s; });
+
+    function fmt(n) {
+      // round to 2 decimals, strip trailing zeros
+      var r = Math.round(n * 100) / 100;
+      return (Math.round(r) === r) ? String(r) : r.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+    }
+
+    // Regular polygon with n sides, top vertex, radius 50% centered at 50,50.
+    function regularPolygon(n) {
+      var pts = [];
+      var step = 360 / n;
+      for (var i = 0; i < n; i++) {
+        var a = (-90 + i * step) * Math.PI / 180;
+        pts.push([50 + 50 * Math.cos(a), 50 + 50 * Math.sin(a)]);
+      }
+      return pts;
+    }
+
+    // Star with n outer points; innerPct is inner radius as % of outer (0-100).
+    function starPolygon(n, innerPct) {
+      var pts = [];
+      var step = 180 / n; // half-step; outer and inner alternate
+      var innerR = 50 * (innerPct / 100);
+      for (var i = 0; i < n * 2; i++) {
+        var a = (-90 + i * step) * Math.PI / 180;
+        var r = (i % 2 === 0) ? 50 : innerR;
+        pts.push([50 + r * Math.cos(a), 50 + r * Math.sin(a)]);
+      }
+      return pts;
+    }
+
+    function ptsToPolygon(pts) {
+      return "polygon(" + pts.map(function (p) { return fmt(p[0]) + "% " + fmt(p[1]) + "%"; }).join(", ") + ")";
+    }
+
+    function parseCustom(text) {
+      var pts = [];
+      var lines = text.split(/\r?\n/);
+      for (var i = 0; i < lines.length; i++) {
+        var ln = lines[i].trim();
+        if (!ln) continue;
+        var m = ln.match(/^(-?\d+(?:\.\d+)?)%?\s+(-?\d+(?:\.\d+)?)%?$/);
+        if (!m) return null; // malformed
+        pts.push([parseFloat(m[1]), parseFloat(m[2])]);
+      }
+      return pts.length >= 3 ? pts : null;
+    }
+
+    // Build the clip-path value for the current shape + controls.
+    function buildValue(shape, sides, points, innerPct, customText) {
+      if (shape.kind === "polygon") {
+        var pts;
+        if (shape.n) pts = regularPolygon(shape.n);
+        else if (shape.key === "polygon") pts = regularPolygon(sides);
+        else pts = shape.pts;
+        return ptsToPolygon(pts);
+      }
+      if (shape.kind === "star") return ptsToPolygon(starPolygon(points, innerPct));
+      if (shape.kind === "custom") {
+        var c = parseCustom(customText);
+        return c ? ptsToPolygon(c) : null;
+      }
+      if (shape.kind === "inset") return "inset(10% 10% 10% 10% round 8%)";
+      if (shape.kind === "circle") return "circle(50% at 50% 50%)";
+      if (shape.kind === "ellipse") return "ellipse(50% 50% at 50% 50%)";
+      return null;
+    }
+
+    var shapesEl = document.getElementById("shapes");
+    var clip = document.getElementById("clip");
+    var codeEl = document.getElementById("code");
+    var polyCtrl = document.getElementById("polyCtrl");
+    var starCtrl = document.getElementById("starCtrl");
+    var innerCtrl = document.getElementById("innerCtrl");
+    var customCtrl = document.getElementById("customCtrl");
+    var sidesEl = document.getElementById("sides");
+    var pointsEl = document.getElementById("points");
+    var innerEl = document.getElementById("inner");
+    var customEl = document.getElementById("custom");
+    var sidesVal = document.getElementById("sidesVal");
+    var pointsVal = document.getElementById("pointsVal");
+    var innerVal = document.getElementById("innerVal");
+    var webkitEl = document.getElementById("webkitchk");
+    var colorEl = document.getElementById("color");
+
+    var shapeKey = "triangle";
+
+    SHAPES.forEach(function (s) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.setAttribute("data-v", s.key);
+      b.textContent = s.name;
+      if (s.key === shapeKey) b.classList.add("active");
+      shapesEl.appendChild(b);
+    });
+
+    function currentShape() { return byKey[shapeKey] || SHAPES[0]; }
+
+    function render() {
+      var sh = currentShape();
+      // show/hide controls
+      polyCtrl.style.display = sh.key === "polygon" ? "block" : "none";
+      starCtrl.style.display = sh.kind === "star" ? "block" : "none";
+      innerCtrl.style.display = sh.kind === "star" ? "block" : "none";
+      customCtrl.style.display = sh.kind === "custom" ? "block" : "none";
+      sidesVal.textContent = sidesEl.value;
+      pointsVal.textContent = pointsEl.value;
+      innerVal.textContent = innerEl.value + "%";
+
+      var v = buildValue(sh, parseInt(sidesEl.value,10), parseInt(pointsEl.value,10), parseInt(innerEl.value,10), customEl.value);
+      clip.style.background = colorEl.value;
+      if (v) {
+        var pre = webkitEl.checked ? "-webkit-clip-path: " + v + ";\n  " : "";
+        var css = ".element {\n  " + pre + "clip-path: " + v + ";\n}";
+        clip.style.webkitClipPath = v;
+        clip.style.clipPath = v;
+        codeEl.textContent = css;
+      } else {
+        clip.style.clipPath = "none";
+        clip.style.webkitClipPath = "none";
+        codeEl.textContent = "/* Enter at least 3 points as \"x% y%\", one per line. */";
+      }
+    }
+
+    shapesEl.addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-v]"); if (!b) return;
+      shapeKey = b.getAttribute("data-v");
+      Array.prototype.forEach.call(shapesEl.querySelectorAll("button"), function (x) { x.classList.toggle("active", x === b); });
+      render();
+    });
+    [sidesEl, pointsEl, innerEl].forEach(function (el) { el.addEventListener("input", render); });
+    customEl.addEventListener("input", render);
+    webkitEl.addEventListener("change", render);
+    colorEl.addEventListener("input", render);
+    colorEl.addEventListener("change", render);
+
+    document.getElementById("copy").addEventListener("click", function () {
+      var txt = codeEl.textContent;
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).catch(function () {});
+      else { try { var t = document.createElement("textarea"); t.value = txt; document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove(); } catch (e) {} }
+    });
+
+    render();
+    window.VT_CLIP_TEST = { SHAPES: SHAPES, buildValue: buildValue, regularPolygon: regularPolygon, starPolygon: starPolygon, parseCustom: parseCustom, ptsToPolygon: ptsToPolygon, fmt: fmt };
+  })();
+  </script>
+</body>
+</html>
