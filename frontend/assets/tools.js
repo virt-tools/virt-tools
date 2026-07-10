@@ -1979,6 +1979,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-10T15:00:00Z",
   },
   {
+    slug: "newtons-second-law",
+    name: "Newton's Second Law Calculator",
+    description: "Solve F = m·a for force, mass, or acceleration given the other two, with unit handling for mass (kg, g, lb, oz), force (N, kN, lbf, kgf, dyn), and acceleration (m/s², ft/s², g). Also compute weight W = m·g under different gravities (Earth, Moon, Mars, Jupiter), and momentum p = m·v plus kinetic energy KE = ½·m·v² from an optional velocity (m/s, km/h, mph, ft/s). Leave the quantity you want blank to solve for it. Pairs with the Projectile Motion and Gear Ratio calculators for mechanics work. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🚀",
+    added: "2026-07-10T22:00:00Z",
+  },
+  {
     slug: "wavelength-calculator",
     name: "Wavelength / Frequency Calculator",
     description: "Convert between an electromagnetic wave's frequency and its wavelength using λ = c / f (c = 299,792,458 m/s). Enter a frequency in Hz, kHz, MHz, or GHz to get the wavelength in metres, centimetres, millimetres, feet, and inches, plus the quarter-wave and half-wave lengths for antenna work; or enter a wavelength to get the frequency. The frequency is also classified into its ITU band (VLF, LF, MF, HF, VHF, UHF, SHF, EHF…) with common examples like FM radio, WiFi, and ISM bands. Pairs with the Decibel and Ohm's Law tools for RF and electronics. Everything runs locally in your browser.",
