@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Image Compare — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .slots { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px; }
+    .slot { border:2px dashed var(--border,#2a2f3a); border-radius:12px; padding:16px; text-align:center; cursor:pointer; position:relative; min-height:120px; display:flex; flex-direction:column; justify-content:center; gap:6px; }
+    .slot:hover { border-color:var(--accent,#6ea8fe); }
+    .slot.loaded { cursor:default; border-style:solid; }
+    .slot img { max-width:100%; max-height:130px; border-radius:6px; }
+    .slot .tag { font-size:.78rem; opacity:.8; }
+    .seg { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0; }
+    .seg button { padding:7px 13px; font-size:.85rem; }
+    .seg button.active { background:var(--accent,#6ea8fe); color:#0b0d12; border-color:var(--accent,#6ea8fe); }
+    .stage { position:relative; display:flex; align-items:center; justify-content:center; background:var(--bg,#14181f);
+      border:1px solid var(--border,#2a2f3a); border-radius:12px; padding:14px; min-height:220px; overflow:hidden; }
+    #canvas { max-width:100%; height:auto; display:block; border-radius:6px; }
+    #sliderHandle { position:absolute; top:0; bottom:0; width:3px; background:var(--accent,#6ea8fe); cursor:ew-resize; box-shadow:0 0 0 1px rgba(0,0,0,.4); display:none; }
+    #sliderHandle::before { content:"⇆"; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); background:var(--accent,#6ea8fe); color:#0b0d12; border-radius:50%; width:22px; height:22px; display:flex; align-items:center; justify-content:center; font-size:13px; }
+    input[type="range"] { width:170px; vertical-align:middle; }
+    .vval { font-family:ui-monospace,monospace; font-size:12px; opacity:.8; }
+    .stats { font-family:ui-monospace,monospace; font-size:13px; line-height:1.7; margin:10px 0; }
+    .stats .warn { color:var(--warn,#fbbf24); }
+    .stats code { background:var(--bg,#14181f); border:1px solid var(--border,#2a2f3a); border-radius:5px; padding:1px 7px; }
+    .opts { display:flex; gap:18px; flex-wrap:wrap; align-items:center; margin:6px 0; }
+    label.check { font-size:.85rem; display:inline-flex; gap:6px; align-items:center; cursor:pointer; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Image Compare</h1>
+      <p>Load two images and compare them four ways — a draggable slider reveal, side-by-side, an onion-skin opacity blend, and a pixel-level difference heatmap that highlights exactly what changed. Nothing is uploaded; every pixel is processed locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="slots">
+        <div class="slot" id="slotA" data-slot="A">
+          <span class="prompt"><strong>Image A — click to choose</strong><br><span class="tag">or drop / paste</span></span>
+          <div class="loadedView"></div>
+          <input type="file" accept="image/*" style="display:none">
+        </div>
+        <div class="slot" id="slotB" data-slot="B">
+          <span class="prompt"><strong>Image B — click to choose</strong><br><span class="tag">or drop / paste</span></span>
+          <div class="loadedView"></div>
+          <input type="file" accept="image/*" style="display:none">
+        </div>
+      </div>
+
+      <div class="seg" id="mode">
+        <button type="button" data-v="slider" class="active">Slider</button>
+        <button type="button" data-v="side">Side by side</button>
+        <button type="button" data-v="onion">Onion skin</button>
+        <button type="button" data-v="diff">Difference</button>
+      </div>
+
+      <div class="opts" id="diffOpts" style="display:none;">
+        <label>Threshold <input type="range" id="threshold" min="0" max="100" step="1" value="2"><span class="vval" id="thrVal">2%</span></label>
+        <label class="check"><input type="checkbox" id="amplify" checked> Amplify</label>
+        <label class="check"><input type="checkbox" id="grayDiff"> Grayscale</label>
+      </div>
+      <div class="opts" id="onionOpts" style="display:none;">
+        <label>Image B opacity <input type="range" id="onion" min="0" max="100" step="1" value="50"><span class="vval" id="onionVal">50%</span></label>
+      </div>
+
+      <div class="stage">
+        <canvas id="canvas"></canvas>
+        <div id="sliderHandle"></div>
+      </div>
+
+      <div class="stats" id="stats">Load both images to compare.</div>
+
+      <div class="row" style="margin-top:8px;">
+        <button id="download">Download current view</button>
+        <button id="reset" class="secondary">Clear</button>
+      </div>
+
+      <p class="note">The slider reveals image A on the left and B on the right (drag the handle). Side-by-side shows both at equal width. Onion skin cross-fades B over A. Difference computes a per-pixel absolute channel difference — unchanged areas stay dark, changed areas light up; the threshold hides tiny noise and "Amplify" boosts faint differences so they're visible. If the two images aren't the same size, B is scaled to A's dimensions before differencing (noted in the stats). No network requests are made.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var slots = { A: document.getElementById("slotA"), B: document.getElementById("slotB") };
+    var imgs = { A: null, B: null };      // HTMLImageElement
+    var files = { A: null, B: null };     // File (for name)
+    var mode = "slider";
+    var canvas = document.getElementById("canvas");
+    var ctx = canvas.getContext("2d");
+    var sliderHandle = document.getElementById("sliderHandle");
+    var statsEl = document.getElementById("stats");
+    var diffOpts = document.getElementById("diffOpts");
+    var onionOpts = document.getElementById("onionOpts");
+    var thresholdEl = document.getElementById("threshold");
+    var amplifyEl = document.getElementById("amplify");
+    var grayDiffEl = document.getElementById("grayDiff");
+    var onionEl = document.getElementById("onion");
+    var thrVal = document.getElementById("thrVal");
+    var onionVal = document.getElementById("onionVal");
+    var sliderPct = 50; // percent position for slider mode
+
+    function slotViews(slotKey) {
+      var slot = slots[slotKey];
+      return { slot: slot, prompt: slot.querySelector(".prompt"), loadedView: slot.querySelector(".loadedView"), input: slot.querySelector("input[type=file]") };
+    }
+    function setSlotLoaded(slotKey, img, dataUrl) {
+      var v = slotViews(slotKey);
+      v.prompt.style.display = "none";
+      v.loadedView.innerHTML = '<span class="tag">Image ' + slotKey + ' · ' + img.naturalWidth + '×' + img.naturalHeight + '</span><img src="' + dataUrl + '">';
+      v.slot.classList.add("loaded");
+    }
+    function setSlotEmpty(slotKey) {
+      var v = slotViews(slotKey);
+      v.prompt.style.display = "";
+      v.loadedView.innerHTML = "";
+      v.slot.classList.remove("loaded");
+      v.input.value = "";
+    }
+
+    // --- file loading per slot ---
+    function loadInto(slotKey, f) {
+      if (!f) return;
+      if (!f.type.startsWith("image/") && !/\.(png|jpe?g|webp|gif|bmp)$/i.test(f.name)) return;
+      var r = new FileReader();
+      r.onload = function () {
+        var img = new Image();
+        img.onload = function () {
+          imgs[slotKey] = img; files[slotKey] = f;
+          setSlotLoaded(slotKey, img, r.result);
+          render();
+        };
+        img.src = r.result;
+      };
+      r.readAsDataURL(f);
+    }
+    function bindSlot(slotKey) {
+      var v = slotViews(slotKey);
+      v.slot.addEventListener("click", function (e) { if (imgs[slotKey]) return; v.input.click(); });
+      v.input.addEventListener("change", function () { loadInto(slotKey, v.input.files[0]); });
+      v.slot.addEventListener("dragover", function (e) { e.preventDefault(); v.slot.style.borderColor = "var(--accent,#6ea8fe)"; });
+      v.slot.addEventListener("dragleave", function () { v.slot.style.borderColor = ""; });
+      v.slot.addEventListener("drop", function (e) {
+        e.preventDefault(); v.slot.style.borderColor = "";
+        if (e.dataTransfer && e.dataTransfer.files[0]) loadInto(slotKey, e.dataTransfer.files[0]);
+      });
+    }
+    bindSlot("A"); bindSlot("B");
+    document.addEventListener("paste", function (e) {
+      var items = e.clipboardData && e.clipboardData.items; if (!items) return;
+      for (var i = 0; i < items.length; i++) if (items[i].type && items[i].type.startsWith("image/")) {
+        var key = !imgs.A ? "A" : "B"; loadInto(key, items[i].getAsFile()); break;
+      }
+    });
+
+    // mode switching
+    document.getElementById("mode").addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-v]"); if (!b) return;
+      mode = b.getAttribute("data-v");
+      Array.prototype.forEach.call(e.currentTarget.querySelectorAll("button"), function (x) { x.classList.toggle("active", x === b); });
+      diffOpts.style.display = mode === "diff" ? "flex" : "none";
+      onionOpts.style.display = mode === "onion" ? "flex" : "none";
+      sliderHandle.style.display = mode === "slider" ? "block" : "none";
+      render();
+    });
+    thresholdEl.addEventListener("input", function () { thrVal.textContent = thresholdEl.value + "%"; render(); });
+    onionEl.addEventListener("input", function () { onionVal.textContent = onionEl.value + "%"; render(); });
+    [amplifyEl, grayDiffEl].forEach(function (el) { el.addEventListener("change", render); });
+
+    // slider drag
+    var dragging = false;
+    function setSliderFromX(clientX) {
+      var rect = canvas.getBoundingClientRect();
+      var pct = ((clientX - rect.left) / rect.width) * 100;
+      sliderPct = Math.max(0, Math.min(100, pct));
+      render();
+    }
+    sliderHandle.addEventListener("mousedown", function (e) { dragging = true; e.preventDefault(); });
+    canvas.addEventListener("mousedown", function (e) { if (mode === "slider") { dragging = true; setSliderFromX(e.clientX); } });
+    window.addEventListener("mousemove", function (e) { if (dragging) setSliderFromX(e.clientX); });
+    window.addEventListener("mouseup", function () { dragging = false; });
+    canvas.addEventListener("touchstart", function (e) { if (mode === "slider") { setSliderFromX(e.touches[0].clientX); } });
+    canvas.addEventListener("touchmove", function (e) { if (mode === "slider") { setSliderFromX(e.touches[0].clientX); e.preventDefault(); } }, { passive: false });
+
+    // --- core: pixel difference (pure, exposed for testing) ---
+    // aPix, bPix: Uint8ClampedArray RGBA, length w*h*4. Returns { out: Uint8ClampedArray, changed, total, sum }.
+    function computeDiff(aPix, bPix, w, h, opts) {
+      opts = opts || {};
+      var threshold = (typeof opts.threshold === "number") ? opts.threshold : 0; // 0-255 per-channel max diff to ignore
+      var amplify = !!opts.amplify;
+      var gray = !!opts.gray;
+      var n = w * h * 4;
+      var out = new Uint8ClampedArray(n);
+      var changed = 0, sum = 0;
+      for (var i = 0; i < n; i += 4) {
+        var dr = Math.abs(aPix[i] - bPix[i]);
+        var dg = Math.abs(aPix[i + 1] - bPix[i + 1]);
+        var db = Math.abs(aPix[i + 2] - bPix[i + 2]);
+        var d = Math.max(dr, dg, db); // strongest channel difference
+        sum += d;
+        var isDiff = d > threshold;
+        if (isDiff) changed++;
+        var v;
+        if (!isDiff) v = 0;
+        else if (amplify) v = Math.min(255, Math.max(1, d) * 8); // boost faint diffs, min 1 so any change is visible
+        else v = d;
+        if (gray) {
+          out[i] = v; out[i + 1] = v; out[i + 2] = v; out[i + 3] = 255;
+        } else {
+          // heatmap: tint diff pixels by their dominant changed channel
+          out[i] = amplify ? Math.min(255, dr * 8) : dr;
+          out[i + 1] = amplify ? Math.min(255, dg * 8) : dg;
+          out[i + 2] = amplify ? Math.min(255, db * 8) : db;
+          out[i + 3] = 255;
+        }
+      }
+      return { out: out, changed: changed, total: w * h, sum: sum };
+    }
+
+    // Draw an image (scaled to target w×h) into a fresh canvas and return its ImageData.
+    function rasterize(img, w, h) {
+      var c = document.createElement("canvas");
+      c.width = w; c.height = h;
+      var cx = c.getContext("2d");
+      cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = "high";
+      cx.drawImage(img, 0, 0, w, h);
+      return cx.getImageData(0, 0, w, h);
+    }
+
+    function render() {
+      if (!imgs.A || !imgs.B) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        sliderHandle.style.display = "none";
+        statsEl.textContent = imgs.A && imgs.B ? "" : (!imgs.A && !imgs.B ? "Load both images to compare." : ("Load image " + (!imgs.A ? "A" : "B") + " to compare."));
+        return;
+      }
+      var aw = imgs.A.naturalWidth, ah = imgs.A.naturalHeight;
+      var bw = imgs.B.naturalWidth, bh = imgs.B.naturalHeight;
+      var sameSize = (aw === bw && ah === bh);
+
+      if (mode === "diff") {
+        // diff at A's resolution; scale B to A if needed
+        var aData = rasterize(imgs.A, aw, ah);
+        var bData = rasterize(imgs.B, aw, ah);
+        var thr = Math.round((parseInt(thresholdEl.value, 10) / 100) * 255);
+        var r = computeDiff(aData.data, bData.data, aw, ah, { threshold: thr, amplify: amplifyEl.checked, gray: grayDiffEl.checked });
+        canvas.width = aw; canvas.height = ah;
+        var outImg = new ImageData(r.out, aw, ah);
+        ctx.putImageData(outImg, 0, 0);
+        var pct = r.total ? (r.changed / r.total * 100) : 0;
+        var avg = r.total ? (r.sum / r.total) : 0;
+        statsEl.innerHTML = "<code>" + aw + "×" + ah + "</code> · " +
+          (sameSize ? "identical dimensions" : "<span class='warn'>B scaled " + bw + "×" + bh + " → " + aw + "×" + ah + " before differencing</span>") + "<br>" +
+          "Changed pixels: <code>" + r.changed.toLocaleString() + " / " + r.total.toLocaleString() + "</code> (" + pct.toFixed(2) + "%)<br>" +
+          "Average per-pixel difference: <code>" + avg.toFixed(2) + "</code> / 255";
+        sliderHandle.style.display = "none";
+        return;
+      }
+
+      // For non-diff modes, pick a display size (use A as reference; B scaled/cropped to fit).
+      var dispW = aw, dispH = ah;
+      if (mode === "side") { dispW = aw * 2; dispH = Math.max(ah, bh); }
+      else if (mode === "slider" || mode === "onion") {
+        // if B is taller/wider, use max so neither is clipped
+        dispW = Math.max(aw, bw); dispH = Math.max(ah, bh);
+      }
+      canvas.width = dispW; canvas.height = dispH;
+      ctx.clearRect(0, 0, dispW, dispH);
+
+      if (mode === "side") {
+        ctx.drawImage(imgs.A, 0, 0, aw, ah, 0, 0, aw, ah);
+        ctx.drawImage(imgs.B, 0, 0, bw, bh, aw, 0, bw, bh);
+        sliderHandle.style.display = "none";
+      } else if (mode === "onion") {
+        ctx.globalAlpha = 1; ctx.drawImage(imgs.A, 0, 0);
+        ctx.globalAlpha = parseInt(onionEl.value, 10) / 100; ctx.drawImage(imgs.B, 0, 0);
+        ctx.globalAlpha = 1;
+        sliderHandle.style.display = "none";
+      } else { // slider: A full, B clipped to right portion
+        ctx.drawImage(imgs.A, 0, 0, aw, ah, 0, 0, aw, ah);
+        var splitPx = Math.round(sliderPct / 100 * aw);
+        // draw B's right portion
+        var srcX = splitPx;
+        var srcW = bw - splitPx;
+        if (srcW > 0) ctx.drawImage(imgs.B, srcX, 0, srcW, bh, splitPx, 0, srcW, bh);
+        // position handle over canvas (CSS px)
+        sliderHandle.style.display = "block";
+        var rect = canvas.getBoundingClientRect();
+        var stageRect = canvas.parentElement.getBoundingClientRect();
+        var leftPx = (splitPx / aw) * rect.width;
+        sliderHandle.style.left = (rect.left - stageRect.left + leftPx) + "px";
+      }
+      statsEl.innerHTML = "<code>A " + aw + "×" + ah + "</code> · <code>B " + bw + "×" + bh + "</code> · " +
+        (sameSize ? "identical dimensions" : "<span class='warn'>different dimensions</span>");
+    }
+
+    window.addEventListener("resize", function () { if (mode === "slider") render(); });
+
+    document.getElementById("download").addEventListener("click", function () {
+      if (!imgs.A || !imgs.B) return;
+      render();
+      var a = document.createElement("a");
+      a.href = canvas.toDataURL("image/png");
+      a.download = mode === "diff" ? "image-diff.png" : "image-compare.png";
+      document.body.appendChild(a); a.click(); a.remove();
+    });
+    document.getElementById("reset").addEventListener("click", function () {
+      imgs.A = imgs.B = null; files.A = files.B = null;
+      setSlotEmpty("A"); setSlotEmpty("B");
+      render();
+    });
+
+    render();
+    window.VT_COMPARE_TEST = { computeDiff: computeDiff };
+  })();
+  </script>
+</body>
+</html>
