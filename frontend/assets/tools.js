@@ -1163,6 +1163,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-10T14:30:00Z",
   },
   {
+    slug: "css-specificity-calculator",
+    name: "CSS Specificity Calculator",
+    description: "Compute the CSS specificity of one or more selectors and rank them. Enter a selector (or a comma-separated list) and each is scored as (a, b, c) — IDs, classes/attributes/pseudo-classes, and elements/pseudo-elements — with the winner highlighted. Handles :is(), :not(), :has() (most specific argument), :where() (zero), ::pseudo-elements, and legacy single-colon pseudo-elements. Runs entirely in your browser; nothing is uploaded.",
+    category: "Design",
+    icon: "🎯",
+    added: "2026-07-10T15:10:00Z",
+  },
+  {
     slug: "ascii-art",
     name: "Image to ASCII Art Generator",
     description: "Turn a picture into ASCII art you can copy or download. Pick a character ramp (standard, detailed, blocks, dots, binary or custom), set the output width and flip light/dark for the background. Rec.709 luminance with 2:1 character-aspect correction, all computed locally from a canvas — the image never leaves your browser.",

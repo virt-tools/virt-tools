@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>CSS Specificity Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .layout { display:grid; grid-template-columns: 1fr 1fr; gap:16px; align-items:start; }
+    @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+    textarea, input[type="text"] { width:100%; box-sizing:border-box; font-family:ui-monospace,monospace; font-size:13px; padding:8px 10px; border:1px solid var(--border,#2a2f3a); border-radius:8px; background:var(--bg,#14181f); color:inherit; }
+    .out table { width:100%; border-collapse:collapse; font-size:13px; }
+    .out th, .out td { text-align:left; padding:7px 10px; border-bottom:1px solid var(--border,#2a2f3a); }
+    .out th { font-size:.72rem; text-transform:uppercase; letter-spacing:.04em; opacity:.7; }
+    .out td.sel { font-family:ui-monospace,monospace; word-break:break-all; }
+    .out tr.win td { background:rgba(110,168,254,.12); }
+    .badge { display:inline-block; min-width:92px; text-align:center; font-family:ui-monospace,monospace; font-size:.8rem; padding:2px 8px; border-radius:999px; border:1px solid var(--border,#2a2f3a); }
+    .ranking { font-family:ui-monospace,monospace; font-size:12px; opacity:.65; }
+    .note code { font-size:.85em; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>CSS Specificity Calculator</h1>
+      <p>Compute the CSS specificity of one or more selectors and rank them. Enter a selector (or a comma-separated selector list) and each one is scored as <code>(a,&nbsp;b,&nbsp;c)</code> — IDs, classes/attributes/pseudo-classes, and elements/pseudo-elements — with the winning selector highlighted. Handles <code>:is()</code>, <code>:not()</code>, <code>:has()</code>, <code>:where()</code> (zero), <code>::pseudo-elements</code>, and the legacy single-colon pseudo-elements. Everything runs in your browser; nothing is uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="layout">
+        <div>
+          <div class="field"><label for="in">Selector(s)</label></div>
+          <input type="text" id="in" spellcheck="false" autocomplete="off" value="#nav .item a:hover">
+          <div class="row" style="gap:8px; margin-top:8px; flex-wrap:wrap;">
+            <button id="sort" class="secondary" style="padding:5px 12px;">Sort by specificity ↓</button>
+            <button id="copy" class="secondary" style="padding:5px 12px;">Copy table</button>
+          </div>
+          <p class="note">Tip: compare several at once with commas — <code>#id, .class, div, *</code> — to see which wins. Combinators (<code>&gt;</code>, <code>+</code>, <code>~</code>, descendant space) and the universal selector <code>*</code> add nothing.</p>
+        </div>
+        <div>
+          <div class="field"><label>Result</label></div>
+          <div class="out" id="out"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var inEl = document.getElementById("in");
+    var outEl = document.getElementById("out");
+    var sortBtn = document.getElementById("sort");
+    var copyBtn = document.getElementById("copy");
+    var sortDesc = true;
+
+    // CSS identifier characters (ASCII subset + backslash escapes). The full
+    // spec allows non-ASCII and \-escapes; we handle \ + next-char escapes and
+    // treat the rest as [A-Za-z0-9_-] for tokenizing.
+    function isIdentChar(ch) { return /[A-Za-z0-9_-]/.test(ch); }
+
+    // Read a CSS identifier starting at i; returns new index past it.
+    function readIdent(s, i) {
+      var n = s.length;
+      while (i < n) {
+        var ch = s.charAt(i);
+        if (ch === "\\") { i += 2; continue; } // escape: skip backslash + next
+        if (isIdentChar(ch)) { i++; continue; }
+        break;
+      }
+      return i;
+    }
+
+    // Split a string on top-level commas (not inside (), [], {}).
+    function splitTopLevel(s) {
+      var out = [], cur = "", depth = 0;
+      for (var i = 0; i < s.length; i++) {
+        var ch = s.charAt(i);
+        if (ch === "(" || ch === "[" || ch === "{") depth++;
+        else if (ch === ")" || ch === "]" || ch === "}") { if (depth > 0) depth--; }
+        if (depth === 0 && ch === ",") { out.push(cur); cur = ""; }
+        else cur += ch;
+      }
+      out.push(cur);
+      return out;
+    }
+
+    // Read balanced (...) starting at the '(' at index i; return {end, inner}.
+    function readParens(s, i) {
+      var n = s.length, depth = 0, start = i;
+      for (; i < n; i++) {
+        var ch = s.charAt(i);
+        if (ch === "(" || ch === "[") depth++;
+        else if (ch === ")" || ch === "]") { depth--; if (depth === 0) { i++; break; } }
+      }
+      return { end: i, inner: s.slice(start + 1, i - 1) };
+    }
+
+    // Legacy CSS2 pseudo-elements writable with a single colon.
+    var LEGACY_PSEUDO_ELEMENT = { after: 1, before: 1, "first-line": 1, "first-letter": 1 };
+
+    // Pure: compute specificity of a single selector string -> {a,b,c}.
+    function computeSpecificity(sel) {
+      var a = 0, b = 0, c = 0;
+      var i = 0, n = sel.length;
+      while (i < n) {
+        var ch = sel.charAt(i);
+        if (/\s/.test(ch) || ch === ">" || ch === "+" || ch === "~" || ch === "*") { i++; continue; }
+        if (ch === "#") { a++; i = readIdent(sel, i + 1); continue; }
+        if (ch === ".") { b++; i = readIdent(sel, i + 1); continue; }
+        if (ch === "[") {
+          b++;
+          var depth = 1; i++;
+          while (i < n && depth > 0) { var x = sel.charAt(i); if (x === "[") depth++; else if (x === "]") depth--; i++; }
+          continue;
+        }
+        if (ch === ":") {
+          if (sel.charAt(i + 1) === ":") {
+            c++; i = readIdent(sel, i + 2); if (sel.charAt(i) === "(") { var p = readParens(sel, i); i = p.end; } continue;
+          }
+          i++;
+          var nameStart = i;
+          i = readIdent(sel, i);
+          var name = sel.slice(nameStart, i);
+          if (name === "where") { if (sel.charAt(i) === "(") i = readParens(sel, i).end; continue; }
+          if (name === "is" || name === "not" || name === "matches" || name === "has") {
+            var par = sel.charAt(i) === "(" ? readParens(sel, i) : { end: i, inner: "" };
+            i = par.end;
+            var sub = maxSpecificity(par.inner);
+            a += sub.a; b += sub.b; c += sub.c;
+            continue;
+          }
+          if (LEGACY_PSEUDO_ELEMENT[name]) { c++; if (sel.charAt(i) === "(") i = readParens(sel, i).end; continue; }
+          b++; // ordinary pseudo-class (incl. :nth-child, :hover, :checked, …)
+          if (sel.charAt(i) === "(") i = readParens(sel, i).end;
+          continue;
+        }
+        // element / type selector
+        if (isIdentChar(ch)) { c++; i = readIdent(sel, i); continue; }
+        i++;
+      }
+      return { a: a, b: b, c: c };
+    }
+
+    // Pure: for a comma-separated argument list (as used by :is/:not/:has),
+    // the spec takes the specificity of the MOST specific argument.
+    function maxSpecificity(inner) {
+      if (!inner || !inner.trim()) return { a: 0, b: 0, c: 0 };
+      var best = { a: 0, b: 0, c: 0 }, bestScore = -1;
+      splitTopLevel(inner).forEach(function (part) {
+        var s = computeSpecificity(part);
+        var sc = s.a * 1000000 + s.b * 1000 + s.c;
+        if (sc > bestScore) { bestScore = sc; best = s; }
+      });
+      return best;
+    }
+
+    function score(s) { return s.a * 1000000 + s.b * 1000 + s.c; }
+    function describe(s) { return "(" + s.a + ", " + s.b + ", " + s.c + ")"; }
+
+    // Pure: parse a selector list -> array of { selector, spec, score }.
+    function analyze(input) {
+      return splitTopLevel(input).map(function (raw) {
+        var selector = raw.trim();
+        var spec = selector ? computeSpecificity(selector) : { a: 0, b: 0, c: 0 };
+        return { selector: selector, spec: spec, score: score(spec) };
+      }).filter(function (r) { return r.selector.length > 0; });
+    }
+
+    function render() {
+      var rows = analyze(inEl.value);
+      if (sortDesc) rows.sort(function (x, y) { return y.score - x.score; });
+      var maxScore = rows.length ? rows[0].score : 0;
+      if (!rows.length) { outEl.innerHTML = '<p class="note">Enter a selector to see its specificity.</p>'; return; }
+      var html = '<table><thead><tr><th>#</th><th>Selector</th><th>Specificity (a, b, c)</th><th>Score</th></tr></thead><tbody>';
+      rows.forEach(function (r, idx) {
+        var win = (rows.length > 1 && r.score === maxScore) ? ' class="win"' : '';
+        html += '<tr' + win + '><td>' + (idx + 1) + '</td><td class="sel">' + escapeHtml(r.selector) + '</td>'
+          + '<td><span class="badge">' + describe(r.spec) + '</span></td>'
+          + '<td class="ranking">' + r.score + '</td></tr>';
+      });
+      html += '</tbody></table>';
+      if (rows.length > 1) {
+        html += '<p class="note">Highest specificity wins: <code>' + escapeHtml(rows[0].selector) + '</code> — ' + describe(rows[0].spec) + '.</p>';
+      }
+      outEl.innerHTML = html;
+    }
+
+    function escapeHtml(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+    inEl.addEventListener("input", render);
+    sortBtn.addEventListener("click", function () { sortDesc = !sortDesc; sortBtn.textContent = sortDesc ? "Sort by specificity ↓" : "Sort by specificity ↑"; render(); });
+    copyBtn.addEventListener("click", function () {
+      var tsv = "selector\ta\tb\tc\tscore\n";
+      analyze(inEl.value).forEach(function (r) { tsv += r.selector + "\t" + r.spec.a + "\t" + r.spec.b + "\t" + r.spec.c + "\t" + r.score + "\n"; });
+      function done() { copyBtn.textContent = "Copied!"; setTimeout(function () { copyBtn.textContent = "Copy table"; }, 1200); }
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(tsv).then(done).catch(function () {});
+      else { try { var ta = document.createElement("textarea"); ta.value = tsv; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove(); done(); } catch (e) {} }
+    });
+
+    window.VT_SPEC_TEST = { computeSpecificity: computeSpecificity, splitTopLevel: splitTopLevel, maxSpecificity: maxSpecificity, analyze: analyze, score: score, describe: describe };
+    render();
+  })();
+  </script>
+</body>
+</html>
