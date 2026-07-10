@@ -1691,6 +1691,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-10T21:00:00Z",
   },
   {
+    slug: "molarity-solution-calculator",
+    name: "Molarity & Solution Calculator",
+    description: "Solve common chemistry-solution calculations: molarity M = n/V, dilution M₁V₁ = M₂V₂, pH/pOH from hydrogen-ion concentration, and mass↔moles via molar mass. Fill the known quantities with their own units and leave the one you want blank — the calculator solves it and shows the result in equivalent units. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🧪",
+    added: "2026-07-10T19:10:00Z",
+  },
+  {
     slug: "quadratic-solver",
     name: "Quadratic Equation Solver",
     description: "Solve a quadratic equation ax² + bx + c = 0. Enter the three coefficients and get the discriminant, the roots (two distinct real, one repeated real, or a complex-conjugate pair), the vertex and axis of symmetry of the parabola, and the factored form when the roots are real. A built-in check evaluates the polynomial at each root so you can confirm the result, and the linear case (a = 0) is handled too. Everything runs locally in your browser.",
