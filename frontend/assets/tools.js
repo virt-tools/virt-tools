@@ -179,6 +179,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-04T04:00:00Z",
   },
   {
+    slug: "user-agent-parser",
+    name: "User-Agent Parser",
+    description: "Paste a User-Agent string and get a readable breakdown — browser name and version, rendering engine, operating system, and device type (desktop, mobile, tablet, or bot). Recognizes Chrome, Edge, Firefox, Safari, Opera, and common crawlers like Googlebot. Useful for debugging logs and analytics. Runs entirely in your browser.",
+    category: "Networking",
+    icon: "🕵️",
+    added: "2026-07-10T19:50:00Z",
+  },
+  {
     slug: "http-headers",
     name: "HTTP Headers Reference",
     description: "Look up common HTTP request and response headers by name or meaning — static reference, runs locally.",
