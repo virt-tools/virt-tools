@@ -1155,6 +1155,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-10T12:50:00Z",
   },
   {
+    slug: "html-to-markdown",
+    name: "HTML to Markdown Converter",
+    description: "Convert HTML into clean Markdown — headings, paragraphs, bold/italic/strikethrough, inline code, fenced code blocks, links, images, ordered and unordered lists (including nested), blockquotes, and horizontal rules. A small pure-JS parser walks the structure (no DOM dependency), so it runs entirely in your browser with nothing uploaded.",
+    category: "Text",
+    icon: "📄",
+    added: "2026-07-10T14:30:00Z",
+  },
+  {
     slug: "ascii-art",
     name: "Image to ASCII Art Generator",
     description: "Turn a picture into ASCII art you can copy or download. Pick a character ramp (standard, detailed, blocks, dots, binary or custom), set the output width and flip light/dark for the background. Rec.709 luminance with 2:1 character-aspect correction, all computed locally from a canvas — the image never leaves your browser.",
