@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Image LSB Steganography — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .seg { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
+    .seg button { padding:8px 14px; font-size:0.9rem; }
+    .seg button.active { background:var(--accent,#6ea8fe); color:#0b0d12; border-color:var(--accent,#6ea8fe); }
+    .drop { border:2px dashed var(--border,#2a2f3a); border-radius:12px; padding:20px; text-align:center; cursor:pointer; margin:10px 0; }
+    .drop:hover { border-color:var(--accent,#6ea8fe); }
+    textarea { width:100%; box-sizing:border-box; font-family:ui-monospace,monospace; }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .chans { display:flex; gap:14px; flex-wrap:wrap; margin:6px 0; }
+    .chans label { font-size:.85rem; display:inline-flex; gap:6px; align-items:center; cursor:pointer; }
+    .stats { font-size:.82rem; color:var(--text-dim); margin:6px 0; font-family:ui-monospace,monospace; }
+    .status { margin:8px 0; font-size:14px; }
+    .status.ok { color:var(--ok,#4ade80); }
+    .status.err { color:var(--bad,#f87171); }
+    #preview { max-width:100%; max-height:220px; border:1px solid var(--border,#2a2f3a); border-radius:8px; }
+    .note code { font-family:ui-monospace,monospace; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Image LSB Steganography</h1>
+      <p>Hide a secret message inside an image by writing it into the least-significant bits of its pixels — the cover looks unchanged — then reveal it again. Optionally key the bits with a password so only someone who has it can extract the message. Everything runs locally in your browser; nothing is uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="seg" id="mode">
+        <button type="button" data-v="hide" class="active">Hide</button>
+        <button type="button" data-v="reveal">Reveal</button>
+      </div>
+
+      <!-- HIDE -->
+      <div id="hideBox">
+        <div class="drop" id="drop">
+          <strong>Click to choose a cover image</strong><br>
+          <span style="opacity:.7;font-size:13px">or drop / paste (Ctrl/⌘+V). PNG works best — the output is lossless PNG.</span>
+          <input type="file" id="file" accept="image/*" style="display:none">
+        </div>
+        <div id="previewWrap" style="display:none; text-align:center; margin:8px 0;">
+          <img id="preview"><span class="stats" id="coverStats" style="display:block;"></span>
+        </div>
+
+        <div class="field">
+          <label for="secret">Secret message</label>
+          <textarea id="secret" rows="3" placeholder="Type the message to hide…">The eagle lands at noon.</textarea>
+        </div>
+
+        <div class="grid">
+          <div class="field">
+            <label>Bits per channel <span class="stats" id="bitsVal" style="display:inline;">1</span></label>
+            <input type="range" id="bits" min="1" max="4" step="1" value="1">
+          </div>
+          <div class="field">
+            <label>Password (optional key)</label>
+            <input type="text" id="password" placeholder="leave blank for no key">
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Carrier channels</label>
+          <div class="chans" id="chans">
+            <label><input type="checkbox" data-c="0" checked> Red</label>
+            <label><input type="checkbox" data-c="1" checked> Green</label>
+            <label><input type="checkbox" data-c="2" checked> Blue</label>
+          </div>
+        </div>
+
+        <div class="row">
+          <button id="encode">Hide &amp; download PNG</button>
+          <button id="newCover" class="secondary">New cover</button>
+        </div>
+        <div class="stats" id="capStats"></div>
+        <div class="status" id="hideStatus"></div>
+      </div>
+
+      <!-- REVEAL -->
+      <div id="revealBox" style="display:none;">
+        <div class="drop" id="drop2">
+          <strong>Click to choose a stego image (PNG)</strong><br>
+          <span style="opacity:.7;font-size:13px">or drop / paste. Must be the PNG produced by Hide (re-saving as JPEG destroys the bits).</span>
+          <input type="file" id="file2" accept="image/*" style="display:none">
+        </div>
+
+        <div class="grid">
+          <div class="field">
+            <label>Bits per channel <span class="stats" id="bits2Val" style="display:inline;">1</span></label>
+            <input type="range" id="bits2" min="1" max="4" step="1" value="1">
+          </div>
+          <div class="field">
+            <label>Password (if one was set)</label>
+            <input type="text" id="password2" placeholder="leave blank if none">
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Carrier channels</label>
+          <div class="chans" id="chans2">
+            <label><input type="checkbox" data-c="0" checked> Red</label>
+            <label><input type="checkbox" data-c="1" checked> Green</label>
+            <label><input type="checkbox" data-c="2" checked> Blue</label>
+          </div>
+        </div>
+
+        <div class="row">
+          <button id="decode">Reveal message</button>
+        </div>
+        <div class="status" id="revealStatus"></div>
+        <div class="field">
+          <label>Hidden message</label>
+          <textarea id="decoded" rows="3" readonly placeholder="Revealed message appears here…"></textarea>
+        </div>
+        <div class="row" style="margin-top:6px;">
+          <button id="revealCopy" class="secondary">Copy message</button>
+        </div>
+      </div>
+
+      <p class="note">How it works: the message is UTF-8 encoded, a 4-byte length header is prepended, and the resulting bits are written into the lowest <code>bits</code> of each selected color channel, walking pixels left-to-right, top-to-bottom. If a password is given, each stored bit is XOR-ed with a keystream seeded from it (mulberry32 + FNV-1a), so extraction needs the same password. <strong>This is steganography, not encryption</strong> — it hides the message's existence, not its meaning; a determined analyst can still find the bits. <strong>Important:</strong> always keep the output as PNG — JPEG/WebP re-encoding destroys the least-significant bits and the message becomes unrecoverable. No network requests are made.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    // --- PRNG + hashing (password keystream) ---
+    function fnv1a(str) {
+      var h = 0x811c9dc5;
+      for (var i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+      return h >>> 0;
+    }
+    function mulberry32(seed) {
+      var a = seed >>> 0;
+      return function () {
+        a = (a + 0x6D2B79F5) >>> 0;
+        var t = a; t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    function utf8Bytes(str) {
+      if (typeof TextEncoder !== "undefined") return new TextEncoder().encode(str);
+      var bytes = [];
+      for (var i = 0; i < str.length; i++) {
+        var c = str.charCodeAt(i);
+        if (c < 0x80) bytes.push(c);
+        else if (c < 0x800) bytes.push(0xC0 | (c >> 6), 0x80 | (c & 0x3F));
+        else if (c >= 0xD800 && c <= 0xDBFF) { var c2 = str.charCodeAt(++i); var cp = 0x10000 + ((c & 0x3FF) << 10) + (c2 & 0x3FF); bytes.push(0xF0 | (cp >> 18), 0x80 | ((cp >> 12) & 0x3F), 0x80 | ((cp >> 6) & 0x3F), 0x80 | (cp & 0x3F)); }
+        else bytes.push(0xE0 | (c >> 12), 0x80 | ((c >> 6) & 0x3F), 0x80 | (c & 0x3F));
+      }
+      return bytes;
+    }
+    function bytesToUtf8(bytes) {
+      if (typeof TextDecoder !== "undefined") { try { return new TextDecoder("utf-8", { fatal: true }).decode(bytes); } catch (e) { return null; } }
+      var s = "", i = 0;
+      while (i < bytes.length) {
+        var b = bytes[i++];
+        if (b < 0x80) s += String.fromCharCode(b);
+        else if (b < 0xE0) s += String.fromCharCode(((b & 0x1F) << 6) | (bytes[i++] & 0x3F));
+        else if (b < 0xF0) s += String.fromCharCode(((b & 0x0F) << 12) | ((bytes[i++] & 0x3F) << 6) | (bytes[i++] & 0x3F));
+        else { var cp = ((b & 0x07) << 18) | ((bytes[i++] & 0x3F) << 12) | ((bytes[i++] & 0x3F) << 6) | (bytes[i++] & 0x3F); cp -= 0x10000; s += String.fromCharCode(0xD800 + (cp >> 10), 0xDC00 + (cp & 0x3FF)); }
+      }
+      return s;
+    }
+
+    // Resolve channels list (sorted) from checkboxes-like input of checked offsets.
+    function resolveChannels(checkedOffsets) {
+      var ch = [];
+      [0, 1, 2].forEach(function (c) { if (checkedOffsets.indexOf(c) >= 0) ch.push(c); });
+      if (!ch.length) ch = [0]; // never empty; default to red
+      return ch;
+    }
+
+    // Total carrier-bit capacity for w×h image, channels[], bits.
+    function capacityBits(w, h, channels, bits) { return w * h * channels.length * bits; }
+
+    // Encode: returns a NEW Uint8ClampedArray (modified RGBA) or { error }.
+    function encodeSecret(pix, w, h, message, channels, bits, password) {
+      var bytes = utf8Bytes(message);
+      if (!bytes.length) return { error: "Type a secret message to hide." };
+      var need = 32 + bytes.length * 8; // 4-byte length header + payload bits
+      var cap = capacityBits(w, h, channels, bits);
+      if (need > cap) return { error: "Message too large for this cover and settings. Capacity: " + Math.floor((cap - 32) / 8) + " bytes; message is " + bytes.length + " bytes." };
+      var out = new Uint8ClampedArray(pix); // copy
+      var rng = password ? mulberry32(fnv1a(password)) : null;
+      function keybit() { return rng ? ((rng() * 2) | 0) : 0; }
+
+      var total = need;
+      for (var k = 0; k < total; k++) {
+        // which payload bit? header (32 bits, big-endian length) then payload
+        var bit;
+        if (k < 32) { bit = (bytes.length >>> (31 - k)) & 1; } // length header, MSB first
+        else { var pi = k - 32; var byteIdx = pi >> 3; var bitIdx = 7 - (pi & 7); bit = (bytes[byteIdx] >>> bitIdx) & 1; }
+        bit = bit ^ keybit(); // XOR keystream
+        // map k -> (pixelIndex, channelOffset, bitPosInChannel)
+        var slot = (k / bits) | 0;
+        var bitPos = k % bits; // 0 = LSB
+        var pixelIndex = (slot / channels.length) | 0;
+        var channelOffset = channels[slot % channels.length];
+        var idx = pixelIndex * 4 + channelOffset;
+        var mask = 1 << bitPos;
+        out[idx] = (out[idx] & ~mask) | (bit ? mask : 0);
+      }
+      return { data: out, bytes: bytes.length };
+    }
+
+    // Decode: returns { message } or { error }.
+    function decodeSecret(pix, w, h, channels, bits, password) {
+      var rng = password ? mulberry32(fnv1a(password)) : null;
+      function keybit() { return rng ? ((rng() * 2) | 0) : 0; }
+      var cap = capacityBits(w, h, channels, bits);
+      if (cap < 32) return { error: "Image too small to carry a message." };
+
+      // read 32-bit length header
+      var len = 0;
+      for (var k = 0; k < 32; k++) {
+        var slot = (k / bits) | 0, bitPos = k % bits;
+        var pixelIndex = (slot / channels.length) | 0;
+        var channelOffset = channels[slot % channels.length];
+        var idx = pixelIndex * 4 + channelOffset;
+        var bit = ((pix[idx] >>> bitPos) & 1) ^ keybit();
+        len = (len << 1) | bit;
+      }
+      // sanity: length must be plausible
+      var maxPayload = Math.floor((cap - 32) / 8);
+      if (len <= 0 || len > maxPayload || len > 50 * 1024 * 1024) return { error: "No message found (wrong bits/channels/password, or this image has none)." };
+
+      var need = 32 + len * 8;
+      if (need > cap) return { error: "No message found (settings mismatch)." };
+      var bytes = new Uint8Array(len);
+      for (var k = 32; k < need; k++) {
+        var pi = k - 32, byteIdx = pi >> 3, bitIdx = 7 - (pi & 7);
+        var slot = (k / bits) | 0, bitPos = k % bits;
+        var pixelIndex = (slot / channels.length) | 0;
+        var channelOffset = channels[slot % channels.length];
+        var idx = pixelIndex * 4 + channelOffset;
+        var bit = ((pix[idx] >>> bitPos) & 1) ^ keybit();
+        bytes[byteIdx] |= (bit << bitIdx);
+      }
+      var msg = bytesToUtf8(bytes);
+      if (msg == null) return { error: "Found bits but couldn't decode as text — wrong password or settings?" };
+      return { message: msg, bytes: len };
+    }
+
+    // ---------- UI wiring ----------
+    var modeBtns = document.getElementById("mode");
+    var hideBox = document.getElementById("hideBox");
+    var revealBox = document.getElementById("revealBox");
+    var mode = "hide";
+    modeBtns.addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-v]"); if (!b) return;
+      mode = b.getAttribute("data-v");
+      Array.prototype.forEach.call(modeBtns.querySelectorAll("button"), function (x) { x.classList.toggle("active", x === b); });
+      hideBox.style.display = mode === "hide" ? "block" : "none";
+      revealBox.style.display = mode === "reveal" ? "block" : "none";
+    });
+
+    function checkedChannels(containerId) {
+      var off = [];
+      Array.prototype.forEach.call(document.getElementById(containerId).querySelectorAll("input[data-c]"), function (cb) {
+        if (cb.checked) off.push(parseInt(cb.getAttribute("data-c"), 10));
+      });
+      return resolveChannels(off);
+    }
+
+    // HIDE
+    var drop = document.getElementById("drop"), fileEl = document.getElementById("file");
+    var preview = document.getElementById("preview"), previewWrap = document.getElementById("previewWrap"), coverStats = document.getElementById("coverStats");
+    var secretEl = document.getElementById("secret"), bitsEl = document.getElementById("bits"), bitsVal = document.getElementById("bitsVal");
+    var passwordEl = document.getElementById("password"), capStats = document.getElementById("capStats"), hideStatus = document.getElementById("hideStatus");
+    var coverImg = null;
+
+    function setHideStatus(msg, kind) { hideStatus.textContent = msg; hideStatus.className = "status" + (kind ? " " + kind : ""); }
+    function updateCap() {
+      if (!coverImg) { capStats.textContent = ""; return; }
+      var ch = checkedChannels("chans"), bits = parseInt(bitsEl.value, 10);
+      var cap = capacityBits(coverImg.naturalWidth, coverImg.naturalHeight, ch, bits);
+      capStats.textContent = "Capacity: " + Math.floor((cap - 32) / 8) + " bytes · secret is " + utf8Bytes(secretEl.value).length + " bytes.";
+    }
+    function loadCover(f) {
+      if (!f) return;
+      if (!f.type.startsWith("image/") && !/\.(png|jpe?g|webp|gif|bmp)$/i.test(f.name)) { setHideStatus("Please choose an image file.", "err"); return; }
+      var r = new FileReader();
+      r.onload = function () {
+        var img = new Image();
+        img.onload = function () {
+          coverImg = img; preview.src = r.result; previewWrap.style.display = "block";
+          coverStats.textContent = img.naturalWidth + " × " + img.naturalHeight + " px";
+          drop.style.display = "none"; setHideStatus(""); updateCap();
+        };
+        img.src = r.result;
+      };
+      r.readAsDataURL(f);
+    }
+    fileEl.addEventListener("change", function () { loadCover(fileEl.files[0]); });
+    drop.addEventListener("click", function () { fileEl.click(); });
+    drop.addEventListener("dragover", function (e) { e.preventDefault(); drop.style.borderColor = "var(--accent,#6ea8fe)"; });
+    drop.addEventListener("dragleave", function () { drop.style.borderColor = ""; });
+    drop.addEventListener("drop", function (e) { e.preventDefault(); drop.style.borderColor = ""; if (e.dataTransfer && e.dataTransfer.files[0]) loadCover(e.dataTransfer.files[0]); });
+    document.addEventListener("paste", function (e) {
+      if (mode !== "hide") return;
+      var items = e.clipboardData && e.clipboardData.items; if (!items) return;
+      for (var i = 0; i < items.length; i++) if (items[i].type && items[i].type.startsWith("image/")) { loadCover(items[i].getAsFile()); break; }
+    });
+    bitsEl.addEventListener("input", function () { bitsVal.textContent = bitsEl.value; updateCap(); });
+    secretEl.addEventListener("input", updateCap);
+    document.getElementById("chans").addEventListener("change", updateCap);
+
+    document.getElementById("encode").addEventListener("click", function () {
+      if (!coverImg) { setHideStatus("Load a cover image first.", "err"); return; }
+      var w = coverImg.naturalWidth, h = coverImg.naturalHeight;
+      var c = document.createElement("canvas"); c.width = w; c.height = h;
+      var cx = c.getContext("2d"); cx.drawImage(coverImg, 0, 0);
+      var imgData = cx.getImageData(0, 0, w, h);
+      var ch = checkedChannels("chans"), bits = parseInt(bitsEl.value, 10), pw = passwordEl.value;
+      var res = encodeSecret(imgData.data, w, h, secretEl.value, ch, bits, pw);
+      if (res.error) { setHideStatus(res.error, "err"); return; }
+      cx.putImageData(new ImageData(res.data, w, h), 0, 0);
+      c.toBlob(function (blob) {
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement("a"); a.href = url; a.download = "stego.png";
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+        setHideStatus("Hidden " + res.bytes + " bytes and downloaded stego.png. Keep it as PNG — re-encoding as JPEG destroys the message.", "ok");
+      }, "image/png");
+    });
+    document.getElementById("newCover").addEventListener("click", function () {
+      coverImg = null; previewWrap.style.display = "none"; drop.style.display = "block"; fileEl.value = ""; capStats.textContent = ""; setHideStatus("");
+    });
+
+    // REVEAL
+    var drop2 = document.getElementById("drop2"), file2 = document.getElementById("file2");
+    var bits2El = document.getElementById("bits2"), bits2Val = document.getElementById("bits2Val");
+    var password2El = document.getElementById("password2"), revealStatus = document.getElementById("revealStatus"), decodedEl = document.getElementById("decoded");
+    var stegoImg = null;
+    bits2El.addEventListener("input", function () { bits2Val.textContent = bits2El.value; });
+    function setRevealStatus(msg, kind) { revealStatus.textContent = msg; revealStatus.className = "status" + (kind ? " " + kind : ""); }
+    function loadStego(f) {
+      if (!f) return;
+      var r = new FileReader();
+      r.onload = function () {
+        var img = new Image();
+        img.onload = function () { stegoImg = img; setRevealStatus("Loaded " + img.naturalWidth + "×" + img.naturalHeight + ". Click Reveal.", ""); };
+        img.src = r.result;
+      };
+      r.readAsDataURL(f);
+    }
+    file2.addEventListener("change", function () { loadStego(file2.files[0]); });
+    drop2.addEventListener("click", function () { file2.click(); });
+    drop2.addEventListener("dragover", function (e) { e.preventDefault(); drop2.style.borderColor = "var(--accent,#6ea8fe)"; });
+    drop2.addEventListener("dragleave", function () { drop2.style.borderColor = ""; });
+    drop2.addEventListener("drop", function (e) { e.preventDefault(); drop2.style.borderColor = ""; if (e.dataTransfer && e.dataTransfer.files[0]) loadStego(e.dataTransfer.files[0]); });
+
+    document.getElementById("decode").addEventListener("click", function () {
+      if (!stegoImg) { setRevealStatus("Load a stego image first.", "err"); return; }
+      var w = stegoImg.naturalWidth, h = stegoImg.naturalHeight;
+      var c = document.createElement("canvas"); c.width = w; c.height = h;
+      var cx = c.getContext("2d"); cx.drawImage(stegoImg, 0, 0);
+      var imgData = cx.getImageData(0, 0, w, h);
+      var ch = checkedChannels("chans2"), bits = parseInt(bits2El.value, 10), pw = password2El.value;
+      var res = decodeSecret(imgData.data, w, h, ch, bits, pw);
+      if (res.error) { setRevealStatus(res.error, "err"); decodedEl.value = ""; return; }
+      decodedEl.value = res.message;
+      setRevealStatus("Revealed " + res.bytes + " bytes.", "ok");
+    });
+    document.getElementById("revealCopy").addEventListener("click", function () { if (decodedEl.value) { decodedEl.select(); try { document.execCommand("copy"); } catch (e) {} } });
+
+    window.VT_LSB_TEST = { encodeSecret: encodeSecret, decodeSecret: decodeSecret, capacityBits: capacityBits, resolveChannels: resolveChannels, fnv1a: fnv1a, mulberry32: mulberry32, utf8Bytes: utf8Bytes, bytesToUtf8: bytesToUtf8 };
+  })();
+  </script>
+</body>
+</html>

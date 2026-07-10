@@ -1083,6 +1083,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-10T03:20:00Z",
   },
   {
+    slug: "image-lsb-steganography",
+    name: "Image LSB Steganography",
+    description: "Hide a secret message inside an image by writing it into the least-significant bits of its pixels — the cover looks unchanged — then reveal it again. Choose bits per channel and which color channels to use, and optionally key the bits with a password so only someone who has it can extract the message. Output is lossless PNG. Everything runs locally; nothing is uploaded.",
+    category: "Image",
+    icon: "🫥",
+    added: "2026-07-10T04:10:00Z",
+  },
+  {
     slug: "ascii-art",
     name: "Image to ASCII Art Generator",
     description: "Turn a picture into ASCII art you can copy or download. Pick a character ramp (standard, detailed, blocks, dots, binary or custom), set the output width and flip light/dark for the background. Rec.709 luminance with 2:1 character-aspect correction, all computed locally from a canvas — the image never leaves your browser.",
