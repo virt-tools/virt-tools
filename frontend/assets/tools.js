@@ -1811,6 +1811,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-09T06:00:00Z",
   },
   {
+    slug: "lc-resonant-calculator",
+    name: "LC Resonant Frequency Calculator",
+    description: "Calculate the resonant frequency of an LC tank circuit: f = 1 / (2π·√(L·C)). Enter any two of frequency, inductance (H, mH, µH, nH, pH), or capacitance (F, mF, µF, nF, pF) and the third is solved for you — plus the characteristic impedance Z = √(L/C), angular frequency ω = 2π·f, and period T = 1/f. Leave one field blank to solve for it; fill all three to cross-check consistency. Pairs with the Wavelength, Decibel, and Ohm's Law tools for RF and electronics work. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "〰️",
+    added: "2026-07-10T20:00:00Z",
+  },
+  {
     slug: "tile-calculator",
     name: "Tile Calculator",
     description: "Work out how many tiles a floor or wall job needs. Enter the project dimensions (length and width in feet or metres) and the tile size (in inches, centimetres, or millimetres) plus an optional grout joint width, and the calculator counts how many full tiles fit along each axis — rounding up the partial tile at every edge — to get the base count. Add a waste percentage for cuts and breakage and you get the number to buy, along with the coverage area in square feet and square metres. Pairs with the Concrete and Paint calculators for the rest of the job. Everything runs locally in your browser.",
