@@ -1147,6 +1147,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-10T06:40:00Z",
   },
   {
+    slug: "svg-editor",
+    name: "SVG Editor",
+    description: "Author and edit vector shapes — rect, circle, ellipse, line, polyline, polygon, path, and text — with a live preview and a property inspector for fill, stroke, and geometry. Edit the markup directly or use the toolbar, then download as .svg or copy to clipboard. Runs entirely in your browser.",
+    category: "Design",
+    icon: "🖌️",
+    added: "2026-07-10T18:30:00Z",
+  },
+  {
     slug: "css-transform-generator",
     name: "CSS Transform Generator",
     description: "Compose CSS transforms with a live preview and copy-ready code — translate, rotate, 3D rotateX/rotateY with perspective, scale (with optional X/Y lock), and skew — plus a visual transform-origin picker. Only the functions you actually change are emitted, so an untouched box outputs transform: none. Everything runs in your browser; nothing is uploaded.",
