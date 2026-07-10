@@ -371,6 +371,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-08T13:00:00Z",
   },
   {
+    slug: "bpm-to-ms-calculator",
+    name: "BPM to Milliseconds Calculator",
+    description: "Convert a tempo in BPM to note durations in milliseconds and hertz for setting delay times and synced LFO rates, or convert a delay time in ms back to a tempo. Shows whole, half, quarter, eighth, sixteenth, and thirty-second notes with optional dotted (×1.5) and triplet (×2/3) variants. The hertz column gives the repetition rate for syncing an LFO. Pairs with the Note Frequency, Metronome, Tap Tempo, and Tone Generator tools. Everything runs locally in your browser.",
+    category: "Time",
+    icon: "⏱️",
+    added: "2026-07-11T15:00:00Z",
+  },
+  {
     slug: "noise-generator",
     name: "Noise Generator",
     description: "Play continuous white, pink, or brown noise for sleep, focus, and sound masking — white is flat, pink falls 3 dB/octave, brown 6 dB/octave. Web Audio, runs locally.",
