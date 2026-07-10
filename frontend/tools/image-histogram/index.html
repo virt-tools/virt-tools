@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Image Histogram — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .layout { display:grid; grid-template-columns: 1fr 1fr; gap:20px; align-items:start; }
+    @media (max-width: 880px) { .layout { grid-template-columns: 1fr; } }
+    .dropzone { border:2px dashed var(--border,#2a2f3a); border-radius:10px; padding:16px; text-align:center; cursor:pointer; }
+    .dropzone:hover { border-color:var(--accent,#6ea8fe); }
+    .dropzone-hint { margin:0; opacity:.7; font-size:.9rem; }
+    .dropzone-name { margin:6px 0 0; font-family:ui-monospace,monospace; font-size:.8rem; }
+    .thumb { margin-top:10px; max-width:100%; max-height:220px; border:1px solid var(--border,#2a2f3a); border-radius:8px; display:block; }
+    .hist-wrap { background:var(--bg,#14181f); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:8px; }
+    #hist { width:100%; height:240px; display:block; border-radius:4px; }
+    .chans { display:flex; gap:14px; flex-wrap:wrap; margin:10px 0; font-size:.85rem; }
+    .chans label { display:inline-flex; gap:5px; align-items:center; cursor:pointer; }
+    .chans .sw { display:inline-block; width:12px; height:12px; border-radius:3px; }
+    .opts { display:flex; gap:18px; align-items:center; flex-wrap:wrap; margin:8px 0; font-size:.85rem; }
+    input[type="range"] { width:130px; vertical-align:middle; }
+    table.stats { width:100%; border-collapse:collapse; font-family:ui-monospace,monospace; font-size:12px; }
+    table.stats th, table.stats td { border:1px solid var(--border,#2a2f3a); padding:4px 8px; text-align:right; }
+    table.stats th { text-align:left; opacity:.8; font-weight:600; }
+    .clip { color:var(--bad,#f87171); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Image Histogram</h1>
+      <p>Drop an image and read its tonal distribution — the red, green, blue, and luminance (Rec.709) histograms that photographers use to judge exposure, clipping, and color cast. Toggle channels, use a log scale to see the tail, and read per-channel mean / median / standard deviation / min / max plus shadow and highlight clipping. Everything is computed from a canvas in your browser; the image is never uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="layout">
+        <div>
+          <div class="dropzone" id="drop">
+            <input type="file" id="file" accept="image/*" hidden>
+            <p class="dropzone-hint">Click to choose, or drag &amp; drop an image</p>
+            <p class="dropzone-name" id="dropName" hidden></p>
+          </div>
+          <canvas id="src" hidden></canvas>
+          <img id="thumb" class="thumb" hidden alt="preview">
+
+          <div class="chans" id="chans">
+            <label><span class="sw" style="background:#e05656"></span><input type="checkbox" id="cR" checked> Red</label>
+            <label><span class="sw" style="background:#56c856"></span><input type="checkbox" id="cG" checked> Green</label>
+            <label><span class="sw" style="background:#5b8bff"></span><input type="checkbox" id="cB" checked> Blue</label>
+            <label><span class="sw" style="background:#d8d8d8"></span><input type="checkbox" id="cL"> Luma</label>
+          </div>
+
+          <div class="opts">
+            <label><input type="checkbox" id="log"> Log scale</label>
+            <label>Smoothing <input type="range" id="smooth" min="0" max="12" value="0"><span id="smoothV" class="vval">0</span></label>
+          </div>
+        </div>
+
+        <div>
+          <div class="hist-wrap"><canvas id="hist" width="768" height="240"></canvas></div>
+          <div class="row" style="justify-content:space-between; margin-top:8px;">
+            <span id="dims" class="muted" style="font-size:.82rem;"></span>
+            <button id="download" class="secondary" style="padding:4px 12px;">Download PNG</button>
+          </div>
+          <table class="stats" id="stats" style="margin-top:10px;"></table>
+        </div>
+      </div>
+
+      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+      <p class="note">Bins are 256 levels (0–255) per channel. <strong>Shadow clip</strong> is the share of pixels pinned to 0, <strong>highlight clip</strong> the share pinned to 255 — large values suggest blown blacks or whites. The luminance channel uses Rec.709 weights (0.2126 R + 0.7152 G + 0.0722 B). No network requests are made.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var drop = document.getElementById("drop");
+    var fileEl = document.getElementById("file");
+    var dropName = document.getElementById("dropName");
+    var src = document.getElementById("src");
+    var sctx = src.getContext("2d");
+    var thumb = document.getElementById("thumb");
+    var hist = document.getElementById("hist");
+    var hctx = hist.getContext("2d");
+    var dims = document.getElementById("dims");
+    var statsEl = document.getElementById("stats");
+    var errEl = document.getElementById("err");
+    var cR = document.getElementById("cR"), cG = document.getElementById("cG"), cB = document.getElementById("cB"), cL = document.getElementById("cL");
+    var logEl = document.getElementById("log");
+    var smoothEl = document.getElementById("smooth"), smoothV = document.getElementById("smoothV");
+
+    var CHAN_COLOR = { r: "#e05656", g: "#56c856", b: "#5b8bff", l: "#d8d8d8" };
+
+    // Rec.709 luminance, 0..255 rounded.
+    function luma(r, g, b) { return Math.round(0.2126 * r + 0.7152 * g + 0.0722 * b); }
+
+    // Pure: build a 256-bin histogram + stats for a channel over an RGBA pixel buffer.
+    function computeHistogram(data, channel) {
+      var bins = new Uint32Array(256);
+      var sum = 0, sumSq = 0, n = 0;
+      for (var i = 0; i < data.length; i += 4) {
+        var v;
+        if (channel === "r") v = data[i];
+        else if (channel === "g") v = data[i + 1];
+        else if (channel === "b") v = data[i + 2];
+        else v = luma(data[i], data[i + 1], data[i + 2]);
+        bins[v]++;
+        sum += v; sumSq += v * v; n++;
+      }
+      var mean = n ? sum / n : 0;
+      var variance = n ? (sumSq / n) - mean * mean : 0;
+      var stddev = Math.sqrt(Math.max(0, variance));
+      var median = 0, acc = 0, half = n >> 1;
+      for (var k = 0; k < 256; k++) { acc += bins[k]; if (acc > half) { median = k; break; } }
+      var min = -1, max = -1;
+      for (var a = 0; a < 256; a++) if (bins[a]) { min = a; break; }
+      for (var b2 = 255; b2 >= 0; b2--) if (bins[b2]) { max = b2; break; }
+      return { bins: bins, mean: mean, median: median, stddev: stddev, min: min, max: max, count: n };
+    }
+
+    // Pure: moving-average smoothing over the 256 bins.
+    function smoothBins(bins, radius) {
+      if (!radius || radius <= 0) return bins;
+      var out = new Float64Array(256);
+      var span = radius * 2 + 1;
+      for (var i = 0; i < 256; i++) {
+        var s = 0;
+        for (var j = -radius; j <= radius; j++) {
+          var idx = i + j; if (idx < 0) idx = 0; else if (idx > 255) idx = 255;
+          s += bins[idx];
+        }
+        out[i] = s / span;
+      }
+      return out;
+    }
+
+    // Pure-ish: render the histogram of one or more series onto a 2d context.
+    function drawHistogram(ctx, series, W, H, opts) {
+      opts = opts || {};
+      var log = opts.log;
+      ctx.clearRect(0, 0, W, H);
+      // subtle grid
+      ctx.strokeStyle = "rgba(127,127,127,0.18)"; ctx.lineWidth = 1;
+      for (var g = 1; g < 4; g++) { var gy = Math.round(g * H / 4); ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke(); }
+      var maxVal = 0;
+      series.forEach(function (s) {
+        for (var i = 0; i < 256; i++) { var v = log ? Math.log(1 + s.bins[i]) : s.bins[i]; if (v > maxVal) maxVal = v; }
+      });
+      if (maxVal <= 0) return;
+      var bw = W / 256;
+      series.forEach(function (s) {
+        ctx.beginPath();
+        ctx.moveTo(0, H);
+        for (var i2 = 0; i2 < 256; i2++) {
+          var v2 = log ? Math.log(1 + s.bins[i2]) : s.bins[i2];
+          ctx.lineTo(i2 * bw, H - (v2 / maxVal) * H);
+        }
+        ctx.lineTo(W, H); ctx.closePath();
+        ctx.fillStyle = s.color; ctx.globalAlpha = 0.45; ctx.fill();
+        ctx.globalAlpha = 1;
+      });
+    }
+
+    var HISTS = null; // { r, g, b, l }
+    var IMGW = 0, IMGH = 0;
+
+    function selectedSeries() {
+      var radius = parseInt(smoothEl.value, 10);
+      var out = [];
+      [["r", cR], ["g", cG], ["b", cB], ["l", cL]].forEach(function (p) {
+        if (p[1].checked && HISTS[p[0]]) out.push({ bins: smoothBins(HISTS[p[0]].bins, radius), color: CHAN_COLOR[p[0]] });
+      });
+      return out;
+    }
+
+    function render() {
+      smoothV.textContent = smoothEl.value;
+      if (!HISTS) { hctx.clearRect(0, 0, hist.width, hist.height); statsEl.innerHTML = ""; dims.textContent = ""; return; }
+      drawHistogram(hctx, selectedSeries(), hist.width, hist.height, { log: logEl.checked });
+      // stats table for selected channels
+      var rows = "<tr><th>Channel</th><th>Mean</th><th>Median</th><th>Std dev</th><th>Min</th><th>Max</th><th>Shadow clip</th><th>Highlight clip</th></tr>";
+      [["r", cR, "Red"], ["g", cG, "Green"], ["b", cB, "Blue"], ["l", cL, "Luma"]].forEach(function (p) {
+        if (!p[1].checked || !HISTS[p[0]]) return;
+        var h = HISTS[p[0]];
+        var n = h.count || 1;
+        var sClip = (h.bins[0] / n) * 100;
+        var hClip = (h.bins[255] / n) * 100;
+        var sCls = sClip > 2 ? " clip" : "", hCls = hClip > 2 ? " clip" : "";
+        rows += "<tr><th>" + p[2] + "</th><td>" + h.mean.toFixed(1) + "</td><td>" + h.median + "</td><td>" +
+          h.stddev.toFixed(1) + "</td><td>" + h.min + "</td><td>" + h.max + "</td>" +
+          "<td class=\"" + sCls + "\">" + sClip.toFixed(1) + "%</td><td class=\"" + hCls + "\">" + hClip.toFixed(1) + "%</td></tr>";
+      });
+      statsEl.innerHTML = rows;
+      dims.textContent = IMGW + " × " + IMGH + " px · " + (IMGW * IMGH).toLocaleString() + " pixels";
+    }
+
+    function loadFile(f) {
+      errEl.hidden = true;
+      if (!f.type.startsWith("image/") && !/\.(png|jpe?g|webp|gif|bmp)$/i.test(f.name)) { errShow("That file isn't an image."); return; }
+      dropName.hidden = false; dropName.textContent = f.name;
+      var r = new FileReader();
+      r.onload = function () {
+        var img = new Image();
+        img.onload = function () {
+          // downscale very large images for speed; keep quality for stats
+          var maxSide = 1600;
+          var w = img.naturalWidth, h = img.naturalHeight;
+          var scale = Math.min(1, maxSide / Math.max(w, h));
+          IMGW = w; IMGH = h;
+          src.width = Math.round(w * scale); src.height = Math.round(h * scale);
+          sctx.drawImage(img, 0, 0, src.width, src.height);
+          var data = sctx.getImageData(0, 0, src.width, src.height).data;
+          HISTS = { r: computeHistogram(data, "r"), g: computeHistogram(data, "g"), b: computeHistogram(data, "b"), l: computeHistogram(data, "l") };
+          thumb.src = r.result; thumb.hidden = false;
+          render();
+        };
+        img.onerror = function () { errShow("Could not decode that image."); };
+        img.src = r.result;
+      };
+      r.readAsDataURL(f);
+    }
+    function errShow(msg) { errEl.hidden = false; errEl.textContent = msg; }
+
+    fileEl.addEventListener("change", function () { if (fileEl.files[0]) loadFile(fileEl.files[0]); });
+    drop.addEventListener("click", function () { fileEl.click(); });
+    drop.addEventListener("dragover", function (e) { e.preventDefault(); drop.style.borderColor = "var(--accent,#6ea8fe)"; });
+    drop.addEventListener("dragleave", function () { drop.style.borderColor = ""; });
+    drop.addEventListener("drop", function (e) { e.preventDefault(); drop.style.borderColor = ""; var f = e.dataTransfer && e.dataTransfer.files[0]; if (f) loadFile(f); });
+    document.addEventListener("paste", function (e) { var items = e.clipboardData && e.clipboardData.items; if (!items) return; for (var i = 0; i < items.length; i++) if (items[i].type && items[i].type.startsWith("image/")) { loadFile(items[i].getAsFile()); break; } });
+
+    [cR, cG, cB, cL, logEl, smoothEl].forEach(function (el) { el.addEventListener("input", render); el.addEventListener("change", render); });
+    document.getElementById("download").addEventListener("click", function () {
+      if (!HISTS) return;
+      var a = document.createElement("a"); a.href = hist.toDataURL("image/png"); a.download = "histogram.png";
+      document.body.appendChild(a); a.click(); a.remove();
+    });
+
+    window.VT_HIST_TEST = { luma: luma, computeHistogram: computeHistogram, smoothBins: smoothBins, drawHistogram: drawHistogram };
+    render();
+  })();
+  </script>
+</body>
+</html>

@@ -1123,6 +1123,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-10T07:30:00Z",
   },
   {
+    slug: "image-histogram",
+    name: "Image Histogram",
+    description: "Read an image's tonal distribution — red, green, blue, and luminance (Rec.709) histograms that photographers use to judge exposure, clipping, and color cast. Toggle channels, switch to a log scale to see the tail, smooth the curve, and read per-channel mean, median, standard deviation, min, max, plus shadow and highlight clipping. Download the chart as PNG. Computed from a canvas in your browser; the image is never uploaded.",
+    category: "Image",
+    icon: "📊",
+    added: "2026-07-10T08:20:00Z",
+  },
+  {
     slug: "ascii-art",
     name: "Image to ASCII Art Generator",
     description: "Turn a picture into ASCII art you can copy or download. Pick a character ramp (standard, detailed, blocks, dots, binary or custom), set the output width and flip light/dark for the background. Rec.709 luminance with 2:1 character-aspect correction, all computed locally from a canvas — the image never leaves your browser.",
