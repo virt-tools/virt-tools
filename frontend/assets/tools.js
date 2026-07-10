@@ -907,6 +907,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-04T00:20:00Z",
   },
   {
+    slug: "base62-encoder",
+    name: "Base62 Encoder / Decoder",
+    description: "Encode and decode Base62 — the 62-symbol alphabet 0-9 A-Z a-z used by URL shorteners and short object IDs (YouTube, Flickr). Convert arbitrary text/bytes to a compact Base62 string and back, or convert an integer to and from Base62. Leading zero bytes are preserved (prefixed as 0 characters, mirroring Base58). BigInt arithmetic keeps any length exact. Pairs with the Base58, Base64, and Ascii85 tools. Everything runs locally in your browser.",
+    category: "Encoding",
+    icon: "🔢",
+    added: "2026-07-11T01:50:00Z",
+  },
+  {
     slug: "ascii85",
     name: "Ascii85 Encoder / Decoder",
     description: "Encode and decode Ascii85 (Base85) — the 4-to-5 byte encoding used in PDF/PostScript and btoa, with Adobe ~ terminator framing and z zero-group compression. Runs locally; nothing uploaded.",

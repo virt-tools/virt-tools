@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Base62 Encoder / Decoder — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .mode { display:flex; gap:8px; margin:6px 0 10px; flex-wrap:wrap; }
+    .mode button { padding:6px 14px; border-radius:6px; border:1px solid var(--border,#2a2f3a); background:var(--bg-elev,#171a21); color:var(--text-dim,#9aa3b2); cursor:pointer; font-size:.85rem; }
+    .mode button.active { background:var(--accent,#6ea8fe); color:#0b0d12; border-color:var(--accent,#6ea8fe); font-weight:700; }
+    .row { display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+    .row .lbl { min-width:90px; color:var(--text-dim,#9aa3b2); font-size:.85rem; }
+    textarea, input { width:100%; box-sizing:border-box; font-family:ui-monospace,monospace; font-size:14px; padding:8px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; }
+    input { width:auto; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    .out { font-family:ui-monospace,monospace; font-size:14px; white-space:pre-wrap; word-break:break-all; background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:10px; margin:8px 0; min-height:48px; }
+    h3 { margin:16px 0 4px; font-size:.9rem; color:var(--text-dim,#9aa3b2); text-transform:uppercase; letter-spacing:.04em; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    .acts { display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; }
+    .acts button { padding:7px 16px; border-radius:6px; border:1px solid var(--accent,#6ea8fe); background:var(--accent,#6ea8fe); color:#0b0d12; cursor:pointer; font-weight:700; font-size:.85rem; }
+    .acts button.ghost { background:var(--bg-elev,#171a21); color:var(--text,#e6e6e6); border-color:var(--border,#2a2f3a); font-weight:600; }
+    .meta { color:var(--text-dim,#9aa3b2); font-size:.8rem; margin:4px 0; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Base62 Encoder / Decoder</h1>
+      <p>Encode and decode Base62 — the 62-symbol alphabet <code>0–9 A–Z a–z</code> used by URL shorteners, database object IDs (e.g. YouTube, Flickr), and short link codes. Convert arbitrary text/bytes to a compact Base62 string and back, or convert an integer to and from Base62. Leading zero bytes are preserved (prefixed as <code>0</code> characters, mirroring how Base58 handles them). All arithmetic uses BigInt, so any length stays exact. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="mode">
+        <button id="m-text" class="active" type="button">Text / Bytes</button>
+        <button id="m-int" type="button">Integer</button>
+      </div>
+
+      <div class="row"><span class="lbl">Input</span></div>
+      <div class="row"><textarea id="in" rows="3" spellcheck="false">Hello, World!</textarea></div>
+      <div class="err" id="err"></div>
+
+      <div class="acts">
+        <button id="b-enc" type="button">Encode →</button>
+        <button id="b-dec" class="ghost" type="button">← Decode</button>
+        <button id="b-swap" class="ghost" type="button">↑ Use output as input</button>
+      </div>
+
+      <h3>Output</h3>
+      <div class="out" id="out">—</div>
+      <div class="meta" id="meta"></div>
+
+      <p class="note"><strong>Base62</strong> maps bytes (or an integer) to the 62 characters <code>0–9</code> then <code>A–Z</code> then <code>a–z</code>. To encode bytes, the whole byte sequence is read as one big-endian integer and repeatedly divided by 62, the remainders indexing the alphabet; leading zero bytes would be lost, so they are instead emitted directly as leading <code>0</code> characters (and stripped back on decode). This is the same leading-zero trick Bitcoin's <strong>Base58</strong> uses. Base62 avoids the visually-similar symbols Base58 drops (0/O, l/I) but is still URL- and filename-safe with no punctuation, making it popular for short identifiers. It is less compact than Base64 (log₂62 ≈ 5.95 bits/char vs 6) but has no <code>+</code>, <code>/</code>, or <code>=</code> padding. Pairs with the Base58, Base64, and Ascii85 tools. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+    var MAP = {};
+    for (var i = 0; i < ALPHABET.length; i++) MAP[ALPHABET[i]] = i;
+    var BASE = 62n;
+    var ZERO = ALPHABET[0]; // "0" represents a leading zero byte
+
+    // ---- byte <-> BigInt ----
+    function bytesToBigInt(bytes) {
+      var n = 0n;
+      for (var i = 0; i < bytes.length; i++) n = (n << 8n) | BigInt(bytes[i]);
+      return n;
+    }
+    function bigIntToBytes(n) {
+      if (n === 0n) return [];
+      var out = [];
+      while (n > 0n) { out.unshift(Number(n & 0xffn)); n >>= 8n; }
+      return out;
+    }
+
+    // ---- bytes <-> base62 string ----
+    function encodeBytes(bytes) {
+      // count leading zero bytes -> that many "0" chars
+      var zeros = 0;
+      while (zeros < bytes.length && bytes[zeros] === 0) zeros++;
+      var num = bytesToBigInt(bytes.slice(zeros));
+      var digits = "";
+      if (num === 0n && bytes.length > zeros) {
+        // shouldn't happen (remaining all zero already stripped), but guard
+        digits = "";
+      }
+      while (num > 0n) {
+        var r = num % BASE;
+        digits += ALPHABET[Number(r)];
+        num = num / BASE;
+      }
+      var s = digits.split("").reverse().join("");
+      return ZERO.repeat(zeros) + s;
+    }
+    function decodeBytes(str) {
+      if (str == null) return { err: "No input." };
+      str = String(str);
+      // validate
+      for (var i = 0; i < str.length; i++) {
+        if (MAP[str[i]] === undefined) return { err: "Invalid Base62 character '" + str[i] + "'." };
+      }
+      var zeros = 0;
+      while (zeros < str.length && str[zeros] === ZERO) zeros++;
+      var num = 0n;
+      for (var j = zeros; j < str.length; j++) {
+        num = num * BASE + BigInt(MAP[str[j]]);
+      }
+      var body = bigIntToBytes(num);
+      var out = new Array(zeros).fill(0).concat(body);
+      return out;
+    }
+
+    // ---- integer <-> base62 ----
+    function encodeInt(n) {
+      if (typeof n !== "bigint") n = BigInt(n);
+      if (n < 0n) return { err: "Base62 integer encoding is for non-negative values." };
+      if (n === 0n) return "0";
+      var digits = "";
+      while (n > 0n) { var r = n % BASE; digits += ALPHABET[Number(r)]; n = n / BASE; }
+      return digits.split("").reverse().join("");
+    }
+    function decodeInt(str) {
+      if (str == null) return { err: "No input." };
+      str = String(str).trim();
+      if (!str) return { err: "No input." };
+      for (var i = 0; i < str.length; i++) {
+        if (MAP[str[i]] === undefined) return { err: "Invalid Base62 character '" + str[i] + "'." };
+      }
+      var num = 0n;
+      for (var j = 0; j < str.length; j++) num = num * BASE + BigInt(MAP[str[j]]);
+      return num;
+    }
+
+    // ---- DOM ----
+    function $(id) { return document.getElementById(id); }
+    var inEl = $("in"), outEl = $("out"), errEl = $("err"), metaEl = $("meta");
+    var mText = $("m-text"), mInt = $("m-int");
+    var mode = "text";
+    var lastOut = "";
+
+    function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+    function setMode(m) {
+      mode = m;
+      mText.classList.toggle("active", m === "text");
+      mInt.classList.toggle("active", m === "int");
+      if (m === "text") inEl.value = "Hello, World!";
+      else inEl.value = "123456789";
+      outEl.textContent = "—"; metaEl.textContent = ""; errEl.textContent = ""; lastOut = "";
+    }
+    mText.addEventListener("click", function () { setMode("text"); });
+    mInt.addEventListener("click", function () { setMode("int"); });
+
+    function doEncode() {
+      errEl.textContent = ""; outEl.textContent = "—"; metaEl.textContent = ""; lastOut = "";
+      if (mode === "text") {
+        var bytes;
+        try { bytes = Array.from(new TextEncoder().encode(inEl.value)); }
+        catch (e) { errEl.textContent = "TextEncoder unavailable."; return; }
+        var s = encodeBytes(bytes);
+        outEl.textContent = s; lastOut = s;
+        metaEl.textContent = "Input: " + inEl.value.length + " chars · " + bytes.length + " bytes → Output: " + s.length + " Base62 chars (≈ " + (s.length * 5.95).toFixed(1) + " bits).";
+      } else {
+        var v = inEl.value.trim();
+        if (!/^\d+$/.test(v)) { errEl.textContent = "Enter a non-negative integer."; return; }
+        var r = encodeInt(BigInt(v));
+        if (r && r.err) { errEl.textContent = r.err; return; }
+        outEl.textContent = r; lastOut = r;
+        metaEl.textContent = "Input: " + v + " → Output: " + r.length + " Base62 chars.";
+      }
+    }
+    function doDecode() {
+      errEl.textContent = ""; outEl.textContent = "—"; metaEl.textContent = ""; lastOut = "";
+      var s = inEl.value;
+      if (mode === "text") {
+        var bytes = decodeBytes(s);
+        if (bytes && bytes.err) { errEl.textContent = bytes.err; return; }
+        var text;
+        try { text = new TextDecoder().decode(new Uint8Array(bytes)); }
+        catch (e) { text = "(bytes) " + bytes.map(function (b) { return ("0" + b.toString(16)).slice(-2); }).join(" "); }
+        outEl.textContent = text; lastOut = text;
+        metaEl.textContent = "Input: " + s.length + " Base62 chars → Output: " + bytes.length + " bytes.";
+      } else {
+        var r = decodeInt(s);
+        if (r && r.err) { errEl.textContent = r.err; return; }
+        outEl.textContent = r.toString(); lastOut = r.toString();
+        metaEl.textContent = "Input: " + s.length + " Base62 chars → Output: " + r.toString() + ".";
+      }
+    }
+
+    $("b-enc").addEventListener("click", doEncode);
+    $("b-dec").addEventListener("click", doDecode);
+    $("b-swap").addEventListener("click", function () { if (lastOut) { inEl.value = lastOut; } });
+    inEl.addEventListener("input", doEncode);
+
+    doEncode();
+
+    window.VT_B62_TEST = {
+      ALPHABET: ALPHABET, MAP: MAP,
+      encodeBytes: encodeBytes, decodeBytes: decodeBytes,
+      encodeInt: encodeInt, decodeInt: decodeInt,
+      bytesToBigInt: bytesToBigInt, bigIntToBytes: bigIntToBytes
+    };
+  })();
+  </script>
+</body>
+</html>
