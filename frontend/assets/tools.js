@@ -1043,6 +1043,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-09T23:20:00Z",
   },
   {
+    slug: "image-watermark",
+    name: "Image Watermark",
+    description: "Add a text or logo watermark to an image — place it in any corner, centered, or tiled across the whole picture, with adjustable opacity, rotation, size, and color. Renders at full resolution on a canvas; nothing is uploaded.",
+    category: "Image",
+    icon: "💧",
+    added: "2026-07-10T00:20:00Z",
+  },
+  {
     slug: "ascii-art",
     name: "Image to ASCII Art Generator",
     description: "Turn a picture into ASCII art you can copy or download. Pick a character ramp (standard, detailed, blocks, dots, binary or custom), set the output width and flip light/dark for the background. Rec.709 luminance with 2:1 character-aspect correction, all computed locally from a canvas — the image never leaves your browser.",
