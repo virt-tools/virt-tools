@@ -1787,6 +1787,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-10T21:30:00Z",
   },
   {
+    slug: "fibonacci-sequence-calculator",
+    name: "Fibonacci & Lucas Sequence Calculator",
+    description: "Generate the Fibonacci, Lucas, and Tribonacci sequences and compute individual terms with exact big-integer arithmetic. Find the nth term via fast doubling (O(log n)), list the first N terms, sum the first N terms, test whether a number is a Fibonacci number and find its index, and compare the exact value with Binet's closed-form approximation and the golden-ratio convergence F(n+1)/F(n) -> phi. All arithmetic uses BigInt, so values stay exact even for F(1000) (209 digits). Pairs with the Number Base Converter and Prime tools. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🌿",
+    added: "2026-07-10T22:30:00Z",
+  },
+  {
     slug: "angle-converter",
     name: "Angle Converter",
     description: "Convert an angle between degrees, radians, gradians (gons), turns (revolutions), arcminutes, arcseconds, and NATO mils, and to or from degrees-minutes-seconds (DMS). Enter a value in any unit or as DMS and every other unit is shown at once. A full circle is 360° = 2π rad = 400 grad = 1 turn = 21,600′ = 1,296,000″ = 6,400 mils; values are kept raw (not wrapped to a single turn). Pairs with the Trigonometry Calculator. Everything runs locally in your browser.",
