@@ -1107,6 +1107,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-10T05:50:00Z",
   },
   {
+    slug: "svg-optimizer",
+    name: "SVG Optimizer",
+    description: "Shrink an SVG by stripping non-rendering cruft — the XML prolog, comments, Inkscape/sodipodi/RDF editor metadata, and empty groups — while minifying path coordinates and collapsing whitespace. Numeric attributes round to your chosen precision (trailing zeros stripped, unit suffixes preserved). Text content and the bodies of <style>/<script> are preserved verbatim, so the visible image is unchanged. Runs entirely in your browser; nothing is uploaded.",
+    category: "Design",
+    icon: "✂️",
+    added: "2026-07-10T06:40:00Z",
+  },
+  {
     slug: "ascii-art",
     name: "Image to ASCII Art Generator",
     description: "Turn a picture into ASCII art you can copy or download. Pick a character ramp (standard, detailed, blocks, dots, binary or custom), set the output width and flip light/dark for the background. Rec.709 luminance with 2:1 character-aspect correction, all computed locally from a canvas — the image never leaves your browser.",

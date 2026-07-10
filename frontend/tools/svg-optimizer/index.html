@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>SVG Optimizer — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .layout { display:grid; grid-template-columns: 1fr 1fr; gap:18px; }
+    @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+    textarea { width:100%; box-sizing:border-box; font-family:ui-monospace,monospace; font-size:12px; min-height:320px; }
+    .opts { display:flex; gap:16px; flex-wrap:wrap; align-items:center; margin:8px 0; font-size:.85rem; }
+    .opts label { display:inline-flex; gap:6px; align-items:center; cursor:pointer; }
+    .drop { border:2px dashed var(--border,#2a2f3a); border-radius:10px; padding:10px; text-align:center; cursor:pointer; margin:6px 0; font-size:.82rem; }
+    .drop:hover { border-color:var(--accent,#6ea8fe); }
+    .stats { font-family:ui-monospace,monospace; font-size:13px; margin:8px 0; }
+    .stats .ok { color:var(--ok,#4ade80); }
+    .stats .warn { color:var(--warn,#fbbf24); }
+    .code { font-family:ui-monospace,monospace; background:var(--bg,#14181f); border:1px solid var(--border,#2a2f3a);
+      border-radius:8px; padding:10px; white-space:pre-wrap; word-break:break-word; font-size:12px; max-height:340px; overflow:auto; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>SVG Optimizer</h1>
+      <p>Paste or upload an SVG and strip the cruft — comments, editor metadata (Inkscape/sodipodi/RDF), the XML prolog, empty groups — while minifying path coordinates and collapsing whitespace. The visible image is unchanged; the file is smaller. Everything runs locally in your browser; nothing is uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="opts">
+        <label>Precision <input type="number" id="precision" value="3" min="0" max="6" style="width:54px;"></label>
+        <label><input type="checkbox" id="oProlog" checked> Strip prolog</label>
+        <label><input type="checkbox" id="oComments" checked> Strip comments</label>
+        <label><input type="checkbox" id="oMetadata" checked> Strip metadata</label>
+        <label><input type="checkbox" id="oEditor" checked> Strip editor cruft</label>
+        <label><input type="checkbox" id="oEmpty" checked> Strip empty groups</label>
+        <label><input type="checkbox" id="oCollapse" checked> Collapse whitespace</label>
+        <label><input type="checkbox" id="oPath" checked> Minify paths</label>
+      </div>
+
+      <div class="drop" id="drop">Click to upload an <code>.svg</code> file (or drop one here)</div>
+
+      <div class="layout">
+        <div>
+          <div class="field"><label for="input">Input SVG</label></div>
+          <textarea id="input" spellcheck="false" placeholder="Paste SVG markup here…"></textarea>
+          <div class="row" style="margin-top:6px;">
+            <button id="optimize">Optimize</button>
+            <button id="loadSample" class="secondary">Load sample</button>
+            <button id="clear" class="secondary">Clear</button>
+          </div>
+        </div>
+        <div>
+          <div class="field"><label>Optimized output</label></div>
+          <div class="code" id="output"></div>
+          <div class="row" style="margin-top:6px;">
+            <button id="copy" class="secondary">Copy</button>
+            <button id="download" class="secondary">Download .svg</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="stats" id="stats"></div>
+
+      <p class="note">The optimizer is intentionally conservative: it removes only non-rendering cruft and rounds numeric coordinates to your chosen precision (trailing zeros stripped). Path <code>d</code> data is re-emitted with minimal separators (a separator is kept only where a number would otherwise run together). Text content inside <code>&lt;text&gt;</code>/<code>&lt;tspan&gt;</code> and the bodies of <code>&lt;style&gt;</code>/<code>&lt;script&gt;</code> are preserved verbatim, so the visible image is not affected. No network requests are made.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var inputEl = document.getElementById("input");
+    var outputEl = document.getElementById("output");
+    var statsEl = document.getElementById("stats");
+    var ids = ["precision","oProlog","oComments","oMetadata","oEditor","oEmpty","oCollapse","oPath"];
+    var E = {}; ids.forEach(function (id) { E[id] = document.getElementById(id); });
+
+    // Round a numeric string to `precision` decimals and strip trailing zeros.
+    // The leading zero before a decimal is intentionally kept (e.g. "0.5", not ".5") so the
+    // result stays a valid length when a unit suffix is appended by the attribute rounder.
+    function roundNum(s, precision) {
+      if (!/^-?\d*\.?\d+(?:[eE][+-]?\d+)?$/.test(s)) return s; // not a plain number
+      var v = parseFloat(s);
+      if (!isFinite(v)) return s;
+      var r = +v.toFixed(precision);
+      var str = String(r);
+      return str;
+    }
+
+    // Minify a path 'd' attribute: round numbers, drop redundant command letters and separators.
+    function minifyPath(d, precision) {
+      // tokenize: commands [A-Za-z] (except e/E in exponents) and numbers
+      var tokens = [];
+      var i = 0, n = d.length;
+      while (i < n) {
+        var c = d.charAt(i);
+        if (/[A-Za-z]/.test(c) && c !== 'e' && c !== 'E') { tokens.push({ t: 'cmd', v: c }); i++; continue; }
+        if (/[\s,]/.test(c)) { i++; continue; }
+        // number: optional -, digits, ., digits, optional exponent
+        var j = i;
+        if (d.charAt(j) === '-' || d.charAt(j) === '+') j++;
+        var sawDot = false, sawDigit = false;
+        while (j < n) {
+          var ch = d.charAt(j);
+          if (ch >= '0' && ch <= '9') { sawDigit = true; j++; }
+          else if (ch === '.' && !sawDot) { sawDot = true; j++; }
+          else break;
+        }
+        // exponent
+        if (j < n && (d.charAt(j) === 'e' || d.charAt(j) === 'E')) {
+          var k = j + 1;
+          if (d.charAt(k) === '+' || d.charAt(k) === '-') k++;
+          var k0 = k;
+          while (k < n && d.charAt(k) >= '0' && d.charAt(k) <= '9') k++;
+          if (k > k0) j = k; // valid exponent
+        }
+        if (j > i && sawDigit) {
+          tokens.push({ t: 'num', v: roundNum(d.slice(i, j), precision) });
+          i = j;
+        } else { i++; } // stray char, skip
+      }
+      // emit
+      var out = "";
+      var prev = null;
+      for (var k = 0; k < tokens.length; k++) {
+        var tok = tokens[k];
+        if (tok.t === 'cmd') {
+          // drop repeated identical command (implicit repetition of L/M/H/V etc. — but only safe for L,T,S,Q,C,A,R? Actually dropping repeats changes semantics only when command expects multiple coord pairs and is repeated; SVG repeats the previous command implicitly, so dropping a repeat is SAFE.)
+          if (prev && prev.t === 'cmd' && prev.v === tok.v) { /* skip duplicate */ continue; }
+          out += tok.v;
+        } else {
+          // number: decide separator
+          if (out.length === 0) { out += tok.v; }
+          else {
+            var last = out.charAt(out.length - 1);
+            var firstOfNum = tok.v.charAt(0);
+            // a sign (- or +) is a valid separator → no space. Otherwise, if the
+            // previous char is a digit, we need a space (a '.' or digit after a
+            // digit would merge into one number; '.' especially must be separated).
+            if (firstOfNum === '-' || firstOfNum === '+') out += tok.v;
+            else if (/[0-9]/.test(last)) out += " " + tok.v;
+            else out += tok.v;
+          }
+        }
+        prev = tok;
+      }
+      return out;
+    }
+
+    var EDITOR_NS = ['sodipodi', 'inkscape', 'rdf', 'cc', 'dc', 'ns1'];
+    var EDITOR_NS_RE = new RegExp(' xmlns:(?:' + EDITOR_NS.join('|') + ')="[^"]*"', 'g');
+    var EDITOR_ATTR_RE = new RegExp('\\s(?:' + EDITOR_NS.join('|') + '):[A-Za-z][A-Za-z0-9_-]*="[^"]*"', 'g');
+
+    function cleanAttrs(attrStr) {
+      // strip editor namespace attributes and declarations
+      attrStr = attrStr.replace(EDITOR_ATTR_RE, '');
+      attrStr = attrStr.replace(EDITOR_NS_RE, '');
+      // round numbers in d= attribute
+      // (handled per-attribute below via minifyPath)
+      return attrStr;
+    }
+
+    // Safe, conservative SVG optimizer via a mini-tokenizer (no regex on whole document).
+    function optimizeSVG(input, opts) {
+      opts = opts || {};
+      var precision = (opts.precision != null) ? opts.precision : 3;
+      var stripProlog = opts.stripProlog !== false;
+      var stripComments = opts.stripComments !== false;
+      var stripMetadata = opts.stripMetadata !== false;
+      var stripEditor = opts.stripEditor !== false;
+      var stripEmptyGroups = opts.stripEmptyGroups !== false;
+      var collapseWhitespace = opts.collapseWhitespace !== false;
+      var minifyPathOn = opts.minifyPath !== false;
+
+      var out = "";
+      var i = 0, n = input.length;
+      // depth of "preserve-text-content" elements
+      var preserveStack = []; // names of currently-open elements whose content we keep verbatim
+
+      function inPreserve() { return preserveStack.length > 0; }
+
+      function isPreserveName(name) {
+        return name === 'text' || name === 'tspan' || name === 'title' || name === 'desc' ||
+               name === 'textarea';
+      }
+      // raw-text elements: their body may contain '<' and '>' that are NOT markup, so we
+      // copy the body verbatim up to the matching close tag instead of tokenizing it.
+      function isRawTextName(name) { return name === 'style' || name === 'script'; }
+
+      while (i < n) {
+        // find next '<'
+        var lt = input.indexOf('<', i);
+        if (lt < 0) { // rest is text
+          var txt = input.slice(i);
+          if (inPreserve()) out += txt;
+          else if (/^\s+$/.test(txt)) { /* drop inter-element whitespace */ }
+          else out += txt;
+          break;
+        }
+        // text before '<'
+        if (lt > i) {
+          var seg = input.slice(i, lt);
+          if (inPreserve()) out += seg;
+          else if (/^\s+$/.test(seg)) { /* drop */ }
+          else out += seg;
+        }
+        // now at '<'
+        if (input.substr(lt, 4) === '<!--') {
+          var endC = input.indexOf('-->', lt + 4);
+          if (endC < 0) { i = n; break; }
+          if (!stripComments) out += input.slice(lt, endC + 3);
+          i = endC + 3; continue;
+        }
+        if (input.substr(lt, 2) === '<?') {
+          var endP = input.indexOf('?>', lt + 2);
+          if (endP < 0) { i = n; break; }
+          if (!stripProlog) out += input.slice(lt, endP + 2);
+          i = endP + 2; continue;
+        }
+        if (input.substr(lt, 9) === '<![CDATA[') {
+          var endD = input.indexOf(']]>', lt + 9);
+          if (endD < 0) { i = n; break; }
+          out += input.slice(lt, endD + 3); // keep CDATA verbatim
+          i = endD + 3; continue;
+        }
+        if (input.substr(lt, 2) === '</') {
+          var endT = input.indexOf('>', lt + 2);
+          if (endT < 0) { i = n; break; }
+          var closeName = input.slice(lt + 2, endT).trim().split(/\s+/)[0];
+          out += '</' + closeName + '>';
+          // pop preserve stack if matches
+          if (preserveStack.length && preserveStack[preserveStack.length - 1] === closeName) preserveStack.pop();
+          i = endT + 1; continue;
+        }
+        // opening or self-closing tag: read until the real '>' (not inside a quoted attr)
+        var p = lt + 1, inQ = null, realEnd = -1;
+        while (p < n) {
+          var cc = input.charAt(p);
+          if (inQ) { if (cc === inQ) inQ = null; }
+          else if (cc === '"' || cc === "'") inQ = cc;
+          else if (cc === '>') { realEnd = p; break; }
+          p++;
+        }
+        if (realEnd < 0) { i = n; break; }
+        var tagBody = input.slice(lt + 1, realEnd);
+        var selfClose = tagBody.charAt(tagBody.length - 1) === '/';
+        var bodyCore = selfClose ? tagBody.slice(0, -1) : tagBody;
+        // split name + attrs
+        var m = bodyCore.match(/^\s*([a-zA-Z][a-zA-Z0-9:_.-]*)/);
+        if (!m) { i = realEnd + 1; continue; }
+        var name = m[1];
+        var attrPart = bodyCore.slice(m[0].length);
+
+        // --- metadata / title / desc / editor element stripping ---
+        if (stripMetadata && (name === 'metadata' || name === 'title' || name === 'desc')) {
+          // skip element entirely (it's not self-closing here; find matching close)
+          var closeStr = '</' + name;
+          var closeIdx = input.indexOf(closeStr, realEnd + 1);
+          if (closeIdx < 0) { i = realEnd + 1; continue; }
+          var closeEnd = input.indexOf('>', closeIdx);
+          if (closeEnd < 0) { i = n; break; }
+          i = closeEnd + 1; continue;
+        }
+        // strip editor-namespaced elements like <sodipodi:namedpath>...</...>
+        if (stripEditor && /^[a-z]+:/.test(name) && EDITOR_NS.indexOf(name.split(':')[0]) >= 0) {
+          var colon = name.indexOf(':');
+          var closeStr2 = '</' + name;
+          var closeIdx2 = input.indexOf(closeStr2, realEnd + 1);
+          if (closeIdx2 < 0) { i = realEnd + 1; continue; }
+          var closeEnd2 = input.indexOf('>', closeIdx2);
+          if (closeEnd2 < 0) { i = n; break; }
+          i = closeEnd2 + 1; continue;
+        }
+
+        // process attributes
+        var newAttr = stripEditor ? cleanAttrs(attrPart) : attrPart;
+        // minify path d
+        if (minifyPathOn && name === 'path') {
+          newAttr = newAttr.replace(/\bd\s*=\s*"([^"]*)"/g, function (_, d) {
+            return 'd="' + minifyPath(d, precision) + '"';
+          });
+        }
+        // round numbers in common numeric attributes (handles optional unit suffix per token)
+        if (precision < 6) {
+          newAttr = newAttr.replace(/\b(x|y|x1|y1|x2|y2|cx|cy|r|rx|ry|width|height|stroke-width|stroke-dashoffset)\s*=\s*"([^"]*)"/g, function (k2, aName, val) {
+            var parts = val.split(/\s+|,/);
+            var outParts = parts.map(function (t) {
+              var mm = t.match(/^(-?\d*\.?\d+(?:[eE][+-]?\d+)?)(px|em|ex|pt|pc|in|mm|cm|%)?$/);
+              return mm ? roundNum(mm[1], precision) + (mm[2] || '') : t;
+            });
+            return aName + '="' + outParts.join(' ') + '"';
+          });
+        }
+        // collapse internal whitespace in attrs
+        if (stripEditor || collapseWhitespace) {
+          newAttr = newAttr.replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
+        }
+
+        // empty group stripping: <g></g> or <g/> with no children
+        if (stripEmptyGroups && name === 'g' && selfClose) {
+          i = realEnd + 1; continue; // <g/> is empty
+        }
+
+        var rebuilt = '<' + name + (newAttr ? ' ' + newAttr : '') + (selfClose ? '/>' : '>');
+        // if empty group and not self-closing, we need to check children — do a look-ahead: find matching </g> with only whitespace between
+        if (stripEmptyGroups && name === 'g' && !selfClose) {
+          // naive: find the matching close by depth scan
+          var probe = realEnd + 1, depth = 1, found = -1, onlyWs = true;
+          while (probe < n) {
+            var nl = input.indexOf('<', probe);
+            if (nl < 0) break;
+            var seg2 = input.slice(probe, nl);
+            if (!/^\s*$/.test(seg2)) { onlyWs = false; break; }
+            if (input.substr(nl, 2) === '</') {
+              var ge = input.indexOf('>', nl);
+              var cn = input.slice(nl + 2, ge).trim().split(/\s+/)[0];
+              if (cn === 'g') { depth--; if (depth === 0) { found = ge; break; } }
+              else { onlyWs = false; break; } // a different close — not empty
+            } else {
+              // an opening tag inside -> not empty
+              onlyWs = false; break;
+            }
+            probe = ge + 1;
+          }
+          if (found >= 0 && onlyWs) {
+            i = found + 1; continue; // drop empty <g>…</g>
+          }
+        }
+
+        out += rebuilt;
+        // raw-text element (script/style): copy body verbatim until matching close tag,
+        // so any '<'/'>' inside the body is preserved and never re-parsed as markup.
+        if (!selfClose && isRawTextName(name)) {
+          var closeRe = new RegExp('</' + name + '\\s*>', 'i');
+          var cm = closeRe.exec(input.slice(realEnd + 1));
+          if (cm) {
+            var bodyStart = realEnd + 1;
+            var closeStart = bodyStart + cm.index;
+            out += input.slice(bodyStart, closeStart) + cm[0];
+            i = closeStart + cm[0].length;
+            continue;
+          }
+          // no close found: copy the rest verbatim
+          out += input.slice(realEnd + 1);
+          i = n;
+          continue;
+        }
+        if (!selfClose && isPreserveName(name)) preserveStack.push(name);
+        i = realEnd + 1;
+      }
+
+      return out;
+    }
+
+    function optimize() {
+      var src = inputEl.value;
+      if (!src.trim()) { outputEl.textContent = ""; setStats(""); return; }
+      var opts = {
+        precision: parseInt(E.precision.value, 10),
+        stripProlog: E.oProlog.checked, stripComments: E.oComments.checked, stripMetadata: E.oMetadata.checked,
+        stripEditor: E.oEditor.checked, stripEmptyGroups: E.oEmpty.checked, collapseWhitespace: E.oCollapse.checked,
+        minifyPath: E.oPath.checked
+      };
+      try {
+        var res = optimizeSVG(src, opts);
+        outputEl.textContent = res;
+        var before = src.length, after = res.length;
+        var pct = before ? Math.round((1 - after / before) * 100) : 0;
+        setStats(before, after, pct, res);
+      } catch (e) {
+        outputEl.textContent = "/* error: " + e.message + " */";
+        setStats("");
+      }
+    }
+    function setStats(before, after, pct, res) {
+      if (!before) { statsEl.textContent = ""; return; }
+      var cls = pct >= 0 ? "ok" : "warn";
+      statsEl.innerHTML = before + " → <strong class='" + cls + "'>" + after + "</strong> bytes (" + (pct >= 0 ? "−" : "+") + Math.abs(pct) + "%)";
+    }
+
+    document.getElementById("optimize").addEventListener("click", optimize);
+    ids.forEach(function (id) {
+      E[id].addEventListener("change", optimize); E[id].addEventListener("input", optimize);
+    });
+    document.getElementById("clear").addEventListener("click", function () { inputEl.value = ""; optimize(); });
+    document.getElementById("loadSample").addEventListener("click", function () {
+      inputEl.value = SAMPLE;
+      optimize();
+    });
+    document.getElementById("copy").addEventListener("click", function () {
+      var t = outputEl.textContent; if (!t) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).catch(function () {});
+      else { try { var ta = document.createElement("textarea"); ta.value = t; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove(); } catch (e) {} }
+    });
+    document.getElementById("download").addEventListener("click", function () {
+      var t = outputEl.textContent; if (!t) return;
+      var blob = new Blob([t], { type: "image/svg+xml" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a"); a.href = url; a.download = "optimized.svg";
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+    });
+    // file drop
+    var drop = document.getElementById("drop");
+    var fileInput = document.createElement("input"); fileInput.type = "file"; fileInput.accept = ".svg,image/svg+xml"; fileInput.style.display = "none"; drop.appendChild(fileInput);
+    drop.addEventListener("click", function () { fileInput.click(); });
+    fileInput.addEventListener("change", function () {
+      var f = fileInput.files[0]; if (!f) return; var r = new FileReader(); r.onload = function () { inputEl.value = r.result; optimize(); }; r.readAsText(f);
+    });
+    drop.addEventListener("dragover", function (e) { e.preventDefault(); drop.style.borderColor = "var(--accent,#6ea8fe)"; });
+    drop.addEventListener("dragleave", function () { drop.style.borderColor = ""; });
+    drop.addEventListener("drop", function (e) { e.preventDefault(); drop.style.borderColor = ""; var f = e.dataTransfer && e.dataTransfer.files[0]; if (f) { var r = new FileReader(); r.onload = function () { inputEl.value = r.result; optimize(); }; r.readAsText(f); } });
+
+    var SAMPLE = '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n<!-- a comment -->\n<svg xmlns="http://www.w3.org/2000/svg" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.0.dtd" width="100.500px" height="100.500px" viewBox="0 0 100 100">\n  <metadata id="m1"><rdf:RDF><cc:Work/></rdf:RDF></metadata>\n  <sodipodi:namedview id="base"/>\n  <g id="layer1">\n    <g></g>\n    <path d="M 0.500 0.500 L 100.250 100.250 L 0 100 Z" stroke="#000" fill="none"/>\n    <text x="10.000" y="20.000">Hello world</text>\n  </g>\n</svg>';
+
+    window.VT_SVGOPT_TEST = { optimizeSVG: optimizeSVG, minifyPath: minifyPath, roundNum: roundNum };
+  })();
+  </script>
+</body>
+</html>
