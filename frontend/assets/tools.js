@@ -1483,6 +1483,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-05T01:40:00Z",
   },
   {
+    slug: "prime-explorer",
+    name: "Prime Number Explorer",
+    description: "List primes with the Sieve of Eratosthenes (primes up to N, or in a range A–B), find the Nth prime, or test whether a single number is prime. The primality test uses the deterministic Miller–Rabin test with big integers, so it stays exact and fast even for very large numbers (e.g. 2⁶¹−1) and correctly flags Carmichael numbers as composite. Listing accepts bounds up to 10,000,000 and the Nth prime up to 1,000,000; lists are capped at 2,000 on screen with a Copy button for the full list. Pairs with the Prime Factorization tool. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🔢",
+    added: "2026-07-11T00:00:00Z",
+  },
+  {
     slug: "gcd-lcm",
     name: "GCD & LCM Calculator",
     description: "Compute the greatest common divisor (GCD) and least common multiple (LCM) of two or more integers, separated by commas, spaces, or new lines. The GCD is the largest integer dividing all of them evenly; the LCM is the smallest integer they all divide evenly. All arithmetic uses big integers, so results are exact even for large inputs, and for the first two numbers the Euclidean algorithm's division steps are shown. Everything runs locally in your browser.",

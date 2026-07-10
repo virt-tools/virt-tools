@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Prime Number Explorer — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .opts { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin:10px 0; font-size:.85rem; }
+    .opts label { display:inline-flex; gap:6px; align-items:center; }
+    .opts input { width:130px; font-family:ui-monospace,monospace; padding:5px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; }
+    .opts select { padding:5px 8px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; font-size:.85rem; }
+    .count { font-family:ui-monospace,monospace; font-size:1.1rem; margin:8px 0; }
+    .count b { color:var(--accent,#6ea8fe); }
+    .verdict { font-family:ui-monospace,monospace; font-size:1.2rem; margin:8px 0; font-weight:700; }
+    .verdict.yes { color:var(--good,#34d399); }
+    .verdict.no { color:var(--bad,#f87171); }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    .out { font-family:ui-monospace,monospace; font-size:12px; background:var(--bg,#14181f); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:10px; white-space:pre-wrap; word-break:break-word; min-height:120px; max-height:420px; overflow:auto; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Prime Number Explorer</h1>
+      <p>List primes with the Sieve of Eratosthenes, find the Nth prime, list primes in a range, or test whether a single number is prime. The primality test uses the deterministic Miller–Rabin test with big integers, so it stays exact and fast even for very large numbers (e.g. 2⁶¹−1). Pairs with the Prime Factorization tool. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="opts">
+        <label>Mode
+          <select id="mode">
+            <option value="list">Primes up to N</option>
+            <option value="range">Primes between A and B</option>
+            <option value="nth">The Nth prime</option>
+            <option value="check">Is N prime?</option>
+          </select>
+        </label>
+        <span id="field-a-wrap"><label>A <input type="text" id="a" inputmode="numeric"></label></span>
+        <span id="field-b-wrap"><label>B <input type="text" id="b" inputmode="numeric" placeholder="e.g. 100"></label></span>
+        <span id="field-n-wrap"><label>N <input type="text" id="n" inputmode="numeric" placeholder="e.g. 100"></label></span>
+        <button id="copy" class="secondary" style="padding:4px 12px;">Copy list</button>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <div class="count" id="count"></div>
+      <div class="err" id="err"></div>
+      <div class="out" id="out"></div>
+
+      <p class="note">Listing modes use the Sieve of Eratosthenes and accept bounds up to <b>10,000,000</b>; the Nth-prime mode accepts N up to <b>1,000,000</b> (the millionth prime is 15,485,863). The is-prime test accepts arbitrarily large integers via big-integer Miller–Rabin with bases 2…37 (deterministic below ~3.3×10²⁴ and reliable beyond). Lists are capped at 2,000 entries on screen; the Copy button copies the full list. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var DISPLAY_CAP = 2000;
+    var LIST_MAX = 10000000;
+    var NTH_MAX = 1000000;
+
+    function powMod(b, e, m) {
+      var r = 1n; b %= m; if (b < 0n) b += m;
+      while (e > 0n) { if (e & 1n) r = r * b % m; e >>= 1n; b = b * b % m; }
+      return r;
+    }
+    var SMALL = [2n, 3n, 5n, 7n, 11n, 13n, 17n, 19n, 23n, 29n, 31n, 37n];
+    // Deterministic Miller–Rabin (bases 2..37 are deterministic for n < 3.3e24).
+    function isPrime(n) {
+      if (typeof n !== "bigint") n = BigInt(n);
+      if (n < 2n) return false;
+      for (var i = 0; i < SMALL.length; i++) { var p = SMALL[i]; if (n === p) return true; if (n % p === 0n) return false; }
+      var d = n - 1n, r = 0n;
+      while ((d & 1n) === 0n) { d >>= 1n; r++; }
+      function isComp(a) {
+        var x = powMod(a, d, n);
+        if (x === 1n || x === n - 1n) return false;
+        for (var i = 1n; i < r; i++) { x = x * x % n; if (x === n - 1n) return false; }
+        return true;
+      }
+      for (var j = 0; j < SMALL.length; j++) { if (isComp(SMALL[j])) return false; }
+      return true;
+    }
+
+    // Sieve of Eratosthenes; returns array of primes <= n (n a safe integer).
+    function sieve(n) {
+      n = Math.floor(n);
+      if (n < 2) return [];
+      var s = new Uint8Array(n + 1);
+      for (var i = 2; i * i <= n; i++) {
+        if (!s[i]) { for (var j = i * i; j <= n; j += i) s[j] = 1; }
+      }
+      var pr = [];
+      for (var k = 2; k <= n; k++) if (!s[k]) pr.push(k);
+      return pr;
+    }
+    function primesUpTo(n) { return sieve(n); }
+    function pi(n) { return sieve(n).length; }
+    function primesInRange(a, b) {
+      if (a > b) return [];
+      var all = sieve(b), out = [];
+      for (var i = 0; i < all.length; i++) if (all[i] >= a) out.push(all[i]);
+      return out;
+    }
+    function nthPrime(n) {
+      n = Math.floor(n);
+      if (n < 1) return null;
+      if (n === 1) return 2;
+      var bound;
+      if (n < 6) bound = 15;
+      else { var ln = Math.log(n); bound = Math.ceil(n * (ln + Math.log(ln))); }
+      var pr = sieve(bound);
+      var safety = 0;
+      while (pr.length < n && safety < 40) { bound = Math.floor(bound * 1.5); pr = sieve(bound); safety++; }
+      return pr.length >= n ? pr[n - 1] : null;
+    }
+
+    function parseNum(s) { if (s == null) return null; s = String(s).trim(); if (!s) return null; if (!/^\d+$/.test(s)) return null; var v = Number(s); return isFinite(v) ? v : null; }
+    function parseBig(s) { if (s == null) return null; s = String(s).trim(); if (!s) return null; if (!/^\d+$/.test(s)) return null; try { return BigInt(s); } catch (e) { return null; } }
+
+    // Pure: run a mode. args = {mode, a, b, n} where a/b/n are raw strings.
+    // Returns {count, primes, total, truncated, isPrime, verdict, err}.
+    function run(mode, args) {
+      var a = args.a, b = args.b, n = args.n;
+      if (mode === "list") {
+        var N = parseNum(n != null ? n : b);
+        if (N == null) return { err: "Enter a positive integer for N." };
+        if (N > LIST_MAX) return { err: "List mode is capped at " + LIST_MAX.toLocaleString() + "." };
+        var pr = primesUpTo(N);
+        return { count: pr.length, primes: pr.slice(0, DISPLAY_CAP), total: pr.length, truncated: pr.length > DISPLAY_CAP, fullList: pr, err: null };
+      }
+      if (mode === "range") {
+        var A = parseNum(a), B = parseNum(b);
+        if (A == null || B == null) return { err: "Enter positive integers for A and B." };
+        if (B > LIST_MAX) return { err: "Range upper bound is capped at " + LIST_MAX.toLocaleString() + "." };
+        if (A > B) return { err: "A must be less than or equal to B." };
+        var prr = primesInRange(A, B);
+        return { count: prr.length, primes: prr.slice(0, DISPLAY_CAP), total: prr.length, truncated: prr.length > DISPLAY_CAP, fullList: prr, err: null };
+      }
+      if (mode === "nth") {
+        var Nn = parseNum(n);
+        if (Nn == null) return { err: "Enter a positive integer for N." };
+        if (Nn < 1) return { err: "N must be at least 1." };
+        if (Nn > NTH_MAX) return { err: "Nth-prime mode is capped at " + NTH_MAX.toLocaleString() + "." };
+        var p = nthPrime(Nn);
+        return { count: 1, nth: p, verdict: "The " + Nn.toLocaleString() + (ordinal(Nn)) + " prime is " + p.toLocaleString(), err: null };
+      }
+      if (mode === "check") {
+        var big = parseBig(n != null ? n : b);
+        if (big == null) return { err: "Enter a non-negative integer to test." };
+        var prime = isPrime(big);
+        return { isPrime: prime, verdict: big.toLocaleString() + " is " + (prime ? "prime" : "not prime"), err: null };
+      }
+      return { err: "Unknown mode." };
+    }
+    function ordinal(n) {
+      var s = ["th", "st", "nd", "rd"], v = n % 100;
+      if (v >= 11 && v <= 13) return "th";
+      return s[n % 10] || "th";
+    }
+
+    var modeEl = document.getElementById("mode");
+    var aEl = document.getElementById("a"), bEl = document.getElementById("b"), nEl = document.getElementById("n");
+    var aWrap = document.getElementById("field-a-wrap"), bWrap = document.getElementById("field-b-wrap"), nWrap = document.getElementById("field-n-wrap");
+    var verdictEl = document.getElementById("verdict");
+    var countEl = document.getElementById("count");
+    var errEl = document.getElementById("err");
+    var outEl = document.getElementById("out");
+    var copyBtn = document.getElementById("copy");
+    var lastFull = [];
+
+    function showFields() {
+      var m = modeEl.value;
+      aWrap.hidden = m !== "range";
+      bWrap.hidden = m === "nth" || m === "check";
+      nWrap.hidden = m === "range";
+      if (m === "list") { bWrap.hidden = false; nWrap.hidden = true; aWrap.hidden = true; }
+      if (m === "check") { bWrap.hidden = true; nWrap.hidden = false; aWrap.hidden = true; }
+      if (m === "nth") { bWrap.hidden = true; nWrap.hidden = false; aWrap.hidden = true; }
+    }
+
+    function render() {
+      errEl.textContent = ""; verdictEl.textContent = ""; verdictEl.className = "verdict"; countEl.textContent = ""; outEl.textContent = "";
+      lastFull = [];
+      var args = { a: aEl.value, b: bEl.value, n: nEl.value };
+      // For list/check modes, read the relevant box (N is in 'n' for nth/check; list uses 'b').
+      var res = run(modeEl.value, args);
+      if (res.err) { errEl.textContent = res.err; return; }
+      if (res.verdict) {
+        verdictEl.textContent = res.verdict;
+        if (modeEl.value === "check") verdictEl.className = "verdict " + (res.isPrime ? "yes" : "no");
+        if (modeEl.value === "nth") { countEl.innerHTML = "<b>" + res.nth.toLocaleString() + "</b>"; }
+        return;
+      }
+      lastFull = res.fullList || [];
+      if (res.truncated) countEl.innerHTML = "Found <b>" + res.total.toLocaleString() + "</b> primes (showing first " + DISPLAY_CAP.toLocaleString() + ")";
+      else countEl.innerHTML = "Found <b>" + res.total.toLocaleString() + "</b> prime" + (res.total === 1 ? "" : "s");
+      outEl.textContent = res.primes.join(", ");
+    }
+
+    copyBtn.addEventListener("click", function () {
+      if (!lastFull.length) return;
+      var t = lastFull.join(", ");
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).catch(function () {});
+      else { try { var ta = document.createElement("textarea"); ta.value = t; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove(); } catch (e) {} }
+    });
+
+    [modeEl, aEl, bEl, nEl].forEach(function (el) { el.addEventListener("input", render); el.addEventListener("change", render); });
+    showFields();
+    render();
+
+    window.VT_PRIME_TEST = { isPrime: isPrime, sieve: sieve, primesUpTo: primesUpTo, pi: pi, primesInRange: primesInRange, nthPrime: nthPrime, run: run, powMod: powMod };
+  })();
+  </script>
+</body>
+</html>
