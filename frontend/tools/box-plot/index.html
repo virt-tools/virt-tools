@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Box Plot Maker — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .row { display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+    .row .lbl { min-width:130px; color:var(--text-dim,#9aa3b2); font-size:.85rem; }
+    .row input, .row select { font-family:ui-monospace,monospace; font-size:14px; padding:7px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; }
+    textarea { font-family:ui-monospace,monospace; font-size:13px; padding:8px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; width:100%; box-sizing:border-box; resize:vertical; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; font-family:ui-monospace,monospace; }
+    h3 { margin:16px 0 4px; font-size:.9rem; color:var(--text-dim,#9aa3b2); text-transform:uppercase; letter-spacing:.04em; }
+    .svgwrap { background:var(--bg,#0d1016); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:10px; margin:8px 0; overflow-x:auto; }
+    .stats { font-family:ui-monospace,monospace; font-size:13px; background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:12px; margin:8px 0; line-height:1.9; }
+    .stats .k { color:var(--text-dim,#9aa3b2); display:inline-block; min-width:170px; }
+    .stats .v { color:var(--text,#e6e6e6); }
+    .stats .out { color:var(--bad,#f87171); }
+    .acts { display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; align-items:center; }
+    .acts button { padding:7px 12px; border-radius:6px; border:1px solid var(--border,#2a2f3a); background:var(--bg-elev,#171a21); color:var(--text,#e6e6e6); cursor:pointer; font-weight:600; font-size:.78rem; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Box Plot Maker</h1>
+      <p>Turn a list of numbers into a <strong>box-and-whisker plot</strong> (box plot) — the classic statistical summary that shows the median, quartiles, range, and outliers at a glance. Paste your data, and the tool computes the five-number summary (min, Q1, median, Q3, max), the interquartile range (IQR), Tukey fences, and whiskers that extend to the most extreme points within 1.5×IQR, flagging any points beyond as outliers. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <h3>Data</h3>
+      <textarea id="data" rows="6" spellcheck="false">3
+7
+8
+5
+12
+14
+21
+13
+18
+150</textarea>
+      <div class="acts">
+        <label style="font-size:.82rem;color:var(--text-dim,#9aa3b2)">fence multiplier
+          <select id="fence"><option value="1.5">1.5 (Tukey)</option><option value="3">3 (extreme)</option></select>
+        </label>
+        <button id="b-ex1" type="button">Outlier example</button>
+        <button id="b-ex2" type="button">Even n</button>
+        <button id="b-ex3" type="button">All equal</button>
+      </div>
+      <div class="err" id="err"></div>
+
+      <h3>Box plot</h3>
+      <div class="svgwrap" id="svgwrap">—</div>
+
+      <h3>Summary</h3>
+      <div class="stats" id="stats">—</div>
+
+      <p class="note" style="margin-top:14px">A <strong>box plot</strong> summarizes a distribution with five numbers: the <strong>minimum</strong>, <strong>first quartile (Q1)</strong>, <strong>median</strong>, <strong>third quartile (Q3)</strong>, and <strong>maximum</strong>. The box spans Q1 to Q3 (the middle 50%, the interquartile range or <strong>IQR</strong>) with a line at the median; whiskers extend out to the most extreme data points within <strong>1.5×IQR</strong> of the box (the <em>adjacent values</em>); and any points beyond are drawn as individual <strong>outlier</strong> dots. Quartiles use linear interpolation between order statistics (the inclusive / type-7 method used by R, NumPy, and Excel's <code>QUARTILE.INC</code>). With IQR=0 (e.g. all values equal, or n=1) the fences collapse and no points are flagged. Pairs with the Histogram, Statistics Calculator, and Percentile tools. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    // Parse a block of numbers (whitespace/newline/comma/semicolon separated).
+    // Allows negative and decimal values. Throws on invalid tokens.
+    function parseNums(text) {
+      var parts = String(text).split(/[\s,;]+/).filter(function (x) { return x !== ""; });
+      if (parts.length === 0) throw new Error("Enter at least one number.");
+      var nums = [];
+      for (var i = 0; i < parts.length; i++) {
+        var n = Number(parts[i]);
+        if (!Number.isFinite(n) || !/^-?\d+(\.\d+)?$/.test(parts[i].trim())) {
+          throw new Error("Invalid number '" + parts[i] + "'.");
+        }
+        nums.push(n);
+      }
+      return nums;
+    }
+
+    // Quantile via linear interpolation between order statistics (type 7).
+    // sorted: ascending sorted array of numbers; p in [0,1].
+    function quantile(sorted, p) {
+      var n = sorted.length;
+      if (n === 0) return NaN;
+      if (p <= 0) return sorted[0];
+      if (p >= 1) return sorted[n - 1];
+      var h = (n - 1) * p;
+      var lo = Math.floor(h);
+      var hi = Math.ceil(h);
+      if (lo === hi) return sorted[lo];
+      var frac = h - lo;
+      return sorted[lo] + frac * (sorted[hi] - sorted[lo]);
+    }
+
+    function quartiles(sorted) {
+      return { q1: quantile(sorted, 0.25), q2: quantile(sorted, 0.5), q3: quantile(sorted, 0.75) };
+    }
+
+    function fiveNumber(sorted) {
+      return {
+        min: sorted[0],
+        q1: quantile(sorted, 0.25),
+        median: quantile(sorted, 0.5),
+        q3: quantile(sorted, 0.75),
+        max: sorted[sorted.length - 1]
+      };
+    }
+
+    function iqr(sorted) {
+      return quantile(sorted, 0.75) - quantile(sorted, 0.25);
+    }
+
+    // Tukey fences: lo = Q1 - k*IQR, hi = Q3 + k*IQR
+    function fences(sorted, k) {
+      k = (k === undefined) ? 1.5 : k;
+      var q1 = quantile(sorted, 0.25), q3 = quantile(sorted, 0.75);
+      var r = q3 - q1;
+      return { lo: q1 - k * r, hi: q3 + k * r };
+    }
+
+    // Adjacent values: the most extreme data points within the fences.
+    function whiskers(sorted, k) {
+      var f = fences(sorted, k);
+      var lo = NaN, hi = NaN;
+      for (var i = 0; i < sorted.length; i++) {
+        var v = sorted[i];
+        if (v >= f.lo && v <= f.hi) {
+          if (isNaN(lo) || v < lo) lo = v;
+          if (isNaN(hi) || v > hi) hi = v;
+        }
+      }
+      return { lo: lo, hi: hi };
+    }
+
+    // Outliers: points strictly outside the fences.
+    function outliers(sorted, k) {
+      var f = fences(sorted, k);
+      var out = [];
+      for (var i = 0; i < sorted.length; i++) {
+        if (sorted[i] < f.lo || sorted[i] > f.hi) out.push(sorted[i]);
+      }
+      return out;
+    }
+
+    // Full summary from a raw (unsorted) array.
+    function summary(nums, k) {
+      k = (k === undefined) ? 1.5 : k;
+      var sorted = nums.slice().sort(function (a, b) { return a - b; });
+      var q = quartiles(sorted);
+      var fn = fiveNumber(sorted);
+      var f = fences(sorted, k);
+      var w = whiskers(sorted, k);
+      var out = outliers(sorted, k);
+      return {
+        n: sorted.length,
+        sorted: sorted,
+        min: fn.min, q1: fn.q1, median: fn.median, q3: fn.q3, max: fn.max,
+        iqr: q.q3 - q.q1,
+        fenceLo: f.lo, fenceHi: f.hi,
+        whiskerLo: w.lo, whiskerHi: w.hi,
+        outliers: out
+      };
+    }
+
+    // ---- DOM ----
+    function $(id) { return document.getElementById(id); }
+    var dataEl = $("data"), fenceEl = $("fence"), errEl = $("err"), svgWrap = $("svgwrap"), statsEl = $("stats");
+
+    function fmt(x) {
+      if (!Number.isFinite(x)) return "—";
+      // trim floating noise
+      var r = Math.round(x * 1e6) / 1e6;
+      return String(r);
+    }
+
+    function render() {
+      errEl.textContent = "";
+      var nums;
+      try { nums = parseNums(dataEl.value); }
+      catch (e) { errEl.textContent = e.message || String(e); svgWrap.innerHTML = "—"; statsEl.innerHTML = "—"; return; }
+      var k = Number(fenceEl.value);
+      var s = summary(nums, k);
+
+      svgWrap.innerHTML = drawSvg(s, k);
+      statsEl.innerHTML =
+        "<span class='k'>count (n)</span> <span class='v'>" + s.n + "</span><br>" +
+        "<span class='k'>minimum</span> <span class='v'>" + fmt(s.min) + "</span><br>" +
+        "<span class='k'>Q1 (25%)</span> <span class='v'>" + fmt(s.q1) + "</span><br>" +
+        "<span class='k'>median (50%)</span> <span class='v'>" + fmt(s.median) + "</span><br>" +
+        "<span class='k'>Q3 (75%)</span> <span class='v'>" + fmt(s.q3) + "</span><br>" +
+        "<span class='k'>maximum</span> <span class='v'>" + fmt(s.max) + "</span><br>" +
+        "<span class='k'>IQR (Q3 − Q1)</span> <span class='v'>" + fmt(s.iqr) + "</span><br>" +
+        "<span class='k'>lower fence (Q1 − " + k + "·IQR)</span> <span class='v'>" + fmt(s.fenceLo) + "</span><br>" +
+        "<span class='k'>upper fence (Q3 + " + k + "·IQR)</span> <span class='v'>" + fmt(s.fenceHi) + "</span><br>" +
+        "<span class='k'>lower whisker</span> <span class='v'>" + fmt(s.whiskerLo) + "</span><br>" +
+        "<span class='k'>upper whisker</span> <span class='v'>" + fmt(s.whiskerHi) + "</span><br>" +
+        "<span class='k'>outliers</span> <span class='out'>" + (s.outliers.length ? s.outliers.map(fmt).join(", ") + " (" + s.outliers.length + ")" : "none") + "</span>";
+    }
+
+    // Horizontal box plot SVG.
+    function drawSvg(s, k) {
+      var W = 720, H = 150, padL = 60, padR = 30, plotW = W - padL - padR;
+      var lo = s.min, hi = s.max;
+      if (lo === hi) { lo = lo - 1; hi = hi + 1; } // avoid zero-width scale
+      function x(v) { return padL + ((v - lo) / (hi - lo)) * plotW; }
+      var boxY = 50, boxH = 60;
+      var q1x = x(s.q1), q3x = x(s.q3), medx = x(s.median);
+      var wlox = x(s.whiskerLo), whix = x(s.whiskerHi);
+      var minx = x(s.min), maxx = x(s.max);
+      var axisY = 120;
+      var parts = [];
+      parts.push("<svg width='" + W + "' height='" + H + "' xmlns='http://www.w3.org/2000/svg' style='font-family:ui-monospace,monospace;font-size:11px'>");
+      // axis
+      parts.push("<line x1='" + padL + "' y1='" + axisY + "' x2='" + (W - padR) + "' y2='" + axisY + "' stroke='#3a4150' stroke-width='1'/>");
+      // ticks at five-number summary
+      var ticks = [{ v: s.min, l: "min" }, { v: s.q1, l: "Q1" }, { v: s.median, l: "med" }, { v: s.q3, l: "Q3" }, { v: s.max, l: "max" }];
+      for (var t = 0; t < ticks.length; t++) {
+        var tx = x(ticks[t].v);
+        parts.push("<line x1='" + tx + "' y1='" + axisY + "' x2='" + tx + "' y2='" + (axisY + 5) + "' stroke='#5b6477'/>");
+        parts.push("<text x='" + tx + "' y='" + (axisY + 18) + "' fill='#9aa3b2' text-anchor='middle'>" + fmt(ticks[t].v) + "</text>");
+      }
+      // whiskers
+      if (Number.isFinite(s.whiskerLo)) {
+        parts.push("<line x1='" + wlox + "' y1='" + (boxY + boxH / 2) + "' x2='" + q1x + "' y2='" + (boxY + boxH / 2) + "' stroke='#9aa3b2' stroke-width='1.5'/>");
+        parts.push("<line x1='" + wlox + "' y1='" + boxY + "' x2='" + wlox + "' y2='" + (boxY + boxH) + "' stroke='#9aa3b2' stroke-width='1.5'/>");
+      }
+      if (Number.isFinite(s.whiskerHi)) {
+        parts.push("<line x1='" + q3x + "' y1='" + (boxY + boxH / 2) + "' x2='" + whix + "' y2='" + (boxY + boxH / 2) + "' stroke='#9aa3b2' stroke-width='1.5'/>");
+        parts.push("<line x1='" + whix + "' y1='" + boxY + "' x2='" + whix + "' y2='" + (boxY + boxH) + "' stroke='#9aa3b2' stroke-width='1.5'/>");
+      }
+      // box
+      parts.push("<rect x='" + q1x + "' y='" + boxY + "' width='" + (q3x - q1x) + "' height='" + boxH + "' fill='#1e3a5f' stroke='#5b8cff' stroke-width='1.5'/>");
+      // median line
+      parts.push("<line x1='" + medx + "' y1='" + boxY + "' x2='" + medx + "' y2='" + (boxY + boxH) + "' stroke='#4ade80' stroke-width='2'/>");
+      // outliers
+      for (var o = 0; o < s.outliers.length; o++) {
+        var ox = x(s.outliers[o]);
+        parts.push("<circle cx='" + ox + "' cy='" + (boxY + boxH / 2) + "' r='4' fill='none' stroke='#f87171' stroke-width='1.5'/>");
+      }
+      parts.push("</svg>");
+      return parts.join("");
+    }
+
+    function setExample(text) { dataEl.value = text; render(); }
+    fenceEl.addEventListener("change", render);
+    dataEl.addEventListener("input", render);
+    $("b-ex1").addEventListener("click", function () { setExample("3\n7\n8\n5\n12\n14\n21\n13\n18\n150"); fenceEl.value = "1.5"; render(); });
+    $("b-ex2").addEventListener("click", function () { setExample("1\n2\n3\n4\n5\n6\n7\n8"); });
+    $("b-ex3").addEventListener("click", function () { setExample("5\n5\n5\n5\n5"); });
+
+    render();
+
+    window.VT_BOX_TEST = {
+      parseNums: parseNums, quantile: quantile, quartiles: quartiles,
+      fiveNumber: fiveNumber, iqr: iqr, fences: fences, whiskers: whiskers,
+      outliers: outliers, summary: summary
+    };
+  })();
+  </script>
+</body>
+</html>
