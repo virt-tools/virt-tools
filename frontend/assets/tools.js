@@ -2395,6 +2395,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T00:30:00Z",
   },
   {
+    slug: "longest-common-subsequence",
+    name: "Longest Common Subsequence",
+    description: "Find the longest common subsequence (LCS) of two texts and show a diff-style alignment. The LCS is the longest sequence of tokens appearing in both inputs in order (not necessarily contiguously) and is the basis of the classic diff utility. Choose character, word, or line granularity and toggle case sensitivity. Reports the LCS length, token counts, a similarity ratio (2 times LCS over the sum of lengths), the actual shared sequence, and a color-coded alignment marking common tokens, tokens only in A (deleted), and tokens only in B (added). Uses dynamic programming with backtracking. Distinct from the Edit Distance tool, which counts minimal edits rather than returning the shared sequence. Pairs with the Text Diff and Edit Distance tools. Everything runs locally in your browser.",
+    category: "Text",
+    icon: "⇌",
+    added: "2026-07-12T00:40:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
