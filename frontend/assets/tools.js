@@ -67,6 +67,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-11T08:10:00Z",
   },
   {
+    slug: "encoded-word",
+    name: "RFC 2047 Encoded-Word",
+    description: "Decode and encode RFC 2047 encoded-words — the =?charset?B?…?= (Base64) and =?charset?Q?…?= (Quoted-Printable variant, where _ is a space) tokens used to carry non-ASCII text in email headers. Handles adjacent words and charsets like UTF-8 and ISO-8859-1. Runs locally.",
+    category: "Encoding",
+    icon: "📨",
+    added: "2026-07-11T11:10:00Z",
+  },
+  {
     slug: "url-encoder",
     name: "URL Encode / Decode",
     description: "Percent-encode or decode URLs and query parameters.",

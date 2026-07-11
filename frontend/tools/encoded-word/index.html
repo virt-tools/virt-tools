@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>RFC 2047 Encoded-Word Decoder — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    textarea { width:100%; min-height:110px; font-family:ui-monospace,monospace; font-size:13px; padding:8px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; resize:vertical; box-sizing:border-box; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    .acts { display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; align-items:center; }
+    .acts button { padding:8px 18px; border-radius:6px; border:1px solid var(--accent,#6ea8fe); background:var(--accent,#6ea8fe); color:#0b0d12; cursor:pointer; font-weight:700; font-size:.85rem; }
+    .acts button.ghost { background:var(--bg-elev,#171a21); color:var(--text,#e6e6e6); border-color:var(--border,#2a2f3a); font-weight:600; }
+    .acts select, .acts .lbl { font-family:ui-monospace,monospace; font-size:13px; padding:6px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; }
+    .acts .lbl { padding:6px 0; border:none; color:var(--text-dim,#9aa3b2); }
+    h3 { margin:16px 0 4px; font-size:.9rem; color:var(--text-dim,#9aa3b2); text-transform:uppercase; letter-spacing:.04em; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    .small { color:var(--text-dim,#9aa3b2); font-size:.82rem; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>RFC 2047 Encoded-Word Decoder / Encoder</h1>
+      <p>Decode and encode the <strong>encoded-word</strong> syntax of RFC 2047 — the <code>=?charset?B?…?=</code> (Base64) and <code>=?charset?Q?…?=</code> (Quoted-Printable variant) tokens used to carry non-ASCII text inside email headers (<code>Subject:</code>, <code>From:</code> display names, and so on). Handles multiple adjacent encoded-words, the Q-encoding's underscore-is-space rule, and charsets like UTF-8 and ISO-8859-1. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <h3>Decode</h3>
+      <textarea id="dec-in" spellcheck="false" placeholder="=?utf-8?B?SGVsbG8gV29ybGQ=?=">=?utf-8?B?SGVsbG8gV29ybGQ=?=</textarea>
+      <div class="acts"><button id="b-decode" type="button">Decode →</button> <button id="b-toenc" class="ghost" type="button">↑ Use as encode input</button></div>
+      <div class="err" id="err2"></div>
+      <textarea id="dec-out" spellcheck="false" readonly></textarea>
+      <div class="small" id="dec-info"></div>
+
+      <h3>Encode</h3>
+      <textarea id="enc-in" spellcheck="false" placeholder="Text to encode…">Café — naïve résumé</textarea>
+      <div class="acts">
+        <span class="lbl">Encoding</span>
+        <select id="enc-mode">
+          <option value="B" selected>B (Base64)</option>
+          <option value="Q">Q (Quoted-Printable)</option>
+        </select>
+        <button id="b-encode" type="button">Encode →</button>
+        <button id="b-copy" class="ghost" type="button">Copy result</button>
+      </div>
+      <div class="err" id="err1"></div>
+      <textarea id="enc-out" spellcheck="false" readonly></textarea>
+
+      <p class="note">An <strong>encoded-word</strong> (RFC 2047) is <code>=?charset?encoding?text?=</code>. <strong>B</strong> is Base64 of the text's bytes; <strong>Q</strong> is the header Quoted-Printable variant, identical to body QP except that <code>_</code> represents a space (ASCII 32) and a literal underscore must be <code>=5F</code>. The decoder recognises these tokens anywhere in a header, decodes each with its declared charset, and — per RFC 2047 — when two encoded-words are separated by <em>only</em> linear whitespace it drops that whitespace and joins the decoded text. Encoding here always uses UTF-8; decoding honours the declared charset (e.g. <code>ISO-8859-1</code>, <code>UTF-8</code>). Pairs with the Base64 and Quoted-Printable tools. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    // Encoded-word token: =?charset?encoding?text?=
+    var RE_WORD = /=\?([^?]+)\?([bBqQ])\?([^?]*)\?=/g;
+
+    function bytesToUtf8(bytes) { return new TextDecoder("utf-8", { fatal: false }).decode(bytes); }
+    function utf8ToBytes(str) { return new TextEncoder().encode(String(str == null ? "" : str)); }
+    function bytesFromBase64(str) {
+      // atob returns a binary string; convert to bytes. Tolerate whitespace.
+      var bin = atob(str.replace(/\s+/g, ""));
+      var out = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+      return out;
+    }
+    function bytesToBase64(bytes) {
+      var bin = "";
+      for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+      return btoa(bin);
+    }
+
+    // Q-decode an encoded-word text fragment (no trailing ?=) to bytes.
+    // '_' -> 0x20 (space); '=XX' -> byte; else literal ASCII.
+    function qDecode(text) {
+      var out = [];
+      for (var i = 0; i < text.length; i++) {
+        var c = text.charAt(i);
+        if (c === "_") out.push(0x20);
+        else if (c === "=" && i + 2 < text.length + 0) {
+          var hex = text.substr(i + 1, 2);
+          if (/^[0-9A-Fa-f]{2}$/.test(hex)) { out.push(parseInt(hex, 16)); i += 2; }
+          else out.push(0x3D); // lenient: literal '='
+        } else out.push(text.charCodeAt(i));
+      }
+      return new Uint8Array(out);
+    }
+
+    // Q-encode a byte array to the encoded-word text fragment (UTF-8 in).
+    // space -> '_'; '?' '_' '=' -> =XX; printable ASCII literal; else =XX.
+    function qEncode(bytes) {
+      var out = "";
+      function hex(b) { return (b < 16 ? "0" : "") + b.toString(16).toUpperCase(); }
+      for (var i = 0; i < bytes.length; i++) {
+        var b = bytes[i];
+        if (b === 0x20) out += "_";
+        else if (b >= 33 && b <= 126 && b !== 0x3F && b !== 0x5F && b !== 0x3D) out += String.fromCharCode(b);
+        else out += "=" + hex(b);
+      }
+      return out;
+    }
+
+    // Decode a single encoded-word token to a string. Returns null if not an encoded-word.
+    function decodeWord(charset, enc, text) {
+      charset = (charset || "utf-8").trim();
+      // normalize common charset aliases for TextDecoder
+      var cs = charset.replace(/_/g, "-");
+      if (/^iso-?8859-?1$/i.test(cs)) cs = "iso-8859-1";
+      if (/^us-?ascii$/i.test(cs)) cs = "ascii";
+      var bytes = (enc === "B" || enc === "b") ? bytesFromBase64(text) : qDecode(text);
+      try { return new TextDecoder(cs, { fatal: false }).decode(bytes); }
+      catch (e) { return bytesToUtf8(bytes); }
+    }
+
+    // Decode a whole header: replace encoded-words; drop whitespace between adjacent ones.
+    function decodeHeader(str) {
+      str = String(str == null ? "" : str);
+      var out = "";
+      var last = 0, prevWasWord = false;
+      RE_WORD.lastIndex = 0;
+      var m;
+      while ((m = RE_WORD.exec(str)) !== null) {
+        var gap = str.slice(last, m.index);
+        // if the previous emitted token was an encoded-word and the gap is only
+        // linear whitespace, drop it (RFC 2047 concatenation); otherwise keep it.
+        if (prevWasWord && /^\s*$/.test(gap)) { /* drop */ }
+        else out += gap;
+        out += decodeWord(m[1], m[2].toUpperCase(), m[3]);
+        last = m.index + m[0].length;
+        prevWasWord = true;
+      }
+      out += str.slice(last); // trailing plain text
+      return out;
+    }
+
+    // Encode text to a single UTF-8 encoded-word (B or Q).
+    function encodeWord(text, mode) {
+      var bytes = utf8ToBytes(text);
+      mode = (mode || "B").toUpperCase() === "Q" ? "Q" : "B";
+      var body = mode === "B" ? bytesToBase64(bytes) : qEncode(bytes);
+      return "=?utf-8?" + mode + "?" + body + "?=";
+    }
+
+    // ---- DOM ----
+    function $(id) { return document.getElementById(id); }
+    var decIn = $("dec-in"), decOut = $("dec-out"), err2 = $("err2"), decInfo = $("dec-info");
+    var encIn = $("enc-in"), encOut = $("enc-out"), err1 = $("err1"), encMode = $("enc-mode");
+
+    function renderDecode() {
+      err2.textContent = ""; decInfo.textContent = "";
+      if (!decIn.value) { decOut.value = ""; return; }
+      var before = decIn.value;
+      var count = (before.match(/=\?[^?]+\?[bBqQ]\?[^?]*\?=/g) || []).length;
+      try {
+        decOut.value = decodeHeader(before);
+        decInfo.textContent = count ? count + " encoded-word" + (count === 1 ? "" : "s") + " decoded." : "No encoded-words found; text passed through unchanged.";
+      } catch (e) { err2.textContent = e.message || String(e); decOut.value = ""; }
+    }
+    function renderEncode() {
+      err1.textContent = "";
+      if (!encIn.value) { encOut.value = ""; return; }
+      try { encOut.value = encodeWord(encIn.value, encMode.value); }
+      catch (e) { err1.textContent = e.message || String(e); encOut.value = ""; }
+    }
+
+    $("b-decode").addEventListener("click", renderDecode);
+    $("b-encode").addEventListener("click", renderEncode);
+    $("b-copy").addEventListener("click", function () { if (encOut.value && navigator.clipboard) navigator.clipboard.writeText(encOut.value); });
+    $("b-toenc").addEventListener("click", function () { if (decIn.value) { encIn.value = decIn.value; renderEncode(); } });
+    decIn.addEventListener("input", renderDecode);
+    encIn.addEventListener("input", renderEncode);
+    encMode.addEventListener("change", renderEncode);
+
+    renderDecode();
+    renderEncode();
+
+    window.VT_EW_TEST = {
+      RE_WORD: RE_WORD, decodeHeader: decodeHeader, decodeWord: decodeWord,
+      encodeWord: encodeWord, qDecode: qDecode, qEncode: qEncode,
+      bytesFromBase64: bytesFromBase64, bytesToBase64: bytesToBase64,
+      bytesToUtf8: bytesToUtf8, utf8ToBytes: utf8ToBytes
+    };
+  })();
+  </script>
+</body>
+</html>
