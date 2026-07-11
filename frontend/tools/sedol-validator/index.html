@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>SEDOL Validator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .row { display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+    .row .lbl { min-width:130px; color:var(--text-dim,#9aa3b2); font-size:.85rem; }
+    .row input { font-family:ui-monospace,monospace; font-size:14px; padding:7px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; }
+    .row input.sedol { width:200px; text-transform:uppercase; letter-spacing:.5px; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    .acts { display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; }
+    .acts button { padding:8px 18px; border-radius:6px; border:1px solid var(--accent,#6ea8fe); background:var(--accent,#6ea8fe); color:#0b0d12; cursor:pointer; font-weight:700; font-size:.85rem; }
+    .acts button.ghost { background:var(--bg-elev,#171a21); color:var(--text,#e6e6e6); border-color:var(--border,#2a2f3a); font-weight:600; }
+    h3 { margin:16px 0 4px; font-size:.9rem; color:var(--text-dim,#9aa3b2); text-transform:uppercase; letter-spacing:.04em; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    .verdict { font-family:ui-monospace,monospace; font-size:14px; background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:10px; margin:8px 0; min-height:40px; }
+    .verdict .ok { color:var(--good,#4ade80); font-weight:700; }
+    .verdict .bad { color:var(--bad,#f87171); font-weight:700; }
+    .struct { font-family:ui-monospace,monospace; font-size:.85rem; line-height:1.8; word-break:break-all; }
+    .struct .ns { color:var(--good,#4ade80); }
+    .struct .cd { color:#f0c674; }
+    .struct small { color:var(--text-dim,#9aa3b2); font-size:.78rem; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>SEDOL Validator &amp; Check-Digit Calculator</h1>
+      <p>Validate <strong>SEDOLs</strong> (Stock Exchange Daily Official List codes) and compute their check digit. A SEDOL is a 7-character alphanumeric code — a 6-character national security identifier and a single trailing check digit — that identifies UK and international securities. It uses digits <code>0</code>–<code>9</code> and the 21 consonant letters (the vowels <code>A E I O U</code> are never used), with a weighted-sum check-digit algorithm distinct from Luhn. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <h3>Validate a SEDOL</h3>
+      <div class="row"><span class="lbl">SEDOL</span><input type="text" id="sedol" class="sedol" spellcheck="false" value="0540528"></div>
+      <div class="err" id="err"></div>
+      <div class="verdict" id="verdict">—</div>
+
+      <h3>Compute check digit</h3>
+      <div class="row"><span class="lbl">6-char prefix</span><input type="text" id="prefix" class="sedol" spellcheck="false" value="054052"></div>
+      <div class="acts">
+        <button id="b-comp" type="button">Compute →</button>
+        <button id="b-use" class="ghost" type="button">Use as SEDOL input</button>
+      </div>
+      <div class="verdict" id="comp">—</div>
+
+      <p class="note"><strong>SEDOL</strong> structure: positions 1–6 are the alphanumeric <strong>NSIN</strong>, position 7 is the <strong>check digit</strong>. Allowed characters are <code>0</code>–<code>9</code> and the consonant letters <code>B C D F G H J K L M N P Q R S T V W X Y Z</code> — vowels are reserved to avoid confusion with digits. Each character has a numeric value: digits → themselves (<code>0</code>–<code>9</code>); a letter → its 1-based place among the consonants plus 9, giving <code>B</code>=10, <code>C</code>=11, … <code>Z</code>=30. The check digit is computed by multiplying the six NSIN values by the fixed weights <code>[1, 3, 1, 7, 3, 9]</code>, summing, then taking <code>(10 − sum mod 10) mod 10</code>. Validation recomputes that digit and compares it to the 7th character. New-style SEDOLs (international securities) start with <code>B</code>; older UK ones are purely numeric. SEDOLs are case-insensitive on input (uppercased here). Pairs with the ISIN and IBAN validators. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    // Valid SEDOL characters: digits 0-9 and the 21 consonant letters (no vowels).
+    var CONSONANTS = "BCDFGHJKLMNPQRSTVWXYZ";
+    var VALID_CHARS = "0123456789" + CONSONANTS;
+    // Positional weights for the 6 NSIN characters.
+    var WEIGHTS = [1, 3, 1, 7, 3, 9];
+    var RE_SEDOL = /^[0-9BCDFGHJKLMNPQRSTVWXYZ]{7}$/;
+    var RE_PREFIX = /^[0-9BCDFGHJKLMNPQRSTVWXYZ]{6}$/;
+
+    // Numeric value of a single SEDOL character (already uppercased + validated).
+    // digits -> 0..9; consonants -> 10..30 (B=10, C=11, ... Z=30).
+    function charValue(ch) {
+      var c = ch.charCodeAt(0);
+      if (c >= 48 && c <= 57) return c - 48; // '0'-'9'
+      var idx = CONSONANTS.indexOf(ch);
+      if (idx >= 0) return idx + 10;
+      return -1; // invalid (vowel or other)
+    }
+
+    // Weighted sum of a 6-char NSIN. Returns -1 if any character is invalid.
+    function weightedSum(nsin6) {
+      if (nsin6 == null || nsin6.length !== 6) return -1;
+      nsin6 = String(nsin6).toUpperCase();
+      var sum = 0;
+      for (var i = 0; i < 6; i++) {
+        var v = charValue(nsin6[i]);
+        if (v < 0) return -1;
+        sum += v * WEIGHTS[i];
+      }
+      return sum;
+    }
+
+    // Check digit (0..9) for a 6-char NSIN, or -1 if invalid.
+    function checkDigit(prefix) {
+      if (prefix == null) return -1;
+      prefix = String(prefix).toUpperCase();
+      if (!RE_PREFIX.test(prefix)) return -1;
+      var sum = weightedSum(prefix);
+      if (sum < 0) return -1;
+      return (10 - (sum % 10)) % 10;
+    }
+
+    // Validate a full 7-char SEDOL.
+    function validate(sedol) {
+      if (sedol == null) return false;
+      sedol = String(sedol).toUpperCase();
+      if (!RE_SEDOL.test(sedol)) return false;
+      var expected = checkDigit(sedol.slice(0, 6));
+      if (expected < 0) return false;
+      return expected === (sedol.charCodeAt(6) - 48);
+    }
+
+    // Per-position breakdown for a 6-char NSIN: [{ch, value, weight, product}].
+    function breakdown(nsin6) {
+      nsin6 = String(nsin6).toUpperCase();
+      var rows = [];
+      for (var i = 0; i < 6; i++) {
+        var v = charValue(nsin6[i]);
+        rows.push({ ch: nsin6[i], value: v, weight: WEIGHTS[i], product: v * WEIGHTS[i] });
+      }
+      return rows;
+    }
+
+    // ---- DOM ----
+    function $(id) { return document.getElementById(id); }
+    var sedolEl = $("sedol"), errEl = $("err"), verdictEl = $("verdict");
+    var prefixEl = $("prefix"), compEl = $("comp");
+    var lastCheck = "";
+
+    function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+    function renderValidate() {
+      errEl.textContent = "";
+      var raw = sedolEl.value.trim().toUpperCase();
+      if (!raw) { verdictEl.textContent = "—"; return; }
+      if (!/^[0-9A-Z]+$/.test(raw)) {
+        verdictEl.innerHTML = '<span class="bad">✗ Invalid character</span> — SEDOLs use digits and consonant letters only (no vowels).';
+        return;
+      }
+      if (raw.length !== 7) {
+        verdictEl.innerHTML = '<span class="bad">✗ Wrong length</span> — a SEDOL is 7 characters (got ' + raw.length + ').';
+        return;
+      }
+      // reject vowels explicitly (clearer than the regex mismatch)
+      if (/[AEIOU]/.test(raw)) {
+        verdictEl.innerHTML = '<span class="bad">✗ Invalid character</span> — vowels (A E I O U) are not allowed in a SEDOL.';
+        return;
+      }
+      var nsin = raw.slice(0, 6), givenCd = raw.charCodeAt(6) - 48;
+      var expected = checkDigit(nsin);
+      if (expected < 0) { verdictEl.innerHTML = '<span class="bad">✗ Invalid</span>'; return; }
+      var rows = breakdown(nsin);
+      var sum = weightedSum(nsin);
+      var valid = expected === givenCd;
+      var parts = '<div class="struct">' +
+        '<span class="ns">' + esc(nsin) + '</span><span class="cd">' + givenCd + '</span>' +
+        ' &nbsp;<small>(NSIN · check digit)</small><br>' +
+        'Values:   [' + rows.map(function (r) { return r.value; }).join(", ") + ']<br>' +
+        'Weights: [' + WEIGHTS.join(", ") + ']<br>' +
+        'Products: ' + rows.map(function (r) { return r.product; }).join(" + ") + ' = <b>' + sum + '</b><br>' +
+        'Check digit = (10 − ' + (sum % 10) + ') mod 10 = <b>' + expected + '</b><br>' +
+        (valid ? '<span class="ok">✓ Valid</span> — check digit matches.' :
+                 '<span class="bad">✗ Invalid</span> — expected check digit ' + expected + ', got ' + givenCd + '.') +
+        '</div>';
+      verdictEl.innerHTML = parts;
+    }
+
+    function renderCompute() {
+      compEl.textContent = "—";
+      var raw = prefixEl.value.trim().toUpperCase();
+      if (!raw) { compEl.textContent = "—"; return; }
+      if (!/^[0-9A-Z]+$/.test(raw)) { compEl.innerHTML = '<span class="bad">✗ Invalid character</span> — digits and consonant letters only.'; return; }
+      if (/[AEIOU]/.test(raw)) { compEl.innerHTML = '<span class="bad">✗ Invalid character</span> — vowels are not allowed.'; return; }
+      if (raw.length !== 6) { compEl.innerHTML = '<span class="bad">✗ Prefix must be 6 characters</span> (got ' + raw.length + ').'; return; }
+      var cd = checkDigit(raw);
+      if (cd < 0) { compEl.innerHTML = '<span class="bad">✗ Invalid prefix</span>'; return; }
+      lastCheck = raw + cd;
+      compEl.innerHTML = '<div class="struct">Check digit: <b>' + cd + '</b><br>Full SEDOL: <span class="ns">' + esc(raw) + '</span><span class="cd">' + cd + '</span></div>';
+    }
+
+    $("b-comp").addEventListener("click", renderCompute);
+    $("b-use").addEventListener("click", function () { if (lastCheck) { sedolEl.value = lastCheck; renderValidate(); } });
+    sedolEl.addEventListener("input", renderValidate);
+    prefixEl.addEventListener("input", renderCompute);
+
+    renderValidate();
+    renderCompute();
+
+    window.VT_SEDOL_TEST = {
+      CONSONANTS: CONSONANTS, VALID_CHARS: VALID_CHARS, WEIGHTS: WEIGHTS,
+      RE_SEDOL: RE_SEDOL, RE_PREFIX: RE_PREFIX,
+      charValue: charValue, weightedSum: weightedSum, checkDigit: checkDigit,
+      validate: validate, breakdown: breakdown
+    };
+  })();
+  </script>
+</body>
+</html>
