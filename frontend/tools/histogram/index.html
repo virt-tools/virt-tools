@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Frequency Distribution &amp; Histogram — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    textarea { width:100%; min-height:120px; font-family:ui-monospace,monospace; font-size:13px; padding:8px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; resize:vertical; box-sizing:border-box; }
+    .row { display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+    .row .lbl { min-width:120px; color:var(--text-dim,#9aa3b2); font-size:.85rem; }
+    .row input { font-family:ui-monospace,monospace; font-size:14px; padding:7px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; width:120px; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    h3 { margin:16px 0 4px; font-size:.9rem; color:var(--text-dim,#9aa3b2); text-transform:uppercase; letter-spacing:.04em; }
+    .info { font-family:ui-monospace,monospace; font-size:14px; background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:12px; margin:8px 0; line-height:1.9; }
+    .info .k { color:var(--text-dim,#9aa3b2); }
+    .info .v { color:var(--text,#e6e6e6); }
+    .tbl { font-family:ui-monospace,monospace; font-size:13px; background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:10px; margin:8px 0; line-height:1.6; white-space:pre; overflow:auto; max-height:380px; }
+    .small { color:var(--text-dim,#9aa3b2); font-size:.82rem; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    .acts { display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; }
+    .acts button { padding:7px 12px; border-radius:6px; border:1px solid var(--border,#2a2f3a); background:var(--bg-elev,#171a21); color:var(--text,#e6e6e6); cursor:pointer; font-weight:600; font-size:.78rem; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Frequency Distribution &amp; Histogram</h1>
+      <p>Bin a list of numbers into a <strong>frequency distribution</strong> with equal-width intervals and visualize it as an ASCII <strong>histogram</strong>. Enter a series, choose the number of bins, and the tool reports each bin's range, count, cumulative count, and relative frequency, plus an ASCII bar chart scaled to the tallest bin. Useful for exploring the shape of a dataset before reaching for a chart library. Runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <h3>Data</h3>
+      <textarea id="data" spellcheck="false">12, 15, 14, 19, 22, 24, 24, 25, 28, 30, 31, 33, 35, 35, 36, 38, 40, 42, 45, 48</textarea>
+      <div class="err" id="err-data"></div>
+
+      <div class="row">
+        <span class="lbl">Number of bins</span>
+        <input id="bins" type="number" min="1" max="100" value="6">
+      </div>
+      <div class="err" id="err"></div>
+
+      <div class="acts">
+        <button id="b-run" type="button">Compute</button>
+        <button id="b-ex" type="button">Example</button>
+      </div>
+
+      <h3>Summary</h3>
+      <div class="info" id="info">—</div>
+
+      <h3>Frequency table &amp; histogram</h3>
+      <div class="tbl" id="tbl">—</div>
+
+      <p class="note">The data is binned into <code>k</code> equal-width intervals spanning <code>[min, max]</code>: bin width <code>w = (max − min) / k</code>. Bin <code>i</code> holds values in <code>[min + i·w, min + (i+1)·w)</code>, and the last bin is closed on the right (it includes <code>max</code>). Each bin reports its count, cumulative count, relative frequency (count / n), and an ASCII bar scaled so the tallest bin fills the available width. When all values are identical the width is zero and everything lands in the first bin. Values are parsed as numbers separated by commas, spaces, or newlines. Pairs with the Statistics Calculator and Moving Average tools. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var MAX_BINS = 1000;
+
+    function parseSeries(str) {
+      str = String(str == null ? "" : str).trim();
+      if (str === "") throw new Error("Enter a series of numbers.");
+      var parts = str.split(/[\s,;]+/).filter(function (t) { return t !== ""; });
+      var nums = [];
+      for (var i = 0; i < parts.length; i++) {
+        var v = Number(parts[i]);
+        if (!Number.isFinite(v)) throw new Error("'" + parts[i] + "' is not a valid number.");
+        nums.push(v);
+      }
+      if (nums.length < 1) throw new Error("Enter at least one number.");
+      return nums;
+    }
+
+    // Bin a series into k equal-width bins over [min,max].
+    // Returns { min, max, width, total, bins: [{ lo, hi, count, cum, rel, closedRight }] }
+    function histogram(series, k) {
+      var n = series.length;
+      k = Number(k);
+      if (!Number.isInteger(k) || k < 1) throw new Error("Number of bins must be a positive integer.");
+      if (k > MAX_BINS) throw new Error("Too many bins (cap " + MAX_BINS + ").");
+
+      var min = Infinity, max = -Infinity;
+      for (var i = 0; i < n; i++) {
+        if (series[i] < min) min = series[i];
+        if (series[i] > max) max = series[i];
+      }
+
+      var width = (max - min) / k;
+      var bins = [];
+      for (var b = 0; b < k; b++) {
+        bins.push({ lo: min + b * width, hi: min + (b + 1) * width, count: 0, cum: 0, rel: 0, closedRight: (b === k - 1) });
+      }
+
+      if (width === 0) {
+        // all values identical -> everything in first bin
+        bins[0].count = n;
+      } else {
+        for (var j = 0; j < n; j++) {
+          var idx = Math.floor((series[j] - min) / width);
+          if (idx >= k) idx = k - 1; // clamp max into last bin
+          if (idx < 0) idx = 0;
+          bins[idx].count++;
+        }
+      }
+
+      var cum = 0;
+      for (var c = 0; c < k; c++) {
+        cum += bins[c].count;
+        bins[c].cum = cum;
+        bins[c].rel = n > 0 ? bins[c].count / n : 0;
+      }
+      return { min: min, max: max, width: width, total: n, bins: bins };
+    }
+
+    function fmt(v, dp) {
+      if (!Number.isFinite(v)) return String(v);
+      var r = Math.round(v * 1e10) / 1e10;
+      if (Number.isInteger(r)) return r.toString();
+      return r.toFixed(dp || 4).replace(/0+$/, "").replace(/\.$/, "");
+    }
+
+    // ---- DOM ----
+    function $(id) { return document.getElementById(id); }
+    var dataEl = $("data"), binsEl = $("bins"), errDataEl = $("err-data"), errEl = $("err");
+    var infoEl = $("info"), tblEl = $("tbl");
+
+    function render() {
+      errEl.textContent = ""; errDataEl.textContent = "";
+      var series, k;
+      try { series = parseSeries(dataEl.value); } catch (e) { errDataEl.textContent = e.message || String(e); infoEl.textContent = "—"; tblEl.textContent = "—"; return; }
+      k = Number(binsEl.value);
+      if (!Number.isInteger(k) || k < 1) { errEl.textContent = "Number of bins must be a positive integer."; infoEl.textContent = "—"; tblEl.textContent = "—"; return; }
+      if (k > MAX_BINS) { errEl.textContent = "Too many bins (cap " + MAX_BINS + ")."; infoEl.textContent = "—"; tblEl.textContent = "—"; return; }
+
+      var h;
+      try { h = histogram(series, k); } catch (e) { errEl.textContent = e.message || String(e); infoEl.textContent = "—"; tblEl.textContent = "—"; return; }
+
+      // summary
+      var sum = 0;
+      for (var i = 0; i < series.length; i++) sum += series[i];
+      var mean = sum / series.length;
+      infoEl.innerHTML =
+        "<span class='k'>n:</span> <span class='v'>" + h.total + "</span><br>" +
+        "<span class='k'>min:</span> <span class='v'>" + fmt(h.min) + "</span>  " +
+        "<span class='k'>max:</span> <span class='v'>" + fmt(h.max) + "</span>  " +
+        "<span class='k'>mean:</span> <span class='v'>" + fmt(mean) + "</span><br>" +
+        "<span class='k'>bin width w:</span> <span class='v'>" + fmt(h.width) + "</span>  " +
+        "<span class='k'>bins:</span> <span class='v'>" + h.bins.length + "</span>";
+
+      // table + ascii bars
+      var maxCount = 0;
+      for (var b2 = 0; b2 < h.bins.length; b2++) if (h.bins[b2].count > maxCount) maxCount = h.bins[b2].count;
+      var BAR = 40;
+      var lines = [];
+      lines.push("      bin range              count   cum    rel%   histogram");
+      lines.push("      " + "-".repeat(80));
+      for (var b3 = 0; b3 < h.bins.length; b3++) {
+        var bin = h.bins[b3];
+        var loStr = fmt(bin.lo), hiStr = fmt(bin.hi);
+        var rng = "[" + loStr + ", " + hiStr + (bin.closedRight ? "]" : ")");
+        rng = rng.padEnd(22);
+        var bars = maxCount > 0 ? Math.round(bin.count / maxCount * BAR) : 0;
+        lines.push(
+          "#" + String(b3 + 1).padStart(2) + "  " + rng + "  " +
+          String(bin.count).padStart(5) + "  " + String(bin.cum).padStart(5) + "  " +
+          (bin.rel * 100).toFixed(1).padStart(5) + "%  " +
+          "█".repeat(bars)
+        );
+      }
+      tblEl.textContent = lines.join("\n");
+    }
+    $("b-run").addEventListener("click", render);
+    $("b-ex").addEventListener("click", function () {
+      dataEl.value = "63, 64, 66, 68, 69, 70, 71, 72, 72, 73, 74, 75, 76, 77, 78, 78, 79, 80, 81, 82, 83, 85, 86, 88, 90";
+      binsEl.value = "7";
+      render();
+    });
+    dataEl.addEventListener("input", render);
+    binsEl.addEventListener("input", render);
+
+    render();
+
+    window.VT_HIST_TEST = { parseSeries: parseSeries, histogram: histogram };
+  })();
+  </script>
+</body>
+</html>

@@ -483,6 +483,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-05T15:00:00Z",
   },
   {
+    slug: "histogram",
+    name: "Frequency Distribution & Histogram",
+    description: "Bin a list of numbers into a frequency distribution with k equal-width intervals over [min, max] and visualize it as an ASCII histogram. Each bin reports its range, count, cumulative count, and relative frequency, with bars scaled to the tallest bin. The last bin is closed on the right (includes max); identical values collapse into the first bin. Useful for exploring the shape of a dataset. Pairs with the Statistics Calculator and Moving Average tools. Everything runs locally in your browser.",
+    category: "Data",
+    icon: "▨",
+    added: "2026-07-11T21:30:00Z",
+  },
+  {
     slug: "list-randomizer",
     name: "List Randomizer",
     description: "Shuffle a list, pick N unique items, or draw a single winner from newline- or comma-separated entries. An optional numeric seed makes the result reproducible. Fisher-Yates shuffle, runs locally.",
