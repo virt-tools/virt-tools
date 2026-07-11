@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Base45 Encoder / Decoder — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    textarea { width:100%; min-height:120px; font-family:ui-monospace,monospace; font-size:13px; padding:8px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; resize:vertical; box-sizing:border-box; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    .acts { display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; }
+    .acts button { padding:8px 18px; border-radius:6px; border:1px solid var(--accent,#6ea8fe); background:var(--accent,#6ea8fe); color:#0b0d12; cursor:pointer; font-weight:700; font-size:.85rem; }
+    .acts button.ghost { background:var(--bg-elev,#171a21); color:var(--text,#e6e6e6); border-color:var(--border,#2a2f3a); font-weight:600; }
+    h3 { margin:16px 0 4px; font-size:.9rem; color:var(--text-dim,#9aa3b2); text-transform:uppercase; letter-spacing:.04em; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    .small { color:var(--text-dim,#9aa3b2); font-size:.82rem; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Base45 Encoder / Decoder</h1>
+      <p>Encode and decode <strong>Base45</strong> (RFC 9285), the byte-packing encoding used in the EU Digital COVID Certificate and other compact QR-code payloads. Two bytes become three Base45 characters; a trailing byte becomes two. Runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <h3>Encode</h3>
+      <textarea id="enc-in" spellcheck="false" placeholder="Text to encode…">AB</textarea>
+      <div class="acts"><button id="b-encode" type="button">Encode →</button> <button id="b-copy" class="ghost" type="button">Copy result</button></div>
+      <div class="err" id="err1"></div>
+      <textarea id="enc-out" spellcheck="false" readonly></textarea>
+
+      <h3>Decode</h3>
+      <textarea id="dec-in" spellcheck="false" placeholder="Base45 text to decode…">BB8</textarea>
+      <div class="acts"><button id="b-decode" type="button">Decode →</button> <button id="b-toenc" class="ghost" type="button">↑ Use as encode input</button></div>
+      <div class="err" id="err2"></div>
+      <textarea id="dec-out" spellcheck="false" readonly></textarea>
+      <div class="small" id="dec-hex"></div>
+
+      <p class="note"><strong>Base45</strong> (RFC 9285) uses the 45-character alphabet <code>0–9 A–Z ␣ $ % * + - . / :</code>. Encoding walks the input bytes two at a time: each pair is treated as a big-endian 16-bit value and written as three Base45 digits, least-significant first; a final lone byte is written as two digits. Decoding reverses this — three chars → two bytes, a trailing two chars → one byte — and rejects inputs whose group values overflow (a 3-char group must be ≤ 65535, a 2-char group must be ≤ 255) or whose length leaves a lone trailing character. Input text is encoded as UTF-8; decoded bytes are shown as UTF-8 text plus a hex view. Pairs with the Base32, Base58, Base62 and Base64 encoders. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:";
+    // Reverse map: char code -> index 0..44.
+    var RMAP = (function () {
+      var m = {};
+      for (var i = 0; i < ALPHABET.length; i++) m[ALPHABET.charCodeAt(i)] = i;
+      return m;
+    })();
+
+    function utf8(str) { return new TextEncoder().encode(String(str == null ? "" : str)); }
+    function fromUtf8(bytes) { return new TextDecoder("utf-8", { fatal: false }).decode(bytes); }
+    function bytesToHex(a) { var s = ""; for (var i = 0; i < a.length; i++) s += (a[i] < 16 ? "0" : "") + a[i].toString(16); return s; }
+
+    // Encode a Uint8Array to a Base45 string. Throws on no input issues (always succeeds).
+    function encode(input) {
+      if (!(input instanceof Uint8Array)) input = new Uint8Array(input || []);
+      var out = "";
+      var n = input.length;
+      for (var i = 0; i < n; i += 2) {
+        if (i + 1 < n) {
+          var v = input[i] * 256 + input[i + 1];           // big-endian 16-bit
+          var d0 = v % 45;
+          var d1 = (v / 45 | 0) % 45;
+          var d2 = (v / 2025 | 0) % 45;
+          out += ALPHABET[d0] + ALPHABET[d1] + ALPHABET[d2];
+        } else {
+          var b = input[i];
+          out += ALPHABET[b % 45] + ALPHABET[b / 45 | 0];    // lone byte -> 2 chars
+        }
+      }
+      return out;
+    }
+
+    // Decode a Base45 string to a Uint8Array. Throws on malformed input.
+    function decode(str) {
+      str = String(str == null ? "" : str);
+      if (str.length % 3 === 1) throw new Error("Invalid Base45 length (" + str.length + "): a lone trailing character is not allowed.");
+      var out = [];
+      var i = 0;
+      while (i < str.length) {
+        if (i + 2 < str.length) {
+          // group of 3 -> 2 bytes
+          var c0 = RMAP[str.charCodeAt(i)], c1 = RMAP[str.charCodeAt(i + 1)], c2 = RMAP[str.charCodeAt(i + 2)];
+          if (c0 == null || c1 == null || c2 == null) throw new Error("Invalid Base45 character at position " + i + ".");
+          var v = c0 + 45 * c1 + 2025 * c2;
+          if (v > 65535) throw new Error("Base45 3-character group at position " + i + " overflows two bytes (" + v + " > 65535).");
+          out.push((v >> 8) & 0xff);
+          out.push(v & 0xff);
+          i += 3;
+        } else {
+          // trailing 2 chars -> 1 byte
+          var a0 = RMAP[str.charCodeAt(i)], a1 = RMAP[str.charCodeAt(i + 1)];
+          if (a0 == null || a1 == null) throw new Error("Invalid Base45 character at position " + i + ".");
+          var w = a0 + 45 * a1;
+          if (w > 255) throw new Error("Base45 trailing 2-character group at position " + i + " overflows one byte (" + w + " > 255).");
+          out.push(w);
+          i += 2;
+        }
+      }
+      return new Uint8Array(out);
+    }
+
+    // ---- DOM ----
+    function $(id) { return document.getElementById(id); }
+    var encIn = $("enc-in"), encOut = $("enc-out"), err1 = $("err1");
+    var decIn = $("dec-in"), decOut = $("dec-out"), err2 = $("err2"), decHex = $("dec-hex");
+
+    function renderEncode() {
+      err1.textContent = "";
+      try { encOut.value = encode(utf8(encIn.value)); }
+      catch (e) { err1.textContent = e.message || String(e); encOut.value = ""; }
+    }
+    function renderDecode() {
+      err2.textContent = ""; decHex.textContent = "";
+      if (!decIn.value) { decOut.value = ""; return; }
+      try {
+        var bytes = decode(decIn.value);
+        decOut.value = fromUtf8(bytes);
+        decHex.textContent = bytes.length + " bytes · hex: " + bytesToHex(bytes);
+      } catch (e) { err2.textContent = e.message || String(e); decOut.value = ""; }
+    }
+
+    $("b-encode").addEventListener("click", renderEncode);
+    $("b-copy").addEventListener("click", function () { if (encOut.value && navigator.clipboard) navigator.clipboard.writeText(encOut.value); });
+    $("b-decode").addEventListener("click", renderDecode);
+    $("b-toenc").addEventListener("click", function () { if (decIn.value) { encIn.value = decIn.value; renderEncode(); } });
+    encIn.addEventListener("input", renderEncode);
+    decIn.addEventListener("input", renderDecode);
+
+    renderEncode();
+    renderDecode();
+
+    window.VT_BASE45_TEST = {
+      ALPHABET: ALPHABET, RMAP: RMAP,
+      encode: encode, decode: decode,
+      utf8: utf8, fromUtf8: fromUtf8, bytesToHex: bytesToHex
+    };
+  })();
+  </script>
+</body>
+</html>

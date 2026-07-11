@@ -883,6 +883,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T17:00:00Z",
   },
   {
+    slug: "base45",
+    name: "Base45 Encoder / Decoder",
+    description: "Encode and decode Base45 (RFC 9285), the compact two-bytes-to-three-chars encoding used in EU Digital COVID Certificate and other QR payloads. Strict decoding rejects overflow and bad lengths. UTF-8 in, UTF-8 + hex out. Runs locally.",
+    category: "Encoding",
+    icon: "🧮",
+    added: "2026-07-11T10:40:00Z",
+  },
+  {
     slug: "random-number",
     name: "Random Number Generator",
     description: "Generate random integers or floats in a range — optionally unique and sorted. Secure mode uses Web Crypto with rejection sampling. Runs in your browser.",
