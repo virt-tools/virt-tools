@@ -2355,6 +2355,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-11T23:40:00Z",
   },
   {
+    slug: "knapsack-solver",
+    name: "Knapsack Solver",
+    description: "Solve the knapsack problem with dynamic programming: given items each with a weight and value and a capacity, pick items to maximize total value without exceeding the capacity. Supports the 0/1 variant (each item at most once) and the unbounded variant (unlimited copies). Reports the optimal value, the selected items with counts, and verifies total weight and value. Unlike linear programming (fractional items), knapsack variables are integer counts. Pairs with the Linear Programming tool. Runs locally.",
+    category: "Math",
+    icon: "🎒",
+    added: "2026-07-11T23:50:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
