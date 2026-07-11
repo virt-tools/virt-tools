@@ -2147,6 +2147,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-11T20:40:00Z",
   },
   {
+    slug: "de-bruijn-sequence",
+    name: "De Bruijn Sequence Generator",
+    description: "Generate a De Bruijn sequence B(k, n) — a cyclic sequence of length k^n over k symbols in which every length-n word appears exactly once. Built with the FKM algorithm (concatenating the Lyndon words whose length divides n), yielding the lexicographically smallest sequence. Classic cases: B(2,3)=00010111, B(2,4)=0000100110101111, B(3,2)=001021122. Verifies all k^n words occur exactly once. Digits or letters alphabet. Pairs with the Run-Length Encoding and Integer Partitions tools. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "⊛",
+    added: "2026-07-11T21:00:00Z",
+  },
+  {
     slug: "angle-converter",
     name: "Angle Converter",
     description: "Convert an angle between degrees, radians, gradians (gons), turns (revolutions), arcminutes, arcseconds, and NATO mils, and to or from degrees-minutes-seconds (DMS). Enter a value in any unit or as DMS and every other unit is shown at once. A full circle is 360° = 2π rad = 400 grad = 1 turn = 21,600′ = 1,296,000″ = 6,400 mils; values are kept raw (not wrapped to a single turn). Pairs with the Trigonometry Calculator. Everything runs locally in your browser.",
