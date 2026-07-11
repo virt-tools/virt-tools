@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Continued Fraction &amp; Best Rational Approximation — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .row { display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+    .row .lbl { min-width:120px; color:var(--text-dim,#9aa3b2); font-size:.85rem; }
+    .row input { font-family:ui-monospace,monospace; font-size:14px; padding:7px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; }
+    .row input.num { width:200px; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    .acts { display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; }
+    .acts button { padding:8px 18px; border-radius:6px; border:1px solid var(--accent,#6ea8fe); background:var(--accent,#6ea8fe); color:#0b0d12; cursor:pointer; font-weight:700; font-size:.85rem; }
+    .acts button.ghost { background:var(--bg-elev,#171a21); color:var(--text,#e6e6e6); border-color:var(--border,#2a2f3a); font-weight:600; }
+    h3 { margin:16px 0 4px; font-size:.9rem; color:var(--text-dim,#9aa3b2); text-transform:uppercase; letter-spacing:.04em; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    .cf { font-family:ui-monospace,monospace; font-size:15px; background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:10px; margin:8px 0; word-break:break-all; }
+    .conv { font-family:ui-monospace,monospace; font-size:.85rem; line-height:1.7; word-break:break-all; }
+    .conv b { color:var(--accent,#6ea8fe); }
+    .conv .alt { color:var(--text-dim,#9aa3b2); }
+    .best { font-family:ui-monospace,monospace; font-size:15px; background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:10px; margin:8px 0; }
+    .best .big { color:var(--good,#4ade80); font-weight:700; }
+    .small { color:var(--text-dim,#9aa3b2); font-size:.82rem; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Continued Fraction &amp; Best Rational Approximation</h1>
+      <p>Expand a number or fraction into its <strong>simple continued fraction</strong> <code>[a₀; a₁, a₂, …]</code>, list its <strong>convergents</strong> (the sequence of best rational approximations), and find the closest fraction whose denominator stays within a bound you choose. All arithmetic is exact (BigInt) — paste <code>355/113</code>, <code>22/7</code>, a decimal like <code>3.14159</code>, or any integer. Runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <h3>Input</h3>
+      <div class="row"><span class="lbl">Number / fraction</span><input id="x" class="num" type="text" spellcheck="false" value="3.14159"></div>
+      <div class="err" id="err"></div>
+      <div class="cf" id="cf">—</div>
+
+      <h3>Convergents</h3>
+      <div class="conv" id="conv">—</div>
+
+      <h3>Best rational approximation</h3>
+      <div class="row"><span class="lbl">Max denominator</span><input id="maxd" class="num" type="text" inputmode="numeric" value="100">
+        <button id="b-best" type="button">Find →</button></div>
+      <div class="best" id="best">—</div>
+
+      <p class="note">A <strong>simple continued fraction</strong> writes a number as <code>a₀ + 1/(a₁ + 1/(a₂ + …))</code>, abbreviated <code>[a₀; a₁, a₂, …]</code>. Each <strong>convergent</strong> <code>pₙ/qₙ</code> (formed by the recurrence <code>pₙ = aₙ·pₙ₋₁ + pₙ₋₂</code>, same for <code>q</code>) is a best rational approximation — no fraction with a smaller denominator is closer. The <strong>best rational approximation with denominator ≤ N</strong> is found among the convergents and their semiconvergents; this tool checks them all exactly. Decimals become exact rationals (e.g. <code>3.14159 → 314159/100000</code>), so every result is exact to the input you give. Negative inputs are taken as absolute value. Pairs with the GCD/LCM and Fraction Calculator tools. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var MAX_TERMS = 200;
+
+    function gcd(a, b) { a = a < 0n ? -a : a; b = b < 0n ? -b : b; while (b) { var t = a % b; a = b; b = t; } return a; }
+
+    // Parse "a/b", "a", or "a.b" -> {num: BigInt, den: BigInt} reduced, non-negative (abs).
+    function parseInput(str) {
+      str = String(str == null ? "" : str).trim();
+      if (!str) throw new Error("Enter a number or fraction (e.g. 355/113 or 3.14159).");
+      var neg = false;
+      if (str[0] === "-") { neg = true; str = str.slice(1).trim(); }
+      else if (str[0] === "+") str = str.slice(1).trim();
+      var num, den;
+      if (str.indexOf("/") >= 0) {
+        var parts = str.split("/").map(function (s) { return s.trim(); });
+        if (parts.length !== 2 || !/^\d+$/.test(parts[0]) || !/^\d+$/.test(parts[1]))
+          throw new Error("Fraction must be two non-negative integers separated by '/'.");
+        num = BigInt(parts[0]); den = BigInt(parts[1]);
+        if (den === 0n) throw new Error("Denominator cannot be zero.");
+      } else {
+        // decimal or integer
+        if (!/^\d*(\.\d*)?$/.test(str) || str === "." || str === "")
+          throw new Error("Enter a number (e.g. 3.14159), integer, or fraction a/b.");
+        var dot = str.indexOf(".");
+        if (dot < 0) { num = BigInt(str); den = 1n; }
+        else {
+          var intPart = str.slice(0, dot) || "0";
+          var frac = str.slice(dot + 1) || "";
+          var scale = frac.length;
+          num = BigInt(intPart + frac);
+          den = 10n ** BigInt(scale);
+        }
+      }
+      var g = gcd(num, den);
+      if (g > 1n) { num /= g; den /= g; }
+      // negative handled as absolute value
+      return { num: neg ? num : num, den: den, negative: neg };
+    }
+
+    // Simple continued fraction terms (BigInt[]) in canonical form (last term >= 2 for non-integers).
+    function toCF(num, den, maxTerms) {
+      if (den === 0n) throw new Error("Zero denominator.");
+      var terms = [];
+      maxTerms = maxTerms || MAX_TERMS;
+      var a, rem;
+      while (den !== 0n && terms.length < maxTerms) {
+        a = num / den;            // BigInt floor (both non-negative)
+        rem = num - a * den;
+        terms.push(a);
+        num = den; den = rem;
+      }
+      // canonicalize: [..., n, 1] -> [..., n+1]
+      if (terms.length >= 2 && terms[terms.length - 1] === 1n) {
+        terms[terms.length - 2] = terms[terms.length - 2] + 1n;
+        terms.pop();
+      }
+      return terms;
+    }
+
+    // Convergents [{p, q}] from CF terms, using the standard recurrence.
+    function convergents(terms) {
+      var pPrev2 = 0n, pPrev1 = 1n, qPrev2 = 1n, qPrev1 = 0n;
+      var rows = [];
+      for (var i = 0; i < terms.length; i++) {
+        var a = terms[i];
+        var p = a * pPrev1 + pPrev2;
+        var q = a * qPrev1 + qPrev2;
+        rows.push({ p: p, q: q });
+        pPrev2 = pPrev1; pPrev1 = p; qPrev2 = qPrev1; qPrev1 = q;
+      }
+      return rows;
+    }
+
+    // Generate all best-approximation candidates (convergents + semiconvergents) with q <= maxDen,
+    // then pick the closest to num/den. Returns {p, q}.
+    function bestApprox(num, den, maxDen) {
+      maxDen = BigInt(maxDen);
+      if (maxDen < 1n) throw new Error("Max denominator must be >= 1.");
+      if (den === 0n) throw new Error("Denominator cannot be zero.");
+      var g = gcd(num, den); if (g > 1n) { num /= g; den /= g; }
+      // exact: if input denominator <= maxDen, return it
+      if (den <= maxDen) return { p: num, q: den };
+      var terms = toCF(num, den, MAX_TERMS);
+      var pPrev2 = 0n, pPrev1 = 1n, qPrev2 = 1n, qPrev1 = 0n;
+      var best = null; // {p, q}
+      // |num/den - p/q| = |num*q - p*den| / (den*q); compare via cross-multiplication.
+      // distance numerator (avoiding division): D = |num*q - p*den|; weight by q for tie/cross compare.
+      function consider(p, q) {
+        if (q > maxDen || q < 1n) return;
+        var dist = num * q - p * den; if (dist < 0n) dist = -dist;
+        if (best === null) { best = { p: p, q: q, dist: dist }; return; }
+        // compare dist1/q1 vs dist2/q2  =>  dist1*q2 vs dist2*q1
+        var cmp = best.dist * q - dist * best.q;
+        if (cmp > 0n) best = { p: p, q: q, dist: dist };
+        else if (cmp === 0n && q < best.q) best = { p: p, q: q, dist: dist };
+      }
+      for (var i = 0; i < terms.length; i++) {
+        var a = terms[i];
+        // semiconvergents + convergent: k = 1..a, candidate (k*pPrev1 + pPrev2)/(k*qPrev1 + qPrev2)
+        for (var k = 1n; k <= a; k++) {
+          var p = k * pPrev1 + pPrev2;
+          var q = k * qPrev1 + qPrev2;
+          consider(p, q);
+        }
+        // advance to convergent (k = a value already set pPrev1 to it)
+        var convP = a * pPrev1 + pPrev2;
+        var convQ = a * qPrev1 + qPrev2;
+        pPrev2 = pPrev1; pPrev1 = convP; qPrev2 = qPrev1; qPrev1 = convQ;
+        if (convQ > maxDen) break; // further convergents only grow the denominator
+      }
+      if (best === null) return { p: 0n, q: 1n };
+      return { p: best.p, q: best.q };
+    }
+
+    // ---- formatting / DOM ----
+    function $(id) { return document.getElementById(id); }
+    var xEl = $("x"), errEl = $("err"), cfEl = $("cf"), convEl = $("conv"), maxdEl = $("maxd"), bestEl = $("best");
+
+    function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+    function decOf(p, q) {
+      // high-precision decimal string of p/q (BigInt), to ~20 significant digits.
+      var sign = p < 0n ? "-" : "";
+      p = p < 0n ? -p : p;
+      var intPart = p / q;
+      var rem = p - intPart * q;
+      var digits = "";
+      for (var i = 0; i < 20 && rem !== 0n; i++) {
+        rem *= 10n;
+        digits += (rem / q).toString();
+        rem = rem % q;
+      }
+      var s = sign + intPart.toString();
+      if (digits) s += "." + digits;
+      return s;
+    }
+
+    function render() {
+      errEl.textContent = "";
+      try {
+        var parsed = parseInput(xEl.value);
+        var terms = toCF(parsed.num, parsed.den, MAX_TERMS);
+        var cfStr = "[" + terms.map(function (t, i) { return t.toString(); }).join(", ") + "]";
+        if (parsed.negative) cfStr = "(abs) " + cfStr;
+        cfEl.innerHTML = "<b>[" + esc(parsed.num.toString()) + "/" + esc(parsed.den.toString()) + "] =</b> " + esc(cfStr);
+        var conv = convergents(terms);
+        var html = conv.map(function (r, i) {
+          return "<b>" + r.p.toString() + "/" + r.q.toString() + "</b>" +
+            " <span class='alt'>≈ " + esc(decOf(r.p, r.q)) + " <small>(term " + i + ": a=" + terms[i].toString() + ")</small></span>";
+        }).join("<br>");
+        convEl.innerHTML = html || "—";
+        renderBest(parsed);
+      } catch (e) {
+        errEl.textContent = e.message || String(e);
+        cfEl.textContent = "—"; convEl.textContent = "—"; bestEl.textContent = "—";
+      }
+    }
+    function renderBest(parsed) {
+      try {
+        var m = maxdEl.value.trim();
+        if (!/^\d+$/.test(m)) { bestEl.innerHTML = '<span style="color:var(--bad,#f87171)">Max denominator must be a positive integer.</span>'; return; }
+        var r = bestApprox(parsed.num, parsed.den, BigInt(m));
+        bestEl.innerHTML = "<span class='big'>" + r.p.toString() + "/" + r.q.toString() + "</span> ≈ " + esc(decOf(r.p, r.q)) +
+          " <span class='alt'>(denominator " + r.q.toString() + " ≤ " + esc(m) + ")</span>";
+      } catch (e) { bestEl.textContent = e.message || String(e); }
+    }
+
+    $("b-best").addEventListener("click", function () { try { var p = parseInput(xEl.value); renderBest(p); } catch (e) { bestEl.textContent = e.message; } });
+    xEl.addEventListener("input", render);
+    maxdEl.addEventListener("input", render);
+
+    render();
+
+    window.VT_CF_TEST = {
+      gcd: gcd, parseInput: parseInput, toCF: toCF,
+      convergents: convergents, bestApprox: bestApprox, decOf: decOf
+    };
+  })();
+  </script>
+</body>
+</html>

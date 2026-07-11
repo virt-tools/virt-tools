@@ -1619,6 +1619,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-04T21:40:00Z",
   },
   {
+    slug: "continued-fraction",
+    name: "Continued Fraction & Best Rational Approximation",
+    description: "Expand a number or fraction into its simple continued fraction [a₀; a₁, a₂, …], list its convergents (the sequence of best rational approximations, formed by the recurrence pₙ = aₙ·pₙ₋₁ + pₙ₋₂), and find the closest fraction whose denominator stays within a bound you choose. Paste a fraction like 355/113 or 22/7, a decimal like 3.14159, or any integer; decimals become exact rationals (3.14159 → 314159/100000), so every result is exact to the input. All arithmetic uses big integers, and the best-approximation search checks every convergent and semiconvergent exactly. Pairs with the Fraction Calculator and GCD/LCM tools. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "➗",
+    added: "2026-07-11T11:40:00Z",
+  },
+  {
     slug: "statistics-calculator",
     name: "Statistics Calculator",
     description: "Compute summary statistics for a list of numbers — count, sum, mean, median, mode, minimum, maximum, range, quartiles (Q1, median, Q3) with interquartile range, and both population and sample variance and standard deviation. Paste values separated by commas, spaces, or new lines; the data is sorted and analysed in your browser. Quartiles use Tukey's hinges and the mode reports every most-frequent value when there are ties. Everything runs locally in your browser.",
