@@ -763,6 +763,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T11:10:00Z",
   },
   {
+    slug: "line-deduplicator",
+    name: "Line Deduplicator",
+    description: "Remove duplicate lines from a list, or surface them. Choose a comparison key (case-insensitive, trimmed), keep first or last occurrence, and output unique lines, only the duplicates, or every line with a count. Order-preserving, runs locally.",
+    category: "Text",
+    icon: "♻️",
+    added: "2026-07-11T08:40:00Z",
+  },
+  {
     slug: "line-number-tool",
     name: "Line Number Tool",
     description: "Add, remove, or renumber sequential line numbers on a list. Add with a chosen start, step, and separator; remove leading number prefixes (1. / 2) / 3: …); or renumber keeping each line's separator style and filling gaps. Runs locally.",

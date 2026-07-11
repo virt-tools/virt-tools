@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Line Deduplicator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .row { display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+    .row .lbl { min-width:130px; color:var(--text-dim,#9aa3b2); font-size:.85rem; }
+    .row select { font-family:ui-monospace,monospace; font-size:14px; padding:7px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; }
+    .small { color:var(--text-dim,#9aa3b2); font-size:.85rem; }
+    .small label { margin-right:14px; cursor:pointer; }
+    textarea { width:100%; min-height:160px; font-family:ui-monospace,monospace; font-size:13px; padding:8px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; resize:vertical; box-sizing:border-box; }
+    .acts { display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; }
+    .acts button { padding:8px 18px; border-radius:6px; border:1px solid var(--accent,#6ea8fe); background:var(--accent,#6ea8fe); color:#0b0d12; cursor:pointer; font-weight:700; font-size:.85rem; }
+    .acts button.ghost { background:var(--bg-elev,#171a21); color:var(--text,#e6e6e6); border-color:var(--border,#2a2f3a); font-weight:600; }
+    h3 { margin:16px 0 4px; font-size:.9rem; color:var(--text-dim,#9aa3b2); text-transform:uppercase; letter-spacing:.04em; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    .stats { color:var(--text-dim,#9aa3b2); font-size:.82rem; margin:6px 0; font-family:ui-monospace,monospace; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Line Deduplicator</h1>
+      <p>Remove duplicate lines from a list, or find them. Paste any multi-line text and choose how duplicates are identified (case-sensitive, trimmed whitespace), which occurrence to keep (first or last), and what to output — unique lines, only the duplicated ones, or every line with a count. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <h3>Input</h3>
+      <textarea id="in" spellcheck="false" placeholder="Paste lines here…">apple
+banana
+Apple
+banana
+cherry
+apple
+date</textarea>
+
+      <div class="row"><span class="lbl">Output</span>
+        <select id="mode">
+          <option value="unique">Unique lines (remove duplicates)</option>
+          <option value="duplicates">Duplicates only</option>
+          <option value="counts">All lines with counts</option>
+        </select></div>
+      <div class="row"><span class="lbl">Keep</span>
+        <select id="keep">
+          <option value="first">First occurrence</option>
+          <option value="last">Last occurrence</option>
+        </select></div>
+      <div class="small">
+        <label><input type="checkbox" id="ci"> Case-insensitive</label>
+        <label><input type="checkbox" id="trim"> Trim whitespace before comparing</label>
+        <label><input type="checkbox" id="ignoreempty"> Ignore empty lines</label>
+      </div>
+      <div class="acts">
+        <button id="b-run" type="button">Run</button>
+        <button id="b-copy" class="ghost" type="button">Copy result</button>
+      </div>
+      <div class="stats" id="stats"></div>
+      <h3>Result</h3>
+      <textarea id="out" spellcheck="false" readonly></textarea>
+
+      <p class="note">Each input line gets a comparison <em>key</em>: optionally trimmed of surrounding whitespace and/or lower-cased. Lines sharing a key are duplicates. <strong>Keep first/last</strong> chooses which physical line is emitted among equal keys (output order always follows first appearance). <strong>Unique</strong> emits one line per key; <strong>Duplicates only</strong> emits only keys that appeared two or more times; <strong>All with counts</strong> emits one line per key prefixed with its occurrence count and a tab. <strong>Ignore empty lines</strong> drops blank lines entirely (otherwise blank lines are treated as a normal line, so repeated blanks collapse to one). The trailing newline of the input is treated as a terminator, not as an extra blank line. Pairs with the line sorter and line numberer. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    function splitLines(text) {
+      text = String(text == null ? "" : text);
+      if (text.length === 0) return [];
+      var t = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+      var lines = t.split("\n");
+      // drop a single trailing empty element if the input ended with a newline
+      if (lines.length > 0 && lines[lines.length - 1] === "" && /[\n\r]$/.test(text)) lines.pop();
+      return lines;
+    }
+    function trimLine(s) { return String(s).replace(/^\s+|\s+$/g, ""); }
+    function keyOf(line, opts) {
+      var k = opts.trim ? trimLine(line) : String(line);
+      if (opts.ci) k = k.toLowerCase();
+      return k;
+    }
+    function isEmpty(line, opts) { return (opts.trim ? trimLine(line) : String(line)) === ""; }
+
+    // Returns { lines: [output strings], stats: {input, unique, duplicateKeys, removed, ignoredEmpty} }.
+    function process(text, opts) {
+      var all = splitLines(text);
+      var order = [];
+      var keptLine = {};
+      var count = {};
+      var ignoredEmpty = 0;
+      for (var i = 0; i < all.length; i++) {
+        var line = all[i];
+        if (opts.ignoreEmpty && isEmpty(line, opts)) { ignoredEmpty++; continue; }
+        var k = keyOf(line, opts);
+        if (!(k in count)) { order.push(k); keptLine[k] = line; count[k] = 0; }
+        count[k]++;
+        if (opts.keep === "last") keptLine[k] = line;
+      }
+      var out = [];
+      var dupKeys = 0;
+      for (var j = 0; j < order.length; j++) {
+        var k = order[j];
+        if (count[k] >= 2) dupKeys++;
+        if (opts.mode === "unique") out.push(keptLine[k]);
+        else if (opts.mode === "duplicates") { if (count[k] >= 2) out.push(keptLine[k]); }
+        else if (opts.mode === "counts") out.push(count[k] + "\t" + keptLine[k]);
+      }
+      var considered = all.length - ignoredEmpty;
+      return {
+        lines: out,
+        stats: {
+          input: all.length,
+          unique: order.length,
+          duplicateKeys: dupKeys,
+          removed: considered - order.length,
+          ignoredEmpty: ignoredEmpty
+        }
+      };
+    }
+
+    // ---- DOM ----
+    function $(id) { return document.getElementById(id); }
+    var inEl = $("in"), modeEl = $("mode"), keepEl = $("keep"), ciEl = $("ci"), trimEl = $("trim"), ignoreEl = $("ignoreempty");
+    var statsEl = $("stats"), outEl = $("out");
+
+    function opts() {
+      return {
+        mode: modeEl.value, keep: keepEl.value,
+        ci: ciEl.checked, trim: trimEl.checked, ignoreEmpty: ignoreEl.checked
+      };
+    }
+
+    function render() {
+      var r = process(inEl.value, opts());
+      outEl.value = r.lines.join("\n");
+      statsEl.textContent = "input " + r.stats.input + " lines · " + r.stats.unique + " unique · " +
+        r.stats.duplicateKeys + " duplicate keys · " + r.stats.removed + " duplicates removed" +
+        (r.stats.ignoredEmpty ? " · " + r.stats.ignoredEmpty + " empty lines ignored" : "");
+    }
+
+    $("b-run").addEventListener("click", render);
+    $("b-copy").addEventListener("click", function () { if (outEl.value && navigator.clipboard) navigator.clipboard.writeText(outEl.value); });
+    [modeEl, keepEl, ciEl, trimEl, ignoreEl].forEach(function (el) {
+      el.addEventListener("change", render);
+      el.addEventListener("input", render);
+    });
+    inEl.addEventListener("input", render);
+    render();
+
+    window.VT_DEDUP_TEST = { splitLines: splitLines, keyOf: keyOf, trimLine: trimLine, process: process };
+  })();
+  </script>
+</body>
+</html>
