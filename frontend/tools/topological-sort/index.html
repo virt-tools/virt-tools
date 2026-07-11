@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Topological Sort — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .row { display:flex; gap:10px; align-items:flex-start; margin:8px 0; flex-wrap:wrap; }
+    .row .lbl { min-width:160px; color:var(--text-dim,#9aa3b2); font-size:.85rem; padding-top:7px; }
+    textarea { font-family:ui-monospace,monospace; font-size:13px; padding:8px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; width:100%; box-sizing:border-box; resize:vertical; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; font-family:ui-monospace,monospace; }
+    h3 { margin:16px 0 4px; font-size:.9rem; color:var(--text-dim,#9aa3b2); text-transform:uppercase; letter-spacing:.04em; }
+    .info { font-family:ui-monospace,monospace; font-size:13px; background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:12px; margin:8px 0; line-height:1.8; }
+    .info .k { color:var(--text-dim,#9aa3b2); display:inline-block; min-width:140px; }
+    .info .v { color:var(--text,#e6e6e6); }
+    .info .big { color:var(--good,#4ade80); font-weight:700; }
+    .info .bad { color:var(--bad,#f87171); font-weight:700; }
+    .order { font-family:ui-monospace,monospace; font-size:14px; background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:12px; margin:8px 0; word-break:break-word; line-height:1.9; }
+    .order .step { display:inline-block; background:var(--bg-elev-2,#1e222b); border:1px solid var(--border,#2a2f3a); border-radius:5px; padding:2px 8px; margin:2px; }
+    .order .idx { color:var(--text-dim,#9aa3b2); font-size:.72rem; margin-right:3px; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    .acts { display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; }
+    .acts button { padding:7px 12px; border-radius:6px; border:1px solid var(--border,#2a2f3a); background:var(--bg-elev,#171a21); color:var(--text,#e6e6e6); cursor:pointer; font-weight:600; font-size:.78rem; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Topological Sort</h1>
+      <p>Compute a <strong>topological ordering</strong> of a directed acyclic graph — the order in which to run tasks so every dependency precedes its dependents. Enter edges and the tool returns a valid order (the lexicographically smallest one), reports unreachable nodes, and detects cycles. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <h3>Edges</h3>
+      <div class="row"><span class="lbl">Edges / nodes</span></div>
+      <textarea id="edges" rows="8" spellcheck="false">course1 course2
+course2 course3
+course1 course3
+course3 thesis
+seminar thesis</textarea>
+      <p class="note" style="font-size:.8rem;margin:4px 0">One rule per line. <code>A B</code> means <strong>A must come before B</strong> (A is a prerequisite of B). A chain <code>A B C</code> means A before B before C. A single token on a line declares a node with no dependencies. Blank lines and <code>#</code> comments are ignored.</p>
+
+      <div class="err" id="err"></div>
+
+      <div class="acts">
+        <button id="b-run" type="button">Sort</button>
+        <button id="b-ex1" type="button">Course prerequisites</button>
+        <button id="b-ex2" type="button">Build order</button>
+        <button id="b-ex3" type="button">Cycle</button>
+      </div>
+
+      <h3>Result</h3>
+      <div class="info" id="info">—</div>
+      <div class="order" id="order">—</div>
+
+      <p class="note" style="margin-top:14px"><strong>Topological sorting</strong> labels each node of a directed acyclic graph with an order index such that for every edge A → B, A's index is less than B's. It is the classic way to schedule tasks with dependencies: build steps, course prerequisites, package installation. This tool uses <strong>Kahn's algorithm</strong> (repeatedly remove a node with no incoming edges); by always choosing the lexicographically smallest available node it returns the <em>lexicographically smallest</em> valid order, which is unique for a given graph. If no node has zero in-degree while nodes remain, the graph contains a <strong>cycle</strong> and no valid ordering exists. Pairs with the Shortest Path (Dijkstra) and Graph tools. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    // Parse the edge block. Returns { nodes: string[], edges: [string,string][] }.
+    // Throws on malformed lines.
+    function parseGraph(text) {
+      var nodes = {};
+      var nodeOrder = [];
+      var edges = [];
+      var lines = String(text).split(/\r?\n/);
+      function addNode(n) {
+        if (n === "") throw new Error("Empty token on a line.");
+        if (!Object.prototype.hasOwnProperty.call(nodes, n)) {
+          nodes[n] = true;
+          nodeOrder.push(n);
+        }
+      }
+      for (var i = 0; i < lines.length; i++) {
+        var raw = lines[i];
+        var line = raw.replace(/#.*$/, "").trim();
+        if (line === "") continue;
+        var toks = line.split(/\s+/);
+        if (toks.length === 1) {
+          addNode(toks[0]);
+        } else {
+          for (var j = 0; j < toks.length - 1; j++) {
+            var u = toks[j], v = toks[j + 1];
+            addNode(u); addNode(v);
+            edges.push([u, v]);
+          }
+        }
+      }
+      if (nodeOrder.length === 0) throw new Error("No nodes provided.");
+      return { nodes: nodeOrder.slice(), edges: edges };
+    }
+
+    // Kahn's algorithm, lexicographically smallest order.
+    // Returns { order: string[]|null, cyclic: bool, partial: string[], remaining: string[] }.
+    function topoSort(nodeList, edges) {
+      var adj = {}, indeg = {};
+      for (var i = 0; i < nodeList.length; i++) { adj[nodeList[i]] = []; indeg[nodeList[i]] = 0; }
+      for (var e = 0; e < edges.length; e++) {
+        var u = edges[e][0], v = edges[e][1];
+        if (u === v) {
+          // self-loop -> cycle
+          adj[u].push(v); indeg[v]++;
+          continue;
+        }
+        adj[u].push(v); indeg[v]++;
+      }
+      var sorted = nodeList.slice().sort();
+      var used = {};
+      var order = [];
+      while (order.length < nodeList.length) {
+        var cand = null;
+        for (var k = 0; k < sorted.length; k++) {
+          var n = sorted[k];
+          if (!used[n] && indeg[n] === 0) { cand = n; break; }
+        }
+        if (cand === null) {
+          var remaining = sorted.filter(function (n) { return !used[n]; });
+          return { order: null, cyclic: true, partial: order, remaining: remaining };
+        }
+        used[cand] = true;
+        order.push(cand);
+        var nbrs = adj[cand];
+        for (var w = 0; w < nbrs.length; w++) indeg[nbrs[w]]--;
+      }
+      return { order: order, cyclic: false, partial: order, remaining: [] };
+    }
+
+    // Validate that an order respects all edges and covers every node exactly once.
+    function validateOrder(nodeList, edges, order) {
+      if (!order || order.length !== nodeList.length) return false;
+      var pos = {};
+      for (var i = 0; i < order.length; i++) {
+        if (Object.prototype.hasOwnProperty.call(pos, order[i])) return false; // duplicate
+        pos[order[i]] = i;
+      }
+      for (var j = 0; j < nodeList.length; j++) {
+        if (!Object.prototype.hasOwnProperty.call(pos, nodeList[j])) return false; // missing
+      }
+      for (var e = 0; e < edges.length; e++) {
+        if (pos[edges[e][0]] >= pos[edges[e][1]]) return false;
+      }
+      return true;
+    }
+
+    // ---- DOM ----
+    function $(id) { return document.getElementById(id); }
+    var edgesEl = $("edges"), errEl = $("err"), infoEl = $("info"), orderEl = $("order");
+
+    function escapeHtml(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+    function render() {
+      errEl.textContent = "";
+      infoEl.innerHTML = "—"; orderEl.innerHTML = "—";
+      var g;
+      try { g = parseGraph(edgesEl.value); }
+      catch (e) { errEl.textContent = e.message || String(e); return; }
+
+      var res = topoSort(g.nodes, g.edges);
+      var info;
+      if (res.cyclic) {
+        info = "<span class='k'>status</span> <span class='bad'>cycle detected — no valid ordering</span><br>" +
+          "<span class='k'>nodes</span> <span class='v'>" + g.nodes.length + "</span><br>" +
+          "<span class='k'>edges</span> <span class='v'>" + g.edges.length + "</span><br>" +
+          "<span class='k'>ordered before cycle</span> <span class='v'>" + res.partial.length + "</span><br>" +
+          "<span class='k'>stuck on</span> <span class='v'>" + escapeHtml(res.remaining.join(", ")) + "</span>";
+        infoEl.innerHTML = info;
+        orderEl.innerHTML = "<span class='bad'>The remaining nodes form (or participate in) a cycle, so a total order is impossible. Remove a dependency to break the loop.</span>";
+        return;
+      }
+      var valid = validateOrder(g.nodes, g.edges, res.order);
+      info = "<span class='k'>status</span> <span class='" + (valid ? "big" : "bad") + "'>" + (valid ? "valid order" : "INVALID") + "</span><br>" +
+        "<span class='k'>nodes</span> <span class='v'>" + g.nodes.length + "</span><br>" +
+        "<span class='k'>edges</span> <span class='v'>" + g.edges.length + "</span><br>" +
+        "<span class='k'>order length</span> <span class='v'>" + res.order.length + "</span>";
+      infoEl.innerHTML = info;
+
+      var html = "";
+      for (var i = 0; i < res.order.length; i++) {
+        html += "<span class='step'><span class='idx'>" + (i + 1) + ".</span>" + escapeHtml(res.order[i]) + "</span>";
+      }
+      orderEl.innerHTML = html;
+    }
+
+    function setEdges(t) { edgesEl.value = t; render(); }
+    $("b-run").addEventListener("click", render);
+    $("b-ex1").addEventListener("click", function () { setEdges("course1 course2\ncourse2 course3\ncourse1 course3\ncourse3 thesis\nseminar thesis"); });
+    $("b-ex2").addEventListener("click", function () { setEdges("# build order: compile after generating sources\nparse generate-code\nparse write-tests\ngenerate-code compile\nwrite-tests compile\ncompile link\nlink deploy"); });
+    $("b-ex3").addEventListener("click", function () { setEdges("a b\nb c\nc a\nd b"); });
+    edgesEl.addEventListener("input", render);
+
+    render();
+
+    window.VT_TOPO_TEST = { parseGraph: parseGraph, topoSort: topoSort, validateOrder: validateOrder };
+  })();
+  </script>
+</body>
+</html>
