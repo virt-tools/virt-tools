@@ -1667,6 +1667,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-11T15:10:00Z",
   },
   {
+    slug: "euler-totient",
+    name: "Euler's Totient & Number-Theoretic Functions",
+    description: "For a positive integer n, compute its multiplicative number-theoretic functions from the prime factorization: φ(n) Euler's totient (how many 1≤k≤n are coprime to n), λ(n) Carmichael's function (the exponent of the multiplicative group mod n), τ(n) divisor count, σ(n) divisor sum, the distinct prime factors, the full prime factorization, and primality. Exact big-integer arithmetic. Pairs with the Prime Factorization, Extended Euclidean, and Modular Arithmetic tools. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "φ",
+    added: "2026-07-11T15:40:00Z",
+  },
+  {
     slug: "statistics-calculator",
     name: "Statistics Calculator",
     description: "Compute summary statistics for a list of numbers — count, sum, mean, median, mode, minimum, maximum, range, quartiles (Q1, median, Q3) with interquartile range, and both population and sample variance and standard deviation. Paste values separated by commas, spaces, or new lines; the data is sorted and analysed in your browser. Quartiles use Tukey's hinges and the mode reports every most-frequent value when there are ties. Everything runs locally in your browser.",
