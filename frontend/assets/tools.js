@@ -979,6 +979,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-11T05:40:00Z",
   },
   {
+    slug: "cusip-validator",
+    name: "CUSIP Validator",
+    description: "Validate a CUSIP (9-char US/Canada securities code) with its Luhn-style check digit, or compute the check digit for an 8-char issuer prefix. Supports the extended * @ # private-issue characters. Runs locally.",
+    category: "Finance",
+    icon: "💼",
+    added: "2026-07-11T09:40:00Z",
+  },
+  {
     slug: "imei-validator",
     name: "IMEI Validator",
     description: "Validate a 15-digit IMEI (mobile device identifier) with its Luhn check digit, break it into TAC + SNR, compute the check digit, or generate a random valid IMEI.",

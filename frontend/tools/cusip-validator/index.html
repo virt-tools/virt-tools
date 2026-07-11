@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>CUSIP Validator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .row { display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+    .row .lbl { min-width:130px; color:var(--text-dim,#9aa3b2); font-size:.85rem; }
+    .row input { font-family:ui-monospace,monospace; font-size:14px; padding:7px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; }
+    .row input.cusip { width:240px; text-transform:uppercase; letter-spacing:.5px; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    .acts { display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; }
+    .acts button { padding:8px 18px; border-radius:6px; border:1px solid var(--accent,#6ea8fe); background:var(--accent,#6ea8fe); color:#0b0d12; cursor:pointer; font-weight:700; font-size:.85rem; }
+    .acts button.ghost { background:var(--bg-elev,#171a21); color:var(--text,#e6e6e6); border-color:var(--border,#2a2f3a); font-weight:600; }
+    h3 { margin:16px 0 4px; font-size:.9rem; color:var(--text-dim,#9aa3b2); text-transform:uppercase; letter-spacing:.04em; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    .verdict { font-family:ui-monospace,monospace; font-size:14px; background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:10px; margin:8px 0; min-height:40px; }
+    .verdict .ok { color:var(--good,#4ade80); font-weight:700; }
+    .verdict .bad { color:var(--bad,#f87171); font-weight:700; }
+    .struct { font-family:ui-monospace,monospace; font-size:.85rem; line-height:1.8; word-break:break-all; }
+    .struct .ns { color:var(--good,#4ade80); }
+    .struct .cd { color:#f0c674; }
+    .struct small { color:var(--text-dim,#9aa3b2); font-size:.78rem; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>CUSIP Validator &amp; Check-Digit Calculator</h1>
+      <p>Validate <strong>CUSIPs</strong> (Committee on Uniform Securities Identification Procedures codes) and compute their check digit. A CUSIP is a 9-character alphanumeric code — an 8-character issuer / national security identifier and a single trailing check digit — that identifies US and Canadian securities. It uses digits <code>0</code>–<code>9</code>, the letters <code>A</code>–<code>Z</code> (vowels included), and an extended <code>* @ #</code> set, with a Luhn-style weighted check-digit algorithm. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <h3>Validate a CUSIP</h3>
+      <div class="row"><span class="lbl">CUSIP</span><input type="text" id="cusip" class="cusip" spellcheck="false" value="037833100"></div>
+      <div class="err" id="err"></div>
+      <div class="verdict" id="verdict">—</div>
+
+      <h3>Compute check digit</h3>
+      <div class="row"><span class="lbl">8-char prefix</span><input type="text" id="prefix" class="cusip" spellcheck="false" value="03783310"></div>
+      <div class="acts">
+        <button id="b-comp" type="button">Compute →</button>
+        <button id="b-use" class="ghost" type="button">Use as CUSIP input</button>
+      </div>
+      <div class="verdict" id="comp">—</div>
+
+      <p class="note"><strong>CUSIP</strong> structure: positions 1–8 are the alphanumeric <strong>issuer / NSIN</strong>, position 9 is the <strong>check digit</strong>. Allowed characters in the first eight are <code>0</code>–<code>9</code>, <code>A</code>–<code>Z</code> (vowels included), and the extended private-issue characters <code>*</code> (36), <code>@</code> (37) and <code>#</code> (38); the check digit is always <code>0</code>–<code>9</code>. Each character has a numeric value: a digit → itself; a letter → its position in the alphabet plus 9, giving <code>A</code>=10, <code>B</code>=11, … <code>Z</code>=35. The check digit is computed by multiplying the eight NSIN values by the alternating weights <code>[1, 2, 1, 2, 1, 2, 1, 2]</code> (leftmost is ×1), summing the <em>decimal digits</em> of each product, then taking <code>(10 − sum mod 10) mod 10</code>. Validation recomputes that digit and compares it to the 9th character. CUSIPs are case-insensitive on input (uppercased here). A US CUSIP is embedded (without the leading <code>US</code>) as the NSIN of the matching 12-character ISIN. Pairs with the SEDOL and ISIN validators. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    // Valid NSIN characters: digits 0-9, letters A-Z, and extended * @ #.
+    var VALID_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ*@#";
+    // Alternating weights for the 8 NSIN characters (leftmost is x1).
+    var WEIGHTS = [1, 2, 1, 2, 1, 2, 1, 2];
+    var RE_NSIN8 = /^[0-9A-Z*@#]{8}$/;
+    var RE_CUSIP9 = /^[0-9A-Z*@#]{8}[0-9]$/;
+
+    // Numeric value of a single CUSIP character (already uppercased + validated).
+    // digit -> 0..9; A-Z -> 10..35; '*' -> 36; '@' -> 37; '#' -> 38.
+    function charValue(ch) {
+      var c = ch.charCodeAt(0);
+      if (c >= 48 && c <= 57) return c - 48;            // '0'-'9'
+      if (c >= 65 && c <= 90) return c - 65 + 10;       // 'A'-'Z'
+      if (ch === "*") return 36;
+      if (ch === "@") return 37;
+      if (ch === "#") return 38;
+      return -1;
+    }
+
+    // Sum of the decimal digits of n, taken once (e.g. 14 -> 5, 76 -> 13, 0 -> 0).
+    function digitSum(n) {
+      n = Math.abs(n);
+      if (n < 10) return n;
+      var s = 0;
+      while (n > 0) { s += n % 10; n = Math.floor(n / 10); }
+      return s;
+    }
+
+    // Weighted checksum of an 8-char NSIN. Returns -1 if any character is invalid.
+    function weightedSum(nsin8) {
+      if (nsin8 == null || nsin8.length !== 8) return -1;
+      nsin8 = String(nsin8).toUpperCase();
+      var sum = 0;
+      for (var i = 0; i < 8; i++) {
+        var v = charValue(nsin8[i]);
+        if (v < 0) return -1;
+        sum += digitSum(v * WEIGHTS[i]);
+      }
+      return sum;
+    }
+
+    // Check digit (0..9) for an 8-char NSIN, or -1 if invalid.
+    function checkDigit(prefix) {
+      if (prefix == null) return -1;
+      prefix = String(prefix).toUpperCase();
+      if (!RE_NSIN8.test(prefix)) return -1;
+      var sum = weightedSum(prefix);
+      if (sum < 0) return -1;
+      return (10 - (sum % 10)) % 10;
+    }
+
+    // Validate a full 9-char CUSIP.
+    function validate(cusip) {
+      if (cusip == null) return false;
+      cusip = String(cusip).toUpperCase();
+      if (!RE_CUSIP9.test(cusip)) return false;
+      var expected = checkDigit(cusip.slice(0, 8));
+      if (expected < 0) return false;
+      return expected === (cusip.charCodeAt(8) - 48);
+    }
+
+    // Per-position breakdown for an 8-char NSIN: [{ch, value, weight, product, contrib}].
+    function breakdown(nsin8) {
+      nsin8 = String(nsin8).toUpperCase();
+      var rows = [];
+      for (var i = 0; i < 8; i++) {
+        var v = charValue(nsin8[i]);
+        var product = v * WEIGHTS[i];
+        rows.push({ ch: nsin8[i], value: v, weight: WEIGHTS[i], product: product, contrib: digitSum(product) });
+      }
+      return rows;
+    }
+
+    // ---- DOM ----
+    function $(id) { return document.getElementById(id); }
+    var cusipEl = $("cusip"), errEl = $("err"), verdictEl = $("verdict");
+    var prefixEl = $("prefix"), compEl = $("comp");
+    var lastCheck = "";
+
+    function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+    function renderValidate() {
+      errEl.textContent = "";
+      var raw = cusipEl.value.trim().toUpperCase();
+      if (!raw) { verdictEl.textContent = "—"; return; }
+      if (!/^[0-9A-Z*@#]+$/.test(raw)) {
+        verdictEl.innerHTML = '<span class="bad">✗ Invalid character</span> — CUSIPs use digits, letters A–Z and (for the first eight) <code>* @ #</code>.';
+        return;
+      }
+      if (raw.length !== 9) {
+        verdictEl.innerHTML = '<span class="bad">✗ Wrong length</span> — a CUSIP is 9 characters (got ' + raw.length + ').';
+        return;
+      }
+      var nsin = raw.slice(0, 8), givenCd = raw.charCodeAt(8) - 48;
+      var expected = checkDigit(nsin);
+      if (expected < 0) { verdictEl.innerHTML = '<span class="bad">✗ Invalid</span>'; return; }
+      var rows = breakdown(nsin);
+      var sum = weightedSum(nsin);
+      var valid = expected === givenCd;
+      var parts = '<div class="struct">' +
+        '<span class="ns">' + esc(nsin) + '</span><span class="cd">' + givenCd + '</span>' +
+        ' &nbsp;<small>(issuer · check digit)</small><br>' +
+        'Values:    [' + rows.map(function (r) { return r.value; }).join(", ") + ']<br>' +
+        'Weights:  [' + WEIGHTS.join(", ") + ']<br>' +
+        'Products: ' + rows.map(function (r) { return r.product; }).join(", ") + ' → digits-summed<br>' +
+        'Contribs: ' + rows.map(function (r) { return r.contrib; }).join(" + ") + ' = <b>' + sum + '</b><br>' +
+        'Check digit = (10 − ' + (sum % 10) + ') mod 10 = <b>' + expected + '</b><br>' +
+        (valid ? '<span class="ok">✓ Valid</span> — check digit matches.' :
+                 '<span class="bad">✗ Invalid</span> — expected check digit ' + expected + ', got ' + givenCd + '.') +
+        '</div>';
+      verdictEl.innerHTML = parts;
+    }
+
+    function renderCompute() {
+      compEl.textContent = "—";
+      var raw = prefixEl.value.trim().toUpperCase();
+      if (!raw) { compEl.textContent = "—"; return; }
+      if (!/^[0-9A-Z*@#]+$/.test(raw)) { compEl.innerHTML = '<span class="bad">✗ Invalid character</span> — digits, letters A–Z and <code>* @ #</code> only.'; return; }
+      if (raw.length !== 8) { compEl.innerHTML = '<span class="bad">✗ Prefix must be 8 characters</span> (got ' + raw.length + ').'; return; }
+      var cd = checkDigit(raw);
+      if (cd < 0) { compEl.innerHTML = '<span class="bad">✗ Invalid prefix</span>'; return; }
+      lastCheck = raw + cd;
+      compEl.innerHTML = '<div class="struct">Check digit: <b>' + cd + '</b><br>Full CUSIP: <span class="ns">' + esc(raw) + '</span><span class="cd">' + cd + '</span></div>';
+    }
+
+    $("b-comp").addEventListener("click", renderCompute);
+    $("b-use").addEventListener("click", function () { if (lastCheck) { cusipEl.value = lastCheck; renderValidate(); } });
+    cusipEl.addEventListener("input", renderValidate);
+    prefixEl.addEventListener("input", renderCompute);
+
+    renderValidate();
+    renderCompute();
+
+    window.VT_CUSIP_TEST = {
+      VALID_CHARS: VALID_CHARS, WEIGHTS: WEIGHTS,
+      RE_NSIN8: RE_NSIN8, RE_CUSIP9: RE_CUSIP9,
+      charValue: charValue, digitSum: digitSum, weightedSum: weightedSum,
+      checkDigit: checkDigit, validate: validate, breakdown: breakdown
+    };
+  })();
+  </script>
+</body>
+</html>
