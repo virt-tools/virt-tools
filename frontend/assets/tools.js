@@ -2099,6 +2099,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-11T20:00:00Z",
   },
   {
+    slug: "catalan-numbers",
+    name: "Catalan Numbers",
+    description: "Compute the n-th Catalan number C(n) = (2n)! / ((n+1)! · n!) exactly with big integers, via the recurrence C(n) = 2(2n−1)·C(n−1) / (n+1). Catalan numbers count balanced parentheses strings, full binary trees, polygon triangulations, and monotonic lattice paths — the sequence 1, 1, 2, 5, 14, 42, 132, …. Also lists the well-formed parentheses strings with n pairs for small n. Pairs with the Combinatorics, Derangements, and Integer Partitions tools. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "∴",
+    added: "2026-07-11T20:10:00Z",
+  },
+  {
     slug: "entropy-analyzer",
     name: "Entropy Analyzer",
     description: "Measure the Shannon entropy of text or bytes — bits of information per symbol — with the symbol-frequency table, max possible entropy, and efficiency. Slice by UTF-8 bytes, code points, UTF-16 units, or graphemes.",
