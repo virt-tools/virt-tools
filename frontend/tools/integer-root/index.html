@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Integer Root &amp; Square Root — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .row { display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+    .row .lbl { min-width:120px; color:var(--text-dim,#9aa3b2); font-size:.85rem; }
+    .row input { font-family:ui-monospace,monospace; font-size:14px; padding:7px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; width:300px; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    h3 { margin:16px 0 4px; font-size:.9rem; color:var(--text-dim,#9aa3b2); text-transform:uppercase; letter-spacing:.04em; }
+    .info { font-family:ui-monospace,monospace; font-size:14px; background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:12px; margin:8px 0; line-height:1.9; }
+    .info .k { color:var(--text-dim,#9aa3b2); }
+    .info .v { color:var(--text,#e6e6e6); word-break:break-all; }
+    .info .big { color:var(--good,#4ade80); font-weight:700; word-break:break-all; }
+    .info .pri { color:var(--accent,#6ea8fe); font-weight:700; word-break:break-all; }
+    .small { color:var(--text-dim,#9aa3b2); font-size:.82rem; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    .acts { display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; }
+    .acts button { padding:7px 12px; border-radius:6px; border:1px solid var(--border,#2a2f3a); background:var(--bg-elev,#171a21); color:var(--text,#e6e6e6); cursor:pointer; font-weight:600; font-size:.78rem; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Integer Root &amp; Square Root</h1>
+      <p>Compute the <strong>integer floor</strong> of an nth root of any non-negative integer, exactly, with big integers: <code>r = ⌊n<sup>1/k</sup>⌋</code> — the largest integer <code>r</code> such that <code>r<sup>k</sup> ≤ n</sup></code>. The special case <code>k = 2</code> is the integer square root. The tool reports whether <code>n</code> is a <strong>perfect kth power</strong> (i.e. <code>r<sup>k</sup> = n</code>) and shows the remainder <code>n − r<sup>k</sup></code>. Useful for number theory, primality work, and exact large-integer arithmetic. Runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <h3>Input</h3>
+      <div class="row"><span class="lbl">n =</span><input id="n" type="text" inputmode="numeric" value="1000000000000"></div>
+      <div class="row"><span class="lbl">k =</span><input id="k" type="text" inputmode="numeric" value="3"></div>
+      <div class="err" id="err"></div>
+
+      <div class="acts">
+        <button id="b-sq" type="button">√ (k=2)</button>
+        <button id="b-cb" type="button">∛ (k=3)</button>
+        <button id="b-perf" type="button">2⁶⁴ − 1, k=2</button>
+      </div>
+
+      <h3>Result</h3>
+      <div class="info" id="info">—</div>
+
+      <p class="note">The <strong>integer kth root</strong> of <code>n</code> is <code>⌊n<sup>1/k</sup>⌋</code> — the largest <code>r</code> with <code>r<sup>k</sup> ≤ n</sup></code>. It is computed here with integer Newton's method (<code>r ← ((k−1)·r + n/r<sup>k−1</sup>) / k</code>, integer division) starting from a bit-length estimate, which is exact and works for arbitrarily large <code>n</code>. When <code>r<sup>k</sup> = n</code> the input is a <strong>perfect kth power</strong> (e.g. <code>∛729 = 9</code>, <code>√499849 = 707</code>); otherwise the remainder <code>n − r<sup>k</sup></code> is shown. <code>k = 2</code> gives the integer square root; <code>k = 1</code> returns <code>n</code> itself. Pairs with the Pythagorean Triples and Prime Factorization tools. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var N_CAP = 1n << 8192n; // hard cap on n magnitude
+
+    function parseBig(str) {
+      str = String(str == null ? "" : str).trim();
+      if (!/^\d+$/.test(str)) throw new Error("Enter a non-negative integer (digits only).");
+      try { return BigInt(str); } catch (e) { throw new Error("Number is too large or malformed."); }
+    }
+
+    // pow(base, exp) for BigInt, exp>=0 integer.
+    function pow(base, exp) {
+      if (exp < 0n) throw new Error("Exponent must be non-negative.");
+      var result = 1n, b = base, e = exp;
+      while (e > 0n) {
+        if (e & 1n) result *= b;
+        e >>= 1n;
+        if (e > 0n) b *= b;
+      }
+      return result;
+    }
+
+    // Integer kth root of n: largest r with r^k <= n. n>=0, k>=1.
+    // Uses integer Newton's method with a bit-length initial estimate.
+    function iroot(n, k) {
+      var N = BigInt(n), K = BigInt(k);
+      if (N < 0n) throw new Error("n must be non-negative.");
+      if (K < 1n) throw new Error("k must be a positive integer.");
+      if (K === 1n) return N;
+      if (N === 0n) return 0n;
+      if (N === 1n) return 1n;
+      if (N > N_CAP) throw new Error("n is too large for the root (cap " + N_CAP.toString().length + " digits).");
+
+      // Initial estimate: 2^(ceil(bitlen(n)/k)). Always an upper bound for the root.
+      var bits = N.toString(2).length;
+      var kNum = Number(K);
+      var initExp = Math.ceil(bits / kNum);
+      var x = 1n << BigInt(initExp); // x^k >= n? not necessarily, but >= true root
+
+      // Newton iterations until stable. Guarantee descent + correctness via final adjust.
+      var Km1 = K - 1n;
+      while (true) {
+        var xk1 = pow(x, Km1);
+        if (xk1 === 0n) { x = 1n; break; }
+        var next = (Km1 * x + N / xk1) / K;
+        if (next >= x) break; // converged (non-increasing sequence)
+        x = next;
+      }
+
+      // Final adjustment: ensure x^k <= n < (x+1)^k.
+      while (pow(x, K) > N) x -= 1n;
+      while (pow(x + 1n, K) <= N) x += 1n;
+      return x;
+    }
+
+    function isPerfectPower(n, k) {
+      if (n < 0n) return false;
+      var r = iroot(n, k);
+      return pow(r, k) === n;
+    }
+
+    function fmt(n) { return n.toString(); }
+
+    // ---- DOM ----
+    function $(id) { return document.getElementById(id); }
+    var nEl = $("n"), kEl = $("k"), errEl = $("err"), infoEl = $("info");
+
+    function render() {
+      errEl.textContent = "";
+      var n, k;
+      try { n = parseBig(nEl.value); k = parseBig(kEl.value); } catch (e) {
+        errEl.textContent = e.message || String(e); infoEl.textContent = "—"; return;
+      }
+      if (k < 1n) { errEl.textContent = "k must be a positive integer (k ≥ 1)."; infoEl.textContent = "—"; return; }
+      if (k > 1000000n) { errEl.textContent = "k is too large."; infoEl.textContent = "—"; return; }
+
+      var r;
+      try { r = iroot(n, k); } catch (e) { errEl.textContent = e.message || String(e); infoEl.textContent = "—"; return; }
+
+      var rk = pow(r, k);
+      var rem = n - rk;
+      var perfect = (rem === 0n);
+      var rp1 = r + 1n;
+      var rp1k = pow(rp1, k);
+
+      var seq = [];
+      // show a few consecutive powers around r for context
+      var lo = r > 3n ? r - 3n : 0n;
+      for (var b = lo; b <= r + 1n; b++) {
+        if (b < 0n) continue;
+        seq.push(b + "<sup>" + k + "</sup> = " + fmt(pow(b, k)));
+        if (b >= r + 1n) break;
+      }
+
+      infoEl.innerHTML =
+        "<span class='k'>n:</span> <span class='v'>" + fmt(n) + "</span><br>" +
+        "<span class='k'>k:</span> <span class='v'>" + fmt(k) + "</span><br>" +
+        "<span class='k'>r = ⌊n<sup>1/k</sup>⌋:</span> <span class='big'>" + fmt(r) + "</span><br>" +
+        "<span class='k'>r<sup>k</sup>:</span> <span class='v'>" + fmt(rk) + "</span><br>" +
+        "<span class='k'>(r+1)<sup>k</sup>:</span> <span class='v'>" + fmt(rp1k) + "</span><br>" +
+        "<span class='k'>remainder n − r<sup>k</sup>:</span> <span class='v'>" + fmt(rem) + "</span><br>" +
+        "<span class='k'>perfect kth power:</span> " + (perfect ? "<span class='big'>yes ✓ (r<sup>k</sup> = n)</span>" : "<span class='pri'>no</span>") + "<br>" +
+        "<span class='k'>nearby powers:</span> <span class='v'>" + seq.join(", ") + "</span>";
+    }
+    nEl.addEventListener("input", render);
+    kEl.addEventListener("input", render);
+    $("b-sq").addEventListener("click", function () { kEl.value = "2"; render(); });
+    $("b-cb").addEventListener("click", function () { nEl.value = "729"; kEl.value = "3"; render(); });
+    $("b-perf").addEventListener("click", function () { nEl.value = "18446744073709551615"; kEl.value = "2"; render(); });
+
+    render();
+
+    window.VT_ROOT_TEST = { parseBig: parseBig, pow: pow, iroot: iroot, isPerfectPower: isPerfectPower };
+  })();
+  </script>
+</body>
+</html>

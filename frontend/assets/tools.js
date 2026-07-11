@@ -2131,6 +2131,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-11T20:30:00Z",
   },
   {
+    slug: "integer-root",
+    name: "Integer Root & Square Root",
+    description: "Compute the integer floor of an nth root of any non-negative integer exactly with big integers: r = ⌊n^(1/k)⌋, the largest r with r^k ≤ n. The k=2 case is the integer square root. Reports whether n is a perfect kth power (r^k = n) and shows the remainder n − r^k and nearby powers. Uses integer Newton's method, exact for arbitrarily large n. Pairs with the Pythagorean Triples and Modular Arithmetic tools. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "√",
+    added: "2026-07-11T20:40:00Z",
+  },
+  {
     slug: "angle-converter",
     name: "Angle Converter",
     description: "Convert an angle between degrees, radians, gradians (gons), turns (revolutions), arcminutes, arcseconds, and NATO mils, and to or from degrees-minutes-seconds (DMS). Enter a value in any unit or as DMS and every other unit is shown at once. A full circle is 360° = 2π rad = 400 grad = 1 turn = 21,600′ = 1,296,000″ = 6,400 mils; values are kept raw (not wrapped to a single turn). Pairs with the Trigonometry Calculator. Everything runs locally in your browser.",
