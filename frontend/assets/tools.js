@@ -267,6 +267,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-06T07:00:00Z",
   },
   {
+    slug: "text-align-pad",
+    name: "Text Align & Pad",
+    description: "Pad each line of a block of text to the same width, aligned left, right, or center, with any pad character. Set the width to a number or \"auto\" (the longest line) so a ragged block becomes flush, and optionally truncate lines that exceed the width with a marker on the left, right, or center. Lines are trimmed before padding. Great for code-comment blocks, ASCII layouts, and centered banners. Width counts UTF-16 code units, which is exact for ASCII. Pairs with the Word Wrap, Tab↔Spaces, and Line Sorter tools. Everything runs locally in your browser.",
+    category: "Text",
+    icon: "↔",
+    added: "2026-07-11T13:10:00Z",
+  },
+  {
     slug: "url-parser",
     name: "URL Parser",
     description: "Break a URL into scheme, host, port, path, decoded query params and fragment — runs locally.",
