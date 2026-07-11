@@ -507,6 +507,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T04:45:03Z",
   },
   {
+    slug: "ulid-generator",
+    name: "ULID Generator",
+    description: "Generate and decode ULIDs — 26-char Crockford-Base32 sortable IDs with a 48-bit timestamp and 80 random bits, with monotonic mode.",
+    category: "Data",
+    icon: "🔑",
+    added: "2026-07-11T02:30:00Z",
+  },
+  {
     slug: "gradient-generator",
     name: "CSS Gradient Generator",
     description: "Build linear and radial CSS gradients with a live preview and copy-ready CSS.",
