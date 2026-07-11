@@ -2123,6 +2123,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-05T07:00:00Z",
   },
   {
+    slug: "polygon-area",
+    name: "Polygon Area (Shoelace Formula)",
+    description: "Enter the vertices of a simple polygon (one x, y pair per line, in order) to compute its area via the shoelace (surveyor's) formula, the perimeter, the area-weighted centroid, the winding orientation (clockwise vs counter-clockwise), and whether it is convex or concave. Coordinates are plain numbers — integers or decimals. Distinct from the Triangle Solver and Coordinate Converter. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "⬠",
+    added: "2026-07-11T19:40:00Z",
+  },
+  {
     slug: "volume-surface-area",
     name: "Volume & Surface Area Calculator",
     description: "Compute the volume and total surface area of common 3D shapes — cube, cuboid (box), sphere, cylinder, cone, square pyramid, and hemisphere — from their dimensions, with the formulas shown. Pick a shape, enter its dimensions, and the volume and total surface area are calculated live. Surface area is the total (a cylinder includes both ends, a cone and pyramid include the base, a hemisphere includes its flat face). Pairs with the Triangle Solver and Trigonometry tools for geometry work. Everything runs locally in your browser.",
