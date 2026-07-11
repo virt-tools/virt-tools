@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Endianness Converter — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .row { display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+    .row .lbl { min-width:120px; color:var(--text-dim,#9aa3b2); font-size:.85rem; }
+    .row input, .row select { font-family:ui-monospace,monospace; font-size:14px; padding:7px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; }
+    .row input.wide { width:340px; }
+    .row select { width:110px; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    h3 { margin:16px 0 4px; font-size:.9rem; color:var(--text-dim,#9aa3b2); text-transform:uppercase; letter-spacing:.04em; }
+    .info { font-family:ui-monospace,monospace; font-size:14px; background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:12px; margin:8px 0; line-height:1.9; }
+    .info .k { color:var(--text-dim,#9aa3b2); }
+    .info .v { color:var(--text,#e6e6e6); word-break:break-all; }
+    .info .big { color:var(--good,#4ade80); font-weight:700; }
+    .small { color:var(--text-dim,#9aa3b2); font-size:.82rem; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    .tabs { display:flex; gap:6px; margin:6px 0 10px; flex-wrap:wrap; }
+    .tabs button { padding:7px 14px; border-radius:6px; border:1px solid var(--border,#2a2f3a); background:var(--bg-elev,#171a21); color:var(--text-dim,#9aa3b2); cursor:pointer; font-weight:600; font-size:.82rem; }
+    .tabs button.active { background:var(--accent,#6ea8fe); color:#0b0d12; border-color:var(--accent,#6ea8fe); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Endianness Converter</h1>
+      <p>Convert between a sequence of <strong>hex bytes</strong> and an <strong>integer</strong> under big-endian (most-significant byte first, network order) and little-endian (least-significant byte first, x86/ARM native) byte orders. Also byte-swaps a hex string. Useful for reverse engineering, binary parsing, and reading multi-byte fields out of memory dumps. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="tabs">
+        <button id="t-hex" class="active" type="button">Hex bytes → integer</button>
+        <button id="t-int" type="button">Integer → hex bytes</button>
+      </div>
+
+      <div id="panel-hex">
+        <h3>Input</h3>
+        <div class="row"><span class="lbl">Hex bytes</span><input id="hex" class="wide" type="text" spellcheck="false" value="0A 0B 0C 0D"></div>
+        <div class="small">Spaces, <code>0x</code> prefixes, and upper/lower case are ignored. The byte order you type is the <em>in-memory</em> order.</div>
+        <div class="err" id="err-hex"></div>
+
+        <h3>Result</h3>
+        <div class="info" id="info-hex">—</div>
+      </div>
+
+      <div id="panel-int" style="display:none">
+        <h3>Input</h3>
+        <div class="row"><span class="lbl">Integer</span><input id="int" class="wide" type="text" spellcheck="false" value="16909060"></div>
+        <div class="small">Decimal, or hex with a <code>0x</code> prefix.</div>
+        <div class="row"><span class="lbl">Byte width</span>
+          <select id="width">
+            <option value="auto">auto</option>
+            <option value="1">1 byte</option>
+            <option value="2">2 bytes</option>
+            <option value="4">4 bytes</option>
+            <option value="8">8 bytes</option>
+            <option value="16">16 bytes</option>
+          </select>
+        </div>
+        <div class="err" id="err-int"></div>
+
+        <h3>Result</h3>
+        <div class="info" id="info-int">—</div>
+      </div>
+
+      <p class="note"><strong>Big-endian</strong> reads the first byte as the most significant (e.g. <code>0A 0B 0C 0D</code> → <code>0x0A0B0C0D</code> = 168496141); it is the "network order" used by TCP/IP and most file formats. <strong>Little-endian</strong> reads the first byte as the least significant (e.g. <code>0A 0B 0C 0D</code> → <code>0x0D0C0B0A</code> = 218893066), the native order of x86 and most ARM CPUs, so a 4-byte int stored in memory on those machines appears reversed when read as big-endian. The byte-swap reverses the in-memory byte order. When converting an integer to bytes, "auto" uses the minimum number of bytes needed to hold the value; a fixed width left-pads with zero bytes (big-endian) or right-pads (little-endian), and an error is shown if the value needs more bytes than the width allows. Pairs with the Hex Viewer and Base Converter tools. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    // Parse a hex string (spaces/0x/colons ignored) into an array of byte values 0..255.
+    function parseHex(str) {
+      str = String(str == null ? "" : str).trim();
+      if (str === "") throw new Error("Enter hex bytes.");
+      var clean = str.replace(/0x/gi, "").replace(/[\s:,-]/g, "");
+      if (clean.length % 2 !== 0) throw new Error("Hex must have an even number of digits (whole bytes).");
+      if (!/^[0-9a-fA-F]+$/.test(clean)) throw new Error("Hex contains non-hex characters.");
+      var bytes = [];
+      for (var i = 0; i < clean.length; i += 2) bytes.push(parseInt(clean.substr(i, 2), 16));
+      return bytes;
+    }
+
+    // bytes -> BigInt under big-endian (first byte most significant).
+    function bytesToUintBE(bytes) {
+      var n = 0n;
+      for (var i = 0; i < bytes.length; i++) n = (n << 8n) | BigInt(bytes[i]);
+      return n;
+    }
+    // bytes -> BigInt under little-endian (first byte least significant).
+    function bytesToUintLE(bytes) {
+      var n = 0n;
+      for (var i = bytes.length - 1; i >= 0; i--) n = (n << 8n) | BigInt(bytes[i]);
+      return n;
+    }
+
+    // BigInt -> byte array of exactly `width` bytes (big-endian). Throws if doesn't fit.
+    function uintToBytesBE(n, width) {
+      if (n < 0n) throw new Error("Integer must be non-negative.");
+      if (width == null || width === "auto") {
+        var b = [];
+        var m = n;
+        if (m === 0n) return [0];
+        while (m > 0n) { b.unshift(Number(m & 0xffn)); m >>= 8n; }
+        return b;
+      }
+      var w = Number(width);
+      if (!(w >= 1 && w <= 1024)) throw new Error("Invalid byte width.");
+      var max = (1n << BigInt(w * 8)) - 1n;
+      if (n > max) throw new Error("Value needs more than " + w + " byte" + (w > 1 ? "s" : "") + ".");
+      var b = new Array(w).fill(0);
+      var m = n;
+      for (var i = w - 1; i >= 0 && m > 0n; i--) { b[i] = Number(m & 0xffn); m >>= 8n; }
+      return b;
+    }
+    // BigInt -> byte array of exactly `width` bytes (little-endian).
+    function uintToBytesLE(n, width) {
+      var be = uintToBytesBE(n, width); // validates width/fit; for auto, be is min bytes
+      var le = be.slice().reverse();
+      // For fixed width, BE already padded to width; reverse keeps width. For auto, reverse of min-bytes.
+      return le;
+    }
+
+    function reverseBytes(bytes) { return bytes.slice().reverse(); }
+
+    function parseUint(str) {
+      str = String(str == null ? "" : str).trim();
+      if (str === "") throw new Error("Enter an integer.");
+      var hex = /^0x([0-9a-fA-F]+)$/i.test(str);
+      if (hex) str = str.replace(/^0x/i, "");
+      if (hex) {
+        if (!/^[0-9a-fA-F]+$/.test(str)) throw new Error("Invalid hex integer.");
+        try { return BigInt("0x" + str); } catch (e) { throw new Error("Integer too large."); }
+      }
+      if (!/^\d+$/.test(str)) throw new Error("Integer must be decimal digits or 0x-prefixed hex.");
+      try { return BigInt(str); } catch (e) { throw new Error("Integer too large."); }
+    }
+
+    function hexString(bytes) {
+      var s = "";
+      for (var i = 0; i < bytes.length; i++) { var h = bytes[i].toString(16); s += (h.length < 2 ? "0" + h : h); }
+      return s;
+    }
+    function hexSpaced(bytes) {
+      var parts = [];
+      for (var i = 0; i < bytes.length; i++) { var h = bytes[i].toString(16); parts.push(h.length < 2 ? "0" + h : h); }
+      return parts.join(" ");
+    }
+
+    // ---- DOM ----
+    function $(id) { return document.getElementById(id); }
+    var hexEl = $("hex"), errHexEl = $("err-hex"), infoHexEl = $("info-hex");
+    var intEl = $("int"), widthEl = $("width"), errIntEl = $("err-int"), infoIntEl = $("info-int");
+    var tHex = $("t-hex"), tInt = $("t-int"), panelHex = $("panel-hex"), panelInt = $("panel-int");
+
+    function setTab(which) {
+      var isHex = which === "hex";
+      tHex.classList.toggle("active", isHex); tInt.classList.toggle("active", !isHex);
+      panelHex.style.display = isHex ? "" : "none"; panelInt.style.display = isHex ? "none" : "";
+    }
+    tHex.addEventListener("click", function () { setTab("hex"); renderHex(); });
+    tInt.addEventListener("click", function () { setTab("int"); renderInt(); });
+
+    function renderHex() {
+      errHexEl.textContent = "";
+      try {
+        var bytes = parseHex(hexEl.value);
+        var be = bytesToUintBE(bytes), le = bytesToUintLE(bytes);
+        var rev = reverseBytes(bytes);
+        infoHexEl.innerHTML =
+          "<span class='k'>Bytes:</span> <span class='v'>" + bytes.length + " (" + hexSpaced(bytes).toUpperCase() + ")</span><br>" +
+          "<span class='k'>Big-endian value:</span> <span class='big'>0x" + hexString(bytes).toUpperCase() + "</span> <span class='small'>= " + be.toString() + "</span><br>" +
+          "<span class='k'>Little-endian value:</span> <span class='big'>0x" + hexString(rev).toUpperCase() + "</span> <span class='small'>= " + le.toString() + "</span><br>" +
+          "<span class='k'>Byte-swapped:</span> <span class='v'>" + hexSpaced(rev).toUpperCase() + "</span>";
+      } catch (e) {
+        errHexEl.textContent = e.message || String(e);
+        infoHexEl.textContent = "—";
+      }
+    }
+    function renderInt() {
+      errIntEl.textContent = "";
+      try {
+        var n = parseUint(intEl.value);
+        var width = widthEl.value;
+        var be = uintToBytesBE(n, width);
+        var le = uintToBytesLE(n, width);
+        var wstr = width === "auto" ? be.length + " byte" + (be.length > 1 ? "s" : "") : Number(width) + " bytes";
+        infoIntEl.innerHTML =
+          "<span class='k'>Value:</span> <span class='big'>0x" + hexString(be).toUpperCase() + "</span> <span class='small'>= " + n.toString() + " · " + wstr + "</span><br>" +
+          "<span class='k'>Big-endian bytes:</span> <span class='v'>" + hexSpaced(be).toUpperCase() + "</span><br>" +
+          "<span class='k'>Little-endian bytes:</span> <span class='v'>" + hexSpaced(le).toUpperCase() + "</span>";
+      } catch (e) {
+        errIntEl.textContent = e.message || String(e);
+        infoIntEl.textContent = "—";
+      }
+    }
+    hexEl.addEventListener("input", renderHex);
+    intEl.addEventListener("input", renderInt);
+    widthEl.addEventListener("change", renderInt);
+
+    renderHex();
+
+    window.VT_ENDIAN_TEST = {
+      parseHex: parseHex, bytesToUintBE: bytesToUintBE, bytesToUintLE: bytesToUintLE,
+      uintToBytesBE: uintToBytesBE, uintToBytesLE: uintToBytesLE, reverseBytes: reverseBytes,
+      parseUint: parseUint, hexString: hexString, hexSpaced: hexSpaced
+    };
+  })();
+  </script>
+</body>
+</html>

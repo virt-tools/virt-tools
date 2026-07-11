@@ -1203,6 +1203,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-04T08:20:00Z",
   },
   {
+    slug: "endian-converter",
+    name: "Endianness Converter",
+    description: "Convert between a sequence of hex bytes and an integer under big-endian (most-significant byte first, network order) and little-endian (least-significant byte first, x86/ARM native) byte orders, and byte-swap a hex string. Reads a hex byte dump either endianness to its integer value, and writes an integer out as fixed-width (1/2/4/8/16-byte) or minimum-width hex bytes in either order. Exact big-integer arithmetic, so it handles 64-bit and larger fields. Useful for reverse engineering and binary parsing. Pairs with the Hex Viewer and Base Converter tools. Everything runs locally in your browser.",
+    category: "System",
+    icon: "⇄",
+    added: "2026-07-11T16:10:00Z",
+  },
+  {
     slug: "ieee-754-inspector",
     name: "IEEE-754 Floating-Point Inspector",
     description: "Decompose a number into its IEEE-754 representation — sign, exponent, and significand — for both single (32-bit) and double (64-bit) precision, with the full binary layout, hex, the nearest representable value, and the rounding error. Or recover a decimal from a hex or binary bit pattern. Handles zeros, infinities, NaN, and subnormals. Runs entirely in your browser.",
