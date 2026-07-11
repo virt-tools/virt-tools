@@ -2347,6 +2347,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-11T23:30:00Z",
   },
   {
+    slug: "shortest-path",
+    name: "Shortest Path (Dijkstra)",
+    description: "Find the shortest path between nodes in a weighted graph with Dijkstra algorithm. Enter edges as from to weight (one per line), choose directed or undirected, pick a source, and the tool computes the minimum distance to every node plus the actual path to a target via a predecessor array. Reports unreachable nodes and rejects negative weights. For unweighted graphs (all weights 1) it reduces to BFS. Includes a full distance table from the source. Pairs with the Maze Generator tool. Runs locally.",
+    category: "Math",
+    icon: "⇶",
+    added: "2026-07-11T23:40:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
