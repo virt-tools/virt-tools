@@ -83,6 +83,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-04T01:00:00Z",
   },
   {
+    slug: "pbkdf2-generator",
+    name: "PBKDF2 Key Derivation",
+    description: "Derive a cryptographic key from a password with PBKDF2 (RFC 2898) — choose salt, iterations, hash, and length, or verify a password against a known key. Powered by the native Web Crypto API.",
+    category: "Security",
+    icon: "🗝️",
+    added: "2026-07-11T07:10:00Z",
+  },
+  {
     slug: "hash-type-detector",
     name: "Hash Type Detector",
     description: "Identify an unknown hash format by prefix, length and alphabet — heuristic, runs locally.",
