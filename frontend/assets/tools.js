@@ -2515,6 +2515,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T03:00:00Z",
   },
   {
+    slug: "mandelbrot-set",
+    name: "Mandelbrot Set Explorer",
+    description: "Explore the Mandelbrot set — the boundary of the complex numbers c for which the iteration z → z² + c stays bounded. Each pixel maps to a complex number c, iterated until |z| exceeds the bailout radius of 2 or hits a max-iteration limit, and colored by a smooth escape-time count across several palettes. Click to recenter, zoom in or out (the set is self-similar at every scale, so you can zoom far, limited by double-precision arithmetic), and switch to a Julia set for a chosen c — each Mandelbrot point c yields its own Julia set, connected when c is inside M. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "❖",
+    added: "2026-07-12T03:10:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",

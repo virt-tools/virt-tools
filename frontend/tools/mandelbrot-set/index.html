@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Mandelbrot Set Explorer — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .row { display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+    .row .lbl { min-width:130px; color:var(--text-dim,#9aa3b2); font-size:.85rem; }
+    .row input, .row select { font-family:ui-monospace,monospace; font-size:14px; padding:7px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; font-family:ui-monospace,monospace; }
+    h3 { margin:16px 0 4px; font-size:.9rem; color:var(--text-dim,#9aa3b2); text-transform:uppercase; letter-spacing:.04em; }
+    canvas { display:block; border:1px solid var(--border,#2a2f3a); border-radius:6px; background:#000; width:100%; max-width:640px; height:auto; cursor:crosshair; image-rendering:pixelated; }
+    .out { font-family:ui-monospace,monospace; font-size:13px; background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:12px; margin:8px 0; line-height:1.9; word-break:break-all; }
+    .out .k { color:var(--text-dim,#9aa3b2); display:inline-block; min-width:120px; }
+    .out .v { color:var(--text,#e6e6e6); font-weight:700; }
+    .acts { display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; align-items:center; }
+    .acts button { padding:7px 12px; border-radius:6px; border:1px solid var(--border,#2a2f3a); background:var(--bg-elev,#171a21); color:var(--text,#e6e6e6); cursor:pointer; font-weight:600; font-size:.78rem; }
+    .acts button.primary { background:#1e3a5f; border-color:var(--accent,#5b8cff); }
+    .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    @media(max-width:640px){ .grid2{ grid-template-columns:1fr; } }
+    .hint { font-size:.8rem; color:var(--text-dim,#9aa3b2); margin:4px 0; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Mandelbrot Set Explorer</h1>
+      <p>Explore the <strong>Mandelbrot set</strong> — the boundary of the set of complex numbers c for which the iteration z → z² + c stays bounded. The renderer maps each pixel to a complex number c, iterates until |z| exceeds a bailout radius or hits a max-iteration limit, and colors by escape time. Click to recenter, scroll or use the buttons to zoom, and switch to a <strong>Julia set</strong> for a chosen c. Because the set is self-similar at every scale, you can zoom essentially forever (limited by double-precision arithmetic). Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="grid2">
+        <div class="row"><span class="lbl">Mode</span>
+          <select id="mode"><option value="mandelbrot" selected>Mandelbrot</option><option value="julia">Julia</option></select></div>
+        <div class="row"><span class="lbl">Palette</span>
+          <select id="pal">
+            <option value="fire">Fire</option><option value="ocean" selected>Ocean</option>
+            <option value="grayscale">Grayscale</option><option value="electric">Electric</option>
+          </select></div>
+        <div class="row"><span class="lbl">Max iterations</span><input id="maxit" style="width:90px" value="256"></div>
+        <div class="row"><span class="lbl">Julia c (a+bi)</span><input id="jc" style="width:160px" value="-0.7+0.27i"></div>
+      </div>
+
+      <div class="row"><span class="lbl">Center (re + i·im)</span><input id="center" style="flex:1;min-width:200px" value="-0.5+0i"></div>
+      <div class="row"><span class="lbl">Zoom (×)</span><input id="zoom" style="width:140px" value="1"></div>
+      <div class="err" id="err"></div>
+
+      <div class="acts">
+        <button id="b-render" class="primary" type="button">Render</button>
+        <button id="b-zin" type="button">Zoom ×2</button>
+        <button id="b-zout" type="button">Zoom ÷2</button>
+        <button id="b-reset" type="button">Reset view</button>
+        <button id="b-julia" type="button">Julia from center c</button>
+      </div>
+
+      <canvas id="cv" width="480" height="360"></canvas>
+      <p class="hint">Click on the image to recenter there. Drag is not required — click to recenter, then zoom.</p>
+
+      <h3>Selected point</h3>
+      <div class="out" id="point">—</div>
+
+      <p class="note" style="margin-top:14px">The <strong>Mandelbrot set</strong> M is the set of complex numbers c for which the sequence z₀ = 0, zₙ₊₁ = zₙ² + c remains bounded (never escapes to infinity). The renderer uses the standard escape-time test: iterate up to <em>maxit</em> steps; if |zₙ| ever exceeds a bailout radius of 2 the point escapes (and is outside M), colored by how fast it escaped (smooth iteration count gives banding-free color); if it never escapes within the limit it's treated as inside (black). The <strong>bailout radius of 2</strong> is sufficient because once |z| > 2 the orbit provably escapes. A <strong>Julia set</strong> uses the same iteration but with a fixed c and varying starting z — each Mandelbrot point c corresponds to a Julia set, and points inside the Mandelbrot set yield connected (filled-in) Julia sets. Pairs with the Function Plotter, Spirograph, and Monte Carlo tools. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    // ---- pure core ----
+    var BAILOUT = 4;          // squared radius (|z|^2 > 4 => escaped); radius 2
+    function complex(re, im) { return { re: re, im: im }; }
+
+    // one step: z = z^2 + c   (z and c are {re,im})
+    function iterate(z, c) {
+      var re = z.re * z.re - z.im * z.im + c.re;
+      var im = 2 * z.re * z.im + c.im;
+      return { re: re, im: im };
+    }
+
+    // escape-time: returns the number of iterations before |z|^2 > BAILOUT,
+    // or -1 if it didn't escape within `maxit` (treated as inside the set).
+    function escapeTime(c, maxit, z0) {
+      var z = z0 ? z0 : { re: 0, im: 0 };
+      var n = 0;
+      while (n < maxit) {
+        var mag2 = z.re * z.re + z.im * z.im;
+        if (mag2 > BAILOUT) return n;
+        z = iterate(z, c);
+        n++;
+      }
+      // final check (z already advanced): if still bounded after maxit, inside
+      var mag2f = z.re * z.re + z.im * z.im;
+      if (mag2f > BAILOUT) return maxit;  // escaped on the very last step
+      return -1;
+    }
+
+    // smooth (continuous) escape count to avoid banding. Returns a float; -1 if inside.
+    function smoothEscape(c, maxit, z0) {
+      var z = z0 ? z0 : { re: 0, im: 0 };
+      var n = 0;
+      while (n < maxit) {
+        var mag2 = z.re * z.re + z.im * z.im;
+        if (mag2 > BAILOUT) {
+          var log_zn = Math.log(mag2) / 2;
+          var nu = Math.log(log_zn / Math.LN2) / Math.LN2;
+          return n + 1 - nu;
+        }
+        z = iterate(z, c);
+        n++;
+      }
+      var mag2f = z.re * z.re + z.im * z.im;
+      if (mag2f > BAILOUT) {
+        var log_zn = Math.log(mag2f) / 2;
+        var nu = Math.log(log_zn / Math.LN2) / Math.LN2;
+        return maxit + 1 - nu;
+      }
+      return -1;
+    }
+
+    // membership test (true if inside the set, i.e. bounded within maxit)
+    function inSet(c, maxit, z0) { return escapeTime(c, maxit, z0) === -1; }
+
+    // ---- palettes: map t in [0,1) to [r,g,b] ----
+    var PALETTES = {
+      fire: function (t) {
+        var r = Math.min(255, Math.floor(255 * Math.pow(t, 0.5) * 1.2));
+        var g = Math.min(255, Math.floor(255 * Math.pow(t, 1.5)));
+        var b = Math.floor(60 * t);
+        return [r, g, b];
+      },
+      ocean: function (t) {
+        var r = Math.floor(20 + 80 * t);
+        var g = Math.floor(60 + 150 * Math.pow(t, 0.7));
+        var b = Math.floor(120 + 135 * Math.pow(t, 0.4));
+        return [Math.min(255, r), Math.min(255, g), Math.min(255, b)];
+      },
+      grayscale: function (t) { var v = Math.floor(255 * t); return [v, v, v]; },
+      electric: function (t) {
+        var r = Math.floor(255 * Math.abs(Math.sin(t * Math.PI * 1.5)));
+        var g = Math.floor(255 * Math.abs(Math.sin(t * Math.PI * 1.5 + 1.0)));
+        var b = Math.floor(255 * Math.abs(Math.sin(t * Math.PI * 1.5 + 2.0)));
+        return [r, g, b];
+      }
+    };
+
+    // map a smooth escape value to an [r,g,b] color. inside -> black.
+    function colorFor(smooth, maxit, paletteName) {
+      if (smooth < 0) return [0, 0, 0];
+      var pal = PALETTES[paletteName] || PALETTES.ocean;
+      var t = (smooth / maxit) % 1;
+      if (t < 0) t += 1;
+      return pal(t);
+    }
+
+    // parse "a+bi" / "a-bi" / "a" / "a b"
+    function parseComplex(str) {
+      var s = String(str || "").replace(/\s+/g, "").replace(/i$/, "");
+      // form a+bi or a-bi
+      var m = s.match(/^([+-]?\d*\.?\d+(?:[eE][+-]?\d+)?)([+-]\d*\.?\d+(?:[eE][+-]?\d+)?)?$/);
+      if (!m) {
+        // try "a,b" form
+        var p = String(str || "").split(/[ ,]+/).filter(Boolean);
+        if (p.length === 2) { var re = parseFloat(p[0]); var im = parseFloat(p[1]); if (!isNaN(re) && !isNaN(im)) return { re: re, im: im }; }
+        throw new Error("Bad complex number: " + str);
+      }
+      var re = parseFloat(m[1]);
+      var im = m[2] ? parseFloat(m[2]) : 0;
+      if (isNaN(re)) throw new Error("Bad complex number: " + str);
+      return { re: re, im: im };
+    }
+
+    // render a region to an ImageData-like { width, height, data:[r,g,b,...] } using a viewport
+    // viewport: { cx, cy, scale } where scale = complex units per pixel.
+    function renderRegion(maxit, mode, juliaC, viewport, width, height, paletteName) {
+      var data = new Array(width * height * 3);
+      var cx = viewport.cx, cy = viewport.cy, scale = viewport.scale;
+      var halfW = width / 2, halfH = height / 2;
+      for (var py = 0; py < height; py++) {
+        for (var px = 0; px < width; px++) {
+          var cRe = cx + (px - halfW) * scale;
+          var cIm = cy + (py - halfH) * scale;
+          var c = { re: cRe, im: cIm };
+          var smooth;
+          if (mode === "julia") {
+            // z0 varies over the plane; c fixed = juliaC
+            smooth = smoothEscape(juliaC, maxit, c);
+          } else {
+            smooth = smoothEscape(c, maxit, null);
+          }
+          var rgb = colorFor(smooth, maxit, paletteName);
+          var idx = (py * width + px) * 3;
+          data[idx] = rgb[0]; data[idx + 1] = rgb[1]; data[idx + 2] = rgb[2];
+        }
+      }
+      return { width: width, height: height, data: data };
+    }
+
+    // ---- DOM ----
+    function $(id) { return document.getElementById(id); }
+    var modeEl = $("mode"), palEl = $("pal"), maxitEl = $("maxit"), jcEl = $("jc");
+    var centerEl = $("center"), zoomEl = $("zoom"), errEl = $("err");
+    var canvas = $("cv"), pointEl = $("point");
+
+    // default view: Mandelbrot fits in re [-2.5,1], im [-1.25,1.25]
+    var DEFAULT_CX = -0.5, DEFAULT_CY = 0, DEFAULT_SCALE = 3.5 / canvas.width; // complex units per pixel at zoom 1
+    var cx = DEFAULT_CX, cy = DEFAULT_CY, scale = DEFAULT_SCALE;
+
+    function curScale() { return DEFAULT_SCALE / (parseFloat(zoomEl.value) || 1); }
+
+    function render() {
+      errEl.textContent = "";
+      try {
+        var maxit = parseInt(maxitEl.value, 10) || 256;
+        if (maxit < 2) maxit = 2;
+        if (maxit > 5000) maxit = 5000;
+        var mode = modeEl.value, palName = palEl.value;
+        var juliaC = parseComplex(jcEl.value);
+        cx = parseComplex(centerEl.value).re || cx;
+        // center is "re+im*i"; we read both parts
+        var ctr = parseComplex(centerEl.value);
+        cx = ctr.re; cy = ctr.im;
+        scale = curScale();
+        var w = canvas.width, h = canvas.height;
+        var img = renderRegion(maxit, mode, juliaC, { cx: cx, cy: cy, scale: scale }, w, h, palName);
+        // write to canvas
+        var ctx = canvas.getContext("2d");
+        var idata = ctx.createImageData(w, h);
+        for (var i = 0; i < img.data.length; i++) idata.data[i] = img.data[i];
+        idata.data[3] = 255; // set after? need per-pixel alpha — fix below
+        for (var p = 0; p < w * h; p++) idata.data[p * 4 + 3] = 255;
+        ctx.putImageData(idata, 0, 0);
+      } catch (e) { errEl.textContent = e.message || String(e); }
+    }
+
+    function pixelToComplex(px, py) {
+      return { re: cx + (px - canvas.width / 2) * scale, im: cy + (py - canvas.height / 2) * scale };
+    }
+
+    function showPoint(px, py) {
+      try {
+        var c = pixelToComplex(px, py);
+        var maxit = parseInt(maxitEl.value, 10) || 256;
+        var mode = modeEl.value;
+        var smooth = (mode === "julia")
+          ? smoothEscape(parseComplex(jcEl.value), maxit, c)
+          : smoothEscape(c, maxit, null);
+        var inside = smooth < 0;
+        var html = "";
+        html += "<span class='k'>c (re)</span><span class='v'>" + c.re.toFixed(8) + "</span><br>";
+        html += "<span class='k'>c (im)</span><span class='v'>" + c.im.toFixed(8) + "</span><br>";
+        html += "<span class='k'>|c|</span><span class='v'>" + Math.hypot(c.re, c.im).toFixed(8) + "</span><br>";
+        html += "<span class='k'>in set?</span><span class='v'>" + (inside ? "yes (bounded)" : "no (escapes)") + "</span><br>";
+        if (!inside) html += "<span class='k'>escape time</span><span class='v'>" + smooth.toFixed(3) + " iters</span>";
+        pointEl.innerHTML = html;
+      } catch (e) { pointEl.innerHTML = "—"; }
+    }
+
+    canvas.addEventListener("click", function (ev) {
+      var rect = canvas.getBoundingClientRect();
+      var px = Math.floor((ev.clientX - rect.left) * canvas.width / rect.width);
+      var py = Math.floor((ev.clientY - rect.top) * canvas.height / rect.height);
+      var c = pixelToComplex(px, py);
+      centerEl.value = c.re.toFixed(6) + "+" + c.im.toFixed(6) + "i";
+      showPoint(px, py);
+      render();
+    });
+    canvas.addEventListener("mousemove", function (ev) {
+      var rect = canvas.getBoundingClientRect();
+      var px = Math.floor((ev.clientX - rect.left) * canvas.width / rect.width);
+      var py = Math.floor((ev.clientY - rect.top) * canvas.height / rect.height);
+      showPoint(px, py);
+    });
+
+    $("b-render").addEventListener("click", render);
+    $("b-zin").addEventListener("click", function () { zoomEl.value = (parseFloat(zoomEl.value) || 1) * 2; render(); });
+    $("b-zout").addEventListener("click", function () { zoomEl.value = Math.max(0.1, (parseFloat(zoomEl.value) || 1) / 2); render(); });
+    $("b-reset").addEventListener("click", function () {
+      centerEl.value = "-0.5+0i"; zoomEl.value = "1"; modeEl.value = "mandelbrot"; render();
+    });
+    $("b-julia").addEventListener("click", function () {
+      var c = parseComplex(centerEl.value);
+      jcEl.value = c.re.toFixed(6) + "+" + c.im.toFixed(6) + "i";
+      modeEl.value = "julia";
+      centerEl.value = "0+0i"; zoomEl.value = "1.4";
+      render();
+    });
+    [modeEl, palEl, maxitEl, jcEl].forEach(function (el) { el.addEventListener("change", render); el.addEventListener("input", render); });
+
+    render();
+
+    window.VT_MB_TEST = {
+      BAILOUT: BAILOUT, complex: complex, iterate: iterate, escapeTime: escapeTime,
+      smoothEscape: smoothEscape, inSet: inSet, PALETTES: PALETTES, colorFor: colorFor,
+      parseComplex: parseComplex, renderRegion: renderRegion
+    };
+  })();
+  </script>
+</body>
+</html>
