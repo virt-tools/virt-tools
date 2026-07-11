@@ -2587,6 +2587,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T04:30:00Z",
   },
   {
+    slug: "birthday-paradox",
+    name: "Birthday Problem Calculator",
+    description: "How many people must be in a room before it's more likely than not that two share a birthday? The counterintuitive answer is just 23 — the famous birthday paradox. Compute the exact probability of at least one shared birthday for any group size (assuming 365 equally-likely birthdays, ignoring leap day) as the complement of the product ∏(d−k)/d, see the Poisson approximation 1−e^(−n(n−1)/2d), find the smallest group reaching any target probability (50% at n=23, 90% at 41, 99% at 57), and plot the probability curve against group size. Works for any year length, including the 2^32 hash-collision birthday bound (~77163 for a 32-bit hash). Pairs with the Binomial Distribution and Combinatorics tools. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🎉",
+    added: "2026-07-12T04:40:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
