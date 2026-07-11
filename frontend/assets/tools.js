@@ -931,6 +931,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T19:00:00Z",
   },
   {
+    slug: "ngram-analyzer",
+    name: "Character & N-Gram Frequency Analyzer",
+    description: "Count the frequency of single characters, bigrams (2), trigrams (3), and longer n-grams in text — overlapping sliding-window counts sorted by how often each occurs, with percentages and a visual bar. Optional case-folding and letters-only filtering (strip spaces and punctuation) for substitution-cipher cryptanalysis and language identification. Distinct from the word-level Word Frequency Counter. Everything runs locally in your browser.",
+    category: "Text",
+    icon: "🆎",
+    added: "2026-07-11T16:40:00Z",
+  },
+  {
     slug: "morse-code",
     name: "Morse Code Translator",
     description: "Translate text to International Morse Code and back — letters separated by a space, words by a slash, with optional audio playback at standard PARIS timing. Runs in your browser.",
