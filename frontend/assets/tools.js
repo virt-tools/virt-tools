@@ -531,6 +531,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-11T03:15:00Z",
   },
   {
+    slug: "nanoid-generator",
+    name: "NanoID Generator",
+    description: "Generate short, URL-safe NanoIDs with the canonical bitmask algorithm (no modulo bias) — custom alphabet, length, and count, powered by Web Crypto.",
+    category: "Data",
+    icon: "🔗",
+    added: "2026-07-11T05:10:00Z",
+  },
+  {
     slug: "gradient-generator",
     name: "CSS Gradient Generator",
     description: "Build linear and radial CSS gradients with a live preview and copy-ready CSS.",

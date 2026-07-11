@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>NanoID Generator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .row { display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+    .row .lbl { min-width:130px; color:var(--text-dim,#9aa3b2); font-size:.85rem; }
+    .row input, .row select { font-family:ui-monospace,monospace; font-size:14px; padding:7px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; }
+    .row input.num { width:90px; }
+    .row input.alpha { width:320px; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    .acts { display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; }
+    .acts button { padding:8px 18px; border-radius:6px; border:1px solid var(--accent,#6ea8fe); background:var(--accent,#6ea8fe); color:#0b0d12; cursor:pointer; font-weight:700; font-size:.85rem; }
+    .acts button.ghost { background:var(--bg-elev,#171a21); color:var(--text,#e6e6e6); border-color:var(--border,#2a2f3a); font-weight:600; }
+    h3 { margin:16px 0 4px; font-size:.9rem; color:var(--text-dim,#9aa3b2); text-transform:uppercase; letter-spacing:.04em; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    .list { font-family:ui-monospace,monospace; font-size:.85rem; background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:10px; max-height:300px; overflow:auto; line-height:1.7; word-break:break-all; }
+    .list .t { color:var(--text-dim,#9aa3b2); font-size:.72rem; }
+    .meta { color:var(--text-dim,#9aa3b2); font-size:.8rem; margin:4px 0; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>NanoID Generator</h1>
+      <p>Generate <strong>NanoIDs</strong> — short, URL-safe, collision-resistant random IDs popularized by NanoID and used widely for web URLs, session tokens, and database keys. A NanoID is a string drawn from a configurable alphabet (default 64 URL-safe characters) at a configurable length (default 21), produced from cryptographic randomness. Generation uses the canonical <strong>bitmask</strong> algorithm, which rejects out-of-range random bytes rather than taking them modulo the alphabet size — so no symbol is favoured and there's no modulo bias. Everything runs locally in your browser; randomness comes from the Web Crypto API.</p>
+    </div>
+
+    <div class="panel">
+      <h3>Generate</h3>
+      <div class="row"><span class="lbl">Alphabet</span><input type="text" id="alphabet" class="alpha" spellcheck="false" value="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"></div>
+      <div class="row"><span class="lbl">Length</span><input type="text" id="size" class="num" inputmode="numeric" value="21"></div>
+      <div class="row"><span class="lbl">Count</span><input type="text" id="count" class="num" inputmode="numeric" value="5"></div>
+      <div class="row"><span class="lbl">Preset</span>
+        <select id="preset">
+          <option value="url">NanoID default (64 url-safe)</option>
+          <option value="hex">Hex (0-9a-f)</option>
+          <option value="base58">Base58 (no 0/O/I/l)</option>
+          <option value="numbers">Numbers (0-9)</option>
+          <option value="lower">Lowercase a-z</option>
+        </select>
+      </div>
+      <div class="err" id="err"></div>
+      <div class="acts">
+        <button id="b-gen" type="button">Generate</button>
+        <button id="b-copy" class="ghost" type="button">Copy all</button>
+      </div>
+      <div class="meta" id="meta"></div>
+      <div class="list" id="list">—</div>
+
+      <p class="note"><strong>NanoID</strong> draws each character uniformly at random from an alphabet. The naive way — <code>alphabet[randomByte % alphabet.length]</code> — is <em>biased</em> whenever the alphabet size doesn't divide 256: symbols early in the alphabet appear slightly more often. NanoID instead masks each random byte down to the next power of two above the alphabet size (<code>mask = (1 &lt;&lt; ⌈log₂ k⌉) − 1</code>) and <strong>rejects</strong> any masked value <code>≥ k</code>, drawing another byte instead. Every accepted value lands in <code>0..k−1</code> exactly evenly. With a 64-symbol alphabet the mask is 63 and nothing is rejected (64 divides the 64-value range), so generation is waste-free; smaller alphabets reject proportionally more. The default 21 characters from a 64-symbol alphabet give <code>64²¹ ≈ 1.4×10³⁸</code> possibilities — about 121 bits of entropy, enough that collisions are astronomically unlikely until ~10¹⁹ IDs. Pairs with the UUID, ULID, and Snowflake generators. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var DEFAULT_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    var DEFAULT_SIZE = 21;
+
+    var PRESETS = {
+      url: DEFAULT_ALPHABET,
+      hex: "0123456789abcdef",
+      base58: "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz",
+      numbers: "0123456789",
+      lower: "abcdefghijklmnopqrstuvwxyz"
+    };
+
+    // mask = (2 << floor(log2(len-1))) - 1 : next power of two >= len, minus one
+    function maskFor(alphabet) {
+      if (alphabet.length < 2) return 0;
+      return (2 << Math.floor(Math.log(alphabet.length - 1) / Math.log(2))) - 1;
+    }
+
+    // Build a generator for a given alphabet + default size.
+    function customAlphabet(alphabet, size) {
+      var mask = maskFor(alphabet);
+      var step = Math.ceil(1.6 * mask * size / alphabet.length) || size;
+      return function (sz) {
+        if (sz == null) sz = size;
+        if (sz <= 0) return "";
+        var id = "";
+        while (true) {
+          var bytes = new Uint8Array(step);
+          if (globalThis.crypto && crypto.getRandomValues) crypto.getRandomValues(bytes);
+          else for (var b = 0; b < bytes.length; b++) bytes[b] = Math.floor(Math.random() * 256);
+          for (var i = 0; i < step; i++) {
+            var idx = bytes[i] & mask;
+            if (alphabet[idx] !== undefined) id += alphabet[idx]; // idx < alphabet.length (rejection otherwise)
+            if (id.length === sz) return id;
+          }
+        }
+      };
+    }
+
+    function randomBytes(n) {
+      var a = new Uint8Array(n);
+      if (globalThis.crypto && crypto.getRandomValues) crypto.getRandomValues(a);
+      else for (var i = 0; i < n; i++) a[i] = Math.floor(Math.random() * 256);
+      return a;
+    }
+
+    // ---- DOM ----
+    function $(id) { return document.getElementById(id); }
+    var alphaEl = $("alphabet"), sizeEl = $("size"), countEl = $("count"), presetEl = $("preset");
+    var errEl = $("err"), metaEl = $("meta"), listEl = $("list");
+    var lastList = [];
+
+    function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+    function applyPreset() {
+      var p = presetEl.value;
+      alphaEl.value = PRESETS[p];
+      if (p === "numbers") sizeEl.value = "12";
+      else if (p === "hex") sizeEl.value = "16";
+      else sizeEl.value = "21";
+      generate();
+    }
+
+    function generate() {
+      errEl.textContent = ""; listEl.innerHTML = "—"; lastList = [];
+      var alphabet = alphaEl.value;
+      if (alphabet.length < 2) { errEl.textContent = "Alphabet must have at least 2 distinct characters."; return; }
+      if (new Set(alphabet).size !== alphabet.length) { errEl.textContent = "Alphabet must not contain duplicate characters."; return; }
+      var n = parseInt(countEl.value, 10);
+      if (isNaN(n) || n < 1) { errEl.textContent = "Count must be a positive integer."; return; }
+      if (n > 10000) { errEl.textContent = "Count capped at 10000."; return; }
+      var sz = parseInt(sizeEl.value, 10);
+      if (isNaN(sz) || sz < 1) { errEl.textContent = "Length must be a positive integer."; return; }
+      if (sz > 1000) { errEl.textContent = "Length capped at 1000."; return; }
+      var gen = customAlphabet(alphabet, sz);
+      var html = "";
+      for (var i = 0; i < n; i++) {
+        var id = gen();
+        lastList.push(id);
+        html += '<div>' + esc(id) + '</div>';
+      }
+      listEl.innerHTML = html || "—";
+      var bits = sz * Math.log2(alphabet.length);
+      metaEl.textContent = "Alphabet: " + alphabet.length + " symbols · mask " + maskFor(alphabet) + " · "
+        + sz + " chars ≈ " + bits.toFixed(1) + " bits of entropy per ID (" + n + " generated).";
+    }
+
+    function copy(text) { if (text && navigator.clipboard) navigator.clipboard.writeText(text); }
+
+    presetEl.addEventListener("change", applyPreset);
+    $("b-gen").addEventListener("click", generate);
+    $("b-copy").addEventListener("click", function () { if (lastList.length) copy(lastList.join("\n")); });
+
+    generate();
+
+    window.VT_NANOID_TEST = {
+      DEFAULT_ALPHABET: DEFAULT_ALPHABET, DEFAULT_SIZE: DEFAULT_SIZE, PRESETS: PRESETS,
+      maskFor: maskFor, customAlphabet: customAlphabet, randomBytes: randomBytes,
+      nanoid: customAlphabet(DEFAULT_ALPHABET, DEFAULT_SIZE)
+    };
+  })();
+  </script>
+</body>
+</html>
