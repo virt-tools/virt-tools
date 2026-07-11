@@ -2555,6 +2555,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T03:50:00Z",
   },
   {
+    slug: "kaprekar-routine",
+    name: "Kaprekar's Routine",
+    description: "Run Kaprekar's routine: take a number, sort its digits descending (K₁) and ascending (K₂), subtract K₂ from K₁, and repeat. For 4-digit numbers (not all the same digit) this always converges to 6174 — the famous Kaprekar constant — in at most 7 steps; for 3-digit numbers it converges to 495 in at most 6 steps. Other digit counts behave differently: 2-digit numbers fall into a 5-cycle, 5-digit numbers into longer cycles. The tool keeps the digit count fixed (padding with leading zeros), traces each step, and detects whether the iteration reaches a fixed point or settles into a cycle. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "↺",
+    added: "2026-07-12T04:00:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
