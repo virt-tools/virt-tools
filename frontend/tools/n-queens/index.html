@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>N-Queens Solver — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .row { display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+    .row .lbl { min-width:110px; color:var(--text-dim,#9aa3b2); font-size:.85rem; }
+    .row input, .row select { font-family:ui-monospace,monospace; font-size:14px; padding:7px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; font-family:ui-monospace,monospace; }
+    .out { font-family:ui-monospace,monospace; font-size:14px; background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:12px; margin:8px 0; line-height:1.9; }
+    .out .k { color:var(--text-dim,#9aa3b2); display:inline-block; min-width:130px; }
+    .out .v { color:var(--text,#e6e6e6); font-weight:700; }
+    .acts { display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; align-items:center; }
+    .acts button { padding:7px 12px; border-radius:6px; border:1px solid var(--border,#2a2f3a); background:var(--bg-elev,#171a21); color:var(--text,#e6e6e6); cursor:pointer; font-weight:600; font-size:.78rem; }
+    .acts button.primary { background:#1e3a5f; border-color:var(--accent,#5b8cff); }
+    .acts button:disabled { opacity:.4; cursor:default; }
+    .board { display:inline-grid; gap:0; border:2px solid var(--border,#2a2f3a); border-radius:4px; margin:10px 0; }
+    .cell { width:30px; height:30px; display:flex; align-items:center; justify-content:center; font-size:20px; line-height:30px; }
+    .cell.light { background:#e8e8e8; color:#222; }
+    .cell.dark { background:#5a6275; color:#fff; }
+    .cell .q { font-weight:700; }
+    .legend { font-size:.8rem; color:var(--text-dim,#9aa3b2); margin:4px 0; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>N-Queens Solver</h1>
+      <p>Place <strong>N queens</strong> on an N×N chessboard so that no two queens attack each other — the classic <em>n-queens</em> constraint-satisfaction problem. The solver uses <strong>backtracking</strong>: it places queens row by row, trying each column, and backtracks the moment a placement conflicts with a previously placed queen (same column or diagonal). Find the first solution, count and browse <em>all</em> solutions, or step through them. The number of solutions is a known sequence: N = 1, 2, …, 8 has 1, 0, 0, 2, 10, 4, 40, 92 distinct arrangements (the famous eight-queens puzzle has 92). Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row">
+        <span class="lbl">Board size N</span>
+        <select id="n">
+          <option>1</option><option>2</option><option>3</option><option>4</option>
+          <option>5</option><option>6</option><option>7</option><option selected>8</option>
+          <option>9</option><option>10</option><option>11</option><option>12</option>
+        </select>
+      </div>
+      <div class="err" id="err"></div>
+      <div class="acts">
+        <button id="b-first" class="primary" type="button">Find first solution</button>
+        <button id="b-all" type="button">Count all solutions</button>
+        <button id="b-prev" type="button" disabled>◀ Prev</button>
+        <button id="b-next" type="button" disabled>Next ▶</button>
+      </div>
+
+      <div class="out" id="info">—</div>
+      <div id="boardWrap"></div>
+      <p class="legend" id="nav">—</p>
+
+      <p class="note" style="margin-top:14px">The <strong>n-queens problem</strong> asks for placements of N non-attacking queens on an N×N board. The solver represents a board as an array <code>cols</code> of length N, where <code>cols[r]</code> is the column of the queen in row r — this guarantees no two queens share a row by construction, so the safety check only needs to test <em>column</em> and <em>diagonal</em> conflicts (|c₁−c₂| === |r₁−r₂| means same diagonal). <strong>Backtracking</strong> tries a column for the current row; if it conflicts, it tries the next; if none work, it backtracks to the previous row and re-places that queen. This explores the search tree depth-first, pruning branches as soon as a conflict appears. The solution count grows roughly exponentially: N=8 → 92, N=10 → 724, N=12 → 14 200 (computing all of those may take a moment). For N=2 and N=3 there are no solutions. Pairs with the Sudoku Solver, Knapsack Solver, and Subset-Sum Solver. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    // ---- core ----
+    // a "board" is an Int array cols of length n: cols[r] = column of queen in row r.
+    // isSafe: can we place a queen at (row, col) given queens already placed in rows 0..row-1?
+    function isSafe(cols, row, col) {
+      for (var r = 0; r < row; r++) {
+        var c = cols[r];
+        if (c === col) return false;                       // same column
+        var d = r - row; if (d < 0) d = -d;                 // |row diff|
+        if (d === Math.abs(c - col)) return false;          // same diagonal
+      }
+      return true;
+    }
+
+    // isValidSolution: verify a full solution (length n) has no conflicts.
+    function isValidSolution(sol) {
+      var n = sol.length;
+      for (var r = 0; r < n; r++) {
+        var c = sol[r];
+        if (c < 0 || c >= n) return false;
+        for (var r2 = r + 1; r2 < n; r2++) {
+          var c2 = sol[r2];
+          if (c2 === c) return false;                        // same column
+          if (Math.abs(r2 - r) === Math.abs(c2 - c)) return false; // same diagonal
+        }
+      }
+      return true;
+    }
+
+    // backtracking solver. if findAll, returns array of all solutions (each an Int array).
+    // if !findAll, returns array with the first solution only (or empty).
+    function solve(n, findAll) {
+      if (n < 1) return [];
+      var solutions = [];
+      var cols = new Array(n);
+      function backtrack(row) {
+        if (row === n) {
+          // a complete valid placement
+          solutions.push(cols.slice());
+          if (!findAll) return false;   // stop after first
+          return true;                   // continue
+        }
+        for (var col = 0; col < n; col++) {
+          if (isSafe(cols, row, col)) {
+            cols[row] = col;
+            if (!findAll) {
+              if (backtrack(row + 1) === false) return false; // propagate stop
+            } else {
+              backtrack(row + 1);
+            }
+          }
+        }
+        return true;
+      }
+      backtrack(0);
+      return solutions;
+    }
+
+    function firstSolution(n) {
+      var s = solve(n, false);
+      return s.length ? s[0] : null;
+    }
+    function countSolutions(n) {
+      // counting without storing solutions
+      if (n < 1) return 0;
+      var count = 0;
+      var cols = new Array(n);
+      function backtrack(row) {
+        if (row === n) { count++; return; }
+        for (var col = 0; col < n; col++) {
+          if (isSafe(cols, row, col)) { cols[row] = col; backtrack(row + 1); }
+        }
+      }
+      backtrack(0);
+      return count;
+    }
+
+    function formatBoard(sol) {
+      // one-line notation: cols as (r,c) pairs
+      return sol.map(function (c, r) { return "(" + r + "," + c + ")"; }).join(" ");
+    }
+
+    // ---- DOM ----
+    function $(id) { return document.getElementById(id); }
+    var nEl = $("n"), errEl = $("err"), infoEl = $("info"), boardWrap = $("boardWrap"), navEl = $("nav");
+    var bPrev = $("b-prev"), bNext = $("b-next");
+
+    var solutions = [];
+    var idx = 0;
+
+    function renderBoard(sol) {
+      var n = sol.length;
+      var h = '<div class="board" style="grid-template-columns:repeat(' + n + ',30px)">';
+      for (var r = 0; r < n; r++) {
+        for (var c = 0; c < n; c++) {
+          var light = (r + c) % 2 === 0;
+          var q = sol[r] === c ? '<span class="q">♛</span>' : '';
+          h += '<div class="cell ' + (light ? "light" : "dark") + '">' + q + '</div>';
+        }
+      }
+      h += '</div>';
+      boardWrap.innerHTML = h;
+    }
+
+    function updateNav() {
+      if (solutions.length === 0) { navEl.textContent = "—"; bPrev.disabled = bNext.disabled = true; return; }
+      navEl.textContent = "Solution " + (idx + 1) + " of " + solutions.length;
+      bPrev.disabled = idx <= 0;
+      bNext.disabled = idx >= solutions.length - 1;
+    }
+
+    function showCurrent() {
+      if (solutions.length === 0) { boardWrap.innerHTML = ""; return; }
+      renderBoard(solutions[idx]);
+      updateNav();
+    }
+
+    function findFirst() {
+      errEl.textContent = "";
+      try {
+        var n = parseInt(nEl.value, 10);
+        var sol = firstSolution(n);
+        if (!sol) {
+          solutions = []; idx = 0;
+          infoEl.innerHTML = "<span class='k'>N = " + n + "</span><span class='v'>no solution exists</span>";
+          boardWrap.innerHTML = ""; navEl.textContent = "—"; bPrev.disabled = bNext.disabled = true;
+          return;
+        }
+        solutions = [sol]; idx = 0;
+        infoEl.innerHTML = "<span class='k'>N = " + n + "</span><span class='v'>first solution found</span><br>" +
+          "<span class='k'>positions</span><span class='v'>" + formatBoard(sol) + "</span>";
+        showCurrent();
+      } catch (e) { errEl.textContent = e.message || String(e); }
+    }
+
+    function findAll() {
+      errEl.textContent = "";
+      try {
+        var n = parseInt(nEl.value, 10);
+        solutions = solve(n, true);
+        idx = 0;
+        infoEl.innerHTML = "<span class='k'>N = " + n + "</span><span class='v'>" + solutions.length + " solutions</span><br>" +
+          "<span class='k'>expected count</span><span class='v'>" + EXPECTED[n] + "</span>";
+        if (solutions.length === 0) { boardWrap.innerHTML = ""; navEl.textContent = "—"; bPrev.disabled = bNext.disabled = true; return; }
+        showCurrent();
+      } catch (e) { errEl.textContent = e.message || String(e); }
+    }
+
+    var EXPECTED = { 1: 1, 2: 0, 3: 0, 4: 2, 5: 10, 6: 4, 7: 40, 8: 92, 9: 352, 10: 724, 11: 2680, 12: 14200 };
+
+    $("b-first").addEventListener("click", findFirst);
+    $("b-all").addEventListener("click", findAll);
+    bPrev.addEventListener("click", function () { if (idx > 0) { idx--; showCurrent(); } });
+    bNext.addEventListener("click", function () { if (idx < solutions.length - 1) { idx++; showCurrent(); } });
+    nEl.addEventListener("change", function () { solutions = []; idx = 0; infoEl.innerHTML = "—"; boardWrap.innerHTML = ""; navEl.textContent = "—"; bPrev.disabled = bNext.disabled = true; });
+
+    findFirst();
+
+    window.VT_NQ_TEST = {
+      isSafe: isSafe, isValidSolution: isValidSolution, solve: solve,
+      firstSolution: firstSolution, countSolutions: countSolutions, formatBoard: formatBoard
+    };
+  })();
+  </script>
+</body>
+</html>

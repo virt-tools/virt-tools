@@ -2531,6 +2531,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T03:20:00Z",
   },
   {
+    slug: "n-queens",
+    name: "N-Queens Solver",
+    description: "Place N queens on an N×N chessboard so no two attack each other — the classic n-queens constraint-satisfaction problem, solved with backtracking. Queens are placed row by row, trying each column and backtracking the moment a placement conflicts (same column or diagonal). Find the first solution, count and browse all solutions (the count is a known sequence: N=1..8 has 1, 0, 0, 2, 10, 4, 40, 92 — the famous eight-queens puzzle has 92), and step through them on a rendered board. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "♛",
+    added: "2026-07-12T03:30:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
