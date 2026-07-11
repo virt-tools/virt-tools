@@ -2539,6 +2539,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T03:30:00Z",
   },
   {
+    slug: "logistic-map",
+    name: "Logistic Map & Bifurcation Diagram",
+    description: "Visualize the logistic map xₙ₊₁ = r·xₙ·(1 − xₙ), the archetypal route to chaos. For growth rates r between 0 and 4 the orbit stays in [0,1] but its long-term behaviour changes: a stable fixed point, a period-doubling cascade (2→4→8→…), then deterministic chaos — interrupted by periodic windows (the period-3 window near r≈3.83). The bifurcation diagram plots the settled orbit values for each r; the spacing ratios converge to Feigenbaum's constant δ≈4.669. Click any point to inspect that r's orbit and Lyapunov exponent. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🦋",
+    added: "2026-07-12T03:40:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
