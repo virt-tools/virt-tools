@@ -2331,6 +2331,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-11T23:10:00Z",
   },
   {
+    slug: "linear-programming",
+    name: "Linear Programming (Simplex)",
+    description: "Solve a linear program — maximize or minimize a linear objective subject to linear constraints — with the two-phase Simplex method. Supports ≤, ≥, and = constraints, non-negative variables, and reports optimal solutions plus unbounded and infeasible cases. Phase 1 finds an initial feasible basis with artificial variables (detecting infeasibility); Phase 2 improves the objective until no edge helps (detecting unboundedness). Uses Bland's rule to avoid cycling. Enter the objective coefficients and constraints (e.g. 1 1 <= 12) and get the optimal value and variable values. Pairs with the Matrix Calculator and Linear System Solver. Runs locally.",
+    category: "Math",
+    icon: "⩽",
+    added: "2026-07-11T23:20:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",

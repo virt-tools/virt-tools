@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Linear Programming (Simplex) — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .row { display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+    .row .lbl { min-width:170px; color:var(--text-dim,#9aa3b2); font-size:.85rem; }
+    .row input, .row select { font-family:ui-monospace,monospace; font-size:14px; padding:7px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; width:130px; }
+    .row input.wide { width:320px; }
+    textarea { width:100%; min-height:120px; font-family:ui-monospace,monospace; font-size:13px; padding:8px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; resize:vertical; box-sizing:border-box; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    h3 { margin:16px 0 4px; font-size:.9rem; color:var(--text-dim,#9aa3b2); text-transform:uppercase; letter-spacing:.04em; }
+    .info { font-family:ui-monospace,monospace; font-size:13px; background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:12px; margin:8px 0; line-height:1.8; word-break:break-word; }
+    .info .k { color:var(--text-dim,#9aa3b2); display:inline-block; min-width:150px; }
+    .info .v { color:var(--text,#e6e6e6); }
+    .info .big { color:var(--good,#4ade80); font-weight:700; }
+    .small { color:var(--text-dim,#9aa3b2); font-size:.82rem; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    .acts { display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; }
+    .acts button { padding:7px 12px; border-radius:6px; border:1px solid var(--border,#2a2f3a); background:var(--bg-elev,#171a21); color:var(--text,#e6e6e6); cursor:pointer; font-weight:600; font-size:.78rem; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Linear Programming (Simplex)</h1>
+      <p>Solve a linear program — maximize or minimize a linear objective subject to linear constraints — with the <strong>two-phase Simplex method</strong>. Supports <code>≤</code>, <code>≥</code>, and <code>=</code> constraints, non-negative variables, and reports <em>optimal</em> solutions plus <em>unbounded</em> and <em>infeasible</em> cases. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <h3>Objective</h3>
+      <div class="row">
+        <span class="lbl">Goal</span>
+        <select id="sense">
+          <option value="max">Maximize</option>
+          <option value="min">Minimize</option>
+        </select>
+      </div>
+      <div class="row">
+        <span class="lbl">Coefficients</span>
+        <input id="obj" class="wide" type="text" value="40 30">
+        <span class="small">space-separated, one per variable</span>
+      </div>
+
+      <h3>Constraints (one per line)</h3>
+      <p class="small">Format: <code>coeffs… op rhs</code> — e.g. <code>1 1 &lt;= 12</code>, <code>2 1 &gt;= 5</code>, <code>1 1 = 4</code>. Variables are implicitly <code>≥ 0</code>.</p>
+      <textarea id="cons" spellcheck="false">1 1 <= 12
+2 1 <= 16</textarea>
+      <div class="err" id="err"></div>
+
+      <div class="acts">
+        <button id="b-run" type="button">Solve</button>
+        <button id="b-ex1" type="button">Factory (max)</button>
+        <button id="b-ex2" type="button">Diet (min, ≥)</button>
+        <button id="b-ex3" type="button">Equality</button>
+        <button id="b-ex4" type="button">3-variable</button>
+      </div>
+
+      <h3>Result</h3>
+      <div class="info" id="result">—</div>
+
+      <p class="note">Linear programming optimizes a linear objective <code>z = c·x</code> over a convex polytope defined by linear constraints. The <strong>two-phase Simplex</strong> method walks along the polytope's vertices: Phase 1 finds an initial feasible basis using artificial variables (and detects <em>infeasibility</em> if they can't be driven to zero); Phase 2 improves the objective until no edge increases it further (reporting <em>unbounded</em> if an improving ray exists). It uses <strong>Bland's rule</strong> to avoid cycling. The optimum of an LP (when finite) is always attained at a vertex — and if there are several, along an edge or face between them. Pairs with the Matrix Calculator and Linear System Solver. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var EPS = 1e-9;
+    var MAX_ITER = 5000;
+
+    // Parse objective / coefficient strings -> number array.
+    function parseNums(s) {
+      s = String(s == null ? "" : s).trim();
+      if (s === "") throw new Error("Enter coefficients (space-separated).");
+      var parts = s.split(/\s+/);
+      var out = [];
+      for (var i = 0; i < parts.length; i++) {
+        var v = Number(parts[i]);
+        if (!Number.isFinite(v)) throw new Error("\"" + parts[i] + "\" is not a number.");
+        out.push(v);
+      }
+      return out;
+    }
+
+    // Parse constraints text -> [{coeffs, op, rhs}]. op in {'<=','>=','='}.
+    function parseConstraints(text, n) {
+      text = String(text == null ? "" : text).trim();
+      if (text === "") throw new Error("Enter at least one constraint.");
+      var lines = text.split(/\n+/).map(function (s) { return s.trim(); }).filter(function (s) { return s !== ""; });
+      var out = [];
+      for (var i = 0; i < lines.length; i++) {
+        var line = lines[i].replace(/≤/g, "<=").replace(/≥/g, ">=").replace(/==/g, "=");
+        // find operator
+        var op = null, opIdx = -1;
+        var ops = ["<=", ">=", "="];
+        for (var oi = 0; oi < ops.length; oi++) {
+          var idx = line.indexOf(ops[oi]);
+          if (idx !== -1 && (opIdx === -1 || idx < opIdx)) { op = ops[oi]; opIdx = idx; }
+        }
+        if (!op) throw new Error("Line " + (i + 1) + ": missing operator (<=, >=, or =).");
+        var leftStr = line.slice(0, opIdx).trim();
+        var rightStr = line.slice(opIdx + op.length).trim();
+        var coeffs = leftStr.split(/\s+/).map(Number);
+        if (coeffs.length !== n) throw new Error("Line " + (i + 1) + ": expected " + n + " coefficients, got " + coeffs.length + ".");
+        for (var ci = 0; ci < coeffs.length; ci++) if (!Number.isFinite(coeffs[ci]))
+          throw new Error("Line " + (i + 1) + ": non-numeric coefficient.");
+        var rhs = Number(rightStr);
+        if (!Number.isFinite(rhs)) throw new Error("Line " + (i + 1) + ": right-hand side is not a number.");
+        out.push({ coeffs: coeffs, op: op, rhs: rhs });
+      }
+      return out;
+    }
+
+    // Normalize: ensure rhs >= 0 by flipping rows.
+    function normalizeConstraints(cons) {
+      return cons.map(function (co) {
+        if (co.rhs >= 0) return { coeffs: co.coeffs.slice(), op: co.op, rhs: co.rhs };
+        var op = co.op === "<=" ? ">=" : (co.op === ">=" ? "<=" : "=");
+        return { coeffs: co.coeffs.map(function (v) { return -v; }), op: op, rhs: -co.rhs };
+      });
+    }
+
+    // In-place pivot on T at (pivRow, pivCol). T is array of rows; cols = row length.
+    function pivot(T, pivRow, pivCol, cols) {
+      var pe = T[pivRow][pivCol];
+      for (var j = 0; j < cols; j++) T[pivRow][j] /= pe;
+      for (var i = 0; i < T.length; i++) {
+        if (i === pivRow) continue;
+        var f = T[i][pivCol];
+        if (Math.abs(f) < 1e-15) continue;
+        for (var jj = 0; jj < cols; jj++) T[i][jj] -= f * T[pivRow][jj];
+      }
+    }
+
+    // Simplex iterations on tableau with objective row at index m (last). Bland's rule.
+    // forbidden: Set of column indices that must not enter the basis (artificials in phase 2).
+    // Returns 'optimal' | 'unbounded' | 'cycling'.
+    function pivotSolve(T, basis, m, cols, rhsCol, forbidden) {
+      forbidden = forbidden || null;
+      function forb(j) { return forbidden && forbidden.has(j); }
+      var iter = 0;
+      while (true) {
+        var pivCol = -1;
+        for (var j = 0; j < rhsCol; j++) {
+          if (forb(j)) continue;
+          if (T[m][j] < -EPS) { pivCol = j; break; } // Bland: first negative
+        }
+        if (pivCol === -1) return "optimal";
+        var pivRow = -1, minRatio = Infinity, minBasis = Infinity;
+        for (var i = 0; i < m; i++) {
+          if (T[i][pivCol] > EPS) {
+            var r = T[i][rhsCol] / T[i][pivCol];
+            if (r < minRatio - EPS) { minRatio = r; pivRow = i; minBasis = basis[i]; }
+            else if (Math.abs(r - minRatio) < EPS && basis[i] < minBasis) { pivRow = i; minBasis = basis[i]; }
+          }
+        }
+        if (pivRow === -1) return "unbounded";
+        pivot(T, pivRow, pivCol, cols);
+        basis[pivRow] = pivCol;
+        if (++iter > MAX_ITER) return "cycling";
+      }
+    }
+
+    // Two-phase simplex.
+    // c: [n] objective coefficients. constraints: [{coeffs:[n], op, rhs}]. sense: 'max'|'min'.
+    // Returns {status:'optimal'|'unbounded'|'infeasible'|'cycling', x:[n], value, iterations}.
+    function simplex(c, constraints, sense) {
+      var n = c.length, m = constraints.length;
+      if (n === 0) throw new Error("No objective coefficients.");
+      if (m === 0) throw new Error("No constraints.");
+      var cons = normalizeConstraints(constraints);
+
+      // Assign slack/surplus/artificial column indices.
+      var nSlack = 0, nArt = 0;
+      var colInfo = [];
+      for (var i = 0; i < m; i++) {
+        var info = { slack: -1, surplus: -1, art: -1 };
+        if (cons[i].op === "<=") { info.slack = n + nSlack + nArt; nSlack++; }
+        else if (cons[i].op === ">=") { info.surplus = n + nSlack + nArt; nSlack++; info.art = n + nSlack + nArt; nArt++; }
+        else { info.art = n + nSlack + nArt; nArt++; }
+        colInfo[i] = info;
+      }
+      var nExtra = nSlack + nArt;
+      var cols = n + nExtra + 1;
+      var rhsCol = cols - 1;
+      var isArt = new Array(cols).fill(false);
+
+      var T = [];
+      var basis = new Array(m);
+      for (var i2 = 0; i2 < m; i2++) {
+        var row = new Array(cols).fill(0);
+        for (var j = 0; j < n; j++) row[j] = cons[i2].coeffs[j];
+        var inf = colInfo[i2];
+        if (inf.slack >= 0) row[inf.slack] = 1;
+        if (inf.surplus >= 0) row[inf.surplus] = -1;
+        if (inf.art >= 0) { row[inf.art] = 1; isArt[inf.art] = true; basis[i2] = inf.art; }
+        else basis[i2] = inf.slack;
+        row[rhsCol] = cons[i2].rhs;
+        T.push(row);
+      }
+
+      var artSet = null;
+      if (nArt > 0) {
+        artSet = new Set();
+        for (var cc = 0; cc < cols; cc++) if (isArt[cc]) artSet.add(cc);
+        // Phase 1: maximize -W (W = sum of artificials). cost = -1 for artificials.
+        var p1cost = new Array(cols).fill(0);
+        for (var cc2 = 0; cc2 < cols; cc2++) if (isArt[cc2]) p1cost[cc2] = -1;
+        var objRow = new Array(cols).fill(0);
+        for (var j2 = 0; j2 < cols; j2++) {
+          var s = 0; for (var i3 = 0; i3 < m; i3++) s += p1cost[basis[i3]] * T[i3][j2];
+          objRow[j2] = s - p1cost[j2];
+        }
+        T.push(objRow);
+        var res1 = pivotSolve(T, basis, m, cols, rhsCol, null);
+        if (res1 === "cycling") return { status: "cycling", iterations: 0 };
+        var W = -T[m][rhsCol];
+        if (W > 1e-6) return { status: "infeasible", iterations: 0 };
+        // Drive remaining artificials out of basis where possible.
+        for (var i4 = 0; i4 < m; i4++) {
+          if (isArt[basis[i4]]) {
+            var pivoted = false;
+            for (var j3 = 0; j3 < rhsCol; j3++) {
+              if (isArt[j3]) continue;
+              if (Math.abs(T[i4][j3]) > EPS) { pivot(T, i4, j3, cols); basis[i4] = j3; pivoted = true; break; }
+            }
+            // if not pivoted, row is redundant; leave artificial at 0.
+          }
+        }
+        T.pop(); // drop phase-1 objective row
+      }
+
+      // Phase 2: original objective.
+      var effc = sense === "min" ? c.map(function (v) { return -v; }) : c.slice();
+      var cost = new Array(cols).fill(0);
+      for (var j4 = 0; j4 < n; j4++) cost[j4] = effc[j4];
+      var objRow2 = new Array(cols).fill(0);
+      for (var j5 = 0; j5 < cols; j5++) {
+        var s2 = 0; for (var i5 = 0; i5 < m; i5++) s2 += cost[basis[i5]] * T[i5][j5];
+        objRow2[j5] = s2 - cost[j5];
+      }
+      T.push(objRow2);
+      var res2 = pivotSolve(T, basis, m, cols, rhsCol, artSet);
+      if (res2 === "unbounded") return { status: "unbounded", iterations: 0 };
+      if (res2 === "cycling") return { status: "cycling", iterations: 0 };
+
+      var x = new Array(n).fill(0);
+      for (var i6 = 0; i6 < m; i6++) if (basis[i6] < n) {
+        var val = T[i6][rhsCol];
+        x[basis[i6]] = Math.abs(val) < 1e-9 ? 0 : val;
+      }
+      var value = T[m][rhsCol];
+      if (sense === "min") value = -value;
+      return { status: "optimal", x: x, value: value, basis: basis };
+    }
+
+    function fmt(v) {
+      if (!Number.isFinite(v)) return String(v);
+      if (Object.is(v, Math.round(v)) && Math.abs(v) < 1e15) return String(v);
+      return String(Number(v.toPrecision(8)));
+    }
+    function escapeHtml(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+    // ---- DOM ----
+    function $(id) { return document.getElementById(id); }
+    var senseEl = $("sense"), objEl = $("obj"), consEl = $("cons"), errEl = $("err"), resultEl = $("result");
+
+    function render() {
+      errEl.textContent = "";
+      resultEl.textContent = "—";
+      var c, cons;
+      try { c = parseNums(objEl.value); }
+      catch (e) { errEl.textContent = "Objective: " + e.message; return; }
+      try { cons = parseConstraints(consEl.value, c.length); }
+      catch (e) { errEl.textContent = e.message; return; }
+      var res;
+      try { res = simplex(c, cons, senseEl.value); }
+      catch (e) { errEl.textContent = e.message || String(e); return; }
+
+      var html;
+      if (res.status === "optimal") {
+        var xs = res.x.map(function (v, k) { return "x" + (k + 1) + " = <span class='big'>" + fmt(v) + "</span>"; }).join("&nbsp;&nbsp;");
+        html = "<span class='k'>status</span> <span class='v' style='color:var(--good,#4ade80)'>optimal</span><br>" +
+          "<span class='k'>" + (senseEl.value === "max" ? "maximum" : "minimum") + " value</span> <span class='big'>" + fmt(res.value) + "</span><br>" +
+          "<span class='k'>solution</span> <span class='v'>" + xs + "</span>";
+      } else if (res.status === "unbounded") {
+        html = "<span class='k'>status</span> <span class='v' style='color:var(--bad,#f87171)'>unbounded</span><br>" +
+          "<span class='small'>The objective can grow without limit along a feasible ray.</span>";
+      } else if (res.status === "infeasible") {
+        html = "<span class='k'>status</span> <span class='v' style='color:var(--bad,#f87171)'>infeasible</span><br>" +
+          "<span class='small'>The constraints have no common feasible point.</span>";
+      } else {
+        html = "<span class='k'>status</span> <span class='v' style='color:var(--bad,#f87171)'>not solved</span><br>" +
+          "<span class='small'>" + escapeHtml(res.status) + " — try a different formulation.</span>";
+      }
+      resultEl.innerHTML = html;
+    }
+
+    function setAll(sense, obj, consStr) {
+      senseEl.value = sense; objEl.value = obj; consEl.value = consStr; render();
+    }
+    $("b-run").addEventListener("click", render);
+    $("b-ex1").addEventListener("click", function () {
+      setAll("max", "40 30", "1 1 <= 12\n2 1 <= 16"); // opt x=4,y=8, value=400
+    });
+    $("b-ex2").addEventListener("click", function () {
+      setAll("min", "2 3", "1 1 >= 4\n1 2 >= 5"); // opt x=3,y=1, value=9
+    });
+    $("b-ex3").addEventListener("click", function () {
+      setAll("max", "1 1", "1 1 = 4\n1 0 <= 3"); // opt x=3,y=1, value=4
+    });
+    $("b-ex4").addEventListener("click", function () {
+      setAll("max", "5 4 3", "2 3 1 <= 5\n4 1 2 <= 11\n3 4 2 <= 8"); // opt x=2,y=0,z=1, value=13
+    });
+    senseEl.addEventListener("change", render);
+    objEl.addEventListener("input", render);
+    consEl.addEventListener("input", render);
+
+    render();
+
+    window.VT_LP_TEST = {
+      parseNums: parseNums, parseConstraints: parseConstraints,
+      normalizeConstraints: normalizeConstraints, pivot: pivot,
+      pivotSolve: pivotSolve, simplex: simplex
+    };
+  })();
+  </script>
+</body>
+</html>
