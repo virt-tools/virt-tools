@@ -2107,6 +2107,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-11T20:10:00Z",
   },
   {
+    slug: "bell-numbers",
+    name: "Bell Numbers",
+    description: "Compute the n-th Bell number B(n) — the number of ways to partition a set of n elements (1, 1, 2, 5, 15, 52, 203, 877, 4140, …) — exactly with big integers by building the Bell (Aitken) triangle. Also shows the triangle and the row of Stirling numbers of the second kind S(n, k) (partitions into exactly k blocks), whose sum equals B(n). Pairs with the Catalan, Derangements, and Integer Partitions tools. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🪺",
+    added: "2026-07-11T20:20:00Z",
+  },
+  {
     slug: "entropy-analyzer",
     name: "Entropy Analyzer",
     description: "Measure the Shannon entropy of text or bytes — bits of information per symbol — with the symbol-frequency table, max possible entropy, and efficiency. Slice by UTF-8 bytes, code points, UTF-16 units, or graphemes.",
