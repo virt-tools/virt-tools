@@ -939,6 +939,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-11T05:40:00Z",
   },
   {
+    slug: "imei-validator",
+    name: "IMEI Validator",
+    description: "Validate a 15-digit IMEI (mobile device identifier) with its Luhn check digit, break it into TAC + SNR, compute the check digit, or generate a random valid IMEI.",
+    category: "Networking",
+    icon: "📱",
+    added: "2026-07-11T06:10:00Z",
+  },
+  {
     slug: "color-blindness-simulator",
     name: "Color Blindness Simulator",
     description: "Preview an image as it appears with protanopia, deuteranopia, tritanopia or achromatopsia — for accessibility checks. Processed locally with a canvas; your image never leaves your browser.",
