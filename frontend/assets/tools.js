@@ -2323,6 +2323,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-11T23:00:00Z",
   },
   {
+    slug: "fast-fourier-transform",
+    name: "Fast Fourier Transform",
+    description: "Compute the Discrete Fourier Transform of a sequence of real or complex numbers and its inverse. Power-of-two lengths use the Cooley-Tukey radix-2 FFT (O(N log N)); other lengths use the direct O(N²) definition. Enter values (real or a+bi form), choose forward or inverse, and the tool lists each frequency bin's magnitude, phase, and power with a magnitude bar chart, and verifies the inverse round-trips to the input. Reports DC, peak bin, Parseval's theorem, and conjugate symmetry. Pairs with the Convolution tool. Runs locally.",
+    category: "Math",
+    icon: "ℱ",
+    added: "2026-07-11T23:10:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
