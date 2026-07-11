@@ -2507,6 +2507,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T02:50:00Z",
   },
   {
+    slug: "enigma-machine",
+    name: "Enigma Machine",
+    description: "Simulate the Enigma, the WWII electromechanical rotor cipher machine. Choose three rotors (historical set I–V) and their order, a reflector (UKW-B or UKW-C), ring settings, starting positions, and an optional plugboard, then type a message to see the encrypted lampboard output letter by letter — with the rotors stepping, including the famous double-stepping anomaly, exactly as the real machine did. Enigma is reciprocal (its own inverse), so typing the ciphertext back through the same starting position decrypts it, and a letter never encrypts to itself. Uses the historical rotor wirings and reflectors. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "⚙",
+    added: "2026-07-12T03:00:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
