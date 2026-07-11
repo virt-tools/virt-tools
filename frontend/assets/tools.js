@@ -2379,6 +2379,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T00:10:00Z",
   },
   {
+    slug: "cron-parser",
+    name: "Cron Expression Parser",
+    description: "Parse a standard 5-field cron expression (minute hour day-of-month month day-of-week) and see a plain-English description of when it fires plus the next fire times from a chosen start date. Supports asterisk, lists, ranges, step values such as */n and a-b/n, and month and weekday names (jan-dec, sun-sat). Implements the Vixie-cron rule that when both day-of-month and day-of-week are restricted a fire occurs if either matches; day-of-week 0 and 7 both mean Sunday. The next-fire search advances minute by minute from the start time. Pairs with the Timestamp/Epoch and Date Difference tools. Everything runs locally in your browser.",
+    category: "Time",
+    icon: "⧗",
+    added: "2026-07-12T00:20:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
