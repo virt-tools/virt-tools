@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>CSV / JSON Converter — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .row { display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+    .row .lbl { min-width:130px; color:var(--text-dim,#9aa3b2); font-size:.85rem; }
+    .row input, .row select { font-family:ui-monospace,monospace; font-size:14px; padding:7px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; }
+    textarea { font-family:ui-monospace,monospace; font-size:13px; padding:8px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; width:100%; box-sizing:border-box; resize:vertical; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; font-family:ui-monospace,monospace; }
+    h3 { margin:16px 0 4px; font-size:.9rem; color:var(--text-dim,#9aa3b2); text-transform:uppercase; letter-spacing:.04em; }
+    .out { font-family:ui-monospace,monospace; font-size:13px; background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:10px; margin:8px 0; white-space:pre-wrap; word-break:break-word; max-height:340px; overflow:auto; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    .acts { display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; align-items:center; }
+    .acts button { padding:7px 12px; border-radius:6px; border:1px solid var(--border,#2a2f3a); background:var(--bg-elev,#171a21); color:var(--text,#e6e6e6); cursor:pointer; font-weight:600; font-size:.78rem; }
+    .toggle { display:inline-flex; border:1px solid var(--border,#2a2f3a); border-radius:6px; overflow:hidden; }
+    .toggle button { border:none; border-radius:0; padding:7px 14px; cursor:pointer; font-weight:600; font-size:.78rem; background:var(--bg-elev,#171a21); color:var(--text,#e6e6e6); }
+    .toggle button.on { background:var(--good,#4ade80); color:#0a0d12; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>CSV / JSON Converter</h1>
+      <p>Convert between <strong>CSV</strong> and <strong>JSON</strong>. Parse CSV with proper RFC 4180 quoting (fields wrapped in double quotes, embedded commas, newlines, and doubled <code>""</code> quotes) or turn JSON arrays into CSV with automatic quoting. Choose delimiter, header handling, and whitespace trimming. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="acts">
+        <span class="toggle">
+          <button id="t-c2j" class="on">CSV → JSON</button>
+          <button id="t-j2c">JSON → CSV</button>
+        </span>
+        <select id="delim"><option value=",">comma ( , )</option><option value=";">semicolon ( ; )</option><option value="&#9;">tab</option><option value="|">pipe ( | )</option></select>
+        <label style="font-size:.82rem;color:var(--text-dim,#9aa3b2)"><input type="checkbox" id="header" checked> header row</label>
+        <label style="font-size:.82rem;color:var(--text-dim,#9aa3b2)"><input type="checkbox" id="trim"> trim unquoted fields</label>
+        <button id="b-swap" type="button">Use output as input</button>
+      </div>
+
+      <h3 id="in-label">CSV input</h3>
+      <textarea id="input" rows="8" spellcheck="false">name,age,note
+Alice,30,"Hello, world"
+Bob,25,"She said ""hi"""
+Carol,40,"line1
+line2"</textarea>
+      <div class="err" id="err"></div>
+
+      <div class="acts">
+        <button id="b-convert" type="button">Convert</button>
+        <button id="b-copy" type="button">Copy output</button>
+      </div>
+
+      <h3 id="out-label">JSON output</h3>
+      <pre class="out" id="output">—</pre>
+
+      <p class="note" style="margin-top:14px"><strong>CSV</strong> (RFC 4180) splits records on newlines and fields on the delimiter, but a field wrapped in double quotes may contain the delimiter, newlines, and doubled quotes (<code>""</code>) as an escaped quote. This tool parses that state machine exactly and, in the reverse direction, automatically quotes any field that contains the delimiter, a quote, or a newline (escaping quotes as <code>""</code>). <strong>CSV → JSON</strong> treats the first row as object keys (toggle off for arrays of arrays); <strong>JSON → CSV</strong> emits a header row from object keys (first-seen order) and stringifies nested values as JSON. Pairs with the JSON Formatter and JSON to TypeScript tools. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var mode = "c2j"; // c2j | j2c
+
+    // ---- CSV parsing (RFC 4180 state machine) ----
+    // Returns string[][] (rows of fields). opts: { delimiter, trim }
+    function parseCsv(text, opts) {
+      opts = opts || {};
+      var delim = opts.delimiter || ",";
+      var trim = !!opts.trim;
+      text = String(text);
+      var rows = [], row = [], field = "", inQuotes = false, quoted = false;
+      var i = 0, n = text.length;
+      function endField() {
+        if (trim && !quoted) field = field.trim();
+        row.push(field);
+        field = ""; quoted = false;
+      }
+      function endRow() { endField(); rows.push(row); row = []; }
+      while (i < n) {
+        var ch = text[i];
+        if (inQuotes) {
+          if (ch === '"') {
+            if (text[i + 1] === '"') { field += '"'; i += 2; continue; }
+            inQuotes = false; i++; continue;
+          }
+          field += ch; i++; continue;
+        } else {
+          if (ch === '"' && field === "" && !quoted) { inQuotes = true; quoted = true; i++; continue; }
+          if (ch === delim) { endField(); i++; continue; }
+          if (ch === '\n') { endRow(); i++; continue; }
+          if (ch === '\r') { endRow(); if (text[i + 1] === '\n') i += 2; else i++; continue; }
+          field += ch; i++; continue;
+        }
+      }
+      if (field !== "" || row.length > 0 || inQuotes || quoted) { endField(); rows.push(row); }
+      return rows;
+    }
+
+    // ---- CSV stringification ----
+    function stringifyField(v, delim) {
+      if (v == null) return "";
+      var s;
+      if (typeof v === "object") s = JSON.stringify(v);
+      else s = String(v);
+      if (s.indexOf(delim) >= 0 || s.indexOf('"') >= 0 || s.indexOf('\n') >= 0 || s.indexOf('\r') >= 0) {
+        return '"' + s.replace(/"/g, '""') + '"';
+      }
+      return s;
+    }
+    // rows: string[][] -> CSV text
+    function stringifyCsv(rows, opts) {
+      opts = opts || {};
+      var delim = opts.delimiter || ",";
+      var lines = [];
+      for (var r = 0; r < rows.length; r++) {
+        var cols = rows[r];
+        var parts = [];
+        for (var c = 0; c < cols.length; c++) parts.push(stringifyField(cols[c], delim));
+        lines.push(parts.join(delim));
+      }
+      return lines.join("\n");
+    }
+
+    // rows -> array of objects (header) or array of arrays
+    function csvToJson(rows, opts) {
+      opts = opts || {};
+      var header = opts.header !== false;
+      var out = [];
+      if (!header || rows.length === 0) {
+        for (var i = 0; i < rows.length; i++) {
+          if (rows[i].length === 1 && rows[i][0] === "") continue; // skip blank lines
+          out.push(rows[i].slice());
+        }
+        return out;
+      }
+      var keys = rows[0].slice();
+      for (var j = 1; j < rows.length; j++) {
+        var r = rows[j];
+        if (r.length === 1 && r[0] === "") continue; // skip blank lines
+        var obj = {};
+        for (var k = 0; k < keys.length; k++) obj[keys[k]] = k < r.length ? r[k] : "";
+        out.push(obj);
+      }
+      return out;
+    }
+
+    // data: array of objects or array of arrays -> CSV text
+    function jsonToCsv(data, opts) {
+      opts = opts || {};
+      var delim = opts.delimiter || ",";
+      var header = opts.header !== false;
+      if (!Array.isArray(data)) throw new Error("JSON must be an array.");
+      var rows = [];
+      if (data.length === 0) return "";
+      var first = data[0];
+      var isObj = (first !== null && typeof first === "object" && !Array.isArray(first));
+      if (isObj) {
+        // collect keys in first-seen order
+        var keys = [];
+        var seen = {};
+        for (var i = 0; i < data.length; i++) {
+          if (data[i] == null || typeof data[i] !== "object" || Array.isArray(data[i])) continue;
+          for (var k in data[i]) {
+            if (Object.prototype.hasOwnProperty.call(data[i], k) && !seen[k]) { seen[k] = true; keys.push(k); }
+          }
+        }
+        if (header) rows.push(keys.slice());
+        for (var d = 0; d < data.length; d++) {
+          var obj = data[d];
+          if (obj == null || typeof obj !== "object" || Array.isArray(obj)) { rows.push([]); continue; }
+          var vals = [];
+          for (var ki = 0; ki < keys.length; ki++) vals.push(obj[keys[ki]]);
+          rows.push(vals);
+        }
+      } else {
+        for (var a = 0; a < data.length; a++) {
+          var arr = data[a];
+          rows.push(Array.isArray(arr) ? arr.slice() : [arr]);
+        }
+      }
+      return stringifyCsv(rows, opts);
+    }
+
+    // ---- DOM ----
+    function $(id) { return document.getElementById(id); }
+    var inputEl = $("input"), outputEl = $("output"), errEl = $("err");
+    var delimEl = $("delim"), headerEl = $("header"), trimEl = $("trim");
+    var inLabel = $("in-label"), outLabel = $("out-label");
+    var tC2j = $("t-c2j"), tJ2c = $("t-j2c");
+
+    function delimValue() {
+      // tab option uses a literal tab via entity -> decoded to char
+      var v = delimEl.value;
+      return v === "\t" ? "\t" : v;
+    }
+
+    function setMode(m) {
+      mode = m;
+      if (m === "c2j") { tC2j.classList.add("on"); tJ2c.classList.remove("on"); inLabel.textContent = "CSV input"; outLabel.textContent = "JSON output"; }
+      else { tJ2c.classList.add("on"); tC2j.classList.remove("on"); inLabel.textContent = "JSON input"; outLabel.textContent = "CSV output"; }
+      render();
+    }
+
+    function render() {
+      errEl.textContent = "";
+      outputEl.textContent = "—";
+      var opts = { delimiter: delimValue(), header: headerEl.checked, trim: trimEl.checked };
+      try {
+        if (mode === "c2j") {
+          var rows = parseCsv(inputEl.value, opts);
+          var json = csvToJson(rows, opts);
+          outputEl.textContent = JSON.stringify(json, null, 2);
+        } else {
+          var data = JSON.parse(inputEl.value === "" ? "[]" : inputEl.value);
+          var csv = jsonToCsv(data, opts);
+          outputEl.textContent = csv;
+        }
+      } catch (e) {
+        errEl.textContent = e.message || String(e);
+      }
+    }
+
+    tC2j.addEventListener("click", function () { setMode("c2j"); });
+    tJ2c.addEventListener("click", function () { setMode("j2c"); });
+    $("b-convert").addEventListener("click", render);
+    $("b-copy").addEventListener("click", function () {
+      var t = outputEl.textContent;
+      if (t === "—") return;
+      try { navigator.clipboard && navigator.clipboard.writeText(t); } catch (e) {}
+    });
+    $("b-swap").addEventListener("click", function () {
+      var t = outputEl.textContent;
+      if (t === "—") return;
+      inputEl.value = t;
+      setMode(mode === "c2j" ? "j2c" : "c2j");
+    });
+    inputEl.addEventListener("input", render);
+    delimEl.addEventListener("change", render);
+    headerEl.addEventListener("change", render);
+    trimEl.addEventListener("change", render);
+
+    render();
+
+    window.VT_CSV_TEST = {
+      parseCsv: parseCsv, stringifyCsv: stringifyCsv, csvToJson: csvToJson,
+      jsonToCsv: jsonToCsv, stringifyField: stringifyField
+    };
+  })();
+  </script>
+</body>
+</html>

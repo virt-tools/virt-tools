@@ -2403,6 +2403,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T00:40:00Z",
   },
   {
+    slug: "csv-json-converter",
+    name: "CSV / JSON Converter",
+    description: "Convert between CSV and JSON. Parses CSV with proper RFC 4180 quoting via a state machine that handles fields wrapped in double quotes, embedded commas, newlines, and doubled-quote escapes, plus CRLF and lone-CR line endings and custom delimiters (comma, semicolon, tab, pipe). In the reverse direction it automatically quotes any field containing the delimiter, a quote, or a newline. CSV to JSON treats the first row as object keys (toggle off for arrays of arrays); JSON to CSV emits a header from first-seen object keys and JSON-stringifies nested values. Optional whitespace trimming of unquoted fields. Pairs with the JSON Formatter and JSON to TypeScript tools. Everything runs locally in your browser.",
+    category: "Data",
+    icon: "⧉",
+    added: "2026-07-12T00:50:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
