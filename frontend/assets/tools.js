@@ -2435,6 +2435,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T01:20:00Z",
   },
   {
+    slug: "bst-visualizer",
+    name: "Binary Search Tree Visualizer",
+    description: "Build and explore a binary search tree interactively. Insert integers one at a time or as a batch, watch the tree take shape, search for a key to highlight the root-to-leaf path, delete keys (all three cases handled: leaf, one child, two children via inorder successor), and rebalance into a minimal-height tree. Reports all four traversals (inorder, preorder, postorder, level-order) plus size, height, min, max, valid-BST, and balanced checks. Inorder traversal yields the sorted key sequence; rebalance rebuilds from the sorted inorder with the median as root. Duplicates are ignored. Pairs with the Sorting Visualizer and Topological Sort tools. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "⬡",
+    added: "2026-07-12T01:30:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
