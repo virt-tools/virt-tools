@@ -1243,6 +1243,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-04T11:00:00Z",
   },
   {
+    slug: "color-temperature-rgb",
+    name: "Color Temperature (Kelvin) → RGB",
+    description: "Convert a color temperature in Kelvin to its approximate sRGB value and hex color — the color a blackbody radiator glows at that temperature. 2700 K is a warm incandescent bulb, 6500 K is neutral daylight, 10000 K is cool overcast light. Uses the Tanner Helland Planckian-locus approximation, valid 1000–40000 K, with a live swatch. Runs entirely in your browser.",
+    category: "Design",
+    icon: "🔆",
+    added: "2026-07-11T14:10:00Z",
+  },
+  {
     slug: "jwt-signer",
     name: "JWT Signer & Verifier",
     description: "Sign a JSON Web Token with HMAC (HS256 / HS384 / HS512) from a header, payload and secret, or verify an existing token's signature and inspect its claims — with a constant-time signature compare and exp / nbf checks. Signatures use the Web Crypto API; the secret and token stay in your browser.",
