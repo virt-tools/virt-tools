@@ -2523,6 +2523,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T03:10:00Z",
   },
   {
+    slug: "egyptian-fractions",
+    name: "Egyptian Fractions",
+    description: "Decompose any positive rational a/b into a sum of distinct unit fractions (numerator 1) — the form used by ancient Egyptians, who had no general notation for m/n. Applies the Fibonacci–Sylvester greedy algorithm: at each step take the largest unit fraction not exceeding the remainder (denominator ⌈b/a⌉), subtract, and repeat, always yielding a finite expansion of distinct unit fractions with strictly increasing denominators. Integer parts are extracted first, so 7/4 becomes 1 + 1/2 + 1/4. Exact BigInt arithmetic keeps even the famously long expansions (e.g. 5/121) correct, with a per-step greedy trace. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "⅓",
+    added: "2026-07-12T03:20:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",

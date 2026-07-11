@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Egyptian Fractions — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .row { display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+    .row .lbl { min-width:120px; color:var(--text-dim,#9aa3b2); font-size:.85rem; }
+    .row input { font-family:ui-monospace,monospace; font-size:14px; padding:7px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; font-family:ui-monospace,monospace; }
+    h3 { margin:16px 0 4px; font-size:.9rem; color:var(--text-dim,#9aa3b2); text-transform:uppercase; letter-spacing:.04em; }
+    .out { font-family:ui-monospace,monospace; font-size:14px; background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:12px; margin:8px 0; line-height:1.9; word-break:break-all; }
+    .out .k { color:var(--text-dim,#9aa3b2); display:inline-block; min-width:130px; }
+    .out .v { color:var(--text,#e6e6e6); font-weight:700; }
+    .out .ok { color:var(--good,#4ade80); font-weight:700; }
+    .acts { display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; align-items:center; }
+    .acts button { padding:7px 12px; border-radius:6px; border:1px solid var(--border,#2a2f3a); background:var(--bg-elev,#171a21); color:var(--text,#e6e6e6); cursor:pointer; font-weight:600; font-size:.78rem; }
+    .acts button.primary { background:#1e3a5f; border-color:var(--accent,#5b8cff); }
+    .steps { font-family:ui-monospace,monospace; font-size:13px; background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:12px; margin:8px 0; line-height:1.8; }
+    .steps .n { color:var(--text-dim,#9aa3b2); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Egyptian Fractions</h1>
+      <p>Decompose any positive rational number <em>a</em>/<em>b</em> into a sum of <strong>distinct unit fractions</strong> (fractions with numerator 1) — the form used by ancient Egyptians, who had no general notation for <em>m</em>/<em>n</em>. The tool applies the <strong>Fibonacci–Sylvester greedy algorithm</strong>: at each step it takes the largest unit fraction not exceeding the remainder (the one with denominator ⌈b/a⌉), subtracts it, and repeats — always producing a finite expansion of distinct unit fractions with strictly increasing denominators. Integer parts are extracted first, so improper fractions like 7/4 become 1 + 1/2 + 1/4. Arithmetic is exact (BigInt), so even the famously long expansions (e.g. 5/121) are correct. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row"><span class="lbl">Numerator a</span><input id="a" style="flex:1;min-width:120px" value="5"></div>
+      <div class="row"><span class="lbl">Denominator b</span><input id="b" style="flex:1;min-width:120px" value="121"></div>
+      <div class="err" id="err"></div>
+      <div class="acts"><button id="b-run" class="primary" type="button">Decompose</button></div>
+
+      <h3>Result</h3>
+      <div class="out" id="out">—</div>
+      <h3>Greedy steps</h3>
+      <div class="steps" id="steps">—</div>
+
+      <p class="note" style="margin-top:14px">An <strong>Egyptian fraction</strong> is a representation of a positive rational as a sum of distinct unit fractions 1/n. The <strong>greedy algorithm</strong> (described by Fibonacci in 1202 and later studied by Sylvester) works as follows: given a remainder <em>a</em>/<em>b</em> (in lowest terms, with 0 &lt; a &lt; b), the largest unit fraction that does not exceed it is 1/⌈b/a⌉, since ⌈b/a⌉ is the smallest integer with 1/q ≤ a/b. Subtract it: a/b − 1/q = (a·q − b)/(b·q), reduce, and repeat. The numerator strictly decreases in a weighted sense and the algorithm provably terminates for every rational, producing denominators that grow strictly (and often explosively — the greedy expansion of 5/121 reaches denominators of 25, 757, 763309, 8736202230049…). Integer parts are pulled out first, so the fractional remainder is always proper. The decomposition is not unique; the greedy one is just the lexicographically smallest (largest first term). Pairs with the Fraction Calculator, Continued Fraction, and GCD/LCM tools. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var MAX_TERMS = 30;
+
+    function gcd(a, b) { a = a < 0n ? -a : a; b = b < 0n ? -b : b; while (b) { var t = a % b; a = b; b = t; } return a; }
+    function reduce(a, b) {
+      if (b === 0n) throw new Error("Denominator is zero");
+      if (b < 0n) { a = -a; b = -b; }
+      var g = gcd(a, b) || 1n;
+      return { a: a / g, b: b / g };
+    }
+    function ceilDiv(b, a) { return (b + a - 1n) / a; }   // a > 0
+
+    // greedy decomposition of a PROPER fraction (0 < a < b, already reduced) into unit fractions.
+    // returns array of BigInt denominators (strictly increasing).
+    function greedy(a, b) {
+      var parts = [];
+      var cur = reduce(a, b);
+      while (cur.a !== 0n) {
+        if (cur.a === 1n) { parts.push(cur.b); break; }
+        var q = ceilDiv(cur.b, cur.a);
+        // remainder = cur.a/cur.b - 1/q = (cur.a*q - cur.b) / (cur.b*q)
+        var na = cur.a * q - cur.b;
+        var nb = cur.b * q;
+        if (na <= 0n) throw new Error("Non-positive remainder (internal)");
+        cur = reduce(na, nb);
+        parts.push(q);
+        if (parts.length > MAX_TERMS) throw new Error("Expansion exceeds " + MAX_TERMS + " terms (denominators exploded)");
+      }
+      return parts;
+    }
+
+    // full decomposition: extract integer part, then greedy on the fractional remainder.
+    // returns { whole: BigInt, parts: [BigInt...] }
+    function expand(a, b) {
+      var r = reduce(a, b);
+      if (r.a === 0n) return { whole: 0n, parts: [] };
+      var whole = r.a / r.b;            // integer part (floor; a>=0 here)
+      var remA = r.a - whole * r.b;     // remainder numerator (0 <= remA < b)
+      var parts = remA === 0n ? [] : greedy(remA, r.b);
+      return { whole: whole, parts: parts };
+    }
+
+    // greedy step trace: list of { q, rem: {a,b} } showing each subtraction
+    function greedySteps(a, b) {
+      var steps = [];
+      var cur = reduce(a, b);
+      while (cur.a !== 0n) {
+        if (cur.a === 1n) { steps.push({ rem: { a: cur.a, b: cur.b }, q: cur.b, next: { a: 0n, b: 1n } }); break; }
+        var q = ceilDiv(cur.b, cur.a);
+        var na = cur.a * q - cur.b;
+        var nb = cur.b * q;
+        var nxt = reduce(na, nb);
+        steps.push({ rem: { a: cur.a, b: cur.b }, q: q, next: { a: nxt.a, b: nxt.b } });
+        cur = nxt;
+        if (steps.length > MAX_TERMS) break;
+      }
+      return steps;
+    }
+
+    // verify: whole + sum(1/parts) == a/b  (exact BigInt fraction sum)
+    function verifySum(whole, parts, a, b) {
+      var num = whole, den = 1n;
+      for (var i = 0; i < parts.length; i++) {
+        // add 1/parts[i]
+        var p = parts[i];
+        num = num * p + den;
+        den = den * p;
+        var r = reduce(num, den); num = r.a; den = r.b;
+      }
+      var target = reduce(a, b);
+      var got = reduce(num, den);
+      return got.a === target.a && got.b === target.b;
+    }
+
+    function fmtTerm(d) { return "1/" + d; }
+
+    // ---- DOM ----
+    function $(id) { return document.getElementById(id); }
+    var aEl = $("a"), bEl = $("b"), errEl = $("err"), outEl = $("out"), stepsEl = $("steps");
+
+    function bi(s) { try { return BigInt(s); } catch (e) { return null; } }
+
+    function run() {
+      errEl.textContent = "";
+      try {
+        var a = bi(aEl.value), b = bi(bEl.value);
+        if (a === null || b === null) throw new Error("a and b must be integers");
+        if (a < 0n) throw new Error("a must be non-negative (Egyptian fractions are for positive rationals)");
+        if (b <= 0n) throw new Error("b must be positive");
+
+        var ex = expand(a, b);
+        // build display string
+        var terms = [];
+        if (ex.whole !== 0n) terms.push(String(ex.whole));
+        for (var i = 0; i < ex.parts.length; i++) terms.push(fmtTerm(ex.parts[i]));
+        var display = terms.length ? terms.join(" + ") : "0";
+
+        var h = [];
+        h.push("<span class='k'>input</span><span class='v'>" + a + "/" + b + "</span><br>");
+        var red = reduce(a, b);
+        h.push("<span class='k'>reduced</span><span class='v'>" + red.a + "/" + red.b + "</span><br>");
+        h.push("<span class='k'>expansion</span><span class='v'>" + display + "</span><br>");
+        h.push("<span class='k'>unit fractions</span><span class='v'>" + ex.parts.length + "</span><br>");
+        var ok = verifySum(ex.whole, ex.parts, a, b);
+        h.push("<span class='k'>verification</span><span class='" + (ok ? "ok" : "bad") + "'>" + (ok ? "✓ sums to " + a + "/" + b : "✗ mismatch") + "</span>");
+        outEl.innerHTML = h.join("");
+
+        // steps
+        var whole = red.a / red.b;
+        var remA = red.a - whole * red.b;
+        if (remA === 0n) {
+          stepsEl.innerHTML = "<span class='n'>No fractional remainder — " + a + "/" + b + " is the integer " + whole + ".</span>";
+        } else {
+          var st = greedySteps(remA, red.b);
+          var sh = [];
+          sh.push("<span class='n'>remainder = " + remA + "/" + red.b + ":</span><br>");
+          for (var i = 0; i < st.length; i++) {
+            sh.push("<span class='n'>step " + (i + 1) + ":</span> " +
+              st[i].rem.a + "/" + st[i].rem.b + " − 1/" + st[i].q +
+              (st[i].next.a === 0n ? " = 0" : " = " + st[i].next.a + "/" + st[i].next.b) + "<br>");
+          }
+          stepsEl.innerHTML = sh.join("");
+        }
+      } catch (e) {
+        errEl.textContent = e.message || String(e);
+        outEl.innerHTML = "—";
+        stepsEl.innerHTML = "—";
+      }
+    }
+
+    $("b-run").addEventListener("click", run);
+    [aEl, bEl].forEach(function (el) { el.addEventListener("input", run); });
+    run();
+
+    window.VT_EF_TEST = {
+      gcd: gcd, reduce: reduce, ceilDiv: ceilDiv, greedy: greedy, expand: expand,
+      greedySteps: greedySteps, verifySum: verifySum
+    };
+  })();
+  </script>
+</body>
+</html>
