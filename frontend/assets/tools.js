@@ -1371,6 +1371,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-10T17:10:00Z",
   },
   {
+    slug: "security-txt-generator",
+    name: "security.txt Generator",
+    description: "Generate a standards-compliant security.txt (RFC 9116) for /.well-known/security.txt so vulnerability reports reach the right people. Fill Contact and Expires (required) plus optional Acknowledgments, Canonical, Encryption, Hiring, Policy and Preferred-Languages, with live RFC conformance checks. Copy or download. Runs locally.",
+    category: "Text",
+    icon: "🛡️",
+    added: "2026-07-11T09:10:00Z",
+  },
+  {
     slug: "css-minifier",
     name: "CSS Minifier",
     description: "Minify CSS by stripping comments, collapsing whitespace, removing unnecessary spaces around {} ; : , ( ), and dropping trailing semicolons — while preserving the contents of strings and url() so nothing breaks. The reverse of the CSS formatter. Optionally shorten hex colors (#aabbcc → #abc) and drop leading zeros (0.5em → .5em). Everything runs in your browser; nothing is uploaded.",
