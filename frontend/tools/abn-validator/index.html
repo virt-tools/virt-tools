@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>ABN Validator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .row { display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+    .row .lbl { min-width:130px; color:var(--text-dim,#9aa3b2); font-size:.85rem; }
+    .row input { font-family:ui-monospace,monospace; font-size:14px; padding:7px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; }
+    .row input.abn { width:240px; letter-spacing:.5px; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    .verdict { font-family:ui-monospace,monospace; font-size:14px; background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:10px; margin:8px 0; min-height:40px; }
+    .verdict .ok { color:var(--good,#4ade80); font-weight:700; }
+    .verdict .bad { color:var(--bad,#f87171); font-weight:700; }
+    h3 { margin:16px 0 4px; font-size:.9rem; color:var(--text-dim,#9aa3b2); text-transform:uppercase; letter-spacing:.04em; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    .struct { font-family:ui-monospace,monospace; font-size:.85rem; line-height:1.8; word-break:break-all; }
+    .struct small { color:var(--text-dim,#9aa3b2); font-size:.78rem; }
+    .struct table { border-collapse:collapse; margin:4px 0; }
+    .struct td { padding:0 6px; text-align:right; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>ABN Validator</h1>
+      <p>Validate an <strong>ABN</strong> (Australian Business Number) — the 11-digit identifier issued by the Australian Business Register. The ABN uses a single mod-89 checksum over a weighted sum: subtract 1 from the first digit, weight all eleven digits by <code>[10,1,3,5,7,9,11,13,15,17,19]</code>, sum, and the result must be a multiple of 89. See the full weighted breakdown. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <h3>Validate an ABN</h3>
+      <div class="row"><span class="lbl">ABN</span><input type="text" id="abn" class="abn" spellcheck="false" value="51 824 753 556"></div>
+      <div class="err" id="err"></div>
+      <div class="verdict" id="verdict">—</div>
+
+      <p class="note"><strong>ABN</strong> structure: 11 digits (spaces are tolerated on input and stripped). The check is a whole-number mod-89 sum, not a single appended check digit, so an ABN can't be built from a free prefix the way a Luhn/CUSIP code can — they are issued. The algorithm: take the 11 digits, <em>subtract 1 from the first (leftmost) digit</em>, multiply each by the fixed weights <code>10, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19</code>, sum the products, and the ABN is valid iff that sum is divisible by <code>89</code>. An ABN's last nine digits embed the entity's ACN (Australian Company Number) for companies. Pairs with the IBAN, ISIN, SEDOL and CUSIP validators. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var WEIGHTS = [10, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19];
+
+    function digitsOnly(s) { return String(s == null ? "" : s).replace(/[^0-9]/g, ""); }
+
+    // Weighted sum of an 11-digit ABN string (digits only), applying the -1 to the first digit.
+    // Returns -1 if not exactly 11 digits.
+    function weightedSum(abn) {
+      abn = String(abn == null ? "" : abn);
+      if (!/^[0-9]{11}$/.test(abn)) return -1;
+      var sum = 0;
+      for (var i = 0; i < 11; i++) {
+        var d = abn.charCodeAt(i) - 48;
+        if (i === 0) d -= 1;            // subtract 1 from the leading digit
+        sum += d * WEIGHTS[i];
+      }
+      return sum;
+    }
+
+    // Validate an ABN (spaces etc. stripped first). Returns {ok, digits, sum, mod}.
+    function validate(raw) {
+      var digits = digitsOnly(raw);
+      if (digits.length !== 11) return { ok: false, reason: "length", digits: digits };
+      var sum = weightedSum(digits);
+      if (sum < 0) return { ok: false, reason: "format" };
+      return { ok: sum % 89 === 0, digits: digits, sum: sum, mod: sum % 89 };
+    }
+
+    // Per-position breakdown: [{digit, weight, product}] for the 11 digits (first decremented).
+    function breakdown(abn) {
+      abn = String(abn);
+      var rows = [];
+      for (var i = 0; i < 11; i++) {
+        var d = abn.charCodeAt(i) - 48;
+        var eff = i === 0 ? d - 1 : d;
+        rows.push({ digit: d, effective: eff, weight: WEIGHTS[i], product: eff * WEIGHTS[i] });
+      }
+      return rows;
+    }
+
+    // ---- DOM ----
+    function $(id) { return document.getElementById(id); }
+    var abnEl = $("abn"), errEl = $("err"), verdictEl = $("verdict");
+
+    function render() {
+      errEl.textContent = "";
+      var raw = abnEl.value.trim();
+      if (!raw) { verdictEl.textContent = "—"; return; }
+      var digits = digitsOnly(raw);
+      // reject if the original had non-space non-digit chars
+      if (/[^0-9 ]/.test(raw.replace(/\t/g, " "))) {
+        verdictEl.innerHTML = '<span class="bad">✗ Invalid character</span> — an ABN is digits (and spaces) only.';
+        return;
+      }
+      if (digits.length !== 11) {
+        verdictEl.innerHTML = '<span class="bad">✗ Wrong length</span> — an ABN is 11 digits (got ' + digits.length + ' after stripping spaces).';
+        return;
+      }
+      var r = validate(digits);
+      var rows = breakdown(digits);
+      var sum = r.sum;
+      var prodRow = rows.map(function (x) { return x.product; });
+      var parts = '<div class="struct">' +
+        'ABN: &nbsp;' + digits.split("").map(function (d, i) {
+          return i === 0 ? '<b style="color:#f0c674">' + d + ' <small>−1</small></b>' : d;
+        }).join("&nbsp;") + '<br>' +
+        'Weights: ' + WEIGHTS.join(", ") + '<br>' +
+        'Products: ' + prodRow.join(" + ") + ' = <b>' + sum + '</b><br>' +
+        sum + ' mod 89 = <b>' + r.mod + '</b><br>' +
+        (r.ok ? '<span class="ok">✓ Valid</span> — ' + sum + ' is divisible by 89.' :
+                '<span class="bad">✗ Invalid</span> — ' + sum + ' mod 89 = ' + r.mod + ' (must be 0).') +
+        '</div>';
+      verdictEl.innerHTML = parts;
+    }
+
+    abnEl.addEventListener("input", render);
+    render();
+
+    window.VT_ABN_TEST = {
+      WEIGHTS: WEIGHTS, digitsOnly: digitsOnly,
+      weightedSum: weightedSum, validate: validate, breakdown: breakdown
+    };
+  })();
+  </script>
+</body>
+</html>

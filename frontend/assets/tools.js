@@ -987,6 +987,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-11T09:40:00Z",
   },
   {
+    slug: "abn-validator",
+    name: "ABN Validator",
+    description: "Validate an ABN (Australian Business Number, 11 digits) with its mod-89 weighted checksum — subtract 1 from the first digit, weight by [10,1,3,5,7,9,11,13,15,17,19], and the sum must be divisible by 89. Shows the full weighted breakdown. Runs locally.",
+    category: "Finance",
+    icon: "🏢",
+    added: "2026-07-11T10:10:00Z",
+  },
+  {
     slug: "imei-validator",
     name: "IMEI Validator",
     description: "Validate a 15-digit IMEI (mobile device identifier) with its Luhn check digit, break it into TAC + SNR, compute the check digit, or generate a random valid IMEI.",
