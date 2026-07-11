@@ -1923,6 +1923,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-05T04:20:00Z",
   },
   {
+    slug: "julian-day-converter",
+    name: "Julian Day Number Converter",
+    description: "Convert between a Gregorian calendar date, its Julian Day Number (the continuous day count used in astronomy and chronology, where 2000-01-01 = 2451545 and 1970-01-01 = 2440588), and a Unix timestamp. Edit the date, the JDN, or the Unix timestamp and the others update, with the day of the week and day of the year shown alongside. The JDN is the standard for date arithmetic that works across any calendar and avoids month/year boundaries; the proleptic Gregorian calendar is used. Pairs with the Timestamp Converter, Day-of-Year, and Date Duration tools. Everything runs locally in your browser.",
+    category: "Time",
+    icon: "🌘",
+    added: "2026-07-11T13:40:00Z",
+  },
+  {
     slug: "age-calculator",
     name: "Age Calculator",
     description: "Calculate exact age from a date of birth, accounting for the calendar — leap years and month lengths are handled so the result is correct even for birthdays on the 29th, 30th, or 31st. Shows age in years, months, and days; total days and weeks lived; the weekday you were born on; and a countdown to your next birthday. \"Today\" defaults to the current date and you can edit it to compute an age as of any date. Everything runs locally in your browser.",
