@@ -2547,6 +2547,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T03:40:00Z",
   },
   {
+    slug: "lorenz-attractor",
+    name: "Lorenz Attractor",
+    description: "Integrate the Lorenz system — the three equations Edward Lorenz studied in 1963 that gave chaos theory its name and the butterfly effect its image: dx/dt = σ(y−x), dy/dt = x(ρ−z) − y, dz/dt = xy − βz. With the classic parameters σ=10, ρ=28, β=8/3 the trajectory settles onto the famous two-lobed strange attractor: deterministic, never repeating, yet forever confined. Two orbits starting a hair's breadth apart diverge exponentially (≈e^{0.906·t}), which is why long-term weather prediction fails. Integration uses fourth-order Runge–Kutta (RK4); slide ρ below 1 to quiet the system to a stable origin. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "∞",
+    added: "2026-07-12T03:50:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
