@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Monte Carlo Simulator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .row { display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+    .row .lbl { min-width:120px; color:var(--text-dim,#9aa3b2); font-size:.85rem; }
+    .row input, .row select { font-family:ui-monospace,monospace; font-size:14px; padding:7px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; font-family:ui-monospace,monospace; }
+    h3 { margin:16px 0 4px; font-size:.9rem; color:var(--text-dim,#9aa3b2); text-transform:uppercase; letter-spacing:.04em; }
+    .acts { display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; align-items:center; }
+    .acts button { padding:8px 14px; border-radius:6px; border:1px solid var(--border,#2a2f3a); background:var(--bg-elev,#171a21); color:var(--text,#e6e6e6); cursor:pointer; font-weight:600; font-size:.82rem; }
+    .acts button.primary { background:#1e3a5f; border-color:var(--accent,#5b8cff); }
+    .out { font-family:ui-monospace,monospace; font-size:13px; background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:12px; margin:8px 0; line-height:1.9; }
+    .out .k { color:var(--text-dim,#9aa3b2); display:inline-block; min-width:180px; }
+    .out .v { color:var(--text,#e6e6e6); font-weight:700; }
+    .canvaswrap { background:var(--bg,#0d1016); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:10px; margin:8px 0; text-align:center; }
+    canvas { display:block; margin:0 auto; image-rendering:pixelated; background:#0d1016; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    @media(max-width:640px){ .grid{ grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Monte Carlo Simulator</h1>
+      <p>Estimate quantities with <strong>Monte Carlo methods</strong> — random sampling instead of exact calculation. Three classic experiments: estimate <strong>π</strong> by throwing darts at a unit square (the fraction inside a quarter circle × 4), estimate <strong>π</strong> again via <strong>Buffon's needle</strong> (dropping needles on a lined floor), and estimate a <strong>definite integral</strong> ∫ₐᵇ f(x) dx by averaging the function over random points. Each run shows the sampled picture, the running estimate, the error against the true value, and a convergence chart. Uses a seeded PRNG so runs are reproducible. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row">
+        <span class="lbl">Method</span>
+        <select id="mode">
+          <option value="pi">Estimate π — dartboard</option>
+          <option value="buffon">Estimate π — Buffon's needle</option>
+          <option value="integral">Estimate a definite integral</option>
+        </select>
+      </div>
+
+      <div id="cfg-pi" class="cfg">
+        <div class="row"><span class="lbl">Darts (samples)</span><input id="pi-n" style="width:120px" value="20000"></div>
+      </div>
+      <div id="cfg-buffon" class="cfg" style="display:none">
+        <div class="grid">
+          <div><div class="row"><span class="lbl">Needles (n)</span><input id="bu-n" style="width:120px" value="20000"></div></div>
+          <div><div class="row"><span class="lbl">Needle length L</span><input id="bu-l" style="width:90px" value="0.5"></div></div>
+        </div>
+        <div class="row"><span class="lbl">Line spacing D</span><input id="bu-d" style="width:90px" value="1"></div>
+      </div>
+      <div id="cfg-int" class="cfg" style="display:none">
+        <div class="row"><span class="lbl">f(x) =</span><input id="in-f" style="flex:1;min-width:200px" value="x*x"></div>
+        <div class="grid">
+          <div><div class="row"><span class="lbl">a (lower)</span><input id="in-a" style="width:90px" value="0"></div></div>
+          <div><div class="row"><span class="lbl">b (upper)</span><input id="in-b" style="width:90px" value="1"></div></div>
+        </div>
+        <div class="row"><span class="lbl">Samples (n)</span><input id="in-n" style="width:120px" value="20000"></div>
+      </div>
+
+      <div class="row">
+        <span class="lbl">Seed (PRNG)</span><input id="seed" style="width:120px" value="42">
+      </div>
+      <div class="err" id="err"></div>
+
+      <div class="acts">
+        <button id="b-run" class="primary" type="button">Run</button>
+        <button id="b-reset" type="button">Clear canvas</button>
+      </div>
+
+      <div class="canvaswrap"><canvas id="cv" width="360" height="360"></canvas></div>
+      <div class="out" id="out">—</div>
+      <h3>Convergence (estimate vs samples)</h3>
+      <div class="canvaswrap"><canvas id="conv" width="600" height="160"></canvas></div>
+
+      <p class="note" style="margin-top:14px"><strong>Monte Carlo methods</strong> estimate a quantity by averaging many random samples — trading exactness for simplicity, with error shrinking as 1/√n. To estimate <strong>π</strong>, throw darts uniformly into a unit square: the fraction landing in the inscribed quarter circle equals π/4, so π ≈ 4·(inside/total). <strong>Buffon's needle</strong> drops needles of length L on a floor ruled with lines spaced D: the crossing probability is 2L/(πD), so π ≈ 2L·n/(D·crossings). A <strong>definite integral</strong> ∫ₐᵇ f(x) dx is estimated by averaging f over uniform random points in [a,b] and multiplying by (b−a), with a standard error of (b−a)·σ/√n. f(x) may use <code>Math</code> functions (e.g. <code>Math.sin(x)</code>, <code>x*x</code>, <code>Math.exp(-x*x)</code>). The PRNG is a seeded mulberry32 so results reproduce. Pairs with the Normal Distribution and Bayes' Theorem tools. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    // ---- pure core ----
+    // mulberry32 seeded PRNG -> function returning [0,1)
+    function makeRng(seed) {
+      var s = (seed >>> 0) || 1;
+      return function () {
+        s = (s + 0x6D2B79F5) >>> 0;
+        var t = s;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    function mean(xs) {
+      if (!xs.length) return 0;
+      var s = 0; for (var i = 0; i < xs.length; i++) s += xs[i];
+      return s / xs.length;
+    }
+    // population variance (Monte Carlo uses population variance of samples)
+    function variance(xs) {
+      if (xs.length < 1) return 0;
+      var m = mean(xs), s = 0;
+      for (var i = 0; i < xs.length; i++) { var d = xs[i] - m; s += d * d; }
+      return s / xs.length;
+    }
+
+    // Estimate pi via darts in unit square [0,1]^2, quarter circle x^2+y^2<=1.
+    // Returns { pi, inside, total, points:[{x,y,inside}...] }.
+    function estimatePi(n, rng, maxPoints) {
+      var inside = 0, points = [];
+      var cap = (maxPoints == null) ? n : Math.min(n, maxPoints);
+      var stride = n > cap ? Math.ceil(n / cap) : 1;
+      for (var i = 0; i < n; i++) {
+        var x = rng(), y = rng();
+        var ins = (x * x + y * y) <= 1 ? 1 : 0;
+        inside += ins;
+        if (i % stride === 0 && points.length < cap) points.push({ x: x, y: y, inside: ins });
+      }
+      return { pi: 4 * inside / n, inside: inside, total: n, points: points };
+    }
+
+    // Buffon's needle: needle length L, line spacing D (L<=D). pi = 2*L*n / (D*crossings).
+    // Returns { pi, crossings, total, needles:[{...}] }.
+    function buffonPi(n, L, D, rng, maxNeedles) {
+      if (L <= 0 || D <= 0) throw new Error("L and D must be positive");
+      if (L > D) throw new Error("Needle length L must be <= line spacing D");
+      var crossings = 0, needles = [];
+      var cap = (maxNeedles == null) ? n : Math.min(n, maxNeedles);
+      var stride = n > cap ? Math.ceil(n / cap) : 1;
+      for (var i = 0; i < n; i++) {
+        // y = midpoint distance to nearest line (in [0, D/2]); theta = angle with lines.
+        var y = rng() * (D / 2);          // midpoint offset to nearest line
+        var theta = rng() * Math.PI;       // angle
+        var half = (L / 2) * Math.sin(theta); // perpendicular half-projection
+        var cross = (y <= half) ? 1 : 0;
+        crossings += cross;
+        if (i % stride === 0 && needles.length < cap) needles.push({ y: y, theta: theta, cross: cross });
+      }
+      if (crossings === 0) return { pi: NaN, crossings: 0, total: n, needles: needles };
+      return { pi: 2 * L * n / (D * crossings), crossings: crossings, total: n, needles: needles };
+    }
+
+    // Estimate integral a..b of f by sample-mean Monte Carlo.
+    // Returns { integral, mean, variance, stderr, n, a, b, xs, ys (sampled) }.
+    function integrate(f, a, b, n, rng, maxPoints) {
+      if (n < 1) throw new Error("n must be >= 1");
+      if (!(a < b) && !(a > b)) { /* a==b -> 0 */ }
+      var sum = 0, sumSq = 0;
+      var xs = [], ys = [], cap = (maxPoints == null) ? n : Math.min(n, maxPoints);
+      var stride = n > cap ? Math.ceil(n / cap) : 1;
+      for (var i = 0; i < n; i++) {
+        var x = a + (b - a) * rng();
+        var fx = f(x);
+        sum += fx; sumSq += fx * fx;
+        if (i % stride === 0 && xs.length < cap) { xs.push(x); ys.push(fx); }
+      }
+      var m = sum / n;
+      var v = sumSq / n - m * m;          // population variance
+      if (v < 0) v = 0;                   // numerical guard
+      var stderr = (b - a) * Math.sqrt(v / n);
+      return { integral: (b - a) * m, mean: m, variance: v, stderr: stderr, n: n, a: a, b: b, xs: xs, ys: ys };
+    }
+
+    // build f from expression string, with Math in scope
+    function makeFn(expr) {
+      try {
+        var fn = new Function("x", "with(Math){return (" + expr + ");}");
+        // sanity probe
+        var v = fn(0.5);
+        if (typeof v !== "number") throw new Error("f does not return a number");
+        return fn;
+      } catch (e) { throw new Error("Bad f(x): " + e.message); }
+    }
+
+    // ---- DOM ----
+    function $(id) { return document.getElementById(id); }
+    var modeEl = $("mode"), seedEl = $("seed"), errEl = $("err"), outEl = $("out");
+    var cv = $("cv"), conv = $("conv");
+    var cfgs = { pi: $("cfg-pi"), buffon: $("cfg-buffon"), integral: $("cfg-int") };
+
+    function showCfg(m) { for (var k in cfgs) cfgs[k].style.display = (k === m) ? "block" : "none"; }
+    function num(id, def) { var v = parseFloat($(id).value); return isNaN(v) ? def : v; }
+
+    function clearCanvas(c) { var ctx = c.getContext("2d"); ctx.fillStyle = "#0d1016"; ctx.fillRect(0, 0, c.width, c.height); }
+
+    function drawPi(res) {
+      var S = 340, pad = 10, ctx = cv.getContext("2d");
+      cv.width = S + pad * 2; cv.height = S + pad * 2;
+      ctx.fillStyle = "#0d1016"; ctx.fillRect(0, 0, cv.width, cv.height);
+      // square
+      ctx.strokeStyle = "#2a2f3a"; ctx.strokeRect(pad, pad, S, S);
+      // quarter circle
+      ctx.strokeStyle = "#5b8cff"; ctx.beginPath(); ctx.arc(pad, pad + S, S, -Math.PI / 2, 0); ctx.stroke();
+      // darts
+      for (var i = 0; i < res.points.length; i++) {
+        var p = res.points[i];
+        ctx.fillStyle = p.inside ? "#4ade80" : "#f87171";
+        ctx.fillRect(pad + p.x * S - 1, pad + (1 - p.y) * S - 1, 2, 2);
+      }
+    }
+    function drawBuffon(res, L, D) {
+      var S = 340, pad = 20, ctx = cv.getContext("2d");
+      cv.width = S + pad * 2; cv.height = S + pad * 2;
+      ctx.fillStyle = "#0d1016"; ctx.fillRect(0, 0, cv.width, cv.height);
+      var lines = Math.max(2, Math.floor(S / (D * 40)) + 1);
+      var scale = S / (lines * D);
+      // lines
+      ctx.strokeStyle = "#2a2f3a";
+      for (var i = 0; i <= lines; i++) { var yy = pad + i * D * scale; ctx.beginPath(); ctx.moveTo(pad, yy); ctx.lineTo(pad + S, yy); ctx.stroke(); }
+      // needles
+      for (var k = 0; k < res.needles.length; k++) {
+        var nd = res.needles[k];
+        // place needle at random x center; y = line + offset
+        var cx = pad + ((k * 37) % S); // spread across width deterministically
+        var lineIdx = Math.floor((k * 0.317) % lines);
+        var cy = pad + (lineIdx + 0.5) * D * scale + (nd.y - D / 4) * scale;
+        var dx = (L / 2) * Math.cos(nd.theta) * scale;
+        var dy = (L / 2) * Math.sin(nd.theta) * scale;
+        ctx.strokeStyle = nd.cross ? "#4ade80" : "#f87171";
+        ctx.beginPath(); ctx.moveTo(cx - dx, cy - dy); ctx.lineTo(cx + dx, cy + dy); ctx.stroke();
+      }
+    }
+    function drawIntegral(res, f) {
+      var S = 340, pad = 20, ctx = cv.getContext("2d");
+      cv.width = S + pad * 2; cv.height = S + pad * 2;
+      ctx.fillStyle = "#0d1016"; ctx.fillRect(0, 0, cv.width, cv.height);
+      var a = res.a, b = res.b;
+      // sample f to find min/max
+      var lo = Infinity, hi = -Infinity;
+      for (var t = 0; t <= 100; t++) { var xv = a + (b - a) * t / 100; var fv = f(xv); if (fv < lo) lo = fv; if (fv > hi) hi = fv; }
+      if (res.ys.length) { for (var q = 0; q < res.ys.length; q++) { if (res.ys[q] < lo) lo = res.ys[q]; if (res.ys[q] > hi) hi = res.ys[q]; } }
+      if (!(lo < hi)) { lo = lo - 1; hi = lo + 2; }
+      var sx = function (x) { return pad + (x - a) / (b - a) * S; };
+      var sy = function (yv) { return pad + (1 - (yv - lo) / (hi - lo)) * S; };
+      // axes
+      ctx.strokeStyle = "#2a2f3a";
+      if (lo <= 0 && 0 <= hi) { var zy = sy(0); ctx.beginPath(); ctx.moveTo(pad, zy); ctx.lineTo(pad + S, zy); ctx.stroke(); }
+      // curve
+      ctx.strokeStyle = "#5b8cff"; ctx.beginPath();
+      for (var u = 0; u <= 100; u++) { var xu = a + (b - a) * u / 100; ctx.lineTo(sx(xu), sy(f(xu))); }
+      ctx.stroke();
+      // samples
+      ctx.fillStyle = "#a78bfa";
+      for (var r = 0; r < res.xs.length; r++) ctx.fillRect(sx(res.xs[r]) - 1, sy(res.ys[r]) - 1, 2, 2);
+    }
+    function drawConvergence(history, target) {
+      var ctx = conv.getContext("2d");
+      conv.width = 600; conv.height = 160;
+      ctx.fillStyle = "#0d1016"; ctx.fillRect(0, 0, conv.width, conv.height);
+      if (history.length < 2) return;
+      var lo = Infinity, hi = -Infinity;
+      for (var i = 0; i < history.length; i++) { if (history[i].est < lo) lo = history[i].est; if (history[i].est > hi) hi = history[i].est; }
+      if (target != null) { lo = Math.min(lo, target); hi = Math.max(hi, target); }
+      if (!(lo < hi)) { lo = lo - 1; hi = lo + 2; }
+      var W = conv.width, H = conv.height;
+      // target line
+      if (target != null) { var ty = H - 10 - ((target - lo) / (hi - lo)) * (H - 20); ctx.strokeStyle = "#4ade80"; ctx.setLineDash([4, 4]); ctx.beginPath(); ctx.moveTo(0, ty); ctx.lineTo(W, ty); ctx.stroke(); ctx.setLineDash([]); }
+      // estimate line
+      ctx.strokeStyle = "#5b8cff"; ctx.beginPath();
+      for (var k = 0; k < history.length; k++) { var px = (k / (history.length - 1)) * W; var py = H - 10 - ((history[k].est - lo) / (hi - lo)) * (H - 20); if (k === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); }
+      ctx.stroke();
+    }
+
+    // run a method, collecting convergence history at checkpoints
+    function run() {
+      errEl.textContent = "";
+      try {
+        var seed = parseInt(seedEl.value, 10) || 42;
+        var mode = modeEl.value;
+        var rng = makeRng(seed);
+        if (mode === "pi") {
+          var n = Math.max(1, parseInt($("pi-n").value, 10) || 20000);
+          var res = estimatePi(n, rng, 4000);
+          drawPi(res);
+          var err = res.pi - Math.PI;
+          outEl.innerHTML = "<span class='k'>estimate π</span><span class='v'>" + res.pi.toFixed(6) + "</span><br>" +
+            "<span class='k'>true π</span><span class='v'>" + Math.PI.toFixed(6) + "</span><br>" +
+            "<span class='k'>error</span><span class='v'>" + (err >= 0 ? "+" : "") + err.toFixed(6) + "</span><br>" +
+            "<span class='k'>inside / total</span><span class='v'>" + res.inside + " / " + res.total + "</span>";
+          // convergence via re-runs at checkpoints
+          var hist = []; var ck = [10, 100, 1000, 10000, 100000, n].filter(function (x) { return x <= n; });
+          var seen = {}; var uniq = []; ck.forEach(function (x) { if (!seen[x]) { seen[x] = x; uniq.push(x); } });
+          var rng2 = makeRng(seed);
+          for (var i = 0; i < uniq.length; i++) hist.push({ est: estimatePi(uniq[i], rng2, 0).pi });
+          drawConvergence(hist, Math.PI);
+        } else if (mode === "buffon") {
+          var n = Math.max(1, parseInt($("bu-n").value, 10) || 20000);
+          var L = num("bu-l", 0.5), D = num("bu-d", 1);
+          var res = buffonPi(n, L, D, rng, 4000);
+          drawBuffon(res, L, D);
+          var err = res.pi - Math.PI;
+          outEl.innerHTML = "<span class='k'>estimate π</span><span class='v'>" + (isNaN(res.pi) ? "—" : res.pi.toFixed(6)) + "</span><br>" +
+            "<span class='k'>true π</span><span class='v'>" + Math.PI.toFixed(6) + "</span><br>" +
+            "<span class='k'>error</span><span class='v'>" + (isNaN(res.pi) ? "—" : (err >= 0 ? "+" : "") + err.toFixed(6)) + "</span><br>" +
+            "<span class='k'>crossings / total</span><span class='v'>" + res.crossings + " / " + res.total + "</span><br>" +
+            "<span class='k'>theory prob</span><span class='v'>" + (2 * L / (Math.PI * D)).toFixed(6) + "</span>";
+          var hist = []; var ck = [10, 100, 1000, 10000, 100000, n].filter(function (x) { return x <= n; });
+          var seen = {}; var uniq = []; ck.forEach(function (x) { if (!seen[x]) { seen[x] = x; uniq.push(x); } });
+          var rng2 = makeRng(seed);
+          for (var i = 0; i < uniq.length; i++) hist.push({ est: buffonPi(uniq[i], L, D, rng2, 0).pi });
+          drawConvergence(hist, Math.PI);
+        } else {
+          var f = makeFn($("in-f").value);
+          var a = num("in-a", 0), b = num("in-b", 1), n = Math.max(1, parseInt($("in-n").value, 10) || 20000);
+          var res = integrate(f, a, b, n, rng, 4000);
+          drawIntegral(res, f);
+          outEl.innerHTML = "<span class='k'>estimate ∫ₐᵇ f(x) dx</span><span class='v'>" + res.integral.toFixed(6) + "</span><br>" +
+            "<span class='k'>sample mean of f</span><span class='v'>" + res.mean.toFixed(6) + "</span><br>" +
+            "<span class='k'>sample variance</span><span class='v'>" + res.variance.toFixed(6) + "</span><br>" +
+            "<span class='k'>standard error</span><span class='v'>±" + res.stderr.toFixed(6) + "</span><br>" +
+            "<span class='k'>samples</span><span class='v'>" + res.n + "</span>";
+          // convergence via cumulative? simpler: re-run at checkpoints with fresh rng
+          var hist = []; var ck = [10, 100, 1000, 10000, 100000, n].filter(function (x) { return x <= n; });
+          var seen = {}; var uniq = []; ck.forEach(function (x) { if (!seen[x]) { seen[x] = x; uniq.push(x); } });
+          var rng2 = makeRng(seed);
+          for (var i = 0; i < uniq.length; i++) hist.push({ est: integrate(f, a, b, uniq[i], rng2, 0).integral });
+          drawConvergence(hist, null);
+        }
+      } catch (e) { errEl.textContent = e.message || String(e); }
+    }
+
+    modeEl.addEventListener("change", function () { showCfg(modeEl.value); });
+    $("b-run").addEventListener("click", run);
+    $("b-reset").addEventListener("click", function () { clearCanvas(cv); clearCanvas(conv); outEl.innerHTML = "—"; });
+    showCfg("pi");
+    run();
+
+    window.VT_MC_TEST = {
+      makeRng: makeRng, mean: mean, variance: variance,
+      estimatePi: estimatePi, buffonPi: buffonPi, integrate: integrate, makeFn: makeFn
+    };
+  })();
+  </script>
+</body>
+</html>

@@ -2475,6 +2475,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T02:10:00Z",
   },
   {
+    slug: "monte-carlo",
+    name: "Monte Carlo Simulator",
+    description: "Estimate quantities with Monte Carlo methods — random sampling instead of exact calculation. Three classic experiments: estimate π by throwing darts at a unit square (the fraction inside a quarter circle × 4), estimate π again via Buffon's needle (dropping needles on a lined floor, π = 2L·n / D·crossings), and estimate a definite integral ∫ₐᵇ f(x) dx by averaging f over uniform random points with its standard error. Each run shows the sampled picture, the running estimate, the error against the true value, and a convergence chart. Uses a seeded mulberry32 PRNG so runs reproduce. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "π",
+    added: "2026-07-12T02:20:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
