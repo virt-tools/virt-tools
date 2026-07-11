@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>JSON Pointer (RFC 6901) Evaluator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    textarea { width:100%; min-height:150px; font-family:ui-monospace,monospace; font-size:13px; padding:8px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; resize:vertical; box-sizing:border-box; }
+    .row { display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+    .row .lbl { min-width:110px; color:var(--text-dim,#9aa3b2); font-size:.85rem; }
+    .row input { font-family:ui-monospace,monospace; font-size:13px; padding:7px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; width:340px; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    h3 { margin:16px 0 4px; font-size:.9rem; color:var(--text-dim,#9aa3b2); text-transform:uppercase; letter-spacing:.04em; }
+    .info { font-family:ui-monospace,monospace; font-size:13px; background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:10px; margin:8px 0; line-height:1.7; white-space:pre-wrap; word-break:break-word; }
+    .info .k { color:var(--text-dim,#9aa3b2); }
+    .info .v { color:var(--good,#4ade80); }
+    .small { color:var(--text-dim,#9aa3b2); font-size:.82rem; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    .acts { display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; }
+    .acts button { padding:7px 12px; border-radius:6px; border:1px solid var(--border,#2a2f3a); background:var(--bg-elev,#171a21); color:var(--text,#e6e6e6); cursor:pointer; font-weight:600; font-size:.78rem; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>JSON Pointer (RFC 6901) Evaluator</h1>
+      <p>Evaluate an <strong>RFC 6901 JSON Pointer</strong> against a JSON document and show the value it refers to. A pointer is a string of <code>/</code>-separated tokens naming object members or array indices — <code>/foo/0/bar</code> means <code>doc["foo"][0]["bar"]</code>, the empty string <code>""</code> means the whole document, and <code>~1</code>/<code>~0</code> escape <code>/</code> and <code>~</code> in keys. JSON Pointers are the addressing scheme used by JSON Patch (RFC 6902). Runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <h3>JSON document</h3>
+      <textarea id="doc" spellcheck="false">{
+  "foo": ["bar", "baz"],
+  "": 0,
+  "a/b": 1,
+  "c%d": 2,
+  "m~n": 8
+}</textarea>
+      <div class="err" id="err-doc"></div>
+
+      <h3>Pointer</h3>
+      <div class="row"><span class="lbl">JSON Pointer</span><input id="ptr" type="text" spellcheck="false" value="/foo/0"></div>
+      <div class="err" id="err-ptr"></div>
+
+      <div class="acts">
+        <button id="b-root" type="button">"" (whole doc)</button>
+        <button id="b-foo" type="button">/foo</button>
+        <button id="b-f0" type="button">/foo/0</button>
+        <button id="b-ab" type="button">/a~1b</button>
+        <button id="b-escape" type="button">/m~0n</button>
+      </div>
+
+      <h3>Result</h3>
+      <div class="info" id="info">—</div>
+
+      <p class="note">An <strong>RFC 6901 JSON Pointer</strong> is either the empty string (the whole document) or a string beginning with <code>/</code>; each <code>/</code>-separated segment names an object member or, for arrays, a non-negative integer index (no leading zeros, in range). Escaping: <code>~1</code> → <code>/</code> and <code>~0</code> → <code>~</code> (applied in that order), so the key <code>a/b</code> is written <code>/a~1b</code> and <code>m~n</code> is <code>/m~0n</code>. The key that is the empty string is addressed by a lone <code>/</code>. The <code>-</code> token is only defined for JSON Patch <em>add</em> operations (the next array index); for plain evaluation it is treated as a member that arrays do not have. Distinct from JSONPath (a different expression syntax). Pairs with the JSON Formatter, JSON Diff, and JSON Schema Validator. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    function unescapeToken(t) {
+      // RFC 6901: ~1 -> / first, then ~0 -> ~ (so ~01 decodes to ~1, not /1... actually ~01 -> ~0 then? order matters)
+      return String(t).replace(/~1/g, "/").replace(/~0/g, "~");
+    }
+    // Split a pointer string into unescaped tokens. Empty string => [].
+    function parsePointer(ptr) {
+      ptr = String(ptr == null ? "" : ptr);
+      if (ptr === "") return [];
+      if (ptr[0] !== "/") throw new Error("Pointer must be empty (whole doc) or start with '/'.");
+      var parts = ptr.split("/").slice(1);
+      return parts.map(unescapeToken);
+    }
+    function typeOf(v) {
+      if (v === null) return "null";
+      if (Array.isArray(v)) return "array";
+      return typeof v;
+    }
+    // Evaluate a pointer against a parsed document. Throws on malformed/out-of-range.
+    function evalPointer(doc, ptr) {
+      var tokens = parsePointer(ptr);
+      var node = doc;
+      for (var i = 0; i < tokens.length; i++) {
+        var tok = tokens[i];
+        if (Array.isArray(node)) {
+          if (!/^(0|[1-9][0-9]*)$/.test(tok)) throw new Error("Invalid array index '" + tok + "'.");
+          var idx = parseInt(tok, 10);
+          if (idx >= node.length) throw new Error("Array index " + idx + " out of range (length " + node.length + ").");
+          node = node[idx];
+        } else if (node !== null && typeof node === "object") {
+          if (!Object.prototype.hasOwnProperty.call(node, tok)) throw new Error("Member '" + tok + "' not found.");
+          node = node[tok];
+        } else {
+          throw new Error("Cannot index " + typeOf(node) + " value with token '" + tok + "'.");
+        }
+      }
+      return node;
+    }
+    function parseJson(str) {
+      str = String(str == null ? "" : str).trim();
+      if (str === "") throw new Error("Enter a JSON document.");
+      try { return JSON.parse(str); } catch (e) { throw new Error("Invalid JSON: " + e.message); }
+    }
+    function pretty(v) {
+      if (v === undefined) return "undefined";
+      try { return JSON.stringify(v, null, 2); } catch (e) { return String(v); }
+    }
+
+    // ---- DOM ----
+    function $(id) { return document.getElementById(id); }
+    var docEl = $("doc"), ptrEl = $("ptr"), errDocEl = $("err-doc"), errPtrEl = $("err-ptr"), infoEl = $("info");
+
+    function render() {
+      errDocEl.textContent = ""; errPtrEl.textContent = "";
+      try {
+        var doc = parseJson(docEl.value);
+      } catch (e) {
+        errDocEl.textContent = e.message || String(e);
+        infoEl.textContent = "—";
+        return;
+      }
+      try {
+        var value = evalPointer(doc, ptrEl.value);
+        var tokens = parsePointer(ptrEl.value);
+        var tokenStr = tokens.length === 0 ? "(root)" : tokens.map(function (t) { return JSON.stringify(t); }).join(" → ");
+        var valStr = pretty(value);
+        infoEl.innerHTML =
+          "<span class='k'>Tokens:</span> " + tokenStr + "\n" +
+          "<span class='k'>Type:</span> " + typeOf(value) + "\n" +
+          "<span class='k'>Value:</span>\n" + "<span class='v'>" + escapeHtml(valStr) + "</span>";
+      } catch (e) {
+        errPtrEl.textContent = e.message || String(e);
+        infoEl.textContent = "—";
+      }
+    }
+    function escapeHtml(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+    docEl.addEventListener("input", render);
+    ptrEl.addEventListener("input", render);
+    $("b-root").addEventListener("click", function () { ptrEl.value = ""; render(); });
+    $("b-foo").addEventListener("click", function () { ptrEl.value = "/foo"; render(); });
+    $("b-f0").addEventListener("click", function () { ptrEl.value = "/foo/0"; render(); });
+    $("b-ab").addEventListener("click", function () { ptrEl.value = "/a~1b"; render(); });
+    $("b-escape").addEventListener("click", function () { ptrEl.value = "/m~0n"; render(); });
+
+    render();
+
+    window.VT_JSONPTR_TEST = { parsePointer: parsePointer, unescapeToken: unescapeToken, evalPointer: evalPointer, parseJson: parseJson, typeOf: typeOf };
+  })();
+  </script>
+</body>
+</html>

@@ -163,6 +163,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-04T11:00:00Z",
   },
   {
+    slug: "json-pointer",
+    name: "JSON Pointer (RFC 6901) Evaluator",
+    description: "Evaluate an RFC 6901 JSON Pointer against a JSON document and show the value it refers to — the addressing scheme behind JSON Patch, with ~1 / ~0 escaping. Runs locally in your browser.",
+    category: "Encoding",
+    icon: "📌",
+    added: "2026-07-11T19:10:00Z",
+  },
+  {
     slug: "xml-formatter",
     name: "XML Formatter",
     description: "Pretty-print, minify and validate XML with the browser's native DOM parser — nothing uploaded.",
