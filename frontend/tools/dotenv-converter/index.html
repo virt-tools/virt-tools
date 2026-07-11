@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Dotenv Converter — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .row { display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+    .row .lbl { min-width:120px; color:var(--text-dim,#9aa3b2); font-size:.85rem; }
+    textarea, .out { font-family:ui-monospace,monospace; font-size:13px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; }
+    textarea { width:100%; box-sizing:border-box; padding:10px; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; font-family:ui-monospace,monospace; }
+    .acts { display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; align-items:center; }
+    .acts button { padding:7px 12px; border-radius:6px; border:1px solid var(--border,#2a2f3a); background:var(--bg-elev,#171a21); color:var(--text,#e6e6e6); cursor:pointer; font-weight:600; font-size:.78rem; }
+    .acts button.primary { background:#1e3a5f; border-color:var(--accent,#5b8cff); }
+    h3 { margin:14px 0 4px; font-size:.9rem; color:var(--text-dim,#9aa3b2); text-transform:uppercase; letter-spacing:.04em; }
+    .out { padding:12px; margin:8px 0; white-space:pre-wrap; word-break:break-all; line-height:1.7; }
+    table.vars { width:100%; border-collapse:collapse; margin:8px 0; font-size:13px; }
+    table.vars td, table.vars th { border:1px solid var(--border,#2a2f3a); padding:5px 8px; text-align:left; vertical-align:top; }
+    table.vars th { color:var(--text-dim,#9aa3b2); font-weight:600; background:var(--bg-elev,#171a21); }
+    table.vars td.k { font-family:ui-monospace,monospace; color:var(--accent,#5b8cff); font-weight:700; white-space:nowrap; }
+    table.vars td.v { font-family:ui-monospace,monospace; white-space:pre-wrap; word-break:break-all; }
+    .cols { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    @media (max-width:760px){ .cols { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Dotenv Converter</h1>
+      <p>Parse a <code>.env</code> file into a structured key–value table and convert it to <strong>JSON</strong> (and back). The parser follows the common <em>dotenv</em> conventions: blank lines and <code>#</code> comment lines are skipped, an optional <code>export</code> prefix is stripped, values may be <strong>single- or double-quoted</strong>, double-quoted values process escape sequences (<code>\n</code>, <code>\t</code>, <code>\\</code>, <code>\"</code>) and can span multiple lines, while single-quoted values are literal. Unquoted values are trimmed and may carry a trailing <code>&nbsp;#</code> inline comment. Duplicate keys take the last value. Everything runs locally in your browser — paste a <code>.env</code> in the left box (or JSON in the right) and convert.</p>
+    </div>
+
+    <div class="panel">
+      <div class="cols">
+        <div>
+          <h3>.env input</h3>
+          <textarea id="env" rows="14" spellcheck="false"># app configuration
+export DATABASE_URL="postgres://user:pass@host:5432/db"
+PORT=8080
+SINGLE='literal \n no escape'
+MULTI="line one
+line two"
+EMPTY=
+INLINE=hello # an inline comment</textarea>
+        </div>
+        <div>
+          <h3>JSON input / output</h3>
+          <textarea id="json" rows="14" spellcheck="false"></textarea>
+        </div>
+      </div>
+      <div class="err" id="err"></div>
+      <div class="acts">
+        <button id="b-to-json" class="primary" type="button">.env → JSON</button>
+        <button id="b-to-env" type="button">JSON → .env</button>
+      </div>
+
+      <h3>Variables</h3>
+      <div id="vars">—</div>
+
+      <p class="note" style="margin-top:14px">A <strong>.env</strong> file stores environment variables as <code>KEY=value</code> lines, one per line. This tool parses them into a structured object you can inspect or export as JSON. Rules: lines starting with <code>#</code> (after optional leading whitespace) are comments and ignored; so are blank lines. An optional leading <code>export&nbsp;</code> is stripped from the key. Values may be wrapped in <strong>double quotes</strong> (which process C-style escapes — <code>\n</code> newline, <code>\t</code> tab, <code>\r</code>, <code>\\</code>, <code>\"</code>, <code>\'</code> — and may run across multiple lines) or <strong>single quotes</strong> (literal, no escapes, also multi-line). Unquoted values are taken verbatim up to a trailing <code>&nbsp;#</code> inline comment and are trimmed of surrounding whitespace. Empty values (<code>KEY=</code>) become the empty string. When a key repeats, the last definition wins. Converting back to <code>.env</code> quotes a value automatically if it contains spaces, <code>#</code>, <code>=</code>, quotes, or newlines, and escapes backslashes and quotes inside double quotes. Pairs with the JSON Formatter, YAML Converter, and CSV↔JSON tools. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    // ---- core (pure) ----
+    // find the index of an unescaped closing double quote, or -1.
+    function findCloseDouble(s) {
+      for (var j = 0; j < s.length; j++) {
+        if (s.charAt(j) === '\\') { j++; continue; }   // skip escaped char
+        if (s.charAt(j) === '"') return j;
+      }
+      return -1;
+    }
+
+    // process escape sequences inside a double-quoted value.
+    function unescapeDouble(s) {
+      return s.replace(/\\(.)/g, function (_, c) {
+        if (c === 'n') return '\n';
+        if (c === 't') return '\t';
+        if (c === 'r') return '\r';
+        if (c === '0') return '\0';
+        if (c === '\\') return '\\';
+        if (c === '"') return '"';
+        if (c === "'") return "'";
+        return c;   // unknown escape: drop the backslash, keep the char
+      });
+    }
+
+    // parse a value starting at `val` (already left-trimmed), drawing more lines
+    // from `lines` starting at index `idx`. returns { value, idx }.
+    function parseValue(val, lines, idx) {
+      var q = val.charAt(0);
+      if (q === '"' || q === "'") {
+        var buf = '';
+        var rest = val.slice(1);
+        while (true) {
+          var end = (q === '"') ? findCloseDouble(rest) : rest.indexOf(q);
+          if (end >= 0) {
+            buf += rest.slice(0, end);
+            return { value: (q === '"') ? unescapeDouble(buf) : buf, idx: idx };
+          }
+          buf += rest + '\n';
+          if (idx >= lines.length) return { value: (q === '"') ? unescapeDouble(buf) : buf, idx: idx };
+          rest = lines[idx]; idx++;
+        }
+      }
+      // unquoted: take up to a trailing ' #' inline comment, trim end
+      var ci = val.indexOf(' #');
+      var v = (ci >= 0) ? val.slice(0, ci) : val;
+      return { value: v.replace(/\s+$/, ''), idx: idx };
+    }
+
+    // parse .env text into a plain object (last key wins).
+    function parseEnv(text) {
+      var lines = text.split('\n');
+      var out = {};
+      var i = 0;
+      while (i < lines.length) {
+        var line = lines[i];
+        i++;
+        var t = line.replace(/^\s+/, '');
+        if (t === '' || t.charAt(0) === '#') continue;
+        var m = t.match(/^export\s+/);
+        if (m) t = t.slice(m[0].length);
+        var eq = t.indexOf('=');
+        if (eq < 0) continue;
+        var key = t.slice(0, eq).trim();
+        if (!key) continue;
+        var val = t.slice(eq + 1).replace(/^\s+/, '');
+        var parsed = parseValue(val, lines, i);
+        i = parsed.idx;
+        out[key] = parsed.value;
+      }
+      return out;
+    }
+
+    // quote/escape a single value for .env output.
+    function envQuote(v) {
+      v = String(v);
+      if (v === '') return '""';
+      var needsQuote = /[\s#"'=]/.test(v) || v.indexOf('\n') >= 0 || v.indexOf('\t') >= 0 || v.indexOf('\r') >= 0;
+      if (!needsQuote) return v;
+      return '"' + v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+        .replace(/\n/g, '\\n').replace(/\t/g, '\\t').replace(/\r/g, '\\r') + '"';
+    }
+
+    // render an object as .env text.
+    function toEnv(obj) {
+      var lines = [];
+      for (var k in obj) {
+        if (!Object.prototype.hasOwnProperty.call(obj, k)) continue;
+        lines.push(k + '=' + envQuote(obj[k]));
+      }
+      return lines.join('\n');
+    }
+
+    // ---- DOM ----
+    function $(id) { return document.getElementById(id); }
+    var envEl = $("env"), jsonEl = $("json"), errEl = $("err"), varsEl = $("vars");
+
+    function escapeHtml(s) {
+      return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function renderVars(obj) {
+      var keys = Object.keys(obj);
+      if (keys.length === 0) { varsEl.innerHTML = "<em style='color:var(--text-dim,#9aa3b2)'>no variables</em>"; return; }
+      var h = '<table class="vars"><tr><th>Key</th><th>Value</th></tr>';
+      for (var i = 0; i < keys.length; i++) {
+        h += '<tr><td class="k">' + escapeHtml(keys[i]) + '</td><td class="v">' + escapeHtml(obj[keys[i]]) + '</td></tr>';
+      }
+      h += '</table>';
+      varsEl.innerHTML = h;
+    }
+
+    function envToJson() {
+      errEl.textContent = "";
+      try {
+        var obj = parseEnv(envEl.value);
+        renderVars(obj);
+        jsonEl.value = JSON.stringify(obj, null, 2);
+      } catch (e) { errEl.textContent = e.message || String(e); }
+    }
+
+    function jsonToEnv() {
+      errEl.textContent = "";
+      try {
+        var obj = JSON.parse(jsonEl.value);
+        if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) throw new Error("JSON must be a flat object of string key→value");
+        // coerce values to strings
+        var flat = {};
+        for (var k in obj) if (Object.prototype.hasOwnProperty.call(obj, k)) flat[k] = String(obj[k]);
+        envEl.value = toEnv(flat);
+        renderVars(flat);
+      } catch (e) { errEl.textContent = e.message || String(e); }
+    }
+
+    $("b-to-json").addEventListener("click", envToJson);
+    $("b-to-env").addEventListener("click", jsonToEnv);
+    envEl.addEventListener("input", envToJson);
+
+    envToJson();
+
+    window.VT_ENV_TEST = {
+      parseEnv: parseEnv, toEnv: toEnv, envQuote: envQuote,
+      unescapeDouble: unescapeDouble, findCloseDouble: findCloseDouble
+    };
+  })();
+  </script>
+</body>
+</html>
