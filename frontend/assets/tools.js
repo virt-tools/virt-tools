@@ -2499,6 +2499,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T02:40:00Z",
   },
   {
+    slug: "diffie-hellman",
+    name: "Diffie–Hellman Key Exchange",
+    description: "Explore Diffie–Hellman key agreement — two parties derive a shared secret over an insecure channel without ever transmitting it. Set a prime p and generator g (or generate a safe prime p = 2q+1 via Miller–Rabin), pick private keys a and b, and the tool computes public values A = g^a mod p and B = g^b mod p, then the shared secret B^a ≡ A^b mod p — equal by the identity g^(ab) = g^(ba). A brute-force discrete-log attack shows why recovering a from A is exponentially hard for large primes. Exact BigInt modular exponentiation throughout; toy key sizes for learning (real DH uses ≥2048-bit primes). Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🤝",
+    added: "2026-07-12T02:50:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
