@@ -2083,6 +2083,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-11T19:20:00Z",
   },
   {
+    slug: "integer-partitions",
+    name: "Integer Partitions",
+    description: "Count and list the partitions of a non-negative integer n. Computes p(n) — the number of unrestricted partitions — via Euler's pentagonal-number recurrence (exact big-integer arithmetic, fast for large n, e.g. p(100) = 190569292), q(n) — the number of partitions into distinct parts — by a 0/1 subset-sum count, and lists the actual partitions for small n. Pairs with the Combinatorics, Fibonacci, and Collatz tools. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🪗",
+    added: "2026-07-11T19:30:00Z",
+  },
+  {
     slug: "entropy-analyzer",
     name: "Entropy Analyzer",
     description: "Measure the Shannon entropy of text or bytes — bits of information per symbol — with the symbol-frequency table, max possible entropy, and efficiency. Slice by UTF-8 bytes, code points, UTF-16 units, or graphemes.",

@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Integer Partitions — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .row { display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+    .row .lbl { min-width:120px; color:var(--text-dim,#9aa3b2); font-size:.85rem; }
+    .row input { font-family:ui-monospace,monospace; font-size:14px; padding:7px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; width:300px; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    h3 { margin:16px 0 4px; font-size:.9rem; color:var(--text-dim,#9aa3b2); text-transform:uppercase; letter-spacing:.04em; }
+    .info { font-family:ui-monospace,monospace; font-size:14px; background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:12px; margin:8px 0; line-height:1.9; }
+    .info .k { color:var(--text-dim,#9aa3b2); }
+    .info .v { color:var(--text,#e6e6e6); word-break:break-all; }
+    .info .big { color:var(--good,#4ade80); font-weight:700; word-break:break-all; }
+    .info .pri { color:var(--accent,#6ea8fe); font-weight:700; word-break:break-all; }
+    .small { color:var(--text-dim,#9aa3b2); font-size:.82rem; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    .acts { display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; }
+    .acts button { padding:7px 12px; border-radius:6px; border:1px solid var(--border,#2a2f3a); background:var(--bg-elev,#171a21); color:var(--text,#e6e6e6); cursor:pointer; font-weight:600; font-size:.78rem; }
+    .plist { font-family:ui-monospace,monospace; font-size:13px; background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:10px; margin:8px 0; line-height:1.7; word-break:break-all; max-height:280px; overflow:auto; }
+    .plist .pp { color:var(--text,#e6e6e6); }
+    .plist .sep { color:var(--text-dim,#9aa3b2); }
+    .plist .trunc { color:var(--text-dim,#9aa3b2); font-style:italic; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Integer Partitions</h1>
+      <p>A partition of a positive integer <code>n</code> is a way of writing it as a sum of positive integers, order ignored. This tool computes <strong>p(n)</strong> — the number of unrestricted partitions — using Euler's pentagonal-number recurrence (exact big-integer arithmetic, fast for large n), <strong>q(n)</strong> — the number of partitions into distinct parts — by a 0/1 subset-sum count, and lists the actual partitions for small n. For example p(10) = 42, p(100) = 190569292, q(10) = 10. Runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <h3>Input</h3>
+      <div class="row"><span class="lbl">n =</span><input id="n" type="text" inputmode="numeric" value="12"></div>
+      <div class="err" id="err"></div>
+
+      <div class="acts">
+        <button id="b-10" type="button">n = 10</button>
+        <button id="b-25" type="button">n = 25</button>
+        <button id="b-100" type="button">n = 100</button>
+        <button id="b-1000" type="button">n = 1000</button>
+      </div>
+
+      <h3>Counts</h3>
+      <div class="info" id="info">—</div>
+
+      <h3>Partitions</h3>
+      <div class="plist" id="plist">—</div>
+
+      <p class="note"><strong>p(n)</strong> counts unordered sums of positive integers equal to n (p(0) = 1 by convention). It is computed from Euler's recurrence <code>p(n) = Σₖ (−1)ᵏ⁻¹ [p(n − k(3k−1)/2) + p(n − k(3k+1)/2)]</code> over the generalized pentagonal numbers 1, 2, 5, 7, 12, 15, … — an <code>O(n√n)</code> algorithm that stays exact for large n. <strong>q(n)</strong> counts partitions into <em>distinct</em> parts (each part used at most once), computed by a 0/1 subset-sum dynamic program over {1,…,n}; it is exact but <code>O(n²)</code>, so it is capped for very large n. The listing is generated recursively and capped at a few thousand rows for readability. Pairs with the Combinatorics, Fibonacci, and Collatz tools. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    // Bound for the distinct-part DP (O(n^2)); above this only p(n) is reported.
+    var DISTINCT_CAP = 3000;
+    // Bound for listing partitions (rows displayed).
+    var LIST_CAP = 2000;
+    // Hard cap for p(n) itself to keep the page responsive.
+    var P_CAP = 200000;
+
+    function parseBig(str) {
+      str = String(str == null ? "" : str).trim();
+      if (!/^\d+$/.test(str)) throw new Error("Enter a non-negative integer n (digits only).");
+      try { return BigInt(str); } catch (e) { throw new Error("Number is too large or malformed."); }
+    }
+
+    // Generalized pentagonal number pair for k >= 1:
+    //   g_k = k(3k-1)/2 ,  g'_k = k(3k+1)/2
+    function pentagonalPair(k) {
+      var kk = BigInt(k);
+      return { a: kk * (3n * kk - 1n) / 2n, b: kk * (3n * kk + 1n) / 2n };
+    }
+
+    // Number of unrestricted partitions p(n) via Euler's pentagonal recurrence.
+    function countPartitions(n) {
+      var N = Number(n);
+      if (N < 0) throw new Error("n must be non-negative.");
+      if (N === 0) return 1n;
+      if (N > P_CAP) throw new Error("n is too large for the partition count (cap " + P_CAP + ").");
+      var dp = new Array(N + 1);
+      dp[0] = 1n;
+      for (var i = 1; i <= N; i++) {
+        var s = 0n;
+        for (var k = 1; ; k++) {
+          var pr = pentagonalPair(k);
+          if (pr.a > BigInt(i)) break;
+          var sign = (k % 2 === 1) ? 1n : -1n;
+          s += sign * dp[i - Number(pr.a)];
+          if (pr.b <= BigInt(i)) s += sign * dp[i - Number(pr.b)];
+        }
+        dp[i] = s;
+      }
+      return dp[N];
+    }
+
+    // Number of partitions into distinct parts q(n) via 0/1 subset-sum count.
+    function distinctCount(n) {
+      var N = Number(n);
+      if (N < 0) throw new Error("n must be non-negative.");
+      if (N === 0) return 1n;
+      if (N > DISTINCT_CAP) throw new Error("n is too large for the distinct-part count (cap " + DISTINCT_CAP + ").");
+      var dp = new Array(N + 1).fill(0n);
+      dp[0] = 1n;
+      for (var k = 1; k <= N; k++) {
+        for (var s = N; s >= k; s--) dp[s] += dp[s - k];
+      }
+      return dp[N];
+    }
+
+    // List all partitions of n (each as a non-increasing array). No internal cap:
+    // the caller decides how much to display.
+    function listPartitions(n) {
+      var N = Number(n);
+      if (N < 0) throw new Error("n must be non-negative.");
+      if (N === 0) return [[]];
+      if (N > 200) throw new Error("Listing is only available for n ≤ 200 (n = " + N + " has too many partitions).");
+      var out = [];
+      function rec(remaining, maxPart, acc) {
+        if (remaining === 0) { out.push(acc.slice()); return; }
+        if (maxPart === 0) return;
+        var top = remaining < maxPart ? remaining : maxPart;
+        for (var p = top; p >= 1; p--) {
+          acc.push(p);
+          rec(remaining - p, p, acc);
+          acc.pop();
+        }
+      }
+      rec(N, N, []);
+      return out;
+    }
+
+    function fmt(n) { return n.toString(); }
+    function fmtPartition(arr) { return arr.join("+"); }
+
+    // ---- DOM ----
+    function $(id) { return document.getElementById(id); }
+    var nEl = $("n"), errEl = $("err"), infoEl = $("info"), plistEl = $("plist");
+
+    function render() {
+      errEl.textContent = "";
+      var n;
+      try { n = parseBig(nEl.value); } catch (e) { errEl.textContent = e.message || String(e); infoEl.textContent = "—"; plistEl.textContent = "—"; return; }
+      if (n < 0n) { errEl.textContent = "n must be non-negative."; infoEl.textContent = "—"; plistEl.textContent = "—"; return; }
+
+      var pVal, qVal, qErr = null;
+      try { pVal = countPartitions(n); } catch (e) { errEl.textContent = e.message || String(e); infoEl.textContent = "—"; plistEl.textContent = "—"; return; }
+      try { qVal = distinctCount(n); } catch (e) { qVal = null; qErr = e.message; }
+
+      var html =
+        "<span class='k'>n:</span> <span class='v'>" + fmt(n) + "</span><br>" +
+        "<span class='k'>p(n) partitions:</span> <span class='big'>" + fmt(pVal) + "</span><br>" +
+        "<span class='k'>q(n) distinct-part partitions:</span> ";
+      if (qVal !== null) html += "<span class='pri'>" + fmt(qVal) + "</span>";
+      else html += "<span class='v' title='" + (qErr || "") + "'>n/a (" + qErr + ")</span>";
+      infoEl.innerHTML = html;
+
+      // Listing
+      try {
+        var parts = listPartitions(n);
+        var shown = parts.length <= LIST_CAP ? parts : parts.slice(0, LIST_CAP);
+        var spans = [];
+        for (var i = 0; i < shown.length; i++) {
+          spans.push("<span class='pp'>" + fmtPartition(shown[i]) + "</span>");
+        }
+        var html2 = spans.join("<span class='sep'> · </span>");
+        if (parts.length > LIST_CAP) {
+          html2 += "<br><span class='trunc'>… (" + (parts.length - LIST_CAP) + " more of " + parts.length + " total truncated)</span>";
+        }
+        plistEl.innerHTML = html2;
+      } catch (e) {
+        plistEl.innerHTML = "<span class='trunc'>" + (e.message || String(e)) + "</span>";
+      }
+    }
+    nEl.addEventListener("input", render);
+    $("b-10").addEventListener("click", function () { nEl.value = "10"; render(); });
+    $("b-25").addEventListener("click", function () { nEl.value = "25"; render(); });
+    $("b-100").addEventListener("click", function () { nEl.value = "100"; render(); });
+    $("b-1000").addEventListener("click", function () { nEl.value = "1000"; render(); });
+
+    render();
+
+    window.VT_PARTITION_TEST = {
+      parseBig: parseBig, pentagonalPair: pentagonalPair,
+      countPartitions: countPartitions, distinctCount: distinctCount, listPartitions: listPartitions
+    };
+  })();
+  </script>
+</body>
+</html>
