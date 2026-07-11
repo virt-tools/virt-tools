@@ -2075,6 +2075,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-10T22:30:00Z",
   },
   {
+    slug: "collatz-conjecture",
+    name: "Collatz Conjecture Visualizer",
+    description: "Trace the Collatz (3n+1 / hailstone) sequence from any positive integer down to 1: even n halves, odd n becomes 3n+1. Shows the full sequence, the stopping time (steps to reach 1), the peak value reached, and the odd/even step split — all with exact big-integer arithmetic, so the famously long n = 27 run (111 steps, peak 9232) is exact. Pairs with the Fibonacci Sequence, Prime Factorization, and Euler Totient tools. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "➿",
+    added: "2026-07-11T19:20:00Z",
+  },
+  {
     slug: "entropy-analyzer",
     name: "Entropy Analyzer",
     description: "Measure the Shannon entropy of text or bytes — bits of information per symbol — with the symbol-frequency table, max possible entropy, and efficiency. Slice by UTF-8 bytes, code points, UTF-16 units, or graphemes.",
