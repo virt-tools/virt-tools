@@ -499,6 +499,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-11T21:30:00Z",
   },
   {
+    slug: "percentile-calculator",
+    name: "Percentile & Quantile Calculator",
+    description: "Compute quartiles, the median, and arbitrary percentiles of a dataset with three interpolation methods (inclusive R-7, exclusive R-6, nearest rank), plus the percentile rank of any value. Runs locally.",
+    category: "Data",
+    icon: "≣",
+    added: "2026-07-11T22:00:00Z",
+  },
+  {
     slug: "list-randomizer",
     name: "List Randomizer",
     description: "Shuffle a list, pick N unique items, or draw a single winner from newline- or comma-separated entries. An optional numeric seed makes the result reproducible. Fisher-Yates shuffle, runs locally.",
