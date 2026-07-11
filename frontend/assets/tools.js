@@ -539,6 +539,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-11T05:10:00Z",
   },
   {
+    slug: "ksuid-generator",
+    name: "KSUID Generator",
+    description: "Generate and decode KSUIDs (K-Sortable Unique IDs) — 27-char base62 strings packing a 32-bit timestamp (2014 epoch) and a 128-bit random payload, so they sort chronologically. Powered by Web Crypto.",
+    category: "Data",
+    icon: "🔖",
+    added: "2026-07-11T06:40:00Z",
+  },
+  {
     slug: "gradient-generator",
     name: "CSS Gradient Generator",
     description: "Build linear and radial CSS gradients with a live preview and copy-ready CSS.",

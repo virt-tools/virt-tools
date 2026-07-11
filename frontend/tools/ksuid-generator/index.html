@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>KSUID Generator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .row { display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+    .row .lbl { min-width:130px; color:var(--text-dim,#9aa3b2); font-size:.85rem; }
+    .row input { font-family:ui-monospace,monospace; font-size:14px; padding:7px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; }
+    .row input.ks { width:280px; letter-spacing:.5px; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    .acts { display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; }
+    .acts button { padding:8px 18px; border-radius:6px; border:1px solid var(--accent,#6ea8fe); background:var(--accent,#6ea8fe); color:#0b0d12; cursor:pointer; font-weight:700; font-size:.85rem; }
+    .acts button.ghost { background:var(--bg-elev,#171a21); color:var(--text,#e6e6e6); border-color:var(--border,#2a2f3a); font-weight:600; }
+    h3 { margin:16px 0 4px; font-size:.9rem; color:var(--text-dim,#9aa3b2); text-transform:uppercase; letter-spacing:.04em; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    .out { font-family:ui-monospace,monospace; font-size:14px; background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:10px; margin:8px 0; line-height:1.7; word-break:break-all; }
+    .out .ts { color:var(--accent,#6ea8fe); }
+    .out .pl { color:var(--good,#4ade80); }
+    .out small { color:var(--text-dim,#9aa3b2); font-size:.78rem; }
+    .bad { color:var(--bad,#f87171); font-weight:700; }
+    .ok { color:var(--good,#4ade80); font-weight:700; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>KSUID Generator &amp; Decoder</h1>
+      <p>Generate and decode <strong>KSUIDs</strong> (K-Sortable Unique IDs), the identifier format popularized by Segment. A KSUID is a 27-character base62 string encoding a 160-bit value: a 32-bit timestamp (seconds since a 2014 epoch, so KSUIDs sort chronologically) followed by a 128-bit random payload — enough randomness that collisions are negligible. Everything runs locally in your browser; randomness comes from the Web Crypto API.</p>
+    </div>
+
+    <div class="panel">
+      <h3>Generate</h3>
+      <div class="acts">
+        <button id="b-gen" type="button">Generate KSUID</button>
+        <button id="b-copy" class="ghost" type="button">Copy</button>
+      </div>
+      <div class="out" id="gen">—</div>
+
+      <h3>Decode</h3>
+      <div class="row"><span class="lbl">KSUID</span><input type="text" id="ksuid" class="ks" spellcheck="false" value=""></div>
+      <div class="err" id="err"></div>
+      <div class="out" id="dec">—</div>
+
+      <p class="note"><strong>KSUID</strong> packs 160 bits into 27 base62 characters (<code>0–9 A–Z a–z</code>): the first 32 bits are a <strong>timestamp</strong> stored as seconds since the custom epoch <code>1400000000</code> (2014-05-13 UTC, giving ~136 years of range), and the remaining 128 bits are a <strong>random payload</strong>. Because the timestamp leads, sorting KSUIDs as strings sorts them by creation time. The whole 160-bit value is converted to base62 with <strong>BigInt</strong> arithmetic and left-padded with <code>0</code> to exactly 27 characters (since 62²⁷ &gt; 2¹⁶⁰, every value fits). Decoding reverses this: parse the base62 string back to a 160-bit BigInt, split into the 4-byte timestamp and 16-byte payload, and add the epoch back to get a wall-clock time. Pairs with the UUID, ULID, Snowflake, and NanoID generators. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var EPOCH = 1400000000;                 // KSUID custom epoch (2014-05-13T16:53:20Z)
+    var BASE62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+    var ENCODE_LEN = 27;
+    var PAYLOAD_BYTES = 16;
+    var TOTAL_BYTES = 20;                    // 4 (ts) + 16 (payload)
+
+    // BigInt <-> big-endian byte array
+    function bytesToBig(a) {
+      var n = 0n;
+      for (var i = 0; i < a.length; i++) n = (n << 8n) + BigInt(a[i]);
+      return n;
+    }
+    function bigToBytes(n, len) {
+      var a = new Uint8Array(len);
+      for (var i = len - 1; i >= 0; i--) { a[i] = Number(n & 0xFFn); n = n >> 8n; }
+      return a;
+    }
+    function bigToBase62(n, len) {
+      if (n < 0n) return null;
+      if (n === 0n) return "0".repeat(len);
+      var s = "";
+      while (n > 0n) { s = BASE62[Number(n % 62n)] + s; n = n / 62n; }
+      while (s.length < len) s = "0" + s;
+      return s.length > len ? null : s; // would overflow fixed width
+    }
+    function base62ToBig(str) {
+      var n = 0n;
+      for (var i = 0; i < str.length; i++) {
+        var idx = BASE62.indexOf(str[i]);
+        if (idx < 0) return null;
+        n = n * 62n + BigInt(idx);
+      }
+      return n;
+    }
+
+    // Encode a 4-byte timestamp (seconds since EPOCH) + 16-byte payload into a 27-char KSUID.
+    // ts may be a Number; payload is a 16-element Uint8Array.
+    function encode(ts, payload) {
+      if (payload.length !== PAYLOAD_BYTES) return null;
+      var tsBig = BigInt(ts) & 0xFFFFFFFFn;
+      var value = (tsBig << 128n) + bytesToBig(payload); // ts * 2^128 + payload
+      return bigToBase62(value, ENCODE_LEN);
+    }
+
+    // Decode a 27-char KSUID -> { timestamp, payload (Uint8Array), time (ms since epoch) } or null.
+    function decode(str) {
+      if (!isValid(str)) return null;
+      var value = base62ToBig(str);
+      var bytes = bigToBytes(value, TOTAL_BYTES);
+      var ts = Number(bytesToBig(bytes.slice(0, 4))) >>> 0;
+      var payload = bytes.slice(4);
+      return { timestamp: ts, payload: payload, time: (ts + EPOCH) * 1000 };
+    }
+
+    function isValid(str) {
+      if (str == null) return false;
+      str = String(str);
+      if (str.length !== ENCODE_LEN) return false;
+      for (var i = 0; i < str.length; i++) if (BASE62.indexOf(str[i]) < 0) return false;
+      return true;
+    }
+
+    function randomBytes(n) {
+      var a = new Uint8Array(n);
+      if (globalThis.crypto && crypto.getRandomValues) crypto.getRandomValues(a);
+      else for (var i = 0; i < n; i++) a[i] = Math.floor(Math.random() * 256);
+      return a;
+    }
+
+    // Generate a new KSUID: current time (since epoch) + 16 random bytes.
+    function ksuid() {
+      var nowSec = Math.floor(Date.now() / 1000);
+      var ts = nowSec - EPOCH;
+      if (ts < 0) ts = 0;
+      return encode(ts, randomBytes(PAYLOAD_BYTES));
+    }
+
+    // ---- DOM ----
+    function $(id) { return document.getElementById(id); }
+    var genEl = $("gen"), ksuidEl = $("ksuid"), errEl = $("err"), decEl = $("dec");
+    var last = "";
+
+    function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+    function hex(a) { return Array.prototype.map.call(a, function (b) { return (b < 16 ? "0" : "") + b.toString(16); }).join(""); }
+    function iso(ms) {
+      if (ms < 0 || ms > 8640000000000000) return "out of range";
+      try { return new Date(ms).toISOString(); } catch (e) { return "out of range"; }
+    }
+
+    function renderGen() {
+      var id = ksuid();
+      last = id;
+      var d = decode(id);
+      genEl.innerHTML = '<div><b>' + esc(id) + '</b></div>' +
+        '<div><small>timestamp: <span class="ts">' + d.timestamp + '</span> (' + iso(d.time) + ') · payload: <span class="pl">' + esc(hex(d.payload)) + '</span></small></div>';
+    }
+
+    function renderDecode() {
+      errEl.textContent = "";
+      var raw = ksuidEl.value.trim();
+      if (!raw) { decEl.textContent = "—"; return; }
+      if (!isValid(raw)) {
+        decEl.innerHTML = '<span class="bad">✗ Invalid</span> — a KSUID is 27 base62 characters (0–9 A–Z a–z).';
+        return;
+      }
+      var d = decode(raw);
+      decEl.innerHTML = '<div><small>timestamp: <span class="ts">' + d.timestamp + '</span> seconds since epoch</small></div>' +
+        '<div><small>wall time: <b>' + esc(iso(d.time)) + '</b></small></div>' +
+        '<div><small>payload (128-bit, hex): <span class="pl">' + esc(hex(d.payload)) + '</span></small></div>';
+    }
+
+    $("b-gen").addEventListener("click", renderGen);
+    $("b-copy").addEventListener("click", function () { if (last && navigator.clipboard) navigator.clipboard.writeText(last); });
+    ksuidEl.addEventListener("input", renderDecode);
+
+    renderGen();
+    renderDecode();
+
+    window.VT_KSUID_TEST = {
+      EPOCH: EPOCH, BASE62: BASE62, ENCODE_LEN: ENCODE_LEN,
+      PAYLOAD_BYTES: PAYLOAD_BYTES, TOTAL_BYTES: TOTAL_BYTES,
+      bytesToBig: bytesToBig, bigToBytes: bigToBytes,
+      bigToBase62: bigToBase62, base62ToBig: base62ToBig,
+      encode: encode, decode: decode, isValid: isValid, ksuid: ksuid
+    };
+  })();
+  </script>
+</body>
+</html>
