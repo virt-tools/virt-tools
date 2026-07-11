@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>ISIN Validator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .row { display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+    .row .lbl { min-width:130px; color:var(--text-dim,#9aa3b2); font-size:.85rem; }
+    .row input { font-family:ui-monospace,monospace; font-size:14px; padding:7px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; }
+    .row input.isin { width:280px; text-transform:uppercase; letter-spacing:.5px; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    .acts { display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; }
+    .acts button { padding:8px 18px; border-radius:6px; border:1px solid var(--accent,#6ea8fe); background:var(--accent,#6ea8fe); color:#0b0d12; cursor:pointer; font-weight:700; font-size:.85rem; }
+    .acts button.ghost { background:var(--bg-elev,#171a21); color:var(--text,#e6e6e6); border-color:var(--border,#2a2f3a); font-weight:600; }
+    h3 { margin:16px 0 4px; font-size:.9rem; color:var(--text-dim,#9aa3b2); text-transform:uppercase; letter-spacing:.04em; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    .verdict { font-family:ui-monospace,monospace; font-size:14px; background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:10px; margin:8px 0; min-height:40px; }
+    .verdict .ok { color:var(--good,#4ade80); font-weight:700; }
+    .verdict .bad { color:var(--bad,#f87171); font-weight:700; }
+    .struct { font-family:ui-monospace,monospace; font-size:.85rem; line-height:1.8; word-break:break-all; }
+    .struct .cc { color:var(--accent,#6ea8fe); }
+    .struct .ns { color:var(--good,#4ade80); }
+    .struct .cd { color:#f0c674; }
+    .struct .db { color:var(--text-dim,#9aa3b2); }
+    .struct small { color:var(--text-dim,#9aa3b2); font-size:.78rem; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>ISIN Validator &amp; Check-Digit Calculator</h1>
+      <p>Validate <strong>ISINs</strong> (International Securities Identification Numbers) and compute their check digit. An ISIN is a 12-character code — a 2-letter ISO country code, a 9-character alphanumeric national security identifier (NSIN), and a single check digit — that uniquely identifies a financial security worldwide. The check digit uses the <strong>Luhn algorithm</strong> run over the full code after each letter is expanded to its decimal value (<code>A</code>=10 … <code>Z</code>=35). Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <h3>Validate an ISIN</h3>
+      <div class="row"><span class="lbl">ISIN</span><input type="text" id="isin" class="isin" spellcheck="false" value="US0378331005"></div>
+      <div class="err" id="err"></div>
+      <div class="verdict" id="verdict">—</div>
+
+      <h3>Compute check digit</h3>
+      <div class="row"><span class="lbl">11-char prefix</span><input type="text" id="prefix" class="isin" spellcheck="false" value="US037833100"></div>
+      <div class="acts">
+        <button id="b-comp" type="button">Compute →</button>
+        <button id="b-use" class="ghost" type="button">Use as ISIN input</button>
+      </div>
+      <div class="verdict" id="comp">—</div>
+
+      <p class="note"><strong>ISIN</strong> structure: positions 1–2 are an <strong>ISO 3166-1 alpha-2 country code</strong> (two uppercase letters; <code>XS</code> is used for international securities), positions 3–11 are the 9-character <strong>NSIN</strong> (letters and digits), and position 12 is the <strong>check digit</strong>. Validation: each letter is replaced by its ordinal value (<code>A</code>→10, <code>B</code>→11, … <code>Z</code>→35), written as two decimal digits; digits pass through unchanged. The <strong>Luhn mod-10</strong> sum is then taken over that digit string — starting from the rightmost digit (the check digit itself, which is not doubled), every second digit is doubled and, if the result exceeds 9, its digits are summed (equivalently, subtract 9). The ISIN is valid when the total is a multiple of 10. To <em>compute</em> the check digit, a placeholder <code>0</code> is appended to the expanded prefix, the Luhn sum is taken, and the check digit is <code>(10 − sum mod 10) mod 10</code>. ISINs are case-insensitive on input (uppercased here). Pairs with the IBAN and Luhn validators. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    // Expand an ISIN (or prefix) to its decimal-digit string.
+    // A-Z -> 10..35 (two digits each), 0-9 -> itself. Anything else -> null.
+    function expandToDigits(str) {
+      if (str == null) return null;
+      str = String(str).toUpperCase();
+      var out = "";
+      for (var i = 0; i < str.length; i++) {
+        var c = str.charCodeAt(i);
+        if (c >= 65 && c <= 90) out += String(c - 55); // 'A'=65 -> 10
+        else if (c >= 48 && c <= 57) out += str[i];
+        else return null;
+      }
+      return out;
+    }
+
+    // Luhn mod-10 sum over a decimal digit string.
+    function luhnSum(digits) {
+      var sum = 0, dbl = false;
+      for (var i = digits.length - 1; i >= 0; i--) {
+        var d = digits.charCodeAt(i) - 48;
+        var n = dbl ? d * 2 : d;
+        if (n > 9) n -= 9;
+        sum += n;
+        dbl = !dbl;
+      }
+      return sum;
+    }
+
+    var RE_ISIN = /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/;
+    var RE_PREFIX = /^[A-Z]{2}[A-Z0-9]{9}$/;
+
+    function isValid(isin) {
+      if (isin == null) return false;
+      isin = String(isin).toUpperCase();
+      if (!RE_ISIN.test(isin)) return false;
+      var digits = expandToDigits(isin);
+      if (!digits) return false;
+      return luhnSum(digits) % 10 === 0;
+    }
+
+    // Returns the check digit (0..9) for an 11-char prefix, or null if invalid.
+    function checkDigit(prefix) {
+      if (prefix == null) return null;
+      prefix = String(prefix).toUpperCase();
+      if (!RE_PREFIX.test(prefix)) return null;
+      var digits = expandToDigits(prefix + "0"); // placeholder check
+      if (!digits) return null;
+      var sum = luhnSum(digits);
+      return (10 - (sum % 10)) % 10;
+    }
+
+    function luhnBreakdown(digits) {
+      // per-digit: [digit, doubled?, value-used]
+      var rows = [];
+      var dbl = false;
+      for (var i = digits.length - 1; i >= 0; i--) {
+        var d = digits.charCodeAt(i) - 48;
+        var used = dbl ? d * 2 : d;
+        if (used > 9) used -= 9;
+        rows.push({ digit: d, dbl: dbl, used: used });
+        dbl = !dbl;
+      }
+      rows.reverse();
+      return rows;
+    }
+
+    // ---- DOM ----
+    function $(id) { return document.getElementById(id); }
+    var isinEl = $("isin"), errEl = $("err"), verdictEl = $("verdict");
+    var prefixEl = $("prefix"), compEl = $("comp");
+    var lastCheck = "";
+
+    function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+    function renderValidate() {
+      errEl.textContent = "";
+      var raw = isinEl.value.trim().toUpperCase();
+      if (!raw) { verdictEl.textContent = "—"; return; }
+      if (!/^[A-Z0-9]+$/.test(raw)) {
+        verdictEl.innerHTML = '<span class="bad">✗ Invalid character</span> — ISINs use only uppercase letters and digits.';
+        return;
+      }
+      if (raw.length !== 12) {
+        verdictEl.innerHTML = '<span class="bad">✗ Wrong length</span> — an ISIN is 12 characters (got ' + raw.length + ').';
+        return;
+      }
+      var digits = expandToDigits(raw);
+      if (!digits) { verdictEl.innerHTML = '<span class="bad">✗ Invalid</span>'; return; }
+      var sum = luhnSum(digits);
+      var valid = sum % 10 === 0;
+      var rows = luhnBreakdown(digits);
+      var parts = '<div class="struct">' +
+        '<span class="cc">' + esc(raw.slice(0, 2)) + '</span>' +
+        '<span class="ns">' + esc(raw.slice(2, 11)) + '</span>' +
+        '<span class="cd">' + esc(raw.slice(11)) + '</span>' +
+        ' &nbsp;<small>(country · NSIN · check)</small><br>' +
+        'Expanded digits: ' + esc(digits) + '<br>' +
+        'Luhn: ' + rows.map(function (r) { return r.used; }).join(" + ") + ' = <b>' + sum + '</b><br>' +
+        (valid ? '<span class="ok">✓ Valid</span> — sum ' + sum + ' is a multiple of 10.' :
+                 '<span class="bad">✗ Invalid</span> — sum ' + sum + ' is not a multiple of 10.') +
+        '</div>';
+      verdictEl.innerHTML = parts;
+    }
+
+    function renderCompute() {
+      compEl.textContent = "—";
+      var raw = prefixEl.value.trim().toUpperCase();
+      if (!raw) { compEl.textContent = "—"; return; }
+      if (!/^[A-Z0-9]+$/.test(raw)) { compEl.innerHTML = '<span class="bad">✗ Invalid character</span>'; return; }
+      if (raw.length !== 11) { compEl.innerHTML = '<span class="bad">✗ Prefix must be 11 characters</span> (country + NSIN; got ' + raw.length + ').'; return; }
+      var cd = checkDigit(raw);
+      if (cd == null) { compEl.innerHTML = '<span class="bad">✗ Invalid prefix</span>'; return; }
+      lastCheck = raw + cd;
+      compEl.innerHTML = '<div class="struct">Check digit: <b>' + cd + '</b><br>Full ISIN: <span class="cc">' + esc(raw.slice(0, 2)) + '</span><span class="ns">' + esc(raw.slice(2)) + '</span><span class="cd">' + cd + '</span></div>';
+    }
+
+    $("b-comp").addEventListener("click", renderCompute);
+    $("b-use").addEventListener("click", function () { if (lastCheck) { isinEl.value = lastCheck; renderValidate(); } });
+    isinEl.addEventListener("input", renderValidate);
+    prefixEl.addEventListener("input", renderCompute);
+
+    renderValidate();
+    renderCompute();
+
+    window.VT_ISIN_TEST = {
+      expandToDigits: expandToDigits, luhnSum: luhnSum,
+      isValid: isValid, checkDigit: checkDigit, luhnBreakdown: luhnBreakdown,
+      RE_ISIN: RE_ISIN, RE_PREFIX: RE_PREFIX
+    };
+  })();
+  </script>
+</body>
+</html>

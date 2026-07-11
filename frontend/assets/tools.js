@@ -907,6 +907,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T23:00:00Z",
   },
   {
+    slug: "isin-validator",
+    name: "ISIN Validator",
+    description: "Validate an ISIN (12-char international securities identifier) with its Luhn check digit, or compute the check digit for a country + NSIN prefix.",
+    category: "Finance",
+    icon: "📊",
+    added: "2026-07-11T03:45:00Z",
+  },
+  {
     slug: "color-blindness-simulator",
     name: "Color Blindness Simulator",
     description: "Preview an image as it appears with protanopia, deuteranopia, tritanopia or achromatopsia — for accessibility checks. Processed locally with a canvas; your image never leaves your browser.",
