@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Markov Chain Text Generator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    textarea { width:100%; min-height:140px; font-family:ui-monospace,monospace; font-size:13px; padding:8px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; resize:vertical; box-sizing:border-box; }
+    .row { display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+    .row .lbl { min-width:140px; color:var(--text-dim,#9aa3b2); font-size:.85rem; }
+    .row input, .row select { font-family:ui-monospace,monospace; font-size:14px; padding:7px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; width:120px; }
+    .row select { width:160px; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    h3 { margin:16px 0 4px; font-size:.9rem; color:var(--text-dim,#9aa3b2); text-transform:uppercase; letter-spacing:.04em; }
+    .out { font-family:ui-monospace,monospace; font-size:13px; background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:10px; margin:8px 0; line-height:1.7; word-break:break-word; max-height:320px; overflow:auto; }
+    .out .v { color:var(--good,#4ade80); }
+    .small { color:var(--text-dim,#9aa3b2); font-size:.82rem; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    .acts { display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; }
+    .acts button { padding:7px 12px; border-radius:6px; border:1px solid var(--border,#2a2f3a); background:var(--bg-elev,#171a21); color:var(--text,#e6e6e6); cursor:pointer; font-weight:600; font-size:.78rem; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Markov Chain Text Generator</h1>
+      <p>Feed in sample text and generate new, plausible-sounding text with a <strong>Markov chain</strong>. The tool builds an n-gram transition model — for each sequence of <code>order</code> consecutive words it records which words historically followed and how often — then generates text by sampling the next word from that distribution, starting from a random seed state. A numeric <strong>seed</strong> makes the output reproducible. Everything stays in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <h3>Sample text</h3>
+      <textarea id="text" spellcheck="false">the quick brown fox jumps over the lazy dog the quick brown fox runs away the lazy dog sleeps the quick fox is quick</textarea>
+      <div class="err" id="err-text"></div>
+
+      <div class="row">
+        <span class="lbl">Order (n-gram)</span>
+        <input id="order" type="number" min="1" max="4" value="2">
+      </div>
+      <div class="row">
+        <span class="lbl">Output words</span>
+        <input id="len" type="number" min="1" max="2000" value="30">
+      </div>
+      <div class="row">
+        <span class="lbl">Seed (reproducible)</span>
+        <input id="seed" type="number" value="1">
+      </div>
+      <div class="err" id="err"></div>
+
+      <div class="acts">
+        <button id="b-run" type="button">Generate</button>
+        <button id="b-ex" type="button">Example text</button>
+      </div>
+
+      <h3>Generated text</h3>
+      <div class="out" id="out">—</div>
+
+      <p class="note">A <strong>Markov chain</strong> of <code>order k</code> models the probability of the next word given the previous <code>k</code> words. The tool builds the transition table from your input (each k-gram maps to the multiset of words that followed it in the sample), then walks the chain: at each step it picks the next word with probability proportional to its recorded frequency after the current k-gram. When the current state was never seen, it restarts from a random observed k-gram. A <strong>seed</strong> drives a deterministic PRNG (mulberry32) so the same text + order + seed always yields the same output; change the seed for a different sample. Larger order → more faithful but more repetitive; order 1 → more chaotic. Pairs with the N-Gram Frequency and Word Frequency tools. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    // ---- PRNG: mulberry32, deterministic from a 32-bit seed ----
+    function makeRng(seed) {
+      var s = seed >>> 0;
+      return function () {
+        s = (s + 0x6D2B79F5) >>> 0;
+        var t = s;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    // Tokenize text into words (whitespace split, keep punctuation attached).
+    function tokenize(text) {
+      text = String(text == null ? "" : text);
+      var raw = text.split(/\s+/).filter(function (w) { return w !== ""; });
+      return raw;
+    }
+
+    // Build the order-k transition model from a token array.
+    // model: { states: { "w1 w2": { nexts: ["w3","w3",...], counts: {w: n} } },
+    //         startStates: ["w1 w2", ...], order: k, vocab: Set-like object }
+    function buildModel(tokens, order) {
+      order = Number(order);
+      if (!Number.isInteger(order) || order < 1) throw new Error("Order must be a positive integer.");
+      if (tokens.length < order + 1) throw new Error("Need at least " + (order + 1) + " words for order " + order + ".");
+      var states = {};
+      var startStates = [];
+      for (var i = 0; i + order < tokens.length; i++) {
+        var key = tokens.slice(i, i + order).join(" ");
+        var next = tokens[i + order];
+        if (!states[key]) {
+          states[key] = { nexts: [], counts: {} };
+          startStates.push(key);
+        }
+        states[key].nexts.push(next);
+        states[key].counts[next] = (states[key].counts[next] || 0) + 1;
+      }
+      return { order: order, states: states, startStates: startStates };
+    }
+
+    // Pick a word from a nexts array using a random value in [0,1).
+    function weightedPick(nexts, r) {
+      if (!nexts || nexts.length === 0) return null;
+      var idx = Math.floor(r * nexts.length);
+      if (idx >= nexts.length) idx = nexts.length - 1;
+      return nexts[idx];
+    }
+
+    // Pick a random start state key from startStates using r in [0,1).
+    function pickStart(model, r) {
+      var starts = model.startStates;
+      if (starts.length === 0) return null;
+      var idx = Math.floor(r * starts.length);
+      if (idx >= starts.length) idx = starts.length - 1;
+      return starts[idx];
+    }
+
+    // Generate `count` words from the model using rng. Returns array of words.
+    function generate(model, count, rng) {
+      rng = rng || makeRng(1);
+      count = Number(count);
+      if (!Number.isInteger(count) || count < 1) throw new Error("Output length must be a positive integer.");
+      var order = model.order;
+      var out = [];
+      var state = pickStart(model, rng());
+      if (state === null) return out;
+      var cur = state.split(" ");
+      for (var k = 0; k < cur.length; k++) out.push(cur[k]);
+      while (out.length < count) {
+        var st = states_get(model, cur, order);
+        if (!st || st.nexts.length === 0) {
+          // restart from a random observed state
+          state = pickStart(model, rng());
+          if (state === null) break;
+          cur = state.split(" ");
+          continue;
+        }
+        var next = weightedPick(st.nexts, rng());
+        if (next === null) break;
+        out.push(next);
+        cur = out.slice(out.length - order);
+      }
+      return out.slice(0, count);
+    }
+    // helper: get state object for current window
+    function states_get(model, cur, order) {
+      var key = cur.slice(-order).join(" ");
+      return model.states[key] || null;
+    }
+
+    // ---- DOM ----
+    function $(id) { return document.getElementById(id); }
+    var textEl = $("text"), orderEl = $("order"), lenEl = $("len"), seedEl = $("seed");
+    var errTextEl = $("err-text"), errEl = $("err"), outEl = $("out");
+
+    function render() {
+      errEl.textContent = ""; errTextEl.textContent = "";
+      var tokens;
+      try { tokens = tokenize(textEl.value); } catch (e) { errTextEl.textContent = e.message || String(e); outEl.textContent = "—"; return; }
+      if (tokens.length < 2) { errTextEl.textContent = "Enter at least a few words of sample text."; outEl.textContent = "—"; return; }
+
+      var order, len, seed;
+      try {
+        order = Number(orderEl.value); len = Number(lenEl.value); seed = Number(seedEl.value);
+        if (!Number.isInteger(order) || order < 1 || order > 4) throw new Error("Order must be an integer 1–4.");
+        if (!Number.isInteger(len) || len < 1 || len > 2000) throw new Error("Output length must be an integer 1–2000.");
+        if (!Number.isInteger(seed)) throw new Error("Seed must be an integer.");
+      } catch (e) { errEl.textContent = e.message || String(e); outEl.textContent = "—"; return; }
+
+      var model;
+      try { model = buildModel(tokens, order); } catch (e) { errEl.textContent = e.message || String(e); outEl.textContent = "—"; return; }
+
+      var rng = makeRng(seed);
+      var out;
+      try { out = generate(model, len, rng); } catch (e) { errEl.textContent = e.message || String(e); outEl.textContent = "—"; return; }
+
+      var stateCount = model.startStates.length;
+      outEl.innerHTML =
+        "<span class='v'>" + escapeHtml(out.join(" ")) + "</span><br><br>" +
+        "<span class='small'>states: " + stateCount + " · tokens: " + tokens.length + " · order: " + order + " · seed: " + seed + "</span>";
+    }
+    function escapeHtml(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+    $("b-run").addEventListener("click", render);
+    $("b-ex").addEventListener("click", function () {
+      textEl.value = "to be or not to be that is the question whether tis nobler in the mind to suffer the slings and arrows of outrageous fortune or to take arms against a sea of troubles and by opposing end them to die to sleep no more";
+      render();
+    });
+    textEl.addEventListener("input", render);
+    orderEl.addEventListener("input", render);
+    lenEl.addEventListener("input", render);
+    seedEl.addEventListener("input", render);
+
+    render();
+
+    window.VT_MARKOV_TEST = {
+      makeRng: makeRng, tokenize: tokenize, buildModel: buildModel,
+      weightedPick: weightedPick, pickStart: pickStart, generate: generate
+    };
+  })();
+  </script>
+</body>
+</html>

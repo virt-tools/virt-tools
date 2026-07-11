@@ -251,6 +251,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-05T05:00:00Z",
   },
   {
+    slug: "markov-chain",
+    name: "Markov Chain Text Generator",
+    description: "Build an n-gram transition model from sample text and generate new plausible text. Seeded for reproducibility, runs locally.",
+    category: "Text",
+    icon: "⛓",
+    added: "2026-07-11T21:50:00Z",
+  },
+  {
     slug: "unicode-normalizer",
     name: "Unicode Normalizer",
     description: "Normalize text to NFC, NFD, NFKC, or NFKD — compose accents, decompose, or fold ligatures and superscripts; shows which code points change.",
