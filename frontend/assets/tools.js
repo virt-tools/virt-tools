@@ -2419,6 +2419,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T01:00:00Z",
   },
   {
+    slug: "sorting-visualizer",
+    name: "Sorting Algorithm Visualizer",
+    description: "Watch sorting algorithms work step by step. Choose from bubble, cocktail shaker, selection, insertion, shell, quicksort (Lomuto), merge, heap, and gnome sort, then play, pause, step, or scrub through every comparison and swap. Bars are drawn in real time with the elements being compared, swapped, or written highlighted, alongside live counts of comparisons, swaps, writes, and array accesses. Record a frame after every operation so you can replay the exact sequence of moves; stability of each algorithm is noted. Generates random arrays of adjustable size or accepts a custom list. Pairs with the Game of Life and Topological Sort algorithm tools. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "⇅",
+    added: "2026-07-12T01:10:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
