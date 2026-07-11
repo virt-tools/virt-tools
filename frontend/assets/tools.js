@@ -1651,6 +1651,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-11T12:10:00Z",
   },
   {
+    slug: "extended-euclidean",
+    name: "Extended Euclidean Algorithm (Bézout)",
+    description: "Compute gcd(a, b) together with the Bézout coefficients x, y satisfying a·x + b·y = gcd(a, b) — Bézout's identity — and show every step of the extended Euclidean algorithm (quotients, remainders, and the running coefficients). When the two inputs are coprime, also gives the modular inverse of a mod b and of b mod a. All arithmetic uses exact big integers, so it works for cryptographically large numbers. Pairs with the GCD & LCM, Modular Arithmetic, Chinese Remainder Theorem, and Continued Fraction tools. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "♾️",
+    added: "2026-07-11T14:40:00Z",
+  },
+  {
     slug: "statistics-calculator",
     name: "Statistics Calculator",
     description: "Compute summary statistics for a list of numbers — count, sum, mean, median, mode, minimum, maximum, range, quartiles (Q1, median, Q3) with interquartile range, and both population and sample variance and standard deviation. Paste values separated by commas, spaces, or new lines; the data is sorted and analysed in your browser. Quartiles use Tukey's hinges and the mode reports every most-frequent value when there are ties. Everything runs locally in your browser.",
