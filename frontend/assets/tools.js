@@ -1659,6 +1659,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-11T14:40:00Z",
   },
   {
+    slug: "linear-diophantine",
+    name: "Linear Diophantine Equation Solver",
+    description: "Find all integer solutions of a·x + b·y = c in two unknowns. A solution exists exactly when gcd(a, b) divides c; when it does, there are infinitely many, parameterised by one free integer t as x = x₀ + (b/g)·t, y = y₀ − (a/g)·t. Shows the particular solution, the full parameterisation, and sample solution pairs, and reports when no solution exists. Handles degenerate cases (one or both coefficients zero). All arithmetic uses exact big integers. Pairs with the Extended Euclidean, GCD & LCM, and Modular Arithmetic tools. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "ℤ",
+    added: "2026-07-11T15:10:00Z",
+  },
+  {
     slug: "statistics-calculator",
     name: "Statistics Calculator",
     description: "Compute summary statistics for a list of numbers — count, sum, mean, median, mode, minimum, maximum, range, quartiles (Q1, median, Q3) with interquartile range, and both population and sample variance and standard deviation. Paste values separated by commas, spaces, or new lines; the data is sorted and analysed in your browser. Quartiles use Tukey's hinges and the mode reports every most-frequent value when there are ties. Everything runs locally in your browser.",
