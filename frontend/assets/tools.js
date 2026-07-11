@@ -1715,6 +1715,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-08T01:00:00Z",
   },
   {
+    slug: "depreciation-calculator",
+    name: "Depreciation Calculator",
+    description: "Compute a year-by-year depreciation schedule for a tangible asset using Straight-line, Double-declining balance (200% declining balance with a salvage-value floor), 150% declining balance, or Sum-of-years'-digits. Enter the asset's cost, salvage value, and useful life and compare the methods: each period shows the beginning book value, depreciation, and ending book value, with totals. All values are rounded to the cent, with the final period adjusted so the ending book value lands exactly on salvage. Informational, not tax or accounting advice. Pairs with the Compound Interest, Loan, and ROI/Payback tools. Everything runs locally in your browser.",
+    category: "Finance",
+    icon: "📉",
+    added: "2026-07-11T12:40:00Z",
+  },
+  {
     slug: "combinatorics",
     name: "Combinatorics Calculator",
     description: "Count arrangements and selections of items. Given a total of n items and a choice of r, compute permutations P(n,r), permutations with repetition (n^r), combinations C(n,r), combinations with repetition (multisets, C(n+r−1,r)), and the factorial of n. All arithmetic uses big integers, so the results are exact — even for values like C(100,50) that overflow ordinary floating point. Everything runs locally in your browser.",

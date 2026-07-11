@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Depreciation Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .row { display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+    .row .lbl { min-width:130px; color:var(--text-dim,#9aa3b2); font-size:.85rem; }
+    .row input, .row select { font-family:ui-monospace,monospace; font-size:14px; padding:7px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; width:140px; }
+    .row select { width:220px; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    .acts { display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; }
+    .acts button { padding:8px 18px; border-radius:6px; border:1px solid var(--accent,#6ea8fe); background:var(--accent,#6ea8fe); color:#0b0d12; cursor:pointer; font-weight:700; font-size:.85rem; }
+    h3 { margin:16px 0 4px; font-size:.9rem; color:var(--text-dim,#9aa3b2); text-transform:uppercase; letter-spacing:.04em; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    table { width:100%; border-collapse:collapse; margin:8px 0; font-size:.83rem; }
+    th, td { padding:6px 8px; text-align:right; border-bottom:1px solid var(--border,#2a2f3a); font-family:ui-monospace,monospace; }
+    th:first-child, td:first-child { text-align:left; }
+    th { color:var(--text-dim,#9aa3b2); font-weight:600; }
+    tr.sum td { font-weight:700; color:var(--good,#4ade80); border-top:2px solid var(--border,#2a2f3a); }
+    .summary { display:flex; gap:20px; flex-wrap:wrap; margin:8px 0; font-size:.85rem; }
+    .summary span { color:var(--text-dim,#9aa3b2); }
+    .summary b { color:var(--text,#e6e6e6); font-family:ui-monospace,monospace; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Depreciation Calculator</h1>
+      <p>Compute a year-by-year depreciation schedule for a tangible asset using <strong>Straight-line</strong>, <strong>Double-declining balance</strong> (200% declining balance with a salvage-value floor), or <strong>Sum-of-years'-digits</strong>. Enter the asset's cost, salvage value, and useful life, then compare the methods. All values are rounded to the cent, with the final period adjusted so the ending book value lands exactly on salvage. Runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <h3>Inputs</h3>
+      <div class="row"><span class="lbl">Asset cost</span><input id="cost" type="text" inputmode="decimal" value="10000"></div>
+      <div class="row"><span class="lbl">Salvage value</span><input id="salvage" type="text" inputmode="decimal" value="1000"></div>
+      <div class="row"><span class="lbl">Useful life (years)</span><input id="life" type="text" inputmode="numeric" value="5"></div>
+      <div class="row"><span class="lbl">Method</span><select id="method">
+        <option value="sl" selected>Straight-line</option>
+        <option value="ddb">Double-declining balance (200%)</option>
+        <option value="ddb150">Declining balance (150%)</option>
+        <option value="syd">Sum-of-years'-digits</option>
+      </select></div>
+      <div class="err" id="err"></div>
+      <div class="acts"><button id="b-calc" type="button">Calculate →</button></div>
+
+      <h3>Schedule</h3>
+      <div class="summary" id="summary"></div>
+      <div id="table-wrap"></div>
+
+      <p class="note"><strong>Straight-line</strong> expenses the depreciable base (cost − salvage) evenly: each year gets <code>(cost − salvage) / life</code>. <strong>Declining balance</strong> applies a fixed rate to the current book value — <code>200% / life</code> for double-declining, <code>150% / life</code> for 150% — and never lets book value drop below salvage (the salvage floor), so the final depreciating period is clamped. This implementation uses pure declining balance without a mid-life switch to straight-line. <strong>Sum-of-years'-digits</strong> weights early years more: year <code>k</code> gets <code>(cost − salvage) × (life − k + 1) / (life×(life+1)/2)</code>. Every method's total depreciation equals <code>cost − salvage</code> and ends at salvage value. Results are informational, not tax or accounting advice. Pairs with the Compound Interest, Loan, and ROI/Payback tools. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var round2 = function (x) { return Math.round((x + (x > 0 ? 1e-9 : -1e-9)) * 100) / 100; };
+
+    // Parse a non-negative number string -> number; throws on invalid.
+    function parseNum(str, name) {
+      str = String(str == null ? "" : str).trim();
+      if (!/^\d+(\.\d+)?$/.test(str)) throw new Error(name + " must be a non-negative number.");
+      return parseFloat(str);
+    }
+    function parseLife(str) {
+      str = String(str == null ? "" : str).trim();
+      if (!/^\d+$/.test(str) || str === "0") throw new Error("Useful life must be a positive whole number of years.");
+      return parseInt(str, 10);
+    }
+
+    // Straight-line: even depreciation, residual plugged into the final year.
+    function straightLine(cost, salvage, life) {
+      var base = cost - salvage;
+      var annual = round2(base / life);
+      var dep = [], book = [], b = cost;
+      for (var k = 0; k < life; k++) {
+        var d = annual;
+        if (k === life - 1) d = round2(base - annual * (life - 1)); // plug residual
+        b = round2(b - d);
+        dep.push(d); book.push(b);
+      }
+      return { depreciation: dep, book: book };
+    }
+
+    // Declining balance: rate = (percent/100)/life applied to current book, floored at salvage.
+    function decliningBalance(cost, salvage, life, percent) {
+      var rate = (percent / 100) / life;
+      var dep = [], book = [], b = cost;
+      for (var k = 0; k < life; k++) {
+        var d = 0;
+        if (b > salvage) {
+          d = Math.min(b * rate, b - salvage);
+          d = round2(d);
+          if (round2(b - d) < salvage) d = round2(b - salvage); // clamp to salvage floor
+        }
+        b = round2(b - d);
+        dep.push(d); book.push(b);
+      }
+      // ensure final book == salvage exactly (plug any cent residual in last depreciating year)
+      if (book.length && round2(book[book.length - 1]) !== salvage) {
+        var residual = round2(book[book.length - 1] - salvage);
+        // add residual onto the last year that had depreciation
+        for (var j = book.length - 1; j >= 0; j--) {
+          if (dep[j] > 0) { dep[j] = round2(dep[j] + residual); book[j] = round2(book[j] - residual); break; }
+        }
+      }
+      return { depreciation: dep, book: book };
+    }
+
+    // Sum-of-years'-digits.
+    function syd(cost, salvage, life) {
+      var base = cost - salvage;
+      var sum = life * (life + 1) / 2;
+      var dep = [], book = [], b = cost, acc = 0;
+      for (var k = 1; k <= life; k++) {
+        var d = round2(base * (life - k + 1) / sum);
+        if (k === life) d = round2(base - acc); // plug residual so total is exact
+        acc = round2(acc + d);
+        b = round2(cost - acc);
+        dep.push(d); book.push(b);
+      }
+      return { depreciation: dep, book: book };
+    }
+
+    function compute(cost, salvage, life, method) {
+      if (salvage > cost) throw new Error("Salvage value cannot exceed asset cost.");
+      if (method === "sl") return straightLine(cost, salvage, life);
+      if (method === "syd") return syd(cost, salvage, life);
+      if (method === "ddb") return decliningBalance(cost, salvage, life, 200);
+      if (method === "ddb150") return decliningBalance(cost, salvage, life, 150);
+      throw new Error("Unknown method.");
+    }
+
+    // ---- DOM ----
+    function $(id) { return document.getElementById(id); }
+    var costEl = $("cost"), salvEl = $("salvage"), lifeEl = $("life"), methodEl = $("method"), errEl = $("err");
+    var sumEl = $("summary"), wrapEl = $("table-wrap");
+    function fmt(x) { return x.toFixed(2); }
+
+    function render() {
+      errEl.textContent = ""; sumEl.textContent = ""; wrapEl.innerHTML = "";
+      try {
+        var cost = parseNum(costEl.value, "Asset cost");
+        var salvage = parseNum(salvageEl.value, "Salvage value");
+        var life = parseLife(lifeEl.value);
+        var r = compute(cost, salvage, life, methodEl.value);
+        var total = round2(r.depreciation.reduce(function (a, b) { return a + b; }, 0));
+        sumEl.innerHTML =
+          "<span>Total depreciation: <b>" + fmt(total) + "</b></span>" +
+          "<span>Annual (year 1): <b>" + fmt(r.depreciation[0]) + "</b></span>" +
+          "<span>Ending book value: <b>" + fmt(r.book[r.book.length - 1]) + "</b></span>";
+        var rows = "";
+        for (var k = 0; k < r.depreciation.length; k++) {
+          var beg = k === 0 ? cost : r.book[k - 1];
+          rows += "<tr><td>Year " + (k + 1) + "</td><td>" + fmt(beg) + "</td><td>" + fmt(r.depreciation[k]) + "</td><td>" + fmt(r.book[k]) + "</td></tr>";
+        }
+        rows += "<tr class='sum'><td>Total</td><td></td><td>" + fmt(total) + "</td><td>" + fmt(r.book[r.book.length - 1]) + "</td></tr>";
+        wrapEl.innerHTML = "<table><tr><th>Period</th><th>Beginning book</th><th>Depreciation</th><th>Ending book</th></tr>" + rows + "</table>";
+      } catch (e) {
+        errEl.textContent = e.message || String(e);
+      }
+    }
+    $("b-calc").addEventListener("click", render);
+    [costEl, salvEl, lifeEl].forEach(function (el) { el.addEventListener("input", render); });
+    methodEl.addEventListener("change", render);
+
+    render();
+
+    window.VT_DEP_TEST = {
+      round2: round2, parseNum: parseNum, parseLife: parseLife,
+      straightLine: straightLine, decliningBalance: decliningBalance, syd: syd, compute: compute
+    };
+  })();
+  </script>
+</body>
+</html>
