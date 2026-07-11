@@ -2459,6 +2459,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T01:50:00Z",
   },
   {
+    slug: "turing-machine",
+    name: "Turing Machine Simulator",
+    description: "Build a Turing machine — an infinite tape, a read/write head, and a finite-state transition function δ(state, read) → (write, next state, L/R) — and watch it execute. Define states, a tape alphabet with a blank symbol, a transition table, plus start, accept, and reject states. Step or run any input and see the tape, head position, current state, and full execution history. The classic model of universal computation, one rung up the Chomsky hierarchy from finite automata; recognizes non-regular languages like aⁿbⁿ. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "▶",
+    added: "2026-07-12T02:00:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
