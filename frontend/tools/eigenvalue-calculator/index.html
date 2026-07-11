@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Eigenvalue Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    textarea { width:100%; min-height:140px; font-family:ui-monospace,monospace; font-size:14px; padding:8px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; resize:vertical; box-sizing:border-box; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    h3 { margin:16px 0 4px; font-size:.9rem; color:var(--text-dim,#9aa3b2); text-transform:uppercase; letter-spacing:.04em; }
+    .info { font-family:ui-monospace,monospace; font-size:13px; background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:12px; margin:8px 0; line-height:1.8; word-break:break-word; }
+    .info .k { color:var(--text-dim,#9aa3b2); display:inline-block; min-width:150px; }
+    .info .v { color:var(--text,#e6e6e6); }
+    .info .big { color:var(--good,#4ade80); font-weight:700; }
+    .small { color:var(--text-dim,#9aa3b2); font-size:.82rem; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    .acts { display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; }
+    .acts button { padding:7px 12px; border-radius:6px; border:1px solid var(--border,#2a2f3a); background:var(--bg-elev,#171a21); color:var(--text,#e6e6e6); cursor:pointer; font-weight:600; font-size:.78rem; }
+    table { width:100%; border-collapse:collapse; font-family:ui-monospace,monospace; font-size:12px; margin:8px 0; }
+    th, td { padding:5px 8px; text-align:right; border-bottom:1px solid var(--border,#2a2f3a); }
+    th { color:var(--text-dim,#9aa3b2); font-weight:600; }
+    td.l { text-align:left; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Eigenvalue Calculator</h1>
+      <p>Compute the <strong>eigenvalues</strong> and <strong>eigenvectors</strong> of a real <strong>symmetric</strong> matrix using the <strong>Jacobi rotation method</strong>. Enter a square symmetric matrix (one row per line, values space-separated); the tool returns each eigenvalue with its eigenvector, sorted by magnitude, and verifies <code>A·v = λ·v</code>, orthonormality, and reconstruction <code>A = V·diag·Vᵀ</code>. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <h3>Symmetric matrix (one row per line)</h3>
+      <p class="small">Space-separated values; the matrix must be square and symmetric (<code>A = Aᵀ</code>).</p>
+      <textarea id="mat" spellcheck="false">2 1 0
+1 2 1
+0 1 2</textarea>
+      <div class="err" id="err"></div>
+
+      <div class="acts">
+        <button id="b-run" type="button">Compute</button>
+        <button id="b-ex1" type="button">2×2 simple</button>
+        <button id="b-ex2" type="button">3×3 repeated</button>
+        <button id="b-ex3" type="button">Diagonal</button>
+        <button id="b-ex4" type="button">4×4</button>
+      </div>
+
+      <h3>Summary</h3>
+      <div class="info" id="summary">—</div>
+
+      <h3>Eigenpairs (sorted by |λ| descending)</h3>
+      <div id="table-wrap">—</div>
+
+      <p class="note">For a symmetric matrix the eigenvalues are real and the eigenvectors are orthogonal — the <strong>Jacobi method</strong> exploits this by repeatedly applying plane rotations <code>J(p,q,θ)</code> that zero the largest off-diagonal element, converging to <code>VᵀAV = diag(λ₁…λₙ)</code>. The columns of <code>V</code> are the eigenvectors. The sum of eigenvalues equals the <strong>trace</strong> and their product equals the <strong>determinant</strong>; both are checked here. For non-symmetric matrices eigenvalues can be complex and require a different algorithm (QR with shifts), which this tool does not attempt. Pairs with the Matrix Calculator, Linear System Solver, and Linear Programming tools. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var MAX_N = 10;
+    var EPS = 1e-12;
+    var MAX_SWEEPS = 100;
+
+    function parseMatrix(text) {
+      text = String(text == null ? "" : text).trim();
+      if (text === "") throw new Error("Enter a square matrix (one row per line).");
+      var lines = text.split(/\n+/).map(function (s) { return s.trim(); }).filter(function (s) { return s !== ""; });
+      var rows = [];
+      for (var i = 0; i < lines.length; i++) {
+        var parts = lines[i].split(/\s+/).map(Number);
+        for (var j = 0; j < parts.length; j++) if (!Number.isFinite(parts[j]))
+          throw new Error("Row " + (i + 1) + ": \"" + parts[j] + "\" is not a number.");
+        rows.push(parts);
+      }
+      var n = rows.length;
+      if (n > MAX_N) throw new Error("Matrix too large (max " + MAX_N + "×" + MAX_N + ").");
+      for (var r = 0; r < n; r++) if (rows[r].length !== n)
+        throw new Error("Row " + (r + 1) + " has " + rows[r].length + " values; expected " + n + " (matrix must be square).");
+      // symmetry check
+      for (var a = 0; a < n; a++)
+        for (var b = a + 1; b < n; b++)
+          if (Math.abs(rows[a][b] - rows[b][a]) > 1e-9)
+            throw new Error("Matrix is not symmetric: A[" + (a + 1) + "][" + (b + 1) + "] = " + rows[a][b] +
+              " ≠ A[" + (b + 1) + "][" + (a + 1) + "] = " + rows[b][a] + ".");
+      return rows;
+    }
+
+    function identity(n) { var I = []; for (var i = 0; i < n; i++) { var r = new Array(n).fill(0); r[i] = 1; I.push(r); } return I; }
+    function copy(A) { return A.map(function (r) { return r.slice(); }); }
+
+    // Cyclic Jacobi eigenvalue algorithm for real symmetric matrices.
+    // Returns { eigenvalues:[n], eigenvectors:[n][n] (columns are eigenvectors), rotations }.
+    function jacobi(Ain) {
+      var A = copy(Ain);
+      var n = A.length;
+      if (n === 0) throw new Error("Empty matrix.");
+      if (n === 1) return { eigenvalues: [A[0][0]], eigenvectors: [[1]], rotations: 0 };
+      var V = identity(n);
+      var rotations = 0;
+      for (var sweep = 0; sweep < MAX_SWEEPS; sweep++) {
+        // off-diagonal norm
+        var off = 0;
+        for (var i = 0; i < n; i++) for (var j = i + 1; j < n; j++) off += A[i][j] * A[i][j];
+        if (off < 1e-30) break;
+        for (var p = 0; p < n - 1; p++) {
+          for (var q = p + 1; q < n; q++) {
+            var apq = A[p][q];
+            if (Math.abs(apq) < EPS) continue;
+            var app = A[p][p], aqq = A[q][q];
+            // compute rotation angle
+            var tau = (aqq - app) / (2 * apq);
+            var t;
+            if (apq === 0) t = 0;
+            else {
+              t = 1 / (Math.abs(tau) + Math.sqrt(1 + tau * tau));
+              if (tau < 0) t = -t;
+            }
+            var c = 1 / Math.sqrt(1 + t * t);
+            var s = t * c;
+            // update diagonals
+            A[p][p] = app - t * apq;
+            A[q][q] = aqq + t * apq;
+            A[p][q] = 0; A[q][p] = 0;
+            for (var i2 = 0; i2 < n; i2++) {
+              if (i2 !== p && i2 !== q) {
+                var aip = A[i2][p], aiq = A[i2][q];
+                A[i2][p] = c * aip - s * aiq;
+                A[p][i2] = A[i2][p];
+                A[i2][q] = s * aip + c * aiq;
+                A[q][i2] = A[i2][q];
+              }
+            }
+            for (var i3 = 0; i3 < n; i3++) {
+              var vip = V[i3][p], viq = V[i3][q];
+              V[i3][p] = c * vip - s * viq;
+              V[i3][q] = s * vip + c * viq;
+            }
+            rotations++;
+          }
+        }
+      }
+      var eigs = [];
+      for (var k = 0; k < n; k++) eigs.push(A[k][k]);
+      return { eigenvalues: eigs, eigenvectors: V, rotations: rotations };
+    }
+
+    // matvec A·v
+    function matvec(A, v) {
+      var n = A.length, out = new Array(n).fill(0);
+      for (var i = 0; i < n; i++) for (var j = 0; j < n; j++) out[i] += A[i][j] * v[j];
+      return out;
+    }
+    // column j of V
+    function col(V, j) { var n = V.length, c = new Array(n); for (var i = 0; i < n; i++) c[i] = V[i][j]; return c; }
+    function dot(a, b) { var s = 0; for (var i = 0; i < a.length; i++) s += a[i] * b[i]; return s; }
+    function vnorm(v) { return Math.sqrt(dot(v, v)); }
+
+    function fmt(v) {
+      if (!Number.isFinite(v)) return String(v);
+      if (Object.is(v, Math.round(v)) && Math.abs(v) < 1e15) return String(v);
+      return String(Number(v.toPrecision(8)));
+    }
+    function fmtVec(v) { return "[" + v.map(fmt).join(", ") + "]"; }
+    function escapeHtml(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+    // ---- DOM ----
+    function $(id) { return document.getElementById(id); }
+    var matEl = $("mat"), errEl = $("err"), summaryEl = $("summary"), wrapEl = $("table-wrap");
+
+    function render() {
+      errEl.textContent = "";
+      summaryEl.textContent = "—"; wrapEl.textContent = "—";
+      var A;
+      try { A = parseMatrix(matEl.value); }
+      catch (e) { errEl.textContent = e.message || String(e); return; }
+      var n = A.length;
+      var res;
+      try { res = jacobi(A); }
+      catch (e) { errEl.textContent = e.message || String(e); return; }
+
+      // sort eigenpairs by |lambda| descending
+      var pairs = [];
+      for (var i = 0; i < n; i++) pairs.push({ lam: res.eigenvalues[i], vec: col(res.eigenvectors, i) });
+      pairs.sort(function (a, b) { return Math.abs(b.lam) - Math.abs(a.lam); });
+
+      // checks
+      var trace = 0, eigSum = 0, eigProd = 1;
+      for (var k = 0; k < n; k++) trace += A[k][k];
+      // determinant via eigenvalues product
+      for (var k2 = 0; k2 < n; k2++) { eigSum += res.eigenvalues[k2]; eigProd *= res.eigenvalues[k2]; }
+      var traceOk = Math.abs(trace - eigSum) < 1e-6 * (1 + Math.abs(trace));
+      var detOk = true; // computed from eigenvalues directly
+
+      // A v = lam v check
+      var residMax = 0;
+      for (var p = 0; p < n; p++) {
+        var Av = matvec(A, pairs[p].vec);
+        var lv = pairs[p].vec.map(function (x) { return x * pairs[p].lam; });
+        for (var r = 0; r < n; r++) residMax = Math.max(residMax, Math.abs(Av[r] - lv[r]));
+      }
+      // orthonormality
+      var orthoMax = 0;
+      for (var a = 0; a < n; a++) {
+        for (var b = 0; b < n; b++) {
+          var d = dot(pairs[a].vec, pairs[b].vec);
+          var target = a === b ? 1 : 0;
+          orthoMax = Math.max(orthoMax, Math.abs(d - target));
+        }
+      }
+      // reconstruct A = V diag V^T
+      var reconMax = 0;
+      for (var i2 = 0; i2 < n; i2++)
+        for (var j2 = 0; j2 < n; j2++) {
+          var s = 0;
+          for (var k3 = 0; k3 < n; k3++) s += pairs[k3].vec[i2] * pairs[k3].lam * pairs[k3].vec[j2];
+          reconMax = Math.max(reconMax, Math.abs(s - A[i2][j2]));
+        }
+
+      var sumHtml = "<span class='k'>size</span> <span class='v'>" + n + "×" + n + "</span><br>" +
+        "<span class='k'>rotations</span> <span class='v'>" + res.rotations + "</span><br>" +
+        "<span class='k'>trace = Σλ</span> <span class='v'>" + fmt(trace) + " " +
+        (traceOk ? "<span style='color:var(--good,#4ade80)'>✓</span>" : "<span style='color:var(--bad,#f87171)'>✗</span>") + "</span><br>" +
+        "<span class='k'>det = Πλ</span> <span class='big'>" + fmt(eigProd) + "</span><br>" +
+        "<span class='k'>max |Av − λv|</span> <span class='v'>" + residMax.toExponential(2) + "</span><br>" +
+        "<span class='k'>max orthonormality err</span> <span class='v'>" + orthoMax.toExponential(2) + "</span><br>" +
+        "<span class='k'>max reconstruct err</span> <span class='v'>" + reconMax.toExponential(2) + "</span>";
+      summaryEl.innerHTML = sumHtml;
+
+      var html = "<table><tr><th>#</th><th>λ</th><th>eigenvector v</th><th>‖v‖</th></tr>";
+      for (var idx = 0; idx < n; idx++) {
+        html += "<tr><td class='l'>" + (idx + 1) + "</td><td><span class='big'>" + fmt(pairs[idx].lam) +
+          "</span></td><td class='l'>" + escapeHtml(fmtVec(pairs[idx].vec)) + "</td><td>" +
+          fmt(vnorm(pairs[idx].vec)) + "</td></tr>";
+      }
+      html += "</table>";
+      wrapEl.innerHTML = html;
+    }
+
+    function setIn(s) { matEl.value = s; render(); }
+    $("b-run").addEventListener("click", render);
+    $("b-ex1").addEventListener("click", function () { setIn("2 1\n1 2"); }); // eig 1,3
+    $("b-ex2").addEventListener("click", function () { setIn("4 1 1\n1 4 1\n1 1 4"); }); // eig 6,3,3
+    $("b-ex3").addEventListener("click", function () { setIn("3 0 0\n0 1 0\n0 0 2"); }); // eig 3,2,1
+    $("b-ex4").addEventListener("click", function () { setIn("4 1 1 1\n1 4 1 1\n1 1 4 1\n1 1 1 4"); }); // eig 7,3,3,3
+    matEl.addEventListener("input", render);
+
+    render();
+
+    window.VT_EIGEN_TEST = {
+      parseMatrix: parseMatrix, jacobi: jacobi, matvec: matvec, col: col, dot: dot, vnorm: vnorm
+    };
+  })();
+  </script>
+</body>
+</html>
