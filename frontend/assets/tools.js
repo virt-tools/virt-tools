@@ -1075,6 +1075,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-11T01:50:00Z",
   },
   {
+    slug: "run-length-encoding",
+    name: "Run-Length Encoding",
+    description: "Compress a string with the simplest lossless scheme — each run of identical consecutive characters becomes its count followed by the character (AAAABBBCCD → 4A3B2C1D). Encodes and decodes with an exact round-trip for any non-digit text (digits cannot be round-tripped through count-then-char RLE). Shows both sizes and verifies the round-trip. Useful for teaching compression and for data with long runs. Pairs with the Base64, Gzip, and Ascii85 tools. Everything runs locally in your browser.",
+    category: "Encoding",
+    icon: "↹",
+    added: "2026-07-11T20:50:00Z",
+  },
+  {
     slug: "ascii85",
     name: "Ascii85 Encoder / Decoder",
     description: "Encode and decode Ascii85 (Base85) — the 4-to-5 byte encoding used in PDF/PostScript and btoa, with Adobe ~ terminator framing and z zero-group compression. Runs locally; nothing uploaded.",
