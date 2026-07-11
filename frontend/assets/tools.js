@@ -2123,6 +2123,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-11T04:20:00Z",
   },
   {
+    slug: "moving-average",
+    name: "Moving Average & Smoothing",
+    description: "Smooth a series with Simple (SMA), Weighted (WMA, newest point weighted highest), and Exponential (EMA, adjustable α) moving averages. Trailing convention: SMA/WMA output length n − w + 1, EMA length n. Series parsed as numbers separated by commas, spaces, or newlines. Pairs with the N-Gram Frequency and Statistics tools. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "∿",
+    added: "2026-07-11T20:30:00Z",
+  },
+  {
     slug: "angle-converter",
     name: "Angle Converter",
     description: "Convert an angle between degrees, radians, gradians (gons), turns (revolutions), arcminutes, arcseconds, and NATO mils, and to or from degrees-minutes-seconds (DMS). Enter a value in any unit or as DMS and every other unit is shown at once. A full circle is 360° = 2π rad = 400 grad = 1 turn = 21,600′ = 1,296,000″ = 6,400 mils; values are kept raw (not wrapped to a single turn). Pairs with the Trigonometry Calculator. Everything runs locally in your browser.",
