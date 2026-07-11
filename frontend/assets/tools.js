@@ -2443,6 +2443,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T01:30:00Z",
   },
   {
+    slug: "set-operations",
+    name: "Set Operations Calculator",
+    description: "Perform set theory operations on two or three sets. Enter elements (separated by commas, spaces, or newlines) and compute union, intersection, difference (A-B and B-A), and symmetric difference; test subset, superset, disjoint, and equality relations; generate the power set (|P(A)| = 2^|A|, capped) and the Cartesian product A x B; and view a labeled Venn diagram with the count in every region (4 regions for 2 sets, 7 for 3). Elements are compared as text and deduplicated within each set. Pairs with the Subset Sum Solver and Combination Generator tools. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "∪",
+    added: "2026-07-12T01:40:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
