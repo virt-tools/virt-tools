@@ -515,6 +515,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-11T02:30:00Z",
   },
   {
+    slug: "snowflake-decoder",
+    name: "Snowflake ID Decoder",
+    description: "Decode and generate 64-bit Twitter/Discord Snowflake IDs — recover the timestamp, machine ID, and sequence packed into the bits, with selectable epochs.",
+    category: "Data",
+    icon: "❄️",
+    added: "2026-07-11T03:15:00Z",
+  },
+  {
     slug: "gradient-generator",
     name: "CSS Gradient Generator",
     description: "Build linear and radial CSS gradients with a live preview and copy-ready CSS.",
