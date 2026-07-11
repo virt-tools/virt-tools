@@ -211,6 +211,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-05T05:00:00Z",
   },
   {
+    slug: "unicode-normalizer",
+    name: "Unicode Normalizer",
+    description: "Normalize text to NFC, NFD, NFKC, or NFKD — compose accents, decompose, or fold ligatures and superscripts; shows which code points change.",
+    category: "Text",
+    icon: "🔤",
+    added: "2026-07-11T04:55:00Z",
+  },
+  {
     slug: "tab-spaces",
     name: "Tab & Spaces Converter",
     description: "Convert between tabs and spaces with column-aware tab expansion. Reindent leading whitespace only or convert everywhere. Runs locally.",
