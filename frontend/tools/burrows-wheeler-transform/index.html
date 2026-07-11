@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Burrows-Wheeler Transform — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    textarea { width:100%; min-height:80px; font-family:ui-monospace,monospace; font-size:13px; padding:8px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; resize:vertical; box-sizing:border-box; }
+    .row { display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+    .row .lbl { min-width:120px; color:var(--text-dim,#9aa3b2); font-size:.85rem; }
+    .row input, .row select { font-family:ui-monospace,monospace; font-size:14px; padding:7px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; width:140px; }
+    .row select { width:200px; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    h3 { margin:16px 0 4px; font-size:.9rem; color:var(--text-dim,#9aa3b2); text-transform:uppercase; letter-spacing:.04em; }
+    .info { font-family:ui-monospace,monospace; font-size:13px; background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:12px; margin:8px 0; line-height:1.8; word-break:break-all; }
+    .info .k { color:var(--text-dim,#9aa3b2); }
+    .info .v { color:var(--text,#e6e6e6); }
+    .info .big { color:var(--good,#4ade80); font-weight:700; word-break:break-all; }
+    .info .idx { color:var(--accent,#60a5fa); }
+    .small { color:var(--text-dim,#9aa3b2); font-size:.82rem; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    .acts { display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; }
+    .acts button { padding:7px 12px; border-radius:6px; border:1px solid var(--border,#2a2f3a); background:var(--bg-elev,#171a21); color:var(--text,#e6e6e6); cursor:pointer; font-weight:600; font-size:.78rem; }
+    table { width:100%; border-collapse:collapse; font-family:ui-monospace,monospace; font-size:12px; margin:8px 0; }
+    th, td { padding:3px 8px; text-align:left; border-bottom:1px solid var(--border,#2a2f3a); }
+    th { color:var(--text-dim,#9aa3b2); font-weight:600; }
+    .mark { color:var(--good,#4ade80); font-weight:700; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Burrows-Wheeler Transform</h1>
+      <p>The <strong>Burrows-Wheeler Transform</strong> (BWT) rearranges a string so that similar characters cluster together — the reversible heart of <code>bzip2</code> compression. It lists all cyclic rotations of the input, sorts them, and takes the last column as the output (plus an index that lets you invert it). This tool transforms and inverts, and shows the rotation table. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row">
+        <span class="lbl">Operation</span>
+        <select id="mode">
+          <option value="forward">Forward (encode)</option>
+          <option value="inverse">Inverse (decode)</option>
+        </select>
+      </div>
+      <div class="row">
+        <span class="lbl">Input</span>
+        <input id="in" type="text" value="banana" style="width:340px">
+      </div>
+      <div class="row" id="idxrow">
+        <span class="lbl">Index (for inverse)</span>
+        <input id="idx" type="number" min="0" value="3">
+      </div>
+      <div class="err" id="err"></div>
+
+      <div class="acts">
+        <button id="b-run" type="button">Transform</button>
+        <button id="b-ex" type="button">Example</button>
+        <button id="b-swap" type="button">Use output as input</button>
+      </div>
+
+      <h3>Result</h3>
+      <div class="info" id="result">—</div>
+
+      <h3>Rotation table (forward, small inputs)</h3>
+      <div id="table-wrap">—</div>
+
+      <p class="note"><strong>Forward:</strong> build all <code>n</code> cyclic rotations of the input, sort them lexicographically, and output the last column <code>L</code> together with the row index <code>idx</code> where the original string landed. <strong>Inverse:</strong> from <code>L</code> and <code>idx</code>, the LF-mapping reconstructs the original exactly — the last character of the original is <code>L[idx]</code>, and a rank/count table walks backward to recover every preceding character. No sentinel character is needed, so the transform works on arbitrary text (including the output of itself). The transform alone doesn't shrink data; it clusters repeated characters so a follow-up <strong>Move-to-Front</strong> + <strong>Run-Length Encoding</strong> pass compresses well — which is why it pairs with the Run-Length Encoding tool. Input is capped at 4096 characters. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var MAX_N = 4096;
+
+    // Forward BWT (index-based, no sentinel). Returns { bwt, index }.
+    // bwt = last column of the sorted cyclic-rotation matrix;
+    // index = row where the original (offset-0) rotation lands.
+    function bwt(s) {
+      s = String(s == null ? "" : s);
+      var n = s.length;
+      if (n === 0) throw new Error("Enter a non-empty string.");
+      if (n > MAX_N) throw new Error("Input too long (max " + MAX_N + " characters).");
+
+      // sort rotation start-offsets by their cyclic rotation, lexicographically & stably
+      var idxs = [];
+      for (var i = 0; i < n; i++) idxs.push(i);
+      idxs.sort(function (a, b) {
+        for (var k = 0; k < n; k++) {
+          var ca = s.charCodeAt((a + k) % n);
+          var cb = s.charCodeAt((b + k) % n);
+          if (ca !== cb) return ca - cb;
+        }
+        return 0; // equal rotations (only when s is periodic; stable)
+      });
+
+      var L = "";
+      var index = 0;
+      for (var r = 0; r < n; r++) {
+        var off = idxs[r];
+        L += s.charAt((off + n - 1) % n); // last char of this rotation
+        if (off === 0) index = r;
+      }
+      return { bwt: L, index: index };
+    }
+
+    // Inverse BWT via LF-mapping. Returns the original string.
+    function ibwt(L, index) {
+      L = String(L == null ? "" : L);
+      var n = L.length;
+      if (n === 0) throw new Error("Enter a non-empty transformed string.");
+      if (!Number.isInteger(index) || index < 0 || index >= n)
+        throw new Error("Index must be an integer in [0, " + (n - 1) + "].");
+
+      // counts and cumulative starts of each character in the (sorted) first column
+      var counts = {};
+      for (var i = 0; i < n; i++) { var c = L.charAt(i); counts[c] = (counts[c] || 0) + 1; }
+      var chars = Object.keys(counts).sort();
+      var start = {}, acc = 0;
+      for (var ci = 0; ci < chars.length; ci++) { start[chars[ci]] = acc; acc += counts[chars[ci]]; }
+
+      // rank[i] = number of occurrences of L[i] in L[0..i-1]
+      var rank = new Array(n), occ = {};
+      for (var i2 = 0; i2 < n; i2++) {
+        var ch = L.charAt(i2);
+        rank[i2] = occ[ch] || 0;
+        occ[ch] = (occ[ch] || 0) + 1;
+      }
+
+      // LF[i] = start[L[i]] + rank[i]
+      // Reconstruct from last char to first: L[index] is s[n-1], then walk LF.
+      var out = new Array(n);
+      var p = index;
+      for (var k = n - 1; k >= 0; k--) {
+        out[k] = L.charAt(p);
+        p = start[L.charAt(p)] + rank[p];
+      }
+      return out.join("");
+    }
+
+    // Build the sorted rotation table (for display on small inputs).
+    function rotationTable(s) {
+      var n = s.length;
+      var idxs = [];
+      for (var i = 0; i < n; i++) idxs.push(i);
+      idxs.sort(function (a, b) {
+        for (var k = 0; k < n; k++) {
+          var ca = s.charCodeAt((a + k) % n);
+          var cb = s.charCodeAt((b + k) % n);
+          if (ca !== cb) return ca - cb;
+        }
+        return 0;
+      });
+      var rows = [];
+      var indexRow = 0;
+      for (var r = 0; r < n; r++) {
+        var off = idxs[r];
+        var rot = "";
+        for (var k = 0; k < n; k++) rot += s.charAt((off + k) % n);
+        if (off === 0) indexRow = r;
+        rows.push({ off: off, rot: rot, last: rot.charAt(n - 1), isOrig: off === 0 });
+      }
+      return { rows: rows, indexRow: indexRow };
+    }
+
+    function escapeHtml(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+    // ---- DOM ----
+    function $(id) { return document.getElementById(id); }
+    var modeEl = $("mode"), inEl = $("in"), idxEl = $("idx"), idxRowEl = $("idxrow");
+    var errEl = $("err"), resultEl = $("result"), wrapEl = $("table-wrap");
+
+    function render() {
+      errEl.textContent = "";
+      resultEl.textContent = "—"; wrapEl.textContent = "—";
+      var mode = modeEl.value;
+      idxRowEl.style.display = (mode === "inverse") ? "" : "none";
+
+      try {
+        if (mode === "forward") {
+          var input = inEl.value;
+          var r = bwt(input);
+          resultEl.innerHTML =
+            "<span class='k'>input:</span> <span class='v'>" + escapeHtml(input) + "</span><br>" +
+            "<span class='k'>BWT (last column L):</span> <span class='big'>" + escapeHtml(r.bwt) + "</span><br>" +
+            "<span class='k'>index:</span> <span class='idx'>" + r.index + "</span>";
+
+          if (input.length > 0 && input.length <= 64) {
+            var t = rotationTable(input);
+            var html = "<table><tr><th>#</th><th>offset</th><th>sorted rotation</th><th>L</th></tr>";
+            for (var i = 0; i < t.rows.length; i++) {
+              var row = t.rows[i];
+              html += "<tr" + (row.isOrig ? " class='mark'" : "") + "><td>" + i + "</td><td>" + row.off +
+                "</td><td>" + escapeHtml(row.rot) + "</td><td class='mark'>" + escapeHtml(row.last) + "</td></tr>";
+            }
+            html += "</table><p class='small'>Green row is the original string (row " + t.indexRow +
+              " = index " + t.indexRow + "). Last column, read top to bottom, is the BWT.</p>";
+            wrapEl.innerHTML = html;
+          } else {
+            wrapEl.innerHTML = "<p class='small'>Rotation table shown only for inputs up to 64 characters.</p>";
+          }
+        } else {
+          var L = inEl.value;
+          var index = Number(idxEl.value);
+          var orig = ibwt(L, index);
+          resultEl.innerHTML =
+            "<span class='k'>L:</span> <span class='v'>" + escapeHtml(L) + "</span><br>" +
+            "<span class='k'>index:</span> <span class='idx'>" + index + "</span><br>" +
+            "<span class='k'>original:</span> <span class='big'>" + escapeHtml(orig) + "</span>";
+          wrapEl.innerHTML = "<p class='small'>Round-trip check: forward(original) should reproduce L and index.</p>";
+        }
+      } catch (e) {
+        errEl.textContent = e.message || String(e);
+      }
+    }
+    $("b-run").addEventListener("click", render);
+    $("b-ex").addEventListener("click", function () {
+      if (modeEl.value === "forward") { inEl.value = "banana"; }
+      else { inEl.value = "nnbaaa"; idxEl.value = "3"; }
+      render();
+    });
+    $("b-swap").addEventListener("click", function () {
+      // take current result output and feed it back as input (toggle mode)
+      if (modeEl.value === "forward") {
+        try {
+          var r = bwt(inEl.value);
+          modeEl.value = "inverse";
+          inEl.value = r.bwt; idxEl.value = String(r.index);
+        } catch (e) { errEl.textContent = e.message || String(e); return; }
+      } else {
+        try {
+          var orig = ibwt(inEl.value, Number(idxEl.value));
+          modeEl.value = "forward";
+          inEl.value = orig;
+        } catch (e) { errEl.textContent = e.message || String(e); return; }
+      }
+      render();
+    });
+    modeEl.addEventListener("change", render);
+    inEl.addEventListener("input", render);
+    idxEl.addEventListener("input", render);
+
+    render();
+
+    window.VT_BWT_TEST = { bwt: bwt, ibwt: ibwt, rotationTable: rotationTable };
+  })();
+  </script>
+</body>
+</html>

@@ -1115,6 +1115,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-11T20:50:00Z",
   },
   {
+    slug: "burrows-wheeler-transform",
+    name: "Burrows-Wheeler Transform",
+    description: "Reversibly rearrange a string so similar characters cluster — the reversible core of bzip2. Forward (encode) lists and sorts cyclic rotations, taking the last column plus an index; inverse (decode) reconstructs the original via the LF-mapping. Shows the rotation table. Pairs with Run-Length Encoding. Runs locally.",
+    category: "Encoding",
+    icon: "⟲",
+    added: "2026-07-11T22:30:00Z",
+  },
+  {
     slug: "ascii85",
     name: "Ascii85 Encoder / Decoder",
     description: "Encode and decode Ascii85 (Base85) — the 4-to-5 byte encoding used in PDF/PostScript and btoa, with Adobe ~ terminator framing and z zero-group compression. Runs locally; nothing uploaded.",
