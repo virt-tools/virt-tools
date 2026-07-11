@@ -2411,6 +2411,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T00:50:00Z",
   },
   {
+    slug: "subset-sum-solver",
+    name: "Subset Sum Solver",
+    description: "Solve the classic subset sum problem: given a set of non-negative integers and a target, decide whether some subset sums exactly to the target, count how many subsets do, reconstruct one subset, or enumerate all of them (capped). Uses dynamic programming over the target sum with a 0/1 scan (each item used at most once), and a suffix-reachability table for reconstruction and enumeration. Items are distinct by position so duplicate values yield distinct subsets; the empty subset counts for target 0 unless disabled. Distinct from the Knapsack Solver, which maximizes value under a weight cap rather than hitting an exact sum. Pairs with the Knapsack Solver and Partition tools. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "⊆",
+    added: "2026-07-12T01:00:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
