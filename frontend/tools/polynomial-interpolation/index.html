@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Polynomial Interpolation — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    textarea { width:100%; min-height:110px; font-family:ui-monospace,monospace; font-size:13px; padding:8px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; resize:vertical; box-sizing:border-box; }
+    .row { display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+    .row .lbl { min-width:160px; color:var(--text-dim,#9aa3b2); font-size:.85rem; }
+    .row input { font-family:ui-monospace,monospace; font-size:14px; padding:7px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; width:200px; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    h3 { margin:16px 0 4px; font-size:.9rem; color:var(--text-dim,#9aa3b2); text-transform:uppercase; letter-spacing:.04em; }
+    .info { font-family:ui-monospace,monospace; font-size:13px; background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:12px; margin:8px 0; line-height:1.8; word-break:break-word; }
+    .info .k { color:var(--text-dim,#9aa3b2); display:inline-block; min-width:180px; }
+    .info .v { color:var(--text,#e6e6e6); }
+    .info .big { color:var(--good,#4ade80); font-weight:700; }
+    .small { color:var(--text-dim,#9aa3b2); font-size:.82rem; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    .acts { display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; }
+    .acts button { padding:7px 12px; border-radius:6px; border:1px solid var(--border,#2a2f3a); background:var(--bg-elev,#171a21); color:var(--text,#e6e6e6); cursor:pointer; font-weight:600; font-size:.78rem; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Polynomial Interpolation</h1>
+      <p>Given a set of <code>(x, y)</code> points, find the unique polynomial of degree <code>n−1</code> that passes through all of them, and evaluate it anywhere. The tool builds the <strong>Newton divided-difference</strong> form (and cross-checks with <strong>Lagrange</strong>), displays the polynomial, and verifies it reproduces every input point. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <h3>Points (one per line: "x y" or "x,y")</h3>
+      <textarea id="pts" spellcheck="false">0 1
+1 2
+2 5
+3 10</textarea>
+      <div class="err" id="err"></div>
+
+      <div class="row">
+        <span class="lbl">Evaluate at x =</span>
+        <input id="x0" type="text" value="1.5">
+      </div>
+      <div class="err" id="err2"></div>
+
+      <div class="acts">
+        <button id="b-run" type="button">Interpolate</button>
+        <button id="b-ex" type="button">Example</button>
+      </div>
+
+      <h3>Newton form coefficients</h3>
+      <div class="info" id="newton">—</div>
+
+      <h3>Polynomial</h3>
+      <div class="info" id="poly">—</div>
+
+      <h3>Evaluation</h3>
+      <div class="info" id="eval">—</div>
+
+      <p class="note">For <code>n</code> points with distinct x values there is exactly one polynomial of degree ≤ <code>n−1</code> through them. The <strong>Newton form</strong> <code>P(x) = c₀ + c₁(x−x₀) + c₂(x−x₀)(x₁) + …</code> builds coefficients from the <strong>divided-difference table</strong>; the <strong>Lagrange form</strong> is a weighted sum of basis polynomials. Both represent the same polynomial and are cross-checked here. Unlike <strong>linear regression</strong> (which approximates), interpolation passes through every point exactly — so it can oscillate wildly between points (Runge's phenomenon) with many points. The expanded power form is also shown; for many points its coefficients can lose precision. Pairs with the Linear Regression and Calculus Toolkit tools. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var MAX_N = 60;
+
+    // Parse points text -> { xs:[], ys:[] }. Each line "x y" / "x,y" / "x  y".
+    function parsePoints(text) {
+      text = String(text == null ? "" : text).trim();
+      if (text === "") throw new Error("Enter at least one point (one per line, e.g. \"0 1\").");
+      var lines = text.split(/\n+/).map(function (s) { return s.trim(); }).filter(function (s) { return s !== ""; });
+      var xs = [], ys = [];
+      for (var i = 0; i < lines.length; i++) {
+        var parts = lines[i].split(/[\s,]+/).filter(function (s) { return s !== ""; });
+        if (parts.length !== 2) throw new Error("Line " + (i + 1) + ": expected two numbers, got \"" + lines[i] + "\".");
+        var x = Number(parts[0]), y = Number(parts[1]);
+        if (!Number.isFinite(x) || !Number.isFinite(y))
+          throw new Error("Line " + (i + 1) + ": \"" + lines[i] + "\" is not a pair of finite numbers.");
+        xs.push(x); ys.push(y);
+      }
+      if (xs.length < 1) throw new Error("Enter at least one point.");
+      if (xs.length > MAX_N) throw new Error("Too many points (max " + MAX_N + ").");
+      // distinct x check
+      for (var a = 0; a < xs.length; a++)
+        for (var b = a + 1; b < xs.length; b++)
+          if (xs[a] === xs[b]) throw new Error("Duplicate x value " + xs[a] + " — interpolation needs distinct x values.");
+      return { xs: xs, ys: ys };
+    }
+
+    // Newton divided-difference coefficients c[0..n-1].
+    // c[k] = f[x0, x1, ..., xk]. Returns array length n.
+    function dividedDifferences(xs, ys) {
+      var n = xs.length;
+      var d = ys.slice(); // working copy
+      var c = [d[0]];
+      for (var k = 1; k < n; k++) {
+        for (var i = n - 1; i >= k; i--) {
+          d[i] = (d[i] - d[i - 1]) / (xs[i] - xs[i - k]);
+        }
+        c.push(d[k]);
+      }
+      return c;
+    }
+
+    // Evaluate Newton polynomial at x (nested form).
+    function newtonEval(xs, c, x) {
+      var n = c.length;
+      var r = c[n - 1];
+      for (var k = n - 2; k >= 0; k--) {
+        r = r * (x - xs[k]) + c[k];
+      }
+      return r;
+    }
+
+    // Evaluate Lagrange interpolant at x.
+    function lagrangeEval(xs, ys, x) {
+      var n = xs.length, sum = 0;
+      for (var i = 0; i < n; i++) {
+        var term = ys[i];
+        for (var j = 0; j < n; j++) {
+          if (j === i) continue;
+          term *= (x - xs[j]) / (xs[i] - xs[j]);
+        }
+        sum += term;
+      }
+      return sum;
+    }
+
+    // Expand Newton form to standard power coefficients a[0..n-1] (P(x)=sum a[k] x^k).
+    function expandCoeffs(xs, c) {
+      var a = [c[0]];           // accumulated sum of terms 0..k-1
+      var prod = [1];           // running product Π_{j<k} (x - xs[j])
+      for (var k = 1; k < c.length; k++) {
+        // prod *= (x - xs[k-1])
+        var np = new Array(prod.length + 1).fill(0);
+        for (var i = 0; i < prod.length; i++) {
+          np[i + 1] += prod[i];
+          np[i] -= prod[i] * xs[k - 1];
+        }
+        prod = np;
+        // a += c[k] * prod
+        var na = a.slice();
+        while (na.length < prod.length) na.push(0);
+        for (var j = 0; j < prod.length; j++) na[j] += c[k] * prod[j];
+        a = na;
+      }
+      return a;
+    }
+
+    function fmtNum(v) {
+      if (!Number.isFinite(v)) return String(v);
+      if (Object.is(v, Math.round(v)) && Math.abs(v) < 1e15) return String(v);
+      return String(Number(v.toPrecision(12)));
+    }
+    function fmtTerm(coef, k) {
+      if (Math.abs(coef) < 1e-12) return "";
+      var sign = coef < 0 ? " − " : " + ";
+      var mag = fmtNum(Math.abs(coef));
+      if (k === 0) return (coef < 0 ? "−" : "") + mag;
+      if (k === 1) return sign + mag + "·x";
+      return sign + mag + "·x^" + k;
+    }
+    function polyString(a) {
+      // a[0..n-1] ascending; print descending
+      var parts = [];
+      for (var k = a.length - 1; k >= 0; k--) {
+        var t = fmtTerm(a[k], k);
+        if (t !== "") parts.push(t);
+      }
+      if (parts.length === 0) return "0";
+      // clean leading " + "
+      var s = parts.join("");
+      return s;
+    }
+    function newtonString(xs, c) {
+      // P = c0 + c1(x-x0) + c2(x-x0)(x-x1) + ...
+      var parts = [];
+      for (var k = 0; k < c.length; k++) {
+        var coef = c[k];
+        if (Math.abs(coef) < 1e-12 && k > 0) continue;
+        var sign = coef < 0 ? " − " : (k === 0 ? "" : " + ");
+        var mag = fmtNum(Math.abs(coef));
+        var term = (k === 0 ? (coef < 0 ? "−" : "") : sign) + mag;
+        for (var j = 0; j < k; j++) term += "(x − " + fmtNum(xs[j]) + ")";
+        parts.push(term);
+      }
+      return parts.join("") || "0";
+    }
+
+    // ---- DOM ----
+    function $(id) { return document.getElementById(id); }
+    var ptsEl = $("pts"), x0El = $("x0"), errEl = $("err"), err2El = $("err2");
+    var newtonEl = $("newton"), polyEl = $("poly"), evalEl = $("eval");
+
+    function render() {
+      errEl.textContent = ""; err2El.textContent = "";
+      newtonEl.textContent = "—"; polyEl.textContent = "—"; evalEl.textContent = "—";
+
+      var pts, xs, ys, c;
+      try {
+        pts = parsePoints(ptsEl.value);
+        xs = pts.xs; ys = pts.ys;
+        c = dividedDifferences(xs, ys);
+      } catch (e) { errEl.textContent = e.message || String(e); return; }
+
+      var n = xs.length;
+      // newton form display
+      var cstr = c.map(function (ck, k) { return "c" + k + " = " + fmtNum(ck); }).join("<br>");
+      newtonEl.innerHTML = cstr + "<br><br><span class='small'>P(x) = " + escapeHtml(newtonString(xs, c)) + "</span>";
+
+      // expanded power form
+      var a = expandCoeffs(xs, c);
+      polyEl.innerHTML = "<span class='k'>expanded form:</span> <span class='v'>" + escapeHtml(polyString(a)) + "</span><br>" +
+        "<span class='k'>degree:</span> <span class='v'>" + (n - 1) + "</span>";
+
+      // verification: passes through all points
+      var maxErr = 0;
+      for (var i = 0; i < n; i++) {
+        var ev = newtonEval(xs, c, xs[i]);
+        maxErr = Math.max(maxErr, Math.abs(ev - ys[i]));
+      }
+
+      // evaluation at x0
+      var x0 = x0El.value.trim();
+      var evalHtml = "";
+      if (x0 === "") {
+        evalHtml = "<span class='k'>x =</span> <span class='v' style='color:var(--bad,#f87171)'>enter a number</span>";
+      } else {
+        var xv = Number(x0);
+        if (!Number.isFinite(xv)) {
+          evalHtml = "<span class='k'>x =</span> <span class='v' style='color:var(--bad,#f87171)'>not a number</span>";
+        } else {
+          var nv = newtonEval(xs, c, xv);
+          var lv = lagrangeEval(xs, ys, xv);
+          evalHtml = "<span class='k'>x</span> <span class='v'>" + fmtNum(xv) + "</span><br>" +
+            "<span class='k'>P(x) (Newton)</span> <span class='big'>" + fmtNum(nv) + "</span><br>" +
+            "<span class='k'>P(x) (Lagrange)</span> <span class='v'>" + fmtNum(lv) + "</span><br>" +
+            "<span class='k'>Newton–Lagrange match</span> <span class='v'>" +
+            (Math.abs(nv - lv) < 1e-6 * (1 + Math.abs(nv)) ? "<span style='color:var(--good,#4ade80)'>✓</span>" : "<span style='color:var(--bad,#f87171)'>mismatch</span>") + "</span>";
+        }
+      }
+      evalHtml += "<br><span class='k'>passes through points</span> <span class='v'>" +
+        (maxErr < 1e-6 ? "<span style='color:var(--good,#4ade80)'>✓ (max error " + maxErr.toExponential(2) + ")</span>" :
+         "<span style='color:var(--bad,#f87171)'>✗ (max error " + maxErr.toExponential(2) + ")</span>") + "</span>";
+      evalEl.innerHTML = evalHtml;
+    }
+    function escapeHtml(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+    $("b-run").addEventListener("click", render);
+    $("b-ex").addEventListener("click", function () {
+      ptsEl.value = "0 0\n1 1\n2 8\n3 27"; // y = x^3
+      x0El.value = "1.5";
+      render();
+    });
+    ptsEl.addEventListener("input", render);
+    x0El.addEventListener("input", render);
+
+    render();
+
+    window.VT_INTERP_TEST = {
+      parsePoints: parsePoints, dividedDifferences: dividedDifferences,
+      newtonEval: newtonEval, lagrangeEval: lagrangeEval, expandCoeffs: expandCoeffs
+    };
+  })();
+  </script>
+</body>
+</html>

@@ -2307,6 +2307,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-05T08:20:00Z",
   },
   {
+    slug: "polynomial-interpolation",
+    name: "Polynomial Interpolation",
+    description: "Find the unique polynomial through a set of (x, y) points and evaluate it anywhere. Builds the Newton divided-difference form, cross-checks with Lagrange, shows the expanded polynomial, and verifies it reproduces every point. Unlike linear regression it passes through all points exactly. Runs locally.",
+    category: "Math",
+    icon: "⌒",
+    added: "2026-07-11T22:50:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
