@@ -2579,6 +2579,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T04:20:00Z",
   },
   {
+    slug: "soundex",
+    name: "Soundex Encoder",
+    description: "Encode names with the Soundex phonetic algorithm, which reduces a name to a four-character code (one letter plus three digits) so that names that sound alike share the same code — the basis of US census surname indexing since 1880. Robert, Rupert, and Rubin all encode to R163; Ashcraft to A261. Consonants map B/F/P/V→1, C/G/J/K/Q/S/X/Z→2, D/T→3, L→4, M/N→5, R→6; vowels break runs of equal-coded letters while H and W are transparent (the National Archives census rule). Paste a list of names for batch encoding, view a step-by-step trace, or check whether two names are phonetically equivalent. Pairs with the Phonetic-alphabet and String Similarity tools. Everything runs locally in your browser.",
+    category: "Text",
+    icon: "🗣",
+    added: "2026-07-12T04:30:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
