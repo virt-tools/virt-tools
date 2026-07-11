@@ -1627,6 +1627,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-11T11:40:00Z",
   },
   {
+    slug: "chinese-remainder-theorem",
+    name: "Chinese Remainder Theorem Solver",
+    description: "Solve a system of simultaneous congruences x ≡ a₁ (mod m₁), x ≡ a₂ (mod m₂), … using the Chinese Remainder Theorem. Moduli need not be coprime — the generalised pairwise merge handles non-coprime moduli and reports when the system is inconsistent (no solution). The answer is the unique residue modulo lcm(m₁, m₂, …), shown as x ≡ r (mod M) with r in [0, M). Accepts one congruence per line in flexible forms (\"x ≡ 2 mod 3\", \"2 mod 3\", \"2,3\"). All arithmetic uses exact big integers, so it works for cryptographically large numbers. Pairs with the Modular Arithmetic Calculator (single congruence) and GCD/LCM tools. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🧩",
+    added: "2026-07-11T12:10:00Z",
+  },
+  {
     slug: "statistics-calculator",
     name: "Statistics Calculator",
     description: "Compute summary statistics for a list of numbers — count, sum, mean, median, mode, minimum, maximum, range, quartiles (Q1, median, Q3) with interquartile range, and both population and sample variance and standard deviation. Paste values separated by commas, spaces, or new lines; the data is sorted and analysed in your browser. Quartiles use Tukey's hinges and the mode reports every most-frequent value when there are ties. Everything runs locally in your browser.",
