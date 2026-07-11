@@ -2571,6 +2571,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T04:10:00Z",
   },
   {
+    slug: "string-similarity",
+    name: "String Similarity",
+    description: "Compare two strings and quantify how alike they are with four standard similarity coefficients (all 0 to 1). Jaro and Jaro-Winkler account for character matches within a sliding window and transpositions, with Jaro-Winkler boosting strings that share a common prefix — the go-to metric for record linkage and typo-tolerant name matching (MARTHA/MARHTA scores 0.9611). Sørensen-Dice and Jaccard compare the character bigram sets as set-overlap ratios. Distinct from the Levenshtein-based Edit Distance tool. Everything runs locally in your browser.",
+    category: "Text",
+    icon: "≈",
+    added: "2026-07-12T04:20:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",

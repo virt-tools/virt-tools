@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>String Similarity — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .row { display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+    .row .lbl { min-width:90px; color:var(--text-dim,#9aa3b2); font-size:.85rem; }
+    .row input { font-family:ui-monospace,monospace; font-size:14px; padding:7px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; flex:1; min-width:120px; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; font-family:ui-monospace,monospace; }
+    .acts { display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; align-items:center; }
+    .acts button { padding:7px 12px; border-radius:6px; border:1px solid var(--border,#2a2f3a); background:var(--bg-elev,#171a21); color:var(--text,#e6e6e6); cursor:pointer; font-weight:600; font-size:.78rem; }
+    .acts button.primary { background:#1e3a5f; border-color:var(--accent,#5b8cff); }
+    h3 { margin:14px 0 4px; font-size:.9rem; color:var(--text-dim,#9aa3b2); text-transform:uppercase; letter-spacing:.04em; }
+    .out { font-family:ui-monospace,monospace; font-size:13px; background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:12px; margin:8px 0; line-height:1.9; }
+    .out .k { color:var(--text-dim,#9aa3b2); display:inline-block; min-width:180px; }
+    .out .v { color:var(--text,#e6e6e6); font-weight:700; }
+    .bar { height:8px; background:var(--bg,#14181f); border:1px solid var(--border,#2a2f3a); border-radius:4px; margin:4px 0 8px; overflow:hidden; }
+    .bar > i { display:block; height:100%; background:linear-gradient(90deg,#5b8cff,#5be0a0); }
+    .note2 { font-size:.78rem; color:var(--text-dim,#9aa3b2); margin:2px 0 10px; }
+    .big { font-family:ui-monospace,monospace; font-size:12px; color:var(--text-dim,#9aa3b2); line-height:1.7; word-break:break-all; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>String Similarity</h1>
+      <p>Compare two strings and quantify how alike they are with four standard similarity coefficients. <strong>Jaro</strong> and <strong>Jaro-Winkler</strong> measure similarity accounting for character matches within a window and transpositions, with Jaro-Winkler boosting strings that share a common prefix — they are the go-to metric for record linkage and typo-tolerant name matching. <strong>Sørensen-Dice</strong> and <strong>Jaccard</strong> compare the <em>character bigram</em> sets of the two strings as set-overlap ratios. All four return 0 (completely different) to 1 (identical). Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row"><span class="lbl">String A</span><input id="a" value="MARTHA"></div>
+      <div class="row"><span class="lbl">String B</span><input id="b" value="MARHTA"></div>
+      <div class="err" id="err"></div>
+      <div class="acts">
+        <button id="b-run" class="primary" type="button">Compare</button>
+        <button id="b-name" type="button">Names (DWAYNE/DUANE)</button>
+        <button id="b-typo" type="button">Typo (recieve/receive)</button>
+        <button id="b-swap" type="button">Swap A↔B</button>
+      </div>
+
+      <h3>Similarity scores</h3>
+      <div class="out" id="out">—</div>
+      <div id="bars"></div>
+
+      <h3>Bigrams</h3>
+      <div class="big" id="bigrams">—</div>
+
+      <p class="note" style="margin-top:14px"><strong>Jaro similarity</strong> counts characters that match within a sliding window of half the longer string's length, divides the number of out-of-order matches by two to get transpositions <em>t</em>, and returns (m/|a| + m/|b| + (m−t)/m)/3 where m is the match count. <strong>Jaro-Winkler</strong> adds a prefix bonus: J + ℓ·0.1·(1−J), where ℓ is the length of the common prefix (capped at 4) and the bonus only applies when J &gt; 0.7 (Winkler's boost threshold) — so "MARTHA"/"MARHTA" rises from Jaro 0.9444 to 0.9611. <strong>Sørensen-Dice</strong> and <strong>Jaccard</strong> operate on the multisets of character bigrams (overlapping 2-grams): Dice is 2·|A∩B|/(|A|+|B|), Jaccard is |A∩B|/|A∪B|; Dice weights shared bigrams more heavily. Both use multiset (min/max) counts so repeated bigrams are handled correctly. Pairs with the Edit Distance Calculator (Levenshtein/Hamming) and Text Diff tools. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    // ---- core (pure) ----
+    function jaro(s1, s2) {
+      if (s1 === s2) return 1;
+      if (s1.length === 0 && s2.length === 0) return 1;
+      if (s1.length === 0 || s2.length === 0) return 0;
+      var md = Math.floor(Math.max(s1.length, s2.length) / 2) - 1;
+      if (md < 0) md = 0;
+      var used = new Array(s2.length);
+      for (var i = 0; i < s2.length; i++) used[i] = false;
+      var s1m = [];
+      var m = 0;
+      for (var i2 = 0; i2 < s1.length; i2++) {
+        var lo = i2 - md; if (lo < 0) lo = 0;
+        var hi = i2 + md; if (hi > s2.length - 1) hi = s2.length - 1;
+        for (var j = lo; j <= hi; j++) {
+          if (!used[j] && s1.charAt(i2) === s2.charAt(j)) {
+            used[j] = true; s1m.push(s1.charAt(i2)); m++; break;
+          }
+        }
+      }
+      if (m === 0) return 0;
+      var s2matched = [];
+      for (var j2 = 0; j2 < s2.length; j2++) if (used[j2]) s2matched.push(s2.charAt(j2));
+      var t = 0;
+      for (var k = 0; k < s1m.length; k++) if (s1m[k] !== s2matched[k]) t++;
+      t = t / 2;
+      return (m / s1.length + m / s2.length + (m - t) / m) / 3;
+    }
+
+    function commonPrefix(a, b) {
+      var n = Math.min(a.length, b.length, 4);
+      var i = 0;
+      while (i < n && a.charAt(i) === b.charAt(i)) i++;
+      return i;
+    }
+
+    function jaroWinkler(s1, s2) {
+      var j = jaro(s1, s2);
+      if (j <= 0.7) return j;                 // Winkler boost threshold
+      var p = commonPrefix(s1, s2);
+      return j + p * 0.1 * (1 - j);
+    }
+
+    function bigrams(s) {
+      if (s.length < 2) return [];
+      var b = [];
+      for (var i = 0; i < s.length - 1; i++) b.push(s.substr(i, 2));
+      return b;
+    }
+
+    function countMap(arr) {
+      var c = {};
+      for (var i = 0; i < arr.length; i++) c[arr[i]] = (c[arr[i]] || 0) + 1;
+      return c;
+    }
+
+    function dice(s1, s2) {
+      var a = bigrams(s1), b = bigrams(s2);
+      if (a.length === 0 && b.length === 0) return s1 === s2 ? 1 : 0;  // degenerate: equal->1, diff->0
+      if (a.length === 0 || b.length === 0) return 0;
+      var ac = countMap(a), bc = countMap(b);
+      var inter = 0;
+      for (var k in ac) if (bc[k]) inter += Math.min(ac[k], bc[k]);
+      return 2 * inter / (a.length + b.length);
+    }
+
+    function jaccard(s1, s2) {
+      var a = bigrams(s1), b = bigrams(s2);
+      if (a.length === 0 && b.length === 0) return s1 === s2 ? 1 : 0;
+      if (a.length === 0 || b.length === 0) return 0;
+      var ac = countMap(a), bc = countMap(b);
+      var inter = 0, uni = 0;
+      var seen = {};
+      for (var k in ac) { seen[k] = 1; inter += Math.min(ac[k], bc[k] || 0); uni += Math.max(ac[k], bc[k] || 0); }
+      for (var k2 in bc) if (!seen[k2]) { uni += bc[k2]; }
+      return uni === 0 ? 0 : inter / uni;
+    }
+
+    // ---- DOM ----
+    function $(id) { return document.getElementById(id); }
+    var aEl = $("a"), bEl = $("b"), errEl = $("err"), outEl = $("out"), barsEl = $("bars"), bigEl = $("bigrams");
+
+    function row(label, val) {
+      var pct = (val * 100).toFixed(1);
+      return "<span class='k'>" + label + "</span><span class='v'>" + val.toFixed(4) + "</span> <span style='color:var(--text-dim)'>( " + pct + "% )</span>";
+    }
+
+    function run() {
+      errEl.textContent = "";
+      try {
+        var a = aEl.value, b = bEl.value;
+        var j = jaro(a, b), jw = jaroWinkler(a, b), d = dice(a, b), ja = jaccard(a, b);
+        outEl.innerHTML = row("Jaro", j) + "<br>" + row("Jaro-Winkler", jw) + "<br>" +
+          row("Sørensen-Dice (bigram)", d) + "<br>" + row("Jaccard (bigram)", ja);
+        var m = [["Jaro", j], ["Jaro-Winkler", jw], ["Sørensen-Dice", d], ["Jaccard", ja]];
+        barsEl.innerHTML = m.map(function (r) {
+          return "<div class='note2'>" + r[0] + "</div><div class='bar'><i style='width:" + (r[1] * 100).toFixed(1) + "%'></i></div>";
+        }).join("");
+        // bigrams
+        var ba = bigrams(a), bb = bigrams(b);
+        bigEl.innerHTML = "A bigrams (" + ba.length + "): " + (ba.join(" · ") || "—") + "<br>" +
+          "B bigrams (" + bb.length + "): " + (bb.join(" · ") || "—");
+      } catch (e) { errEl.textContent = e.message || String(e); }
+    }
+
+    $("b-run").addEventListener("click", run);
+    $("b-name").addEventListener("click", function () { aEl.value = "DWAYNE"; bEl.value = "DUANE"; run(); });
+    $("b-typo").addEventListener("click", function () { aEl.value = "recieve"; bEl.value = "receive"; run(); });
+    $("b-swap").addEventListener("click", function () { var t = aEl.value; aEl.value = bEl.value; bEl.value = t; run(); });
+    aEl.addEventListener("input", run); bEl.addEventListener("input", run);
+
+    run();
+
+    window.VT_SIM_TEST = {
+      jaro: jaro, jaroWinkler: jaroWinkler, commonPrefix: commonPrefix,
+      bigrams: bigrams, dice: dice, jaccard: jaccard
+    };
+  })();
+  </script>
+</body>
+</html>
