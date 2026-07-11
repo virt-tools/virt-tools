@@ -507,6 +507,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-11T22:00:00Z",
   },
   {
+    slug: "benford-law",
+    name: "Benford's Law Analyzer",
+    description: "Extract the leading digit of every number and compare the distribution to Benford's Law (P(d)=log10(1+1/d)) with a chi-square fit — a sanity check for naturally occurring data. Runs locally.",
+    category: "Data",
+    icon: "∆",
+    added: "2026-07-11T22:10:00Z",
+  },
+  {
     slug: "list-randomizer",
     name: "List Randomizer",
     description: "Shuffle a list, pick N unique items, or draw a single winner from newline- or comma-separated entries. An optional numeric seed makes the result reproducible. Fisher-Yates shuffle, runs locally.",

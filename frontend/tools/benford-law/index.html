@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Benford's Law Analyzer — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    textarea { width:100%; min-height:120px; font-family:ui-monospace,monospace; font-size:13px; padding:8px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; resize:vertical; box-sizing:border-box; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    h3 { margin:16px 0 4px; font-size:.9rem; color:var(--text-dim,#9aa3b2); text-transform:uppercase; letter-spacing:.04em; }
+    .info { font-family:ui-monospace,monospace; font-size:14px; background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:12px; margin:8px 0; line-height:1.9; }
+    .info .k { color:var(--text-dim,#9aa3b2); display:inline-block; min-width:150px; }
+    .info .v { color:var(--text,#e6e6e6); }
+    .info .big { color:var(--good,#4ade80); font-weight:700; }
+    .info .bad { color:var(--bad,#f87171); font-weight:700; }
+    .small { color:var(--text-dim,#9aa3b2); font-size:.82rem; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    .acts { display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; }
+    .acts button { padding:7px 12px; border-radius:6px; border:1px solid var(--border,#2a2f3a); background:var(--bg-elev,#171a21); color:var(--text,#e6e6e6); cursor:pointer; font-weight:600; font-size:.78rem; }
+    table { width:100%; border-collapse:collapse; font-family:ui-monospace,monospace; font-size:13px; margin:8px 0; }
+    th, td { padding:4px 8px; text-align:right; border-bottom:1px solid var(--border,#2a2f3a); }
+    th { color:var(--text-dim,#9aa3b2); font-weight:600; text-align:right; }
+    td.d { text-align:left; }
+    td.bar { text-align:left; }
+    .barobs { color:var(--good,#4ade80); }
+    .barexp { color:var(--text-dim,#9aa3b2); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Benford's Law Analyzer</h1>
+      <p><strong>Benford's Law</strong> says that in many naturally occurring datasets, the leading (first significant) digit is <code>1</code> about 30% of the time, <code>9</code> only about 4.6%, following <code>P(d) = log₁₀(1 + 1/d)</code>. This tool extracts the leading digit of every number you paste, compares the observed distribution to the Benford expectation, and reports a chi-square fit. Useful as a quick sanity check on accounting, population, or scientific data — large deviations can signal fabricated or constrained values. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <h3>Data (one number per line, or comma / space separated)</h3>
+      <textarea id="data" spellcheck="false">1245
+834
+312
+678
+92
+45
+1234
+89
+2105
+567
+4321
+178
+934
+61
+2889
+443
+1502
+76
+3
+521</textarea>
+      <div class="err" id="err"></div>
+
+      <div class="acts">
+        <button id="b-run" type="button">Analyze</button>
+        <button id="b-ex" type="button">Populations example</button>
+      </div>
+
+      <h3>Summary</h3>
+      <div class="info" id="summary">—</div>
+
+      <h3>Distribution</h3>
+      <div id="table-wrap">—</div>
+
+      <p class="note">For each value the tool takes the <strong>first significant digit</strong> (the leading nonzero digit, ignoring sign, decimal point, and leading zeros — so <code>0.0034 → 3</code>, <code>-12.5 → 1</code>, <code>340 → 3</code>). Zeros are excluded (they have no nonzero leading digit). <strong>Benford's expected proportion</strong> is <code>P(d) = log₁₀(1 + 1/d)</code> for d = 1…9, which sums to 1. The <strong>chi-square statistic</strong> is <code>χ² = Σ (O − E)² / E</code> with expected counts <code>E = n·P(d)</code> and 8 degrees of freedom (critical values: χ²₀.₀₅ ≈ 15.51, χ²₀.₀₁ ≈ 20.09). A high χ² relative to these doesn't prove anything, but flags the data as a poor Benford fit. Benford works best on positive data spanning several orders of magnitude; it does <em>not</em> apply to assigned IDs, uniform ranges, or data with a hard min/max. Pairs with the Statistics, Histogram, and Frequency tools. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var MAX_N = 100000;
+
+    function parseSeries(str) {
+      str = String(str == null ? "" : str).trim();
+      if (str === "") throw new Error("Enter some numbers (comma, space, or newline separated).");
+      var parts = str.split(/[\s,;]+/).filter(function (s) { return s !== ""; });
+      var out = [];
+      for (var i = 0; i < parts.length; i++) {
+        var v = Number(parts[i]);
+        if (!Number.isFinite(v)) throw new Error("Not a number: \"" + parts[i] + "\".");
+        out.push(v);
+      }
+      if (out.length > MAX_N) throw new Error("Too many values (max " + MAX_N + ").");
+      return out;
+    }
+
+    // First significant digit of n (1-9), or null if n is 0 / non-finite.
+    function leadingDigit(n) {
+      if (!Number.isFinite(n)) return null;
+      var a = Math.abs(n);
+      if (a === 0) return null;
+      var s = a.toExponential(); // "3.4e+2", "1.25e+1", "3.4e-3" — first char is the leading digit
+      var c = s.charCodeAt(0) - 48;
+      if (c < 1 || c > 9) return null;
+      return c;
+    }
+
+    // Benford expected proportion for digit d (1-9): log10(1 + 1/d).
+    function benfordExpected(d) {
+      return Math.log10(1 + 1 / d);
+    }
+
+    // Analyze a series: returns { n, counts[1..9], obsProp[1..9], expProp[1..9], chiSquare }.
+    function analyze(series) {
+      var counts = [0,0,0,0,0,0,0,0,0,0]; // index 0 unused, 1..9 used
+      var n = 0;
+      for (var i = 0; i < series.length; i++) {
+        var d = leadingDigit(series[i]);
+        if (d === null) continue;
+        counts[d]++;
+        n++;
+      }
+      var obsProp = [0,0,0,0,0,0,0,0,0,0];
+      var expProp = [0,0,0,0,0,0,0,0,0,0];
+      var chi = 0;
+      for (var d = 1; d <= 9; d++) {
+        expProp[d] = benfordExpected(d);
+        obsProp[d] = n > 0 ? counts[d] / n : 0;
+        var E = n * expProp[d];
+        if (E > 0) chi += (counts[d] - E) * (counts[d] - E) / E;
+      }
+      return { n: n, counts: counts, obsProp: obsProp, expProp: expProp, chiSquare: chi };
+    }
+
+    function fmtP(v) { return (v * 100).toFixed(2) + "%"; }
+    function fmt(v, d) { d = d == null ? 3 : d; return String(Number(v.toFixed(d))); }
+
+    // ASCII bar: observed (green) vs expected (grey), scaled to 40 chars at max prob.
+    function bar(prop, maxP) {
+      var w = Math.round((prop / maxP) * 40);
+      if (w < 0) w = 0; if (w > 40) w = 40;
+      var s = ""; for (var i = 0; i < w; i++) s += "█";
+      return s;
+    }
+
+    // ---- DOM ----
+    function $(id) { return document.getElementById(id); }
+    var dataEl = $("data"), errEl = $("err"), summaryEl = $("summary"), wrapEl = $("table-wrap");
+
+    function render() {
+      errEl.textContent = "";
+      summaryEl.textContent = "—"; wrapEl.textContent = "—";
+
+      var series;
+      try { series = parseSeries(dataEl.value); } catch (e) { errEl.textContent = e.message || String(e); return; }
+
+      var r = analyze(series);
+      var n = r.n;
+      var maxP = 0.30103; // digit 1 is the largest expected
+
+      if (n === 0) {
+        errEl.textContent = "No nonzero numbers found (zeros are excluded from Benford analysis).";
+        return;
+      }
+
+      // chi-square verdict (df=8)
+      var verdict, verdictCls;
+      if (r.chiSquare < 15.51) { verdict = "good fit (χ² < 15.51, p > 0.05)"; verdictCls = "big"; }
+      else if (r.chiSquare < 20.09) { verdict = "marginal fit (15.51 ≤ χ² < 20.09, 0.01 < p ≤ 0.05)"; verdictCls = "v"; }
+      else { verdict = "poor fit (χ² ≥ 20.09, p ≤ 0.01) — possible anomaly"; verdictCls = "bad"; }
+
+      summaryEl.innerHTML =
+        "<span class='k'>values analyzed</span> <span class='v'>" + n + "</span><br>" +
+        "<span class='k'>values skipped</span> <span class='v'>" + (series.length - n) + " (zeros)</span><br>" +
+        "<span class='k'>leading digit = 1</span> <span class='v'>" + fmtP(r.obsProp[1]) + " (expected " + fmtP(r.expProp[1]) + ")</span><br>" +
+        "<span class='k'>chi-square (df=8)</span> <span class='v'>" + fmt(r.chiSquare, 4) + "</span><br>" +
+        "<span class='k'>Benford fit</span> <span class='" + verdictCls + "'>" + verdict + "</span>";
+
+      // table
+      var html = "<table><tr><th class='d'>digit</th><th>count</th><th>observed</th><th>expected</th><th>deviation</th><th class='bar'>observed vs expected</th></tr>";
+      for (var d = 1; d <= 9; d++) {
+        var dev = r.obsProp[d] - r.expProp[d];
+        html += "<tr><td class='d'>" + d + "</td>" +
+          "<td>" + r.counts[d] + "</td>" +
+          "<td>" + fmtP(r.obsProp[d]) + "</td>" +
+          "<td>" + fmtP(r.expProp[d]) + "</td>" +
+          "<td style='color:" + (Math.abs(dev) > 0.03 ? "var(--bad,#f87171)" : "var(--good,#4ade80)") + "'>" + (dev >= 0 ? "+" : "") + (dev * 100).toFixed(2) + "%</td>" +
+          "<td class='bar'><span class='barobs'>" + bar(r.obsProp[d], maxP) + "</span> <span class='barexp'>" + bar(r.expProp[d], maxP) + "</span></td>" +
+          "</tr>";
+      }
+      html += "</table>";
+      html += "<p class='small'>green bar = observed, grey bar = Benford expected (scaled to P(1) ≈ 30.1%).</p>";
+      wrapEl.innerHTML = html;
+    }
+    $("b-run").addEventListener("click", render);
+    $("b-ex").addEventListener("click", function () {
+      // World's most populous cities — typical Benford-following data
+      dataEl.value = "37381653\n28538754\n24253806\n22163982\n20695287\n16573990\n16421366\n16400905\n16048739\n15625792\n15108511\n14856771\n14781520\n14527517\n13741638\n13497702\n13362465\n13163971\n13128489\n12896562\n12594516\n12386000";
+      render();
+    });
+    dataEl.addEventListener("input", render);
+
+    render();
+
+    window.VT_BENFORD_TEST = {
+      parseSeries: parseSeries, leadingDigit: leadingDigit,
+      benfordExpected: benfordExpected, analyze: analyze
+    };
+  })();
+  </script>
+</body>
+</html>
