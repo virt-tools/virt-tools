@@ -1211,6 +1211,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-04T06:20:00Z",
   },
   {
+    slug: "verhoeff-check-digit",
+    name: "Verhoeff Check Digit",
+    description: "Compute or validate a Verhoeff check digit — a decimal check digit scheme that, unlike Luhn, detects every single-digit error AND every adjacent-digit transposition (e.g. 12 → 21), plus most twin and jump-transposition errors. Works in the dihedral group D5 with a permutation table. Compute the check digit for a number body, or validate a number with its check digit appended. Pairs with the Luhn Validator, ISBN Validator, and IBAN Validator tools. Everything runs locally — nothing leaves your browser.",
+    category: "Security",
+    icon: "⌖",
+    added: "2026-07-11T21:40:00Z",
+  },
+  {
     slug: "coordinate-converter",
     name: "Geographic Coordinate Converter",
     description: "Convert between decimal degrees (e.g. 48.85822) and degrees/minutes/seconds (e.g. 48° 51′ 29.6″ N) for latitude and longitude — with hemisphere handling and range validation. Pure arithmetic, in your browser.",
