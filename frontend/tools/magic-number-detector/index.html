@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>File Signature Detector — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .row { display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+    .row .lbl { min-width:130px; color:var(--text-dim,#9aa3b2); font-size:.85rem; }
+    .row input { font-family:ui-monospace,monospace; font-size:14px; padding:7px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; }
+    .row input.hex { width:340px; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    .acts { display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; }
+    .acts button { padding:8px 18px; border-radius:6px; border:1px solid var(--accent,#6ea8fe); background:var(--accent,#6ea8fe); color:#0b0d12; cursor:pointer; font-weight:700; font-size:.85rem; }
+    .acts button.ghost { background:var(--bg-elev,#171a21); color:var(--text,#e6e6e6); border-color:var(--border,#2a2f3a); font-weight:600; }
+    h3 { margin:16px 0 4px; font-size:.9rem; color:var(--text-dim,#9aa3b2); text-transform:uppercase; letter-spacing:.04em; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    .drop { border:2px dashed var(--border,#2a2f3a); border-radius:8px; padding:24px; text-align:center; color:var(--text-dim,#9aa3b2); margin:8px 0; cursor:pointer; }
+    .drop.over { border-color:var(--accent,#6ea8fe); color:var(--accent,#6ea8fe); }
+    .out { font-family:ui-monospace,monospace; font-size:14px; background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:12px; margin:8px 0; line-height:1.7; word-break:break-all; }
+    .out .name { color:var(--accent,#6ea8fe); font-weight:700; }
+    .out .mime { color:var(--good,#4ade80); }
+    .out .ext { color:#f0c674; }
+    .out .sig { color:var(--text-dim,#9aa3b2); }
+    .out small { color:var(--text-dim,#9aa3b2); font-size:.78rem; }
+    .bad { color:var(--bad,#f87171); font-weight:700; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>File Signature Detector</h1>
+      <p>Identify a file's true type from its <strong>magic number</strong> — the distinctive leading bytes that every format writes at a known offset — rather than trusting the (easily forged) file extension. Drop a file or paste its leading bytes as hex; the tool reads only the first kilobyte locally and matches it against common signatures. Nothing is uploaded — the file never leaves your browser.</p>
+    </div>
+
+    <div class="panel">
+      <h3>From a file</h3>
+      <div class="drop" id="drop">Drop a file here, or click to choose — only the first 1&nbsp;KB is read</div>
+      <input type="file" id="file" style="display:none">
+      <div class="out" id="fout">—</div>
+
+      <h3>From hex bytes</h3>
+      <div class="row"><span class="lbl">Leading bytes (hex)</span><input type="text" id="hex" class="hex" spellcheck="false" placeholder="e.g. 89 50 4E 47 0D 0A 1A 0A"></div>
+      <div class="err" id="err"></div>
+      <div class="acts"><button id="b-detect" type="button">Detect</button></div>
+      <div class="out" id="hout">—</div>
+
+      <p class="note">A file's <strong>magic number</strong> is a fixed byte sequence a format writes at a known offset (usually the start), so the operating system and applications can identify the type regardless of the extension. This tool compares the leading bytes of your input against a built-in table of ~30 common signatures (images, archives, documents, audio/video, executables). It reads only the first <strong>1&nbsp;KB</strong> of any dropped file (enough to cover every signature, the furthest being the <code>ustar</code> marker at byte 257 of a tar archive). Some formats share a container — <strong>WAV</strong> and <strong>WebP</strong> both begin with <code>RIFF</code>, and <strong>MP4/M4A/HEIC/AVIF</strong> all carry an <code>ftyp</code> box at byte 4 — so the detector also checks the distinguishing brand at byte 8. It cannot identify plain-text formats (JSON, CSV, source code) by content alone, since they have no magic bytes. Pairs with the MIME-type lookup (extension-based) and hex viewer. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    // Signatures ordered most-specific / longest first. Each: {offset, bytes, name, mime, ext}.
+    var SIGNATURES = [
+      { offset: 0, bytes: [0x89,0x50,0x4E,0x47,0x0D,0x0A,0x1A,0x0A], name: "PNG image", mime: "image/png", ext: "png" },
+      { offset: 0, bytes: [0xFF,0xD8,0xFF], name: "JPEG image", mime: "image/jpeg", ext: "jpg" },
+      { offset: 0, bytes: [0x47,0x49,0x46,0x38,0x37,0x61], name: "GIF image (87a)", mime: "image/gif", ext: "gif" },
+      { offset: 0, bytes: [0x47,0x49,0x46,0x38,0x39,0x61], name: "GIF image (89a)", mime: "image/gif", ext: "gif" },
+      { offset: 0, bytes: [0x42,0x4D], name: "BMP image", mime: "image/bmp", ext: "bmp" },
+      { offset: 0, bytes: [0x00,0x00,0x01,0x00], name: "ICO icon", mime: "image/x-icon", ext: "ico" },
+      { offset: 0, bytes: [0x38,0x42,0x50,0x53], name: "Photoshop document", mime: "image/vnd.adobe.photoshop", ext: "psd" },
+      { offset: 0, bytes: [0x49,0x49,0x2A,0x00], name: "TIFF image (little-endian)", mime: "image/tiff", ext: "tif" },
+      { offset: 0, bytes: [0x4D,0x4D,0x00,0x2A], name: "TIFF image (big-endian)", mime: "image/tiff", ext: "tif" },
+      // RIFF containers — distinguished by the 4 bytes at offset 8.
+      { offset: 8, bytes: [0x57,0x41,0x56,0x45], name: "Wave audio (RIFF/WAVE)", mime: "audio/wav", ext: "wav" },
+      { offset: 8, bytes: [0x57,0x45,0x42,0x50], name: "WebP image (RIFF/WEBP)", mime: "image/webp", ext: "webp" },
+      { offset: 8, bytes: [0x41,0x56,0x49,0x20], name: "AVI video (RIFF/AVI )", mime: "video/x-msvideo", ext: "avi" },
+      // ISO BMFF — ftyp box at offset 4; brand at offset 8 refines.
+      { offset: 4, bytes: [0x66,0x74,0x79,0x70,0x68,0x65,0x69,0x63], name: "HEIC image (ftyp heic)", mime: "image/heic", ext: "heic" },
+      { offset: 4, bytes: [0x66,0x74,0x79,0x70,0x61,0x76,0x69,0x66], name: "AVIF image (ftyp avif)", mime: "image/avif", ext: "avif" },
+      { offset: 4, bytes: [0x66,0x74,0x79,0x70,0x71,0x74,0x20], name: "QuickTime movie (ftyp qt)", mime: "video/quicktime", ext: "mov" },
+      { offset: 4, bytes: [0x66,0x74,0x79,0x70], name: "ISO BMFF / MP4 family (ftyp)", mime: "video/mp4", ext: "mp4" },
+      { offset: 0, bytes: [0x25,0x50,0x44,0x46], name: "PDF document", mime: "application/pdf", ext: "pdf" },
+      { offset: 0, bytes: [0x50,0x4B,0x03,0x04], name: "ZIP archive", mime: "application/zip", ext: "zip" },
+      { offset: 0, bytes: [0x50,0x4B,0x05,0x06], name: "ZIP (empty) archive", mime: "application/zip", ext: "zip" },
+      { offset: 0, bytes: [0x50,0x4B,0x07,0x08], name: "ZIP archive (spanned)", mime: "application/zip", ext: "zip" },
+      { offset: 0, bytes: [0x52,0x61,0x72,0x21,0x1A,0x07,0x01,0x00], name: "RAR archive (v5)", mime: "application/x-rar", ext: "rar" },
+      { offset: 0, bytes: [0x52,0x61,0x72,0x21,0x1A,0x07,0x00], name: "RAR archive (v4)", mime: "application/x-rar", ext: "rar" },
+      { offset: 0, bytes: [0x37,0x7A,0xBC,0xAF,0x27,0x1C], name: "7-Zip archive", mime: "application/x-7z-compressed", ext: "7z" },
+      { offset: 0, bytes: [0x1F,0x8B], name: "GZIP archive", mime: "application/gzip", ext: "gz" },
+      { offset: 0, bytes: [0x42,0x5A,0x68], name: "Bzip2 archive", mime: "application/x-bzip2", ext: "bz2" },
+      { offset: 0, bytes: [0xFD,0x37,0x7A,0x58,0x5A,0x00], name: "XZ archive", mime: "application/x-xz", ext: "xz" },
+      { offset: 257, bytes: [0x75,0x73,0x74,0x61,0x72], name: "tar archive (ustar)", mime: "application/x-tar", ext: "tar" },
+      { offset: 0, bytes: [0x53,0x51,0x4C,0x69,0x74,0x65,0x20,0x66,0x6F,0x72,0x6D,0x61,0x74,0x20,0x33,0x00], name: "SQLite database", mime: "application/vnd.sqlite3", ext: "sqlite" },
+      { offset: 0, bytes: [0x4F,0x67,0x67,0x53], name: "Ogg media", mime: "audio/ogg", ext: "ogg" },
+      { offset: 0, bytes: [0x66,0x4C,0x61,0x43], name: "FLAC audio", mime: "audio/flac", ext: "flac" },
+      { offset: 0, bytes: [0x49,0x44,0x33], name: "MP3 audio (ID3)", mime: "audio/mpeg", ext: "mp3" },
+      { offset: 0, bytes: [0xFF,0xFB], name: "MP3 audio (frame)", mime: "audio/mpeg", ext: "mp3" },
+      { offset: 0, bytes: [0x77,0x4F,0x46,0x46], name: "WOFF font", mime: "font/woff", ext: "woff" },
+      { offset: 0, bytes: [0x77,0x4F,0x46,0x32], name: "WOFF2 font", mime: "font/woff2", ext: "woff2" },
+      { offset: 0, bytes: [0x7F,0x45,0x4C,0x46], name: "ELF executable", mime: "application/x-elf", ext: "elf" },
+      { offset: 0, bytes: [0xCA,0xFE,0xBA,0xBE], name: "Java class file", mime: "application/x-java", ext: "class" },
+      { offset: 0, bytes: [0x4D,0x5A], name: "DOS/PE executable (MZ)", mime: "application/x-dosexec", ext: "exe" },
+      { offset: 0, bytes: [0x3C,0x3F,0x78,0x6D,0x6C], name: "XML document", mime: "application/xml", ext: "xml" }
+    ];
+
+    function matchAt(bytes, offset, pattern) {
+      if (bytes.length < offset + pattern.length) return false;
+      for (var i = 0; i < pattern.length; i++) if (bytes[offset + i] !== pattern[i]) return false;
+      return true;
+    }
+
+    // Pure detection over a byte array. Returns {name, mime, ext, offset} or null.
+    function detect(bytes) {
+      if (!bytes || bytes.length === 0) return null;
+      for (var i = 0; i < SIGNATURES.length; i++) {
+        var s = SIGNATURES[i];
+        if (matchAt(bytes, s.offset, s.bytes)) {
+          return { name: s.name, mime: s.mime, ext: s.ext, offset: s.offset };
+        }
+      }
+      return null;
+    }
+
+    function hexToBytes(hex) {
+      var s = String(hex).replace(/\s+/g, "");
+      if (s.length === 0) return new Uint8Array(0);
+      if (s.length % 2 !== 0 || !/^[0-9a-fA-F]*$/.test(s)) return null;
+      var a = new Uint8Array(s.length / 2);
+      for (var i = 0; i < a.length; i++) a[i] = parseInt(s.substr(i * 2, 2), 16);
+      return a;
+    }
+    function bytesToHex(a, max) {
+      var s = "";
+      for (var i = 0; i < a.length && i < max; i++) s += (a[i] < 16 ? "0" : "") + a[i].toString(16) + " ";
+      return s.trim();
+    }
+
+    // ---- DOM ----
+    function $(id) { return document.getElementById(id); }
+    var dropEl = $("drop"), fileEl = $("file"), foutEl = $("fout");
+    var hexEl = $("hex"), errEl = $("err"), houtEl = $("hout");
+
+    function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+    function renderDetect(bytes, outEl) {
+      var r = detect(bytes);
+      if (!r) {
+        outEl.innerHTML = '<span class="bad">✗ Unknown signature</span> — no matching magic number in the first ' + bytes.length + ' bytes. (Plain-text formats like JSON/CSV have no magic bytes.)';
+        return;
+      }
+      outEl.innerHTML = '<div><span class="name">' + esc(r.name) + '</span> <small>(match at byte ' + r.offset + ')</small></div>' +
+        '<div>MIME: <span class="mime">' + esc(r.mime) + '</span></div>' +
+        '<div>Extension: <span class="ext">.' + esc(r.ext) + '</span></div>';
+    }
+
+    function renderHex() {
+      errEl.textContent = "";
+      var bytes = hexToBytes(hexEl.value);
+      if (bytes == null) { errEl.textContent = "Enter valid hex bytes (e.g. 89 50 4E 47…)."; houtEl.textContent = "—"; return; }
+      if (bytes.length === 0) { houtEl.textContent = "—"; return; }
+      renderDetect(bytes, houtEl);
+    }
+
+    // File input: read first 1 KB.
+    function readFile(file) {
+      if (!file) return;
+      var slice = file.slice(0, 1024);
+      var reader = new FileReader();
+      reader.onload = function (e) {
+        var bytes = new Uint8Array(e.target.result);
+        foutEl.innerHTML = '<div class="sig"><small>' + esc(file.name) + ' · ' + file.size.toLocaleString() + ' bytes · first ' + bytes.length + ' bytes read:</small><br>' + esc(bytesToHex(bytes, 32)) + (bytes.length > 32 ? ' …' : '') + '</div>';
+        renderDetect(bytes, foutEl);
+      };
+      reader.onerror = function () { foutEl.innerHTML = '<span class="bad">✗ Could not read the file.</span>'; };
+      reader.readAsArrayBuffer(slice);
+    }
+
+    fileEl.addEventListener("change", function () { readFile(fileEl.files[0]); });
+    dropEl.addEventListener("click", function () { fileEl.click(); });
+    dropEl.addEventListener("dragover", function (e) { e.preventDefault(); dropEl.classList.add("over"); });
+    dropEl.addEventListener("dragleave", function () { dropEl.classList.remove("over"); });
+    dropEl.addEventListener("drop", function (e) {
+      e.preventDefault(); dropEl.classList.remove("over");
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) readFile(e.dataTransfer.files[0]);
+    });
+    $("b-detect").addEventListener("click", renderHex);
+    hexEl.addEventListener("input", renderHex);
+
+    window.VT_MAGIC_TEST = {
+      SIGNATURES: SIGNATURES, detect: detect, matchAt: matchAt,
+      hexToBytes: hexToBytes, bytesToHex: bytesToHex
+    };
+  })();
+  </script>
+</body>
+</html>

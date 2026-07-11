@@ -179,6 +179,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-04T02:00:00Z",
   },
   {
+    slug: "magic-number-detector",
+    name: "File Signature Detector",
+    description: "Identify a file's true type from its magic number (leading bytes), not its extension — drop a file or paste hex; reads only the first 1 KB locally and matches ~30 common signatures.",
+    category: "System",
+    icon: "🔍",
+    added: "2026-07-11T07:40:00Z",
+  },
+  {
     slug: "http-status-codes",
     name: "HTTP Status Code Reference",
     description: "Look up HTTP response status codes by number or meaning — static reference, runs locally.",
