@@ -1123,6 +1123,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-11T22:30:00Z",
   },
   {
+    slug: "huffman-coding",
+    name: "Huffman Coding",
+    description: "Build an optimal prefix-free binary code from a text's symbol frequencies (frequent symbols get short codes), show each symbol's code, encode the text to a bit string, and decode it back. Reports entropy and compression vs 8-bit ASCII. Pairs with Run-Length Encoding and Burrows-Wheeler. Runs locally.",
+    category: "Encoding",
+    icon: "⌗",
+    added: "2026-07-11T22:40:00Z",
+  },
+  {
     slug: "ascii85",
     name: "Ascii85 Encoder / Decoder",
     description: "Encode and decode Ascii85 (Base85) — the 4-to-5 byte encoding used in PDF/PostScript and btoa, with Adobe ~ terminator framing and z zero-group compression. Runs locally; nothing uploaded.",

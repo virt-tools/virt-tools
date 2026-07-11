@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Huffman Coding — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    textarea { width:100%; min-height:90px; font-family:ui-monospace,monospace; font-size:13px; padding:8px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; resize:vertical; box-sizing:border-box; }
+    .row { display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+    .row .lbl { min-width:120px; color:var(--text-dim,#9aa3b2); font-size:.85rem; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    h3 { margin:16px 0 4px; font-size:.9rem; color:var(--text-dim,#9aa3b2); text-transform:uppercase; letter-spacing:.04em; }
+    .info { font-family:ui-monospace,monospace; font-size:13px; background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:12px; margin:8px 0; line-height:1.8; word-break:break-all; }
+    .info .k { color:var(--text-dim,#9aa3b2); display:inline-block; min-width:200px; }
+    .info .v { color:var(--text,#e6e6e6); }
+    .info .big { color:var(--good,#4ade80); font-weight:700; word-break:break-all; }
+    .small { color:var(--text-dim,#9aa3b2); font-size:.82rem; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    .acts { display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; }
+    .acts button { padding:7px 12px; border-radius:6px; border:1px solid var(--border,#2a2f3a); background:var(--bg-elev,#171a21); color:var(--text,#e6e6e6); cursor:pointer; font-weight:600; font-size:.78rem; }
+    table { width:100%; border-collapse:collapse; font-family:ui-monospace,monospace; font-size:12px; margin:8px 0; }
+    th, td { padding:4px 8px; text-align:left; border-bottom:1px solid var(--border,#2a2f3a); }
+    th { color:var(--text-dim,#9aa3b2); font-weight:600; }
+    td.sym { white-space:nowrap; }
+    td.code { color:var(--good,#4ade80); }
+    .esc { color:var(--text-dim,#9aa3b2); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Huffman Coding</h1>
+      <p><strong>Huffman coding</strong> builds an optimal prefix-free binary code from a text's symbol frequencies: frequent symbols get short codes, rare ones long. This tool computes the frequency table, builds the Huffman tree, shows each symbol's code, encodes the text to a bit string, and decodes it back. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <h3>Input text</h3>
+      <textarea id="text" spellcheck="false">the quick brown fox jumps over the lazy dog</textarea>
+      <div class="err" id="err"></div>
+
+      <div class="acts">
+        <button id="b-run" type="button">Encode</button>
+        <button id="b-ex" type="button">Example</button>
+      </div>
+
+      <h3>Code table</h3>
+      <div id="table-wrap">—</div>
+
+      <h3>Encoded output</h3>
+      <div class="info" id="out">—</div>
+
+      <h3>Statistics</h3>
+      <div class="info" id="stats">—</div>
+
+      <p class="note"><strong>Huffman's algorithm</strong> repeatedly merges the two lowest-frequency nodes into a parent whose frequency is their sum, until one tree remains; walking it with left = <code>0</code>, right = <code>1</code> yields the codes. By construction no code is a prefix of another (so decoding is unambiguous), and the weighted code length <code>Σ freqᵢ · |codeᵢ|</code> is minimal among prefix codes. The <strong>Shannon entropy</strong> <code>H = −Σ pᵢ log₂ pᵢ</code> is the information-theoretic lower bound; Huffman's average length satisfies <code>H ≤ L &lt; H + 1</code> bits/symbol. A single distinct symbol is given the code <code>0</code>. Pairs with the Run-Length Encoding and Burrows-Wheeler Transform tools. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var MAX_N = 200000;
+
+    // Frequency table: returns array of {sym (char code), ch (display), freq} sorted by char code.
+    function freqTable(text) {
+      text = String(text == null ? "" : text);
+      if (text.length === 0) throw new Error("Enter some text.");
+      if (text.length > MAX_N) throw new Error("Input too long (max " + MAX_N + " characters).");
+      var map = {};
+      for (var i = 0; i < text.length; i++) {
+        var c = text.charCodeAt(i);
+        map[c] = (map[c] || 0) + 1;
+      }
+      var arr = [];
+      var keys = Object.keys(map).map(Number).sort(function (a, b) { return a - b; });
+      for (var k = 0; k < keys.length; k++) {
+        arr.push({ sym: keys[k], ch: String.fromCharCode(keys[k]), freq: map[keys[k]] });
+      }
+      return arr;
+    }
+
+    // Build the Huffman tree from a frequency array. Deterministic: ties broken by
+    // insertion order (leaves first in ascending char-code order, then internals).
+    // Returns the root node { freq, left, right, sym } (leaf has sym set, no children).
+    function buildTree(freqs) {
+      if (freqs.length === 0) throw new Error("No symbols.");
+      // nodes with a monotonically increasing id for stable tie-breaking
+      var nodes = [];
+      var id = 0;
+      for (var i = 0; i < freqs.length; i++) {
+        nodes.push({ id: id++, freq: freqs[i].freq, sym: freqs[i].sym, ch: freqs[i].ch, left: null, right: null });
+      }
+      if (nodes.length === 1) {
+        // single distinct symbol: wrap so it gets a code "0"
+        var only = nodes[0];
+        return { id: id++, freq: only.freq, sym: null, ch: null, left: only, right: null };
+      }
+      while (nodes.length > 1) {
+        // find two smallest by (freq, id)
+        // simple O(n) selection — n is alphabet size (≤ 65536, usually small)
+        var i1 = 0;
+        for (var a = 1; a < nodes.length; a++) if (cmp(nodes[a], nodes[i1]) < 0) i1 = a;
+        var first = nodes.splice(i1, 1)[0];
+        var i2 = 0;
+        for (var b = 1; b < nodes.length; b++) if (cmp(nodes[b], nodes[i2]) < 0) i2 = b;
+        var second = nodes.splice(i2, 1)[0];
+        var parent = { id: id++, freq: first.freq + second.freq, sym: null, ch: null,
+          left: first, right: second };
+        nodes.push(parent);
+      }
+      return nodes[0];
+    }
+    function cmp(x, y) { if (x.freq !== y.freq) return x.freq - y.freq; return x.id - y.id; }
+
+    // Build code map: { symCode: "0101" }. left = '0', right = '1'.
+    function buildCodes(tree) {
+      var codes = {};
+      if (!tree) return codes;
+      // single-symbol case: tree.left is the only leaf, tree.right null
+      if (tree.sym === null && tree.left && !tree.right) {
+        codes[tree.left.sym] = "0";
+        return codes;
+      }
+      function walk(node, prefix) {
+        if (node.sym !== null && node.sym !== undefined) {
+          codes[node.sym] = prefix.length ? prefix : "0";
+          return;
+        }
+        walk(node.left, prefix + "0");
+        walk(node.right, prefix + "1");
+      }
+      walk(tree, "");
+      return codes;
+    }
+
+    // Encode text to a bit string using codes.
+    function encode(text, codes) {
+      text = String(text == null ? "" : text);
+      var bits = "";
+      for (var i = 0; i < text.length; i++) {
+        var c = text.charCodeAt(i);
+        if (!(c in codes)) throw new Error("No code for symbol " + c + " — rebuild the tree.");
+        bits += codes[c];
+      }
+      return bits;
+    }
+
+    // Decode a bit string back to text using the tree.
+    function decode(bits, tree) {
+      bits = String(bits == null ? "" : bits);
+      if (bits.length === 0) return "";
+      // validate bits
+      for (var v = 0; v < bits.length; v++) if (bits[v] !== "0" && bits[v] !== "1")
+        throw new Error("Bit string must contain only 0 and 1.");
+      var out = "";
+      // single-symbol tree
+      if (tree.sym === null && tree.left && !tree.right) {
+        var leaf = tree.left;
+        for (var s = 0; s < bits.length; s++) {
+          if (bits[s] !== "0") throw new Error("Invalid bit for single-symbol code.");
+          out += leaf.ch;
+        }
+        return out;
+      }
+      var node = tree;
+      for (var i = 0; i < bits.length; i++) {
+        node = bits[i] === "0" ? node.left : node.right;
+        if (!node) throw new Error("Invalid bit sequence (ran off the tree).");
+        if (node.sym !== null && node.sym !== undefined) {
+          out += node.ch;
+          node = tree;
+        }
+      }
+      if (node !== tree) throw new Error("Bit sequence ended mid-code.");
+      return out;
+    }
+
+    // Entropy in bits/symbol from freqs.
+    function entropy(freqs) {
+      var total = 0;
+      for (var i = 0; i < freqs.length; i++) total += freqs[i].freq;
+      if (total === 0) return 0;
+      var h = 0;
+      for (var j = 0; j < freqs.length; j++) {
+        var p = freqs[j].freq / total;
+        if (p > 0) h -= p * Math.log2(p);
+      }
+      return h;
+    }
+
+    function escapeCh(ch) {
+      if (ch === " ") return "␣";
+      if (ch === "\n") return "⏎";
+      if (ch === "\t") return "⇥";
+      if (ch.charCodeAt(0) < 32) return "·";
+      return ch.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+    function escapeHtml(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+    // ---- DOM ----
+    function $(id) { return document.getElementById(id); }
+    var textEl = $("text"), errEl = $("err"), wrapEl = $("table-wrap"), outEl = $("out"), statsEl = $("stats");
+
+    function render() {
+      errEl.textContent = "";
+      wrapEl.textContent = "—"; outEl.textContent = "—"; statsEl.textContent = "—";
+      var text, freqs, tree, codes;
+      try {
+        text = textEl.value;
+        freqs = freqTable(text);
+        tree = buildTree(freqs);
+        codes = buildCodes(tree);
+      } catch (e) { errEl.textContent = e.message || String(e); return; }
+
+      // code table sorted by frequency desc, then char code
+      var sorted = freqs.slice().sort(function (a, b) {
+        if (b.freq !== a.freq) return b.freq - a.freq;
+        return a.sym - b.sym;
+      });
+      var html = "<table><tr><th>symbol</th><th>code</th><th>freq</th><th>bits</th><th>contrib</th></tr>";
+      for (var i = 0; i < sorted.length; i++) {
+        var s = sorted[i];
+        var code = codes[s.sym];
+        html += "<tr><td class='sym'>" + escapeCh(s.ch) + " <span class='esc'>(" + s.sym + ")</span></td>" +
+          "<td class='code'>" + escapeHtml(code) + "</td>" +
+          "<td>" + s.freq + "</td><td>" + code.length + "</td><td>" + (s.freq * code.length) + "</td></tr>";
+      }
+      html += "</table>";
+      wrapEl.innerHTML = html;
+
+      var bits;
+      try { bits = encode(text, codes); } catch (e) { errEl.textContent = e.message || String(e); return; }
+      // round-trip check
+      var roundOk = false, roundMsg = "";
+      try { roundOk = decode(bits, tree) === text; }
+      catch (e) { roundMsg = e.message || String(e); }
+
+      outEl.innerHTML =
+        "<span class='k'>bit string (" + bits.length + " bits):</span><br>" +
+        "<span class='big'>" + (bits.length <= 4096 ? escapeHtml(bits) : escapeHtml(bits.slice(0, 4096)) + " … (truncated for display)") + "</span><br>" +
+        "<span class='small'>round-trip: " + (roundOk ? "<span style='color:var(--good,#4ade80)'>verified ✓</span>" : "<span style='color:var(--bad,#f87171)'>MISMATCH (" + escapeHtml(roundMsg) + ")</span>") + "</span>";
+
+      var n = text.length;
+      var totalBits = bits.length;
+      var avgLen = n > 0 ? totalBits / n : 0;
+      var H = entropy(freqs);
+      var asciiBits = n * 8;
+      statsEl.innerHTML =
+        "<span class='k'>symbols (chars)</span> <span class='v'>" + n + "</span><br>" +
+        "<span class='k'>distinct symbols</span> <span class='v'>" + freqs.length + "</span><br>" +
+        "<span class='k'>total code bits</span> <span class='v'>" + totalBits + "</span><br>" +
+        "<span class='k'>avg length</span> <span class='v'>" + avgLen.toFixed(4) + " bits/symbol</span><br>" +
+        "<span class='k'>Shannon entropy H</span> <span class='v'>" + H.toFixed(4) + " bits/symbol</span><br>" +
+        "<span class='k'>vs 8-bit ASCII</span> <span class='v'>" + asciiBits + " bits → " + totalBits + " bits (" +
+        (asciiBits > 0 ? ((100 * totalBits / asciiBits).toFixed(1)) : "0") + "% of original)</span><br>" +
+        "<span class='k'>H ≤ L &lt; H+1</span> <span class='v'>" +
+        (H <= avgLen + 1e-9 && avgLen < H + 1 + 1e-9 ? "<span style='color:var(--good,#4ade80)'>holds ✓</span>" : "<span style='color:var(--bad,#f87171)'>violated</span>") + "</span>";
+    }
+    $("b-run").addEventListener("click", render);
+    $("b-ex").addEventListener("click", function () {
+      textEl.value = "abracadabra";
+      render();
+    });
+    textEl.addEventListener("input", render);
+
+    render();
+
+    window.VT_HUFFMAN_TEST = {
+      freqTable: freqTable, buildTree: buildTree, buildCodes: buildCodes,
+      encode: encode, decode: decode, entropy: entropy
+    };
+  })();
+  </script>
+</body>
+</html>
