@@ -2467,6 +2467,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T02:00:00Z",
   },
   {
+    slug: "elementary-ca",
+    name: "Elementary Cellular Automaton",
+    description: "Run a one-dimensional elementary cellular automaton — the simplest class of cellular automata, where each cell's next state depends on its three-cell neighborhood via a single 8-bit Wolfram rule number (0–255). Watch generations stack downward as the rule plays out from a single live cell or a random start, with a full rule-table display. Includes the iconic rules: 30 (chaotic, pseudo-random), 90 (the Sierpinski triangle), 110 (Turing-complete), and 184 (traffic flow), with optional toroidal wrapping. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "▣",
+    added: "2026-07-12T02:10:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
