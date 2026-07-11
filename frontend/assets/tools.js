@@ -2131,6 +2131,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-11T19:40:00Z",
   },
   {
+    slug: "pythagorean-triples",
+    name: "Pythagorean Triple Generator",
+    description: "Generate primitive Pythagorean triples (a, b, c) with a² + b² = c² using Euclid's formula — every primitive triple arises exactly once from coprime m > n of opposite parity. List all primitive triples up to a maximum hypotenuse, and test whether a given triple is Pythagorean and whether it is primitive. All arithmetic uses exact big integers. Distinct from the Triangle Solver. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "△",
+    added: "2026-07-11T19:50:00Z",
+  },
+  {
     slug: "volume-surface-area",
     name: "Volume & Surface Area Calculator",
     description: "Compute the volume and total surface area of common 3D shapes — cube, cuboid (box), sphere, cylinder, cone, square pyramid, and hemisphere — from their dimensions, with the formulas shown. Pick a shape, enter its dimensions, and the volume and total surface area are calculated live. Surface area is the total (a cylinder includes both ends, a cone and pyramid include the base, a hemisphere includes its flat face). Pairs with the Triangle Solver and Trigonometry tools for geometry work. Everything runs locally in your browser.",
