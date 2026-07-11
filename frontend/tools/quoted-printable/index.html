@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Quoted-Printable — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .row { display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+    .row .lbl { min-width:130px; color:var(--text-dim,#9aa3b2); font-size:.85rem; }
+    .row input, .row select { font-family:ui-monospace,monospace; font-size:14px; padding:7px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; }
+    .row input.num { width:90px; }
+    textarea { width:100%; min-height:120px; font-family:ui-monospace,monospace; font-size:13px; padding:8px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; resize:vertical; box-sizing:border-box; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    .acts { display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; }
+    .acts button { padding:8px 18px; border-radius:6px; border:1px solid var(--accent,#6ea8fe); background:var(--accent,#6ea8fe); color:#0b0d12; cursor:pointer; font-weight:700; font-size:.85rem; }
+    .acts button.ghost { background:var(--bg-elev,#171a21); color:var(--text,#e6e6e6); border-color:var(--border,#2a2f3a); font-weight:600; }
+    h3 { margin:16px 0 4px; font-size:.9rem; color:var(--text-dim,#9aa3b2); text-transform:uppercase; letter-spacing:.04em; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    .small { color:var(--text-dim,#9aa3b2); font-size:.78rem; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Quoted-Printable Encoder / Decoder</h1>
+      <p>Encode and decode <strong>Quoted-Printable</strong> (RFC 2045), the MIME transfer encoding used to send mostly-text data over 7-bit email channels. Printable ASCII passes through unchanged; bytes outside that range — and the <code>=</code> marker itself — are written as <code>=XX</code> hex, and long lines are wrapped with <em>soft</em> breaks that disappear on decode. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <h3>Encode</h3>
+      <div class="row"><span class="lbl">Max line length</span><input type="text" id="maxline" class="num" inputmode="numeric" value="76">
+        <label class="small"><input type="checkbox" id="wrap" checked> soft-wrap lines</label></div>
+      <textarea id="enc-in" spellcheck="false" placeholder="Text to encode…">Café — naïve résumé: 50% off = savings!</textarea>
+      <div class="acts"><button id="b-encode" type="button">Encode →</button> <button id="b-copy" class="ghost" type="button">Copy result</button></div>
+      <div class="err" id="err1"></div>
+      <textarea id="enc-out" spellcheck="false" readonly></textarea>
+
+      <h3>Decode</h3>
+      <textarea id="dec-in" spellcheck="false" placeholder="Quoted-Printable text to decode…"></textarea>
+      <div class="row"><span class="lbl">On malformed <code>=</code></span>
+        <select id="strict">
+          <option value="lenient" selected>Lenient — pass through as <code>=</code></option>
+          <option value="strict">Strict — report an error</option>
+        </select></div>
+      <div class="acts"><button id="b-decode" type="button">Decode →</button> <button id="b-toenc" class="ghost" type="button">↑ Use as encode input</button></div>
+      <div class="err" id="err2"></div>
+      <textarea id="dec-out" spellcheck="false" readonly></textarea>
+      <div class="small" id="dec-hex"></div>
+
+      <p class="note"><strong>Quoted-Printable</strong> (RFC 2045 §6.7) keeps bytes in the printable ASCII range 33–126 (except <code>=</code>, byte 61) as themselves; <code>=</code> becomes <code>=3D</code>; bytes outside the range (control characters, 8-bit values) become <code>=XX</code> uppercase hex. Spaces and tabs pass through <em>except</em> at the end of a line, where they are encoded as <code>=20</code> / <code>=09</code> so trailing whitespace can't be silently stripped by mail gateways. Lines longer than 76 characters are wrapped with a <strong>soft line break</strong> — a lone <code>=</code> followed by CRLF — which the decoder removes, so encoding then decoding always round-trips exactly. On decode, <code>=XX</code> is converted back to its byte; a <code>=</code> at end of line (before CRLF/LF) is a soft break and dropped; a malformed <code>=</code> is either passed through (lenient) or flagged (strict). Input text is encoded as UTF-8 bytes; decoded bytes are shown as UTF-8 text plus a hex view. Pairs with the Base64 and Punycode encoders. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    function isHex(c) { return (c >= 48 && c <= 57) || (c >= 65 && c <= 70) || (c >= 97 && c <= 102); }
+    function hexOf(b) { return (b < 16 ? "0" : "") + b.toString(16).toUpperCase(); }
+    function bytesToHex(a) { var s = ""; for (var i = 0; i < a.length; i++) s += hexOf(a[i]); return s; }
+    function utf8(str) { return new TextEncoder().encode(String(str)); }
+    function fromUtf8(bytes) { return new TextDecoder("utf-8", { fatal: false }).decode(bytes); }
+
+    // Byte-level Quoted-Printable encoder. input: Uint8Array, maxLine: number (0 = no wrap).
+    // Returns a string (the QP text). Uses CRLF soft breaks.
+    function encode(input, maxLine) {
+      if (!(input instanceof Uint8Array)) input = new Uint8Array(input || []);
+      if (maxLine == null) maxLine = 76;
+      var out = "";
+      var lineLen = 0;
+      var n = input.length;
+      function emit(s) { out += s; lineLen += s.length; }
+      function softBreak() { out += "=\r\n"; lineLen = 0; }
+      for (var i = 0; i < n; i++) {
+        var b = input[i];
+        // Only a CRLF is a real (raw) QP line break; lone CR / lone LF are DATA
+        // bytes and are encoded as =0D / =0A so they survive the round-trip and
+        // cannot be mistaken for line breaks by mail gateways.
+        if (b === 0x0D && i + 1 < n && input[i + 1] === 0x0A) { out += "\r\n"; lineLen = 0; i++; continue; }
+        // EOL-space rule: a space/tab immediately before a CRLF line break or EOF
+        // must be encoded (=20 / =09) so trailing whitespace isn't stripped.
+        var nextIsLineEnd = (i + 1 >= n) ||
+          (input[i + 1] === 0x0D && i + 2 < n && input[i + 2] === 0x0A);
+        var token;
+        if (b === 0x20 || b === 0x09) token = nextIsLineEnd ? ("=" + hexOf(b)) : String.fromCharCode(b);
+        else if (b >= 33 && b <= 126 && b !== 0x3D) token = String.fromCharCode(b);
+        else token = "=" + hexOf(b); // '=', control chars, 8-bit bytes
+        // soft wrap: keep room for the trailing '=' of a soft break (line <= maxLine incl '=')
+        if (maxLine > 0 && lineLen + token.length > maxLine - 1) softBreak();
+        emit(token);
+      }
+      return out;
+    }
+
+    // Byte-level Quoted-Printable decoder. input: string. strict: throw on malformed '='.
+    // Returns a Uint8Array. Line endings (CRLF/LF/CR) are preserved.
+    function decode(str, strict) {
+      str = String(str == null ? "" : str);
+      var out = [];
+      var n = str.length;
+      var i = 0;
+      while (i < n) {
+        var c = str.charCodeAt(i);
+        if (c === 0x3D) { // '='
+          var n1 = i + 1 < n ? str.charCodeAt(i + 1) : -1;
+          var n2 = i + 2 < n ? str.charCodeAt(i + 2) : -1;
+          // =XX hex
+          if (n1 >= 0 && isHex(n1) && n2 >= 0 && isHex(n2)) {
+            out.push(parseInt(str.substr(i + 1, 2), 16));
+            i += 3;
+            continue;
+          }
+          // soft break: =CRLF, =LF, =CR, or '=' at EOF
+          if (n1 === 0x0D && n2 === 0x0A) { i += 3; continue; }
+          if (n1 === 0x0A) { i += 2; continue; }
+          if (n1 === 0x0D) { i += 2; continue; }
+          if (n1 < 0) { i += 1; continue; } // '=' at EOF -> discard
+          // malformed
+          if (strict) throw new Error("Malformed Quoted-Printable at position " + i + ": '=' not followed by two hex digits or a line break.");
+          out.push(0x3D); i++; // lenient: pass through
+        } else {
+          out.push(c); i++;
+        }
+      }
+      return new Uint8Array(out);
+    }
+
+    // ---- DOM ----
+    function $(id) { return document.getElementById(id); }
+    var encIn = $("enc-in"), encOut = $("enc-out"), maxlineEl = $("maxline"), wrapEl = $("wrap"), err1 = $("err1");
+    var decIn = $("dec-in"), decOut = $("dec-out"), strictEl = $("strict"), err2 = $("err2"), decHex = $("dec-hex");
+
+    function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+    function renderEncode() {
+      err1.textContent = "";
+      var max = parseInt(maxlineEl.value, 10);
+      if (isNaN(max) || max < 0) { err1.textContent = "Max line length must be a non-negative integer."; return; }
+      var limit = wrapEl.checked ? max : 0;
+      try { encOut.value = encode(utf8(encIn.value), limit); }
+      catch (e) { err1.textContent = e.message || String(e); }
+    }
+
+    function renderDecode() {
+      err2.textContent = ""; decHex.textContent = "";
+      if (!decIn.value) { decOut.value = ""; return; }
+      try {
+        var bytes = decode(decIn.value, strictEl.value === "strict");
+        decOut.value = fromUtf8(bytes);
+        decHex.textContent = bytes.length + " bytes · hex: " + bytesToHex(bytes);
+      } catch (e) { err2.textContent = e.message || String(e); decOut.value = ""; }
+    }
+
+    $("b-encode").addEventListener("click", renderEncode);
+    $("b-copy").addEventListener("click", function () { if (encOut.value && navigator.clipboard) navigator.clipboard.writeText(encOut.value); });
+    $("b-decode").addEventListener("click", renderDecode);
+    $("b-toenc").addEventListener("click", function () { if (decIn.value) { encIn.value = decIn.value; renderEncode(); } });
+    encIn.addEventListener("input", renderEncode);
+    maxlineEl.addEventListener("input", renderEncode);
+    wrapEl.addEventListener("change", renderEncode);
+    decIn.addEventListener("input", renderDecode);
+
+    renderEncode();
+
+    window.VT_QP_TEST = {
+      encode: encode, decode: decode, isHex: isHex, hexOf: hexOf,
+      bytesToHex: bytesToHex, utf8: utf8, fromUtf8: fromUtf8
+    };
+  })();
+  </script>
+</body>
+</html>

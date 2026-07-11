@@ -59,6 +59,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T03:27:17Z",
   },
   {
+    slug: "quoted-printable",
+    name: "Quoted-Printable",
+    description: "Encode and decode Quoted-Printable (RFC 2045), the MIME email transfer encoding — printable ASCII passes through, other bytes and '=' become =XX hex, with soft line wrapping. Exact byte round-trip.",
+    category: "Encoding",
+    icon: "📧",
+    added: "2026-07-11T08:10:00Z",
+  },
+  {
     slug: "url-encoder",
     name: "URL Encode / Decode",
     description: "Percent-encode or decode URLs and query parameters.",
