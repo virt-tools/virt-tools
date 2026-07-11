@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Bayes' Theorem Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .row { display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+    .row .lbl { min-width:230px; color:var(--text-dim,#9aa3b2); font-size:.85rem; }
+    .row input { font-family:ui-monospace,monospace; font-size:14px; padding:7px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; width:120px; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    h3 { margin:16px 0 4px; font-size:.9rem; color:var(--text-dim,#9aa3b2); text-transform:uppercase; letter-spacing:.04em; }
+    .info { font-family:ui-monospace,monospace; font-size:13px; background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:12px; margin:8px 0; line-height:1.8; word-break:break-word; }
+    .info .k { color:var(--text-dim,#9aa3b2); display:inline-block; min-width:240px; }
+    .info .v { color:var(--text,#e6e6e6); }
+    .info .big { color:var(--good,#4ade80); font-weight:700; }
+    .small { color:var(--text-dim,#9aa3b2); font-size:.82rem; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    .acts { display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; }
+    .acts button { padding:7px 12px; border-radius:6px; border:1px solid var(--border,#2a2f3a); background:var(--bg-elev,#171a21); color:var(--text,#e6e6e6); cursor:pointer; font-weight:600; font-size:.78rem; }
+    table { width:100%; border-collapse:collapse; font-family:ui-monospace,monospace; font-size:12px; margin:8px 0; }
+    th, td { padding:5px 8px; text-align:right; border-bottom:1px solid var(--border,#2a2f3a); }
+    th { color:var(--text-dim,#9aa3b2); font-weight:600; }
+    td.l { text-align:left; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Bayes' Theorem Calculator</h1>
+      <p>Update a probability in light of new evidence with <strong>Bayes' theorem</strong>. Enter the <strong>prior</strong> P(A), the <strong>sensitivity</strong> P(B|A), and the <strong>false-positive rate</strong> P(B|¬A); the tool computes the posterior P(A|B) after observing B, the posterior after a negative result P(A|¬B), the marginal P(B), and a natural-frequency breakdown. Supports repeating an independent test. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <h3>Inputs</h3>
+      <div class="row"><span class="lbl">Prior P(A)</span><input id="prior" type="text" value="0.001"></div>
+      <div class="row"><span class="lbl">Sensitivity P(B|A)</span><input id="sens" type="text" value="0.99"></div>
+      <div class="row"><span class="lbl">False-positive rate P(B|¬A)</span><input id="fpr" type="text" value="0.05"></div>
+      <div class="row"><span class="lbl">Repeated independent tests (positive)</span><input id="rep" type="number" value="1" min="1" max="100"></div>
+      <div class="err" id="err"></div>
+
+      <div class="acts">
+        <button id="b-run" type="button">Compute</button>
+        <button id="b-ex1" type="button">Rare disease</button>
+        <button id="b-ex2" type="button">Fair coin?</button>
+        <button id="b-ex3" type="button">Perfect test</button>
+      </div>
+
+      <h3>Posterior</h3>
+      <div class="info" id="result">—</div>
+
+      <h3>Natural frequencies (per 10,000)</h3>
+      <div id="freq-wrap">—</div>
+
+      <p class="note"><strong>Bayes' theorem</strong> relates the conditional probabilities: <code>P(A|B) = P(B|A)·P(A) / P(B)</code>, where <code>P(B) = P(B|A)·P(A) + P(B|¬A)·P(¬A)</code> is the <em>total probability</em> of the evidence. The posterior is how likely A is <em>after</em> seeing B — famously, even a highly sensitive test for a rare disease yields a low posterior because the false positives outnumber true positives. In <strong>odds form</strong>, <code>posterior odds = prior odds × likelihood ratio</code>, where <code>LR = P(B|A)/P(B|¬A)</code>; repeating an independent test multiplies the odds by LR each time. Pairs with the Statistics Calculator and Confidence Interval tools. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    function p(v) { return Number(v); }
+    function inUnit(x, name) {
+      if (!Number.isFinite(x)) throw new Error(name + " must be a number.");
+      if (x < 0 || x > 1) throw new Error(name + " must be between 0 and 1.");
+      return x;
+    }
+
+    // Bayes core. prior P(A), sens P(B|A), fpr P(B|~A).
+    // Returns posterior after positive, after negative, marginals, rates.
+    function bayes(prior, sens, fpr) {
+      prior = inUnit(prior, "Prior P(A)");
+      sens = inUnit(sens, "Sensitivity P(B|A)");
+      fpr = inUnit(fpr, "False-positive rate P(B|¬A)");
+      var notPrior = 1 - prior;
+      var marginalPos = sens * prior + fpr * notPrior; // P(B)
+      var marginalNeg = (1 - sens) * prior + (1 - fpr) * notPrior; // P(¬B)
+      var posteriorPos, posteriorNeg;
+      if (marginalPos === 0) {
+        // evidence B impossible; posterior undefined -> leave as prior
+        posteriorPos = (prior > 0 && sens > 0) ? 1 : prior;
+      } else {
+        posteriorPos = (sens * prior) / marginalPos;
+      }
+      if (marginalNeg === 0) {
+        posteriorNeg = (prior > 0 && (1 - sens) > 0) ? 1 : prior;
+      } else {
+        posteriorNeg = ((1 - sens) * prior) / marginalNeg;
+      }
+      return {
+        prior: prior, sens: sens, fpr: fpr, specificity: 1 - fpr,
+        marginalPos: marginalPos, marginalNeg: marginalNeg,
+        posteriorPos: posteriorPos, posteriorNeg: posteriorNeg,
+        falseDiscoveryRate: 1 - posteriorPos, // P(~A|B)
+        falseOmissionRate: posteriorNeg,      // P(A|~B)
+        priorOdds: prior / (1 - prior === 0 ? 1e-300 : (1 - prior)),
+        lr: fpr === 0 ? Infinity : sens / fpr
+      };
+    }
+
+    // Posterior odds after k independent positive tests.
+    function bayesRepeated(prior, sens, fpr, k) {
+      if (!Number.isInteger(k) || k < 1) throw new Error("Repeat count must be a positive integer.");
+      prior = inUnit(prior, "Prior P(A)");
+      sens = inUnit(sens, "Sensitivity P(B|A)");
+      fpr = inUnit(fpr, "False-positive rate P(B|¬A)");
+      if (prior === 0) return 0;
+      if (prior === 1) return 1;
+      var priorOdds = prior / (1 - prior);
+      // odds after k positives = priorOdds * (sens/fpr)^k
+      var lr = fpr === 0 ? Infinity : sens / fpr;
+      var postOdds;
+      if (lr === Infinity) {
+        // any positive with FPR 0 -> certain (if sens>0)
+        postOdds = (sens > 0) ? Infinity : priorOdds;
+      } else {
+        postOdds = priorOdds * Math.pow(lr, k);
+      }
+      if (postOdds === Infinity) return 1;
+      return postOdds / (1 + postOdds);
+    }
+
+    function pct(v) {
+      if (!Number.isFinite(v)) return String(v);
+      return (v * 100).toPrecision(4) + "%";
+    }
+    function fmt(v) {
+      if (!Number.isFinite(v)) return String(v);
+      if (Object.is(v, Math.round(v)) && Math.abs(v) < 1e15) return String(v);
+      return String(Number(v.toPrecision(8)));
+    }
+    function escapeHtml(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+    // ---- DOM ----
+    function $(id) { return document.getElementById(id); }
+    var priorEl = $("prior"), sensEl = $("sens"), fprEl = $("fpr"), repEl = $("rep");
+    var errEl = $("err"), resultEl = $("result"), freqWrap = $("freq-wrap");
+
+    function render() {
+      errEl.textContent = "";
+      resultEl.textContent = "—"; freqWrap.textContent = "—";
+      var res, rep;
+      try {
+        var prior = p(priorEl.value), sens = p(sensEl.value), fpr = p(fprEl.value);
+        res = bayes(prior, sens, fpr);
+        rep = Number(repEl.value);
+      } catch (e) { errEl.textContent = e.message || String(e); return; }
+
+      var repPost;
+      try { repPost = bayesRepeated(res.prior, res.sens, res.fpr, rep); }
+      catch (e) { errEl.textContent = e.message || String(e); return; }
+
+      var html = "<span class='k'>prior P(A)</span> <span class='v'>" + fmt(res.prior) + " (" + pct(res.prior) + ")</span><br>" +
+        "<span class='k'>sensitivity P(B|A)</span> <span class='v'>" + fmt(res.sens) + "</span><br>" +
+        "<span class='k'>specificity P(¬B|¬A)</span> <span class='v'>" + fmt(res.specificity) + "</span><br>" +
+        "<span class='k'>false-positive P(B|¬A)</span> <span class='v'>" + fmt(res.fpr) + "</span><br>" +
+        "<span class='k'>marginal P(B)</span> <span class='v'>" + fmt(res.marginalPos) + "</span><br>" +
+        "<span class='k'>likelihood ratio LR</span> <span class='v'>" + fmt(res.lr) + "</span><br><br>" +
+        "<span class='k'>posterior P(A|B) after positive</span> <span class='big'>" + fmt(res.posteriorPos) + " (" + pct(res.posteriorPos) + ")</span><br>" +
+        "<span class='k'>posterior P(A|¬B) after negative</span> <span class='v'>" + fmt(res.posteriorNeg) + " (" + pct(res.posteriorNeg) + ")</span><br>" +
+        "<span class='k'>false discovery rate P(¬A|B)</span> <span class='v'>" + fmt(res.falseDiscoveryRate) + "</span><br>" +
+        "<span class='k'>false omission rate P(A|¬B)</span> <span class='v'>" + fmt(res.falseOmissionRate) + "</span>";
+      if (rep > 1) {
+        html += "<br><span class='k'>posterior after " + rep + " positive tests</span> <span class='big'>" + fmt(repPost) + " (" + pct(repPost) + ")</span>";
+      }
+      resultEl.innerHTML = html;
+
+      // natural frequencies per 10000
+      var N = 10000;
+      var a = Math.round(res.prior * N);
+      var notA = N - a;
+      var tp = Math.round(res.sens * a);
+      var fn = a - tp;
+      var fp = Math.round(res.fpr * notA);
+      var tn = notA - fp;
+      var t = "<table><tr><th></th><th>A (true)</th><th>¬A (false)</th><th>total</th></tr>" +
+        "<tr><td class='l'>test positive B</td><td>" + tp + " (TP)</td><td>" + fp + " (FP)</td><td>" + (tp + fp) + "</td></tr>" +
+        "<tr><td class='l'>test negative ¬B</td><td>" + fn + " (FN)</td><td>" + tn + " (TN)</td><td>" + (fn + tn) + "</td></tr>" +
+        "<tr><td class='l'>total</td><td>" + a + "</td><td>" + notA + "</td><td>" + N + "</td></tr></table>";
+      t += "<p class='small'>Of " + (tp + fp) + " people testing positive, " + tp + " actually have A → P(A|B) ≈ " + (tp + fp > 0 ? pct(tp / (tp + fp)) : "—") + ".</p>";
+      freqWrap.innerHTML = t;
+    }
+
+    function setAll(prior, sens, fpr, rep) { priorEl.value = prior; sensEl.value = sens; fprEl.value = fpr; repEl.value = rep || 1; render(); }
+    $("b-run").addEventListener("click", render);
+    $("b-ex1").addEventListener("click", function () { setAll(0.001, 0.99, 0.05, 1); });
+    $("b-ex2").addEventListener("click", function () { setAll(0.5, 0.9, 0.1, 1); });
+    $("b-ex3").addEventListener("click", function () { setAll(0.2, 1, 0, 1); });
+    priorEl.addEventListener("input", render);
+    sensEl.addEventListener("input", render);
+    fprEl.addEventListener("input", render);
+    repEl.addEventListener("input", render);
+
+    render();
+
+    window.VT_BAYES_TEST = { bayes: bayes, bayesRepeated: bayesRepeated };
+  })();
+  </script>
+</body>
+</html>

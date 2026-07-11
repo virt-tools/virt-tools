@@ -2363,6 +2363,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-11T23:50:00Z",
   },
   {
+    slug: "bayes-theorem",
+    name: "Bayes' Theorem Calculator",
+    description: "Update a probability in light of new evidence with Bayes theorem. Enter the prior P(A), sensitivity P(B|A), and false-positive rate P(B|not A); the tool computes the posterior P(A|B) after observing the evidence, the posterior after a negative result P(A|not B), the marginal P(B), the likelihood ratio, and a natural-frequency breakdown per 10000. Supports repeating an independent test (odds multiply by the likelihood ratio each time). Reports the false discovery and omission rates. Pairs with the Statistics Calculator and Confidence Interval tools. Runs locally.",
+    category: "Math",
+    icon: "∝",
+    added: "2026-07-12T00:00:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
