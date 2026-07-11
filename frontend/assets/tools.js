@@ -2123,6 +2123,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-11T20:20:00Z",
   },
   {
+    slug: "stirling-first",
+    name: "Stirling Numbers of the First Kind",
+    description: "Compute the unsigned Stirling number of the first kind c(n, k) — the number of permutations of n elements with exactly k cycles — exactly with big integers via the recurrence c(n, k) = c(n−1, k−1) + (n−1)·c(n−1, k). Shows the full row c(n, 1…n), the signed version s(n,k) = (−1)^(n−k)·c(n,k) (coefficients of the falling factorial x(x−1)…(x−n+1)), and the cycle-count triangle. The row sum equals n! (every permutation has some cycle count). Pairs with the Bell Numbers (Stirling 2nd kind), Derangements, and Catalan tools. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "↻",
+    added: "2026-07-11T21:10:00Z",
+  },
+  {
     slug: "entropy-analyzer",
     name: "Entropy Analyzer",
     description: "Measure the Shannon entropy of text or bytes — bits of information per symbol — with the symbol-frequency table, max possible entropy, and efficiency. Slice by UTF-8 bytes, code points, UTF-16 units, or graphemes.",
