@@ -979,6 +979,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T21:40:00Z",
   },
   {
+    slug: "words-to-number",
+    name: "Words to Number Converter",
+    description: "Parse an English cardinal-number phrase into its integer — the reverse of Number to Words. Accepts hyphens, commas, and 'and', reads 'a' as one, supports negatives and short-scale magnitudes up to decillion (10³³). Exact big-integer arithmetic, so very large phrases are handled precisely. Pairs with the Number to Words tool. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "💬",
+    added: "2026-07-11T17:40:00Z",
+  },
+  {
     slug: "punycode",
     name: "Punycode & IDN Converter",
     description: "Convert internationalized domain names to and from Punycode ACE form (xn--) per RFC 3492/3490 — each label handled independently, in your browser.",
