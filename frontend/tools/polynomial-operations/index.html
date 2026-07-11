@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Polynomial Operations — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .row { display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+    .row .lbl { min-width:90px; color:var(--text-dim,#9aa3b2); font-size:.85rem; }
+    .row input, .row select { font-family:ui-monospace,monospace; font-size:14px; padding:7px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; font-family:ui-monospace,monospace; }
+    h3 { margin:16px 0 4px; font-size:.9rem; color:var(--text-dim,#9aa3b2); text-transform:uppercase; letter-spacing:.04em; }
+    .out { font-family:ui-monospace,monospace; font-size:14px; background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:12px; margin:8px 0; line-height:1.9; }
+    .out .k { color:var(--text-dim,#9aa3b2); display:inline-block; min-width:150px; }
+    .out .v { color:var(--text,#e6e6e6); font-weight:700; }
+    .acts { display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; align-items:center; }
+    .acts button { padding:7px 12px; border-radius:6px; border:1px solid var(--border,#2a2f3a); background:var(--bg-elev,#171a21); color:var(--text,#e6e6e6); cursor:pointer; font-weight:600; font-size:.78rem; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    @media(max-width:640px){ .grid{ grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Polynomial Operations</h1>
+      <p>Perform <strong>polynomial algebra</strong>: add, subtract, multiply, divide (with quotient and remainder), scalar-multiply, evaluate, differentiate, integrate, and find the greatest common divisor. Enter two polynomials in standard algebraic form (e.g. <code>x^3 - 2x^2 + 3x - 5</code>, <code>2x + 1</code>, or <code>4</code>), pick an operation, and see the simplified result. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="grid">
+        <div><div class="row"><span class="lbl">A =</span><input id="pa" style="flex:1" value="x^3 - 2x^2 + 3x - 5"></div></div>
+        <div><div class="row"><span class="lbl">B =</span><input id="pb" style="flex:1" value="x - 1"></div></div>
+      </div>
+      <div class="row">
+        <span class="lbl">Operation</span>
+        <select id="op">
+          <option value="add">A + B</option>
+          <option value="sub">A − B</option>
+          <option value="mul">A × B</option>
+          <option value="div">A ÷ B (quotient + remainder)</option>
+          <option value="gcd">gcd(A, B)</option>
+          <option value="eval">evaluate A at x =</option>
+          <option value="deriv">dA/dx</option>
+          <option value="integ">∫ A dx (indefinite, C = 0)</option>
+          <option value="definteg">∫ₐᵇ A dx</option>
+        </select>
+        <input id="oparg" style="width:120px" value="2" placeholder="x or a, b">
+      </div>
+      <div class="err" id="err"></div>
+
+      <div class="acts">
+        <button id="b-run" type="button">Compute</button>
+      </div>
+
+      <h3>Result</h3>
+      <div class="out" id="out">—</div>
+
+      <p class="note" style="margin-top:14px">A <strong>polynomial</strong> is a sum of terms <code>aₙxⁿ</code>. This tool keeps polynomials in coefficient form and performs exact arithmetic on them: <strong>add/subtract</strong> combine like terms, <strong>multiply</strong> convolves coefficients, <strong>divide</strong> uses polynomial long division to produce a quotient and remainder (A = Q·B + R, with deg R &lt; deg B), <strong>evaluate</strong> uses Horner's method, <strong>differentiate</strong> applies the power rule termwise, <strong>integrate</strong> adds one to each exponent and divides by the new exponent, and <strong>gcd</strong> runs the Euclidean algorithm (returned monic). Enter polynomials like <code>x^2 + 2x + 1</code>, <code>-x^3 + 4</code>, or <code>3</code>; decimals like <code>1.5x^2</code> are fine. Pairs with the Polynomial Interpolation and Matrix Calculator tools. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var EPS = 1e-12;
+    // ---- pure core ----
+    // Polynomials are arrays of coefficients, ascending: c[i] is the coeff of x^i.
+
+    function trimPoly(c) {
+      var a = c.slice();
+      while (a.length > 1 && Math.abs(a[a.length - 1]) < EPS) a.pop();
+      return a;
+    }
+    function isZero(c) {
+      var t = trimPoly(c);
+      return t.length === 1 && Math.abs(t[0]) < EPS;
+    }
+    function degPoly(c) {
+      var t = trimPoly(c);
+      if (t.length === 1 && Math.abs(t[0]) < EPS) return -Infinity;
+      return t.length - 1;
+    }
+    function leadPoly(c) { var t = trimPoly(c); return t[t.length - 1]; }
+
+    function parsePoly(str) {
+      var s = String(str).replace(/\s+/g, "").replace(/X/g, "x");
+      if (s === "" || s === "+" || s === "-") throw new Error("Empty polynomial");
+      // split into signed terms
+      var terms = s.match(/[+-]?[^+-]+/g);
+      if (!terms) throw new Error("Could not parse: " + str);
+      var maxExp = 0;
+      var parsed = [];
+      for (var i = 0; i < terms.length; i++) {
+        var term = terms[i];
+        var xi = term.indexOf("x");
+        var coeff, exp;
+        if (xi < 0) {
+          // constant
+          coeff = parseFloat(term);
+          exp = 0;
+          if (isNaN(coeff)) throw new Error("Bad term: " + term);
+        } else {
+          var left = term.slice(0, xi).replace(/\*/g, "");   // before x
+          var right = term.slice(xi + 1);                     // after x
+          if (left === "" || left === "+") coeff = 1;
+          else if (left === "-") coeff = -1;
+          else { coeff = parseFloat(left); if (isNaN(coeff)) throw new Error("Bad term: " + term); }
+          if (right === "") exp = 1;
+          else if (right.charAt(0) === "^") { exp = parseInt(right.slice(1), 10); if (isNaN(exp)) throw new Error("Bad exponent: " + term); }
+          else throw new Error("Bad term: " + term);
+          if (exp < 0) throw new Error("Negative exponents not supported: " + term);
+        }
+        if (!parsed[exp]) parsed[exp] = 0;
+        parsed[exp] += coeff;
+        if (exp > maxExp) maxExp = exp;
+      }
+      var out = new Array(maxExp + 1);
+      for (var j = 0; j <= maxExp; j++) out[j] = parsed[j] || 0;
+      return trimPoly(out);
+    }
+
+    function fmtNum(n) {
+      if (Math.abs(n) < EPS) return "0";
+      var r = Math.round(n * 1e10) / 1e10;
+      return String(r);
+    }
+    function formatPoly(c) {
+      var t = trimPoly(c);
+      if (t.length === 1 && Math.abs(t[0]) < EPS) return "0";
+      var parts = [];
+      for (var i = t.length - 1; i >= 0; i--) {
+        var coef = t[i];
+        if (Math.abs(coef) < EPS) continue;
+        var sign = coef < 0 ? "-" : "+";
+        var ac = Math.abs(coef);
+        // term text
+        var term = "";
+        if (i === 0) term = fmtNum(ac);
+        else {
+          if (Math.abs(ac - 1) > EPS) term = fmtNum(ac);
+          if (i === 1) term += "x";
+          else term += "x^" + i;
+        }
+        if (parts.length === 0) parts.push((sign === "-" ? "-" : "") + term);
+        else parts.push(sign + " " + term);
+      }
+      return parts.join(" ").replace(/\+ /g, "+ ").replace(/- /g, "- ");
+    }
+
+    function addPoly(a, b) {
+      var n = Math.max(a.length, b.length), out = new Array(n);
+      for (var i = 0; i < n; i++) out[i] = (a[i] || 0) + (b[i] || 0);
+      return trimPoly(out);
+    }
+    function subPoly(a, b) {
+      var n = Math.max(a.length, b.length), out = new Array(n);
+      for (var i = 0; i < n; i++) out[i] = (a[i] || 0) - (b[i] || 0);
+      return trimPoly(out);
+    }
+    function scalePoly(a, s) {
+      var out = new Array(a.length);
+      for (var i = 0; i < a.length; i++) out[i] = a[i] * s;
+      return trimPoly(out);
+    }
+    function mulPoly(a, b) {
+      var out = new Array(a.length + b.length - 1);
+      for (var k = 0; k < out.length; k++) out[k] = 0;
+      for (var i = 0; i < a.length; i++) {
+        for (var j = 0; j < b.length; j++) {
+          out[i + j] += a[i] * b[j];
+        }
+      }
+      return trimPoly(out);
+    }
+    // polynomial long division: a / b -> { quotient, remainder }, ascending coeffs.
+    function divPoly(a, b) {
+      a = trimPoly(a); b = trimPoly(b);
+      if (isZero(b)) throw new Error("Division by zero polynomial");
+      var rem = a.slice();
+      var dB = b.length - 1;
+      var lb = b[dB];
+      var q = new Array(Math.max(0, a.length - b.length) + 1);
+      for (var i = 0; i < q.length; i++) q[i] = 0;
+      while (rem.length > 0 && degPoly(rem) >= dB) {
+        var dR = degPoly(rem);
+        var k = dR - dB;               // exponent of next quotient term
+        var coef = rem[dR] / lb;
+        if (!q[k]) q[k] = 0;
+        q[k] += coef;
+        for (var i2 = 0; i2 <= dB; i2++) {
+          rem[k + i2] -= coef * b[i2];
+        }
+        rem = trimPoly(rem);
+      }
+      return { quotient: trimPoly(q), remainder: trimPoly(rem) };
+    }
+    function evalPoly(c, x) {
+      var t = trimPoly(c);
+      var r = 0;
+      for (var i = t.length - 1; i >= 0; i--) r = r * x + t[i];
+      return r;
+    }
+    function derivPoly(c) {
+      var t = trimPoly(c);
+      if (t.length <= 1) return [0];
+      var out = new Array(t.length - 1);
+      for (var i = 0; i < out.length; i++) out[i] = (i + 1) * t[i + 1];
+      return trimPoly(out);
+    }
+    function integPoly(c, C) {
+      if (C == null) C = 0;
+      var t = trimPoly(c);
+      var out = new Array(t.length + 1);
+      out[0] = C;
+      for (var i = 0; i < t.length; i++) out[i + 1] = t[i] / (i + 1);
+      return trimPoly(out);
+    }
+    function defIntegPoly(c, a, b) {
+      var F = integPoly(c, 0);
+      return evalPoly(F, b) - evalPoly(F, a);
+    }
+    function gcdPoly(a, b) {
+      a = trimPoly(a.slice()); b = trimPoly(b.slice());
+      if (isZero(a) && isZero(b)) return [0];
+      while (!isZero(b)) {
+        var r = divPoly(a, b).remainder;
+        a = b; b = r;
+      }
+      // normalize to monic
+      var lead = leadPoly(a);
+      if (Math.abs(lead) > EPS) {
+        var out = new Array(a.length);
+        for (var i = 0; i < a.length; i++) out[i] = a[i] / lead;
+        return trimPoly(out);
+      }
+      return a;
+    }
+
+    // ---- DOM ----
+    function $(id) { return document.getElementById(id); }
+    var pa = $("pa"), pb = $("pb"), opEl = $("op"), oparg = $("oparg"), errEl = $("err"), outEl = $("out");
+
+    function run() {
+      errEl.textContent = "";
+      try {
+        var A = parsePoly(pa.value);
+        var op = opEl.value;
+        var h = [];
+        h.push("<span class='k'>A</span><span class='v'>" + formatPoly(A) + "</span> (deg " + degPoly(A) + ")<br>");
+        var B = null;
+        if (["add", "sub", "mul", "div", "gcd"].indexOf(op) >= 0) {
+          B = parsePoly(pb.value);
+          h.push("<span class='k'>B</span><span class='v'>" + formatPoly(B) + "</span> (deg " + degPoly(B) + ")<br>");
+        }
+        var arg = oparg.value.trim();
+        if (op === "add") { var r = addPoly(A, B); h.push("<span class='k'>A + B</span><span class='v'>" + formatPoly(r) + "</span><br>"); }
+        else if (op === "sub") { var r = subPoly(A, B); h.push("<span class='k'>A − B</span><span class='v'>" + formatPoly(r) + "</span><br>"); }
+        else if (op === "mul") { var r = mulPoly(A, B); h.push("<span class='k'>A × B</span><span class='v'>" + formatPoly(r) + "</span><br>"); }
+        else if (op === "div") {
+          if (isZero(B)) throw new Error("Division by zero polynomial");
+          var d = divPoly(A, B);
+          h.push("<span class='k'>quotient Q</span><span class='v'>" + formatPoly(d.quotient) + "</span><br>");
+          h.push("<span class='k'>remainder R</span><span class='v'>" + formatPoly(d.remainder) + "</span><br>");
+          h.push("<span class='k'>A = Q·B + R</span><span class='v'>" + (eqCheck(A, d, B) ? "verified" : "check") + "</span><br>");
+        }
+        else if (op === "gcd") { var g = gcdPoly(A, B); h.push("<span class='k'>gcd(A, B)</span><span class='v'>" + formatPoly(g) + "</span><br>"); }
+        else if (op === "eval") {
+          var x = parseFloat(arg); if (isNaN(x)) throw new Error("Need a number for x");
+          h.push("<span class='k'>A(" + x + ")</span><span class='v'>" + fmtNum(evalPoly(A, x)) + "</span><br>");
+        }
+        else if (op === "deriv") { var r = derivPoly(A); h.push("<span class='k'>dA/dx</span><span class='v'>" + formatPoly(r) + "</span><br>"); }
+        else if (op === "integ") { var r = integPoly(A, 0); h.push("<span class='k'>∫ A dx (+ C)</span><span class='v'>" + formatPoly(r) + "</span><br>"); }
+        else if (op === "definteg") {
+          var ab = arg.split(/[ ,]+/).map(parseFloat);
+          if (ab.length < 2 || isNaN(ab[0]) || isNaN(ab[1])) throw new Error("Need a and b (e.g. 0, 1)");
+          h.push("<span class='k'>∫_" + ab[0] + "^" + ab[1] + " A dx</span><span class='v'>" + fmtNum(defIntegPoly(A, ab[0], ab[1])) + "</span><br>");
+        }
+        outEl.innerHTML = h.join("");
+      } catch (e) { errEl.textContent = e.message || String(e); outEl.innerHTML = "—"; }
+    }
+    function eqCheck(A, d, B) {
+      // A == Q*B + R
+      var recon = addPoly(mulPoly(d.quotient, B), d.remainder);
+      if (recon.length !== A.length) return false;
+      for (var i = 0; i < A.length; i++) if (Math.abs(recon[i] - A[i]) > 1e-6) return false;
+      return true;
+    }
+
+    $("b-run").addEventListener("click", run);
+    [pa, pb, oparg].forEach(function (el) { el.addEventListener("input", run); });
+    opEl.addEventListener("change", run);
+    run();
+
+    window.VT_POLY_TEST = {
+      EPS: EPS, trimPoly: trimPoly, isZero: isZero, degPoly: degPoly, leadPoly: leadPoly,
+      parsePoly: parsePoly, formatPoly: formatPoly, addPoly: addPoly, subPoly: subPoly,
+      scalePoly: scalePoly, mulPoly: mulPoly, divPoly: divPoly, evalPoly: evalPoly,
+      derivPoly: derivPoly, integPoly: integPoly, defIntegPoly: defIntegPoly, gcdPoly: gcdPoly
+    };
+  })();
+  </script>
+</body>
+</html>

@@ -2483,6 +2483,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T02:20:00Z",
   },
   {
+    slug: "polynomial-operations",
+    name: "Polynomial Operations",
+    description: "Perform polynomial algebra: add, subtract, multiply, divide (with quotient and remainder), scalar-multiply, evaluate, differentiate, integrate, and find the greatest common divisor. Enter two polynomials in standard algebraic form (e.g. x^3 − 2x^2 + 3x − 5), pick an operation, and see the simplified result. Division uses long division (A = Q·B + R, deg R < deg B), evaluation uses Horner's method, and GCD runs the Euclidean algorithm returned monic. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "∂",
+    added: "2026-07-12T02:30:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
