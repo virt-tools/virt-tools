@@ -2091,6 +2091,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-11T19:30:00Z",
   },
   {
+    slug: "derangements",
+    name: "Derangements & Subfactorial",
+    description: "Count and list derangements of {1, …, n} — permutations with no element in its original position (the hat-check problem). Computes the subfactorial !n exactly via the recurrence !n = (n−1)·(!(n−1) + !(n−2)) with !0 = 1, !1 = 0 (equivalently round(n!/e)), lists the actual derangements for small n, and shows the no-fixed-point probability !n / n!, which tends to 1/e ≈ 0.3679. Pairs with the Combinatorics, Permutations, and Integer Partitions tools. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🃏",
+    added: "2026-07-11T20:00:00Z",
+  },
+  {
     slug: "entropy-analyzer",
     name: "Entropy Analyzer",
     description: "Measure the Shannon entropy of text or bytes — bits of information per symbol — with the symbol-frequency table, max possible entropy, and efficiency. Slice by UTF-8 bytes, code points, UTF-16 units, or graphemes.",
