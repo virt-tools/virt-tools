@@ -2147,6 +2147,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-11T20:30:00Z",
   },
   {
+    slug: "convolution",
+    name: "Convolution & Correlation",
+    description: "Compute the discrete linear convolution of two real-valued sequences (a ∗ b)[k] = Σⱼ a[j]·b[k−j] — the same operation as multiplying two polynomials, so (1,2,3) ∗ (1,1) = (1,3,5,3). Also cross-correlation (a ⋆ b, sliding dot product) and autocorrelation of a series with itself at every lag. Output length m + n − 1 for convolution/cross-correlation, n lags for autocorrelation. Series parsed as numbers separated by commas, spaces, or newlines. Pairs with the Moving Average and Statistics tools. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "⊗",
+    added: "2026-07-11T21:20:00Z",
+  },
+  {
     slug: "integer-root",
     name: "Integer Root & Square Root",
     description: "Compute the integer floor of an nth root of any non-negative integer exactly with big integers: r = ⌊n^(1/k)⌋, the largest r with r^k ≤ n. The k=2 case is the integer square root. Reports whether n is a perfect kth power (r^k = n) and shows the remainder n − r^k and nearby powers. Uses integer Newton's method, exact for arbitrarily large n. Pairs with the Pythagorean Triples and Modular Arithmetic tools. Everything runs locally in your browser.",
