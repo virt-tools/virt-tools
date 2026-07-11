@@ -2379,6 +2379,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-11T01:00:00Z",
   },
   {
+    slug: "mach-calculator",
+    name: "Mach Number & Speed of Sound Calculator",
+    description: "Compute the speed of sound in air at a given temperature (c = 331.3·√(1 + T/273.15) m/s, about 343 m/s at 20 °C) and the Mach number M = v/c of an object moving through it, with the Mach angle of the shock wave (sin μ = 1/M) and regime classification (subsonic, transonic, supersonic, hypersonic). Speed input in m/s, km/h, mph, or knots; temperature in °C/°F/K. Distinct from the Doppler Effect Calculator (frequency shift). Pairs with the Wavelength/Frequency and Decibel tools for acoustics and aerodynamics. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "✈️",
+    added: "2026-07-11T17:10:00Z",
+  },
+  {
     slug: "scale-generator",
     name: "Scale & Key Generator",
     description: "List the notes of a scale or mode in 12-tone equal temperament. Pick a root note and a scale — major, natural / harmonic / melodic minor, the seven church modes (Ionian through Locrian), major and minor pentatonic, blues, whole-tone, and chromatic — and see each note's name, MIDI number, and frequency across one octave, plus each degree's semitone interval from the root. The reference pitch (A4) is adjustable. Pairs with the Note Frequency Calculator. Everything runs locally in your browser.",
