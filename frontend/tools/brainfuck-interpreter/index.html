@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Brainfuck Interpreter — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .row { display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+    .row .lbl { min-width:180px; color:var(--text-dim,#9aa3b2); font-size:.85rem; }
+    .row input, .row select, .row textarea { font-family:ui-monospace,monospace; font-size:14px; padding:7px; background:var(--bg,#14181f); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; }
+    .row textarea { min-width:340px; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; font-family:ui-monospace,monospace; }
+    .acts { display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; align-items:center; }
+    .acts button { padding:7px 12px; border-radius:6px; border:1px solid var(--border,#2a2f3a); background:var(--bg-elev,#171a21); color:var(--text,#e6e6e6); cursor:pointer; font-weight:600; font-size:.78rem; }
+    .acts button.primary { background:#1e3a5f; border-color:var(--accent,#5b8cff); }
+    h3 { margin:14px 0 4px; font-size:.9rem; color:var(--text-dim,#9aa3b2); text-transform:uppercase; letter-spacing:.04em; }
+    .out { font-family:ui-monospace,monospace; font-size:13px; background:var(--bg-elev,#171a21); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:12px; margin:8px 0; line-height:1.7; word-break:break-all; white-space:pre-wrap; }
+    .out .k { color:var(--text-dim,#9aa3b2); display:inline-block; min-width:170px; }
+    .out .v { color:var(--text,#e6e6e6); font-weight:700; }
+    .out .hl { color:var(--accent,#5b8cff); font-weight:700; }
+    .out .bad { color:var(--bad,#f87171); font-weight:700; }
+    .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+    @media (max-width:820px){ .grid2 { grid-template-columns:1fr; } }
+    code.bf { color:var(--accent,#5b8cff); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Brainfuck Interpreter</h1>
+      <p>Run programs in <strong>Brainfuck</strong>, the famous minimalist esoteric programming language — a Turing-complete language with just eight commands (<code class="bf">&gt; &lt; + - . , [ ]</code>) that manipulates a tape of byte cells. Enter a program (any characters other than those eight are treated as comments and ignored), supply any input the program reads with <code class="bf">,</code>, and run it to see the output, the output as hex bytes, the number of steps executed, and a final tape dump. The interpreter uses an 8-bit wrapping tape (values 0–255), reads input until end-of-input (returning 0 at EOF), and bounds-checks the pointer so it cannot fall off the tape. A step limit guards against infinite loops. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row">
+        <span class="lbl">Program</span>
+        <textarea id="code" rows="4" style="min-width:340px">++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.</textarea>
+      </div>
+      <div class="row"><span class="lbl">Input (bytes read by ,)</span><textarea id="input" rows="2" style="min-width:340px"></textarea></div>
+      <div class="row"><span class="lbl">Step limit</span><input id="limit" type="number" value="10000000" min="1" style="min-width:130px"></div>
+      <div class="row"><span class="lbl">Tape size</span><input id="tape" type="number" value="30000" min="1" style="min-width:130px"></div>
+      <div class="err" id="err"></div>
+      <div class="acts">
+        <button id="b-run" class="primary" type="button">Run</button>
+        <button id="b-hw" type="button">Hello World</button>
+        <button id="b-cat" type="button">cat (echo input)</button>
+        <button id="b-add2" type="button">Add two digits</button>
+        <button id="b-clear" type="button">Clear</button>
+      </div>
+
+      <h3>Output</h3>
+      <div class="out" id="out">—</div>
+
+      <h3>Details</h3>
+      <div class="out" id="details">—</div>
+
+      <p class="note" style="margin-top:14px"><strong>The math.</strong> Brainfuck models a single-tape Turing machine. The tape is an array of byte cells (here 8-bit, 0–255, wrapping), all initially zero; a data pointer starts at cell 0. The eight commands operate as: <code class="bf">&gt;</code> move the pointer right, <code class="bf">&lt;</code> move left, <code class="bf">+</code> increment the cell, <code class="bf">-</code> decrement the cell (wrapping mod 256), <code class="bf">.</code> output the cell as a byte, <code class="bf">,</code> read one byte from the input into the cell (0 at end-of-input), <code class="bf">[</code> jump forward to the matching <code class="bf">]</code> if the cell is zero, and <code class="bf">]</code> jump back to the matching <code class="bf">[</code> if the cell is non-zero. The interpreter pre-computes the bracket pairs so jumps are instant, counts every executed command as one step, and stops with an error if a bracket is unmatched, the pointer leaves the tape, or the step limit is reached (protecting the page from infinite loops). Because every non-command character is a comment, programs can be annotated freely. Everything runs locally — nothing leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    // Validate and pre-compute matching bracket pairs.
+    // Returns { jumps: Object<index->matchingIndex>, error: string|null }.
+    function compileBF(code) {
+      code = String(code == null ? '' : code);
+      var jumps = {};
+      var stack = [];
+      for (var i = 0; i < code.length; i++) {
+        var c = code[i];
+        if (c === '[') { stack.push(i); }
+        else if (c === ']') {
+          if (stack.length === 0) return { jumps: null, error: "unmatched ']' at position " + i };
+          var open = stack.pop();
+          jumps[open] = i;
+          jumps[i] = open;
+        }
+      }
+      if (stack.length > 0) return { jumps: null, error: "unmatched '[' at position " + stack[stack.length - 1] };
+      return { jumps: jumps, error: null };
+    }
+
+    // Interpret the program. opts: { tapeSize, stepLimit }.
+    // input is a string; each ',' consumes one char's code point as a byte.
+    // Returns { ok, output (string), outputBytes (number[]), steps, error, finalTape (number[]) }.
+    function runBF(code, input, opts) {
+      opts = opts || {};
+      var compiled = compileBF(code);
+      if (compiled.error) return { ok: false, output: '', outputBytes: [], steps: 0, error: compiled.error, finalTape: [] };
+      var jumps = compiled.jumps;
+      code = String(code);
+      input = String(input == null ? '' : input);
+      var tapeSize = opts.tapeSize || 30000;
+      var stepLimit = opts.stepLimit || 10000000;
+      // build the command stream (strip comments) for efficiency, keeping a position map
+      var prog = [];
+      var posMap = [];
+      for (var i = 0; i < code.length; i++) {
+        var c = code[i];
+        if (c === '>' || c === '<' || c === '+' || c === '-' || c === '.' || c === ',' || c === '[' || c === ']') {
+          prog.push(c); posMap.push(i);
+        }
+      }
+      var tape = new Array(tapeSize);
+      for (var k = 0; k < tapeSize; k++) tape[k] = 0;
+      var ptr = 0, ip = 0, inIdx = 0, steps = 0;
+      var outBytes = [];
+      while (ip < prog.length) {
+        var cmd = prog[ip];
+        var srcPos = posMap[ip];
+        steps++;
+        if (steps > stepLimit) {
+          return { ok: false, output: bytesToStr(outBytes), outputBytes: outBytes, steps: steps - 1,
+            error: "step limit (" + stepLimit + ") exceeded — possible infinite loop", finalTape: tape };
+        }
+        if (cmd === '>') { ptr++; if (ptr >= tapeSize) return errResult(tape, outBytes, steps - 1, "pointer moved past end of tape (cell " + ptr + ")"); }
+        else if (cmd === '<') { ptr--; if (ptr < 0) return errResult(tape, outBytes, steps - 1, "pointer moved before start of tape"); }
+        else if (cmd === '+') { tape[ptr] = (tape[ptr] + 1) & 0xFF; }
+        else if (cmd === '-') { tape[ptr] = (tape[ptr] - 1) & 0xFF; }
+        else if (cmd === '.') { outBytes.push(tape[ptr]); }
+        else if (cmd === ',') { tape[ptr] = inIdx < input.length ? input.charCodeAt(inIdx++) & 0xFF : 0; }
+        else if (cmd === '[') { if (tape[ptr] === 0) ip = jumps[srcPos]; }
+        else if (cmd === ']') { if (tape[ptr] !== 0) ip = jumps[srcPos]; }
+        ip++;
+      }
+      return { ok: true, output: bytesToStr(outBytes), outputBytes: outBytes, steps: steps, error: null, finalTape: tape, finalPtr: ptr };
+    }
+    function errResult(tape, outBytes, steps, msg) {
+      return { ok: false, output: bytesToStr(outBytes), outputBytes: outBytes, steps: steps, error: msg, finalTape: tape };
+    }
+    function bytesToStr(bytes) {
+      var s = '';
+      for (var i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+      return s;
+    }
+
+    function $(id) { return document.getElementById(id); }
+    var codeEl = $("code"), inputEl = $("input"), limitEl = $("limit"), tapeEl = $("tape"), errEl = $("err");
+    var outEl = $("out"), detailsEl = $("details");
+
+    function toHex(bytes) {
+      var s = '';
+      for (var i = 0; i < bytes.length; i++) { if (i) s += ' '; s += (bytes[i] < 16 ? '0' : '') + bytes[i].toString(16); }
+      return s || '(no output)';
+    }
+    function escapeHtml(s) {
+      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+    function tapeDump(tape, ptr) {
+      var used = [];
+      for (var i = 0; i < tape.length; i++) if (tape[i] !== 0) used.push(i);
+      if (used.length === 0) return '(all zero)';
+      var parts = [];
+      for (var k = 0; k < used.length; k++) {
+        var idx = used[k];
+        parts.push('[' + idx + (idx === ptr ? '*' : '') + ']=' + tape[idx]);
+      }
+      return parts.join('  ');
+    }
+
+    function run() {
+      errEl.textContent = "";
+      var res = runBF(codeEl.value, inputEl.value, {
+        tapeSize: Math.max(1, Number(tapeEl.value) || 30000),
+        stepLimit: Math.max(1, Number(limitEl.value) || 10000000)
+      });
+      var outText = res.output;
+      var displayOut = outText === '' ? '(no output)' : outText;
+      outEl.innerHTML = escapeHtml(displayOut);
+      var statusHtml;
+      if (res.error) statusHtml = '<span class="bad">' + escapeHtml(res.error) + '</span>';
+      else statusHtml = '<span class="hl">terminated normally</span>';
+      detailsEl.innerHTML =
+        '<span class="k">status</span>' + statusHtml + '<br>' +
+        '<span class="k">steps executed</span><span class="v">' + res.steps + '</span><br>' +
+        '<span class="k">output bytes</span><span class="v">' + res.outputBytes.length + '</span><br>' +
+        '<span class="k">output (hex)</span><span class="v">' + escapeHtml(toHex(res.outputBytes)) + '</span><br>' +
+        '<span class="k">final tape (non-zero cells)</span><span class="v">' + escapeHtml(tapeDump(res.finalTape, res.finalPtr)) + '</span>';
+    }
+
+    function setCode(c, inp) { codeEl.value = c; inputEl.value = inp || ''; run(); }
+
+    $("b-run").addEventListener("click", run);
+    $("b-hw").addEventListener("click", function () {
+      setCode("++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.");
+    });
+    $("b-cat").addEventListener("click", function () {
+      setCode(",[.,]", "Hello, Brainfuck!");
+    });
+    $("b-add2").addEventListener("click", function () {
+      // reads two digit characters, prints their sum as a digit (mod 10 wrap); e.g. 2+3=5
+      setCode(",>,[<+>-]<------------------------------------------------>++++++++++++++++++++++++++++++++++++++++++++++++.", "27");
+    });
+    $("b-clear").addEventListener("click", function () { setCode("", ""); });
+    [codeEl, inputEl, limitEl, tapeEl].forEach(function (el) { el.addEventListener("input", run); });
+
+    run();
+
+    window.VT_BF_TEST = { compileBF: compileBF, runBF: runBF, bytesToStr: bytesToStr };
+  })();
+  </script>
+</body>
+</html>
