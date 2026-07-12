@@ -2763,6 +2763,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T08:10:00Z",
   },
   {
+    slug: "iso-week",
+    name: "ISO Week Date Calculator",
+    description: "Convert between a Gregorian calendar date and its ISO 8601 week date (yyyy-Www-d). Weeks start on Monday and week 1 is the week containing the year's first Thursday, so a week-numbering year has 52 or 53 weeks and can straddle the calendar boundary — e.g. 31 Dec 2020 is 2020-W53-4 and 29 Dec 2014 is 2015-W01-1. Enter a date to get its ISO week number, week-numbering year, day-of-week (Mon=1..Sun=7), day-of-year, leap-year flag, and the number of weeks in that ISO year, or enter year/week/day to recover the calendar date. Integer Julian-Day arithmetic, exact and timezone-independent for years 1-9999. Pairs with the Julian Day Number, Day-of-Year, and Date Duration tools. Everything runs locally in your browser.",
+    category: "Time",
+    icon: "№",
+    added: "2026-07-12T08:20:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
