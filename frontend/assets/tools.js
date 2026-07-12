@@ -2755,6 +2755,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T08:00:00Z",
   },
   {
+    slug: "twos-complement",
+    name: "Two's Complement Converter",
+    description: "Encode and decode signed integers in two's-complement binary. Enter a signed decimal (or a 0b / 0x literal) and a bit width (4 to 64) to get the n-bit binary and hex encoding, the unsigned interpretation, the sign bit, the negated value (~v + 1), and a bitwise NOT, with an overflow/range check against -2^(n-1) .. 2^(n-1)-1. Paste an n-bit binary pattern to decode it back to a signed decimal. Sign-extension and the one-more-negative-than-positive asymmetry (e.g. 8 bits holds -128 but not +128) are made explicit. Uses BigInt for exact 64-bit math. Pairs with the Bitwise Calculator and the Number Base / Text-Binary converters. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "±",
+    added: "2026-07-12T08:10:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
