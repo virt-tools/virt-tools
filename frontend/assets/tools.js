@@ -2731,6 +2731,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T07:30:00Z",
   },
   {
+    slug: "power-factor",
+    name: "Power Factor & Power Triangle Calculator",
+    description: "AC power has three flavors: real power P (watts, energy consumed), reactive power Q (var, energy exchanged with inductors/capacitors), and apparent power S (VA, total the source delivers). They form a right triangle with S^2 = P^2 + Q^2, P = S*cos(phi), Q = S*sin(phi), and power factor PF = P/S = cos(phi). Enter voltage, current, and PF to get P, Q, S, and the phase angle (single-phase S = V*I, three-phase S = sqrt(3)*V*I); solve the power triangle from any two of P/Q/S; and compute the capacitive vars needed to correct a poor power factor, Qc = P*(tan(acos(PF1)) - tan(acos(PF2))). A resistive load is PF = 1; an inductive motor lags (positive Q); a capacitive load leads (negative Q). Pairs with the Reactance & Impedance, Voltage Drop, and Ohm's Law tools. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "▲",
+    added: "2026-07-12T07:40:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
