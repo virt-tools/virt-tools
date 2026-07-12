@@ -2699,6 +2699,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T06:50:00Z",
   },
   {
+    slug: "cmyk-converter",
+    name: "CMYK Color Converter",
+    description: "Convert between CMYK (the subtractive cyan/magenta/yellow/key model used by printers) and RGB / HEX / HSL (the additive model used by screens). Given RGB, the key channel is K = 1 - max(R,G,B) and the color channels are C = (1-R-K)/(1-K) (likewise M, Y), so pure red (#FF0000) becomes CMYK 0,100,100,0 and black becomes 0,0,0,100. The inverse is R = 255*(1-C)*(1-K). Enter any representation to get the others with a live swatch and the eight process-color corners. Notes the idealized math vs real device-dependent CMYK (ICC profile, dot gain, rich black). Pairs with the Color Converter (HEX/RGB/HSL), OKLCH Converter, and Color Temperature to RGB tools. Everything runs locally in your browser.",
+    category: "Design",
+    icon: "🖨️",
+    added: "2026-07-12T07:00:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
