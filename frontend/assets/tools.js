@@ -1219,6 +1219,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T00:00:00Z",
   },
   {
+    slug: "scytale-cipher",
+    name: "Scytale Cipher",
+    description: "Transpose text using the ancient Greek rod-winding method. Simple yet effective for its time. Runs locally.",
+    category: "Text",
+    icon: "📜",
+    added: "2026-07-12T00:00:00Z",
+  },
+  {
     slug: "bifid-cipher",
     name: "Bifid Cipher",
     description: "A complex substitution cipher that combines a Polybius square with fractionation. Runs locally.",
