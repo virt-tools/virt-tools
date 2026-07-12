@@ -2795,6 +2795,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T08:50:00Z",
   },
   {
+    slug: "columnar-transposition",
+    name: "Columnar Transposition Cipher",
+    description: "Encrypt and decrypt with the columnar transposition cipher, a classical cipher that rearranges letters rather than substituting them. Pick a keyword whose length sets the number of columns and whose alphabetical order sets the order in which columns are read. To encrypt, the upper-cased, letters-only plaintext is written row by row into a grid of that width, padded with X to fill the last row, and the ciphertext is read column by column in the keyword's rank order. To decrypt, the ciphertext is split back into columns of the right lengths (the first n mod width columns are one taller) and read off row by row. The column order is shown for reference. Pairs with the Rail Fence cipher in the Classical Ciphers tool, and with the Caesar and Vigenere ciphers. Everything runs locally in your browser.",
+    category: "Text",
+    icon: "▥",
+    added: "2026-07-12T09:00:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
