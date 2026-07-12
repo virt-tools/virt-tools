@@ -1203,6 +1203,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T00:00:00Z",
   },
   {
+    slug: "one-time-pad",
+    name: "One-Time Pad",
+    description: "Encrypt and decrypt using a truly random key of equal length to the message. The only mathematically unbreakable cipher. Runs locally.",
+    category: "Text",
+    icon: "🔒",
+    added: "2026-07-12T00:00:00Z",
+  },
+  {
     slug: "zero-width-steganography",
     name: "Zero-Width Text Steganography",
     description: "Hide a secret message inside ordinary-looking text using invisible Unicode zero-width characters, then reveal it again. The payload (UTF-8 → bits → zero-width chars) is slipped into cover text; survives plain-text copy/paste. Runs locally — nothing uploaded.",
