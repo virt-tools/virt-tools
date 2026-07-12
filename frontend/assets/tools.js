@@ -2603,6 +2603,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T04:50:00Z",
   },
   {
+    slug: "magic-square",
+    name: "Magic Square Generator",
+    description: "Generate a magic square of any supported order — an n×n grid of the numbers 1 to n² in which every row, column, and both main diagonals sum to the same magic constant M = n(n²+1)/2. Odd orders (3, 5, 7, …) use the Siamese (de la Loubère) up-and-right method — the 3×3 case is the ancient Lo Shu — and doubly-even orders divisible by 4 (4, 8, 12, …) use the complement method (keep the diagonal cells of each 4×4 block, replace the rest with n²+1−value). Each square is verified on the spot: all 2n+2 lines must equal M and the values 1…n² must each appear exactly once. Singly-even orders (n = 4k+2, e.g. 6, 10) need Strachey's quadrant-swap construction and are out of scope. Pairs with the Number Properties and Pascal's Triangle tools. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🪄",
+    added: "2026-07-12T05:00:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
