@@ -2635,6 +2635,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T05:30:00Z",
   },
   {
+    slug: "edit-distance",
+    name: "Edit Distance Calculator",
+    description: "Count the single-character edits needed to turn one string into another. Levenshtein distance (insert, delete, substitute) is the classic metric behind spell-checking, diff tools, and DNA sequence alignment — kitten to sitting costs 3. Damerau-Levenshtein adds the adjacent transposition so ab to ba costs 1 instead of 2, and Hamming distance counts mismatched positions in two equal-length strings. See the full dynamic-programming matrix, the optimal edit script as a character-by-character alignment (match / substitute / delete / insert), and a normalized similarity ratio. Everything runs locally in your browser.",
+    category: "Text",
+    icon: "✎",
+    added: "2026-07-12T05:40:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
