@@ -2779,6 +2779,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T08:30:00Z",
   },
   {
+    slug: "tap-code",
+    name: "Tap Code / Polybius Square",
+    description: "Encode and decode text with the tap code (the 'knock code' used by prisoners of war) and the classical Polybius square. Each letter is located in a 5×5 grid and represented by its row and column — transmitted historically as two groups of taps (one to five knocks for the row, a pause, then one to five for the column), or written as the two-digit coordinate rowcol (A=11, E=15, T=44). Because 26 letters don't fit 25 cells, one pair shares a cell: choose C/K merged (the military tap-code convention, where K is written as C) or I/J merged (the classical Polybius convention, where J is written as I). Convert text to taps or numbers and back, with the reference grid shown. Pairs with the Caesar, Vigenère, and Classical Ciphers, and with Morse Code and the NATO Phonetic alphabet. Everything runs locally in your browser.",
+    category: "Text",
+    icon: "👆",
+    added: "2026-07-12T08:40:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
