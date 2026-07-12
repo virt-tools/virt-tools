@@ -2707,6 +2707,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T07:00:00Z",
   },
   {
+    slug: "key-signature",
+    name: "Circle of Fifths / Key Signature Calculator",
+    description: "Pick any major or minor key and see its key signature — how many sharps or flats and exactly which notes are altered (G major has 1 sharp, F#; D major has F# and C#; F major has 1 flat, Bb) — along with its 7-note scale, its relative major/minor, and its place on the circle of fifths. Sharps accumulate F#-C#-G#-D#-A#-E#-B# and flats Bb-Eb-Ab-Db-Gb-Cb-Fb; the relative minor sits a minor third below the major and shares the signature. Includes an interactive circle of fifths diagram and a full table of all major and minor key signatures. Pairs with the Scale Generator and Note Frequency Calculator. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "♪",
+    added: "2026-07-12T07:10:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
