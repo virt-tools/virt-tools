@@ -2683,6 +2683,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T06:30:00Z",
   },
   {
+    slug: "just-intonation",
+    name: "Just Intonation / Cents Deviation Calculator",
+    description: "Compare just-intonation intervals (small whole-number ratios like 3:2, 5:4, 4:3) with 12-tone equal temperament. One cent is 1/1200 of an octave, so cents = 1200 * log2(ratio). See a full interval table with each ratio's cents, frequency above a base, the nearest equal-tempered interval, and the deviation - the pure 5:4 major third sits 13.7 cents below the piano's 400¢ major third (ET is sharp), the pure 3:2 fifth is 2 cents above the piano's 700¢ (ET is flat). Plus converters between ratios, cents, and frequencies (cents = 1200 * log2(f2/f1), ratio = 2^(cents/1200)). Pairs with the Note Frequency Calculator (equal-tempered note to frequency) and the Wavelength / Frequency Calculator. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "♯",
+    added: "2026-07-12T06:40:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
