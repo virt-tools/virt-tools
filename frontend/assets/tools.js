@@ -1259,6 +1259,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T00:00:00Z",
   },
   {
+    slug: "l-system",
+    name: "L-System Generator",
+    description: "Generate complex fractal patterns and plant-like structures using formal recursive grammars. Runs locally.",
+    category: "Design",
+    icon: "🌿",
+    added: "2026-07-12T00:00:00Z",
+  },
+  {
     slug: "rail-fence-cipher",
     name: "Rail Fence Cipher",
     description: "Encrypt and decrypt text by writing it in a zigzag pattern across multiple rails and reading them row by row. Runs locally.",
