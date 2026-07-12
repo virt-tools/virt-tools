@@ -2811,6 +2811,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T09:10:00Z",
   },
   {
+    slug: "bacon-cipher",
+    name: "Bacon's Cipher",
+    description: "Encode and decode with Bacon's cipher, the steganographic cipher devised by Francis Bacon around 1605. Each letter becomes a group of five symbols drawn from a two-symbol alphabet (historically A/B, equivalently 0/1), so a message turns into a binary stream that can be hidden in anything with two states (two typefaces, bold/regular, and so on). Choose the modern 26-letter alphabet (I, J, U, V all distinct) or Bacon's original 24-letter alphabet (where I/J and U/V share a code); encode text to symbol groups and decode a symbol stream back to text, with the full code table shown. Decoding ignores any character that isn't A/B/0/1 and marks out-of-range codes with a question mark. Pairs with the Caesar, Vigenere, Beaufort, and Classical Ciphers tools. Everything runs locally in your browser.",
+    category: "Text",
+    icon: "🥓",
+    added: "2026-07-12T09:20:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
