@@ -2747,6 +2747,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T07:50:00Z",
   },
   {
+    slug: "free-space-path-loss",
+    name: "Free-Space Path Loss & Link Budget Calculator",
+    description: "Radio signal weakens as it spreads — the free-space path loss between two antennas distance d apart at frequency f follows the Friis equation FSPL = (4*pi*d*f/c)^2, or in dB FSPL = 20*log10(d) + 20*log10(f) + 32.44 with d in km and f in MHz (it grows 20 dB per decade of distance and 20 dB per decade of frequency). A link budget adds it all up: Pr = Pt + Gt + Gr - FSPL - other losses, giving the received power in dBm, with EIRP = Pt + Gt, wavelength lambda = c/f, and fade margin = Pr - receiver sensitivity (should be 10-30 dB). Enter frequency, distance, transmit power, antenna gains, losses, and sensitivity to get the path loss, received power, EIRP, wavelength, and fade margin. Presets for WiFi 2.4/5 GHz, 900 MHz, and a satellite link. Pairs with the Decibel, VSWR, and Wavelength tools. Everything runs locally in your browser.",
+    category: "Networking",
+    icon: "🛰️",
+    added: "2026-07-12T08:00:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
