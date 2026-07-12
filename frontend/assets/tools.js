@@ -1187,6 +1187,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-11T00:40:00Z",
   },
   {
+    slug: "polybius-square",
+    name: "Polybius Square",
+    description: "Encrypt and decrypt text using a 5×5 grid to convert letters into numeric coordinates. A classic substitution cipher from ancient Greece. Runs locally.",
+    category: "Text",
+    icon: "🔢",
+    added: "2026-07-12T00:00:00Z",
+  },
+  {
     slug: "zero-width-steganography",
     name: "Zero-Width Text Steganography",
     description: "Hide a secret message inside ordinary-looking text using invisible Unicode zero-width characters, then reveal it again. The payload (UTF-8 → bits → zero-width chars) is slipped into cover text; survives plain-text copy/paste. Runs locally — nothing uploaded.",
