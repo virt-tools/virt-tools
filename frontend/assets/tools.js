@@ -2643,6 +2643,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T05:40:00Z",
   },
   {
+    slug: "lzw-compressor",
+    name: "LZW Compressor",
+    description: "Compress and decompress text with LZW (Lempel-Ziv-Welch), the dictionary-based algorithm behind GIF, TIFF, and the original UNIX compress. LZW builds its dictionary on the fly: it emits a code for the longest phrase already seen, then adds that phrase plus the next character as a new entry, so recurring patterns get ever-shorter codes the more they repeat. See the emitted code sequence, the packed byte stream (variable-width 9-to-12-bit codes), the compression ratio, and a live decompression that verifies the lossless round-trip. Everything runs locally in your browser.",
+    category: "Encoding",
+    icon: "🗃️",
+    added: "2026-07-12T05:50:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
