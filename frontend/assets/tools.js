@@ -2667,6 +2667,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T06:10:00Z",
   },
   {
+    slug: "lottery-odds",
+    name: "Lottery Odds Calculator",
+    description: "Compute the exact odds of winning a lottery. Pick p numbers from a pool of n, the draw selects d (usually d = p), and find the probability of matching exactly k of them. The match count follows the hypergeometric distribution, P(match k) = C(p,k) * C(n-p, d-k) / C(n,d), so the jackpot (match all) is 1 / C(n,p) - 1 in 13,983,816 for a 6/49 lottery. Add a separate bonus-ball pool (Powerball's 1 of 26, Mega Millions' 1 of 25) and the jackpot odds multiply by that pool. Exact integer arithmetic via BigInt with a full match-distribution table. Presets for 6/49, Powerball, Mega Millions, UK Lotto, and Keno. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🍀",
+    added: "2026-07-12T06:20:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
