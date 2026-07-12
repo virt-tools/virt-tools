@@ -1219,6 +1219,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T00:00:00Z",
   },
   {
+    slug: "bifid-cipher",
+    name: "Bifid Cipher",
+    description: "A complex substitution cipher that combines a Polybius square with fractionation. Runs locally.",
+    category: "Text",
+    icon: "🧩",
+    added: "2026-07-12T00:00:00Z",
+  },
+  {
     slug: "rot13-cipher",
     name: "ROT13 Cipher",
     description: "A simple substitution cipher that rotates letters by 13 places. Self-reciprocal and widely used for spoilers. Runs locally.",
