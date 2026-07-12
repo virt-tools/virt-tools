@@ -2819,6 +2819,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T09:20:00Z",
   },
   {
+    slug: "phone-keypad",
+    name: "T9 / Phone Keypad (Multitap)",
+    description: "Encode and decode text with the multitap method of the classic phone keypad — how you typed SMS on a numeric keypad before smartphones. Each letter lives on a digit key (2=ABC, 3=DEF, 4=GHI, 5=JKL, 6=MNO, 7=PQRS, 8=TUV, 9=WXYZ) and you press it once for the first letter, twice for the second, three times for the third, and four times for S, Z, and the four-letter keys; 0 is the space. So A=2, B=22, C=222, S=7777, SPACE=0. Encode text to a space-separated sequence of key presses and decode it back, with the full keypad shown for reference. The space separators disambiguate consecutive letters that share a key (AB encodes as 2 22, not 222 which is C). Pairs with the Tap Code, Morse Code, and NATO Phonetic alphabet tools. Everything runs locally in your browser.",
+    category: "Text",
+    icon: "☎️",
+    added: "2026-07-12T09:30:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
