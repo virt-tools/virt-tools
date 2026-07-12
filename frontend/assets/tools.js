@@ -2691,6 +2691,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T06:40:00Z",
   },
   {
+    slug: "pwm-duty-cycle",
+    name: "PWM Duty Cycle Calculator",
+    description: "Pulse-width modulation switches a signal on and off at a fixed frequency; the duty cycle is the fraction of each period the signal is high. Given a frequency and duty cycle get the period T = 1/f, the high (pulse) time tH = T*D, the low time tL = T - tH, and the average voltage Vavg = Vs*D delivered to a load (a 5 V pin at 50% duty averages 2.5 V - dimming an LED or setting motor speed). Works the other way too: recover the duty cycle from a measured pulse width and period (D = tH/T). Includes a square-waveform preview and presets for Arduino analogWrite (490 Hz), a 60 Hz dimmer, and RC servo signals (50 Hz, 1-2 ms pulses). Pairs with the Ohm's Law, LED Resistor, Voltage Divider, and RC Time Constant calculators. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "⎍",
+    added: "2026-07-12T06:50:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
