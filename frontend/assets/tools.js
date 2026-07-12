@@ -2651,6 +2651,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T05:50:00Z",
   },
   {
+    slug: "move-to-front",
+    name: "Move-to-Front Transform",
+    description: "Rewrite a string as a sequence of small integers with the Move-to-Front (MTF) transform. Keep a list of all 256 byte values; for each input byte output its current position in the list, then move that byte to the front. Repeated characters in a row become runs of zeros, and recently-seen bytes get small codes, so MTF is the standard second stage after the Burrows-Wheeler transform in bzip2, turning BWT's clustered runs into a zero-dominated stream that RLE and Huffman then crush. MTF is lossless and exactly invertible. See the forward codes, the inverse round-trip, and a step-by-step trace of the moving front of the symbol table. Everything runs locally in your browser.",
+    category: "Encoding",
+    icon: "🔝",
+    added: "2026-07-12T06:00:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
