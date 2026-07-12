@@ -2739,6 +2739,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T07:40:00Z",
   },
   {
+    slug: "ac-rms-peak",
+    name: "AC RMS / Peak Converter",
+    description: "Convert between the amplitude measures of an AC waveform. For a sine V_rms = V_pk/sqrt(2) (~0.707 V_pk), V_pp = 2 V_pk, and the full-wave rectified average is 2 V_pk/pi (~0.637 V_pk). The peak-to-RMS ratio is the crest factor (sqrt(2) for a sine) and the RMS-to-average ratio is the form factor (pi/(2 sqrt(2)) ~ 1.11, which is why average-reading meters calibrated for sine are wrong for other waveforms). Enter peak, RMS, or peak-to-peak and pick sine / square / triangle / half-wave rectified to get the others, plus crest and form factors; optionally add a DC offset (combined RMS = sqrt(V_dc^2 + V_ac_rms^2)); or paste a list of samples to compute RMS = sqrt(mean(v^2)), mean, peak, and crest factor from the general definition. Pairs with the Decibel, Power Factor, and Reactance & Impedance tools. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "⌁",
+    added: "2026-07-12T07:50:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
