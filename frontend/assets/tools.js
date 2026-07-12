@@ -2723,6 +2723,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T07:20:00Z",
   },
   {
+    slug: "voltage-drop",
+    name: "Voltage Drop Calculator",
+    description: "Estimate the voltage lost along a wire run so the load still sees an acceptable voltage. Enter conductor material, cross-section (mm^2 or AWG), one-way length, load current, and supply voltage. Conductor resistance is R = rho*L/A (resistivity times length over area), temperature-corrected as rho(T) = rho20*(1 + alpha*(T - 20)) with copper rho = 1.68e-8 and aluminum 2.82e-8 ohm-meters. Single-phase drop is Vd = 2*I*R (go and return); balanced three-phase is Vd = sqrt(3)*I*R. Shows the voltage at the load (V - Vd) and the drop as a percentage of supply, flagging the 3% branch / 5% feeder limits. AWG area is derived from the gauge formula d = 0.005*92^((36-n)/39) inches. Pairs with the AWG Wire Gauge, Ohm's Law, Reactance & Impedance, and Voltage Divider tools. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "⏚",
+    added: "2026-07-12T07:30:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
