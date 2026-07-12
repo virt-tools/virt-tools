@@ -2611,6 +2611,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T05:00:00Z",
   },
   {
+    slug: "bloom-filter",
+    name: "Bloom Filter Calculator",
+    description: "A Bloom filter tests set membership with no false negatives and a tunable false-positive rate, using m bits and k hash functions. Size a filter with the standard formulas — optimal k = (m/n)·ln 2, expected false-positive rate p ≈ (1 − e^(−kn/m))^k, and optimal bit count m = −n·ln p / (ln 2)² (about 9.6 bits per element for a 1% rate) — then drive a live filter: insert elements, query membership, and watch the bit-fill ratio and observed versus theoretical false-positive rate. Hashing uses the Kirsch-Mitzenmacher double-hashing scheme over two FNV-1a 32-bit hashes. Bloom filters back database joins, browser safe-browsing, and cache membership; the sizing math is the same collision bound as the birthday problem. Pairs with the Hash Generator and Birthday Problem tools. Everything runs locally in your browser.",
+    category: "Data",
+    icon: "🪣",
+    added: "2026-07-12T05:10:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
