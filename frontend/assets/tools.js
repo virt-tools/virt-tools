@@ -2843,6 +2843,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T09:50:00Z",
   },
   {
+    slug: "autokey-cipher",
+    name: "Autokey Cipher",
+    description: "Encrypt and decrypt with the autokey cipher (the autoclave or Vigenere autokey), a polyalphabetic cipher that fixes the great weakness of the repeating-key Vigenere cipher. Instead of looping a short keyword, the autokey builds a keystream that never repeats: it begins with a short primer (the keyword) and then continues with the plaintext itself, so each letter is shifted by the primer for the first stretch and by earlier plaintext letters thereafter. Because the key grows with the message, no short cycle exists for frequency analysis to exploit. Encryption is C = (P + K) mod 26; decryption inverts it, reconstructing the key from the primer and the plaintext already recovered. Case and non-letters pass through untouched and the key advances only on letters. A letter-by-letter keystream breakdown is shown for reference. Pairs with the Vigenere, Beaufort, Caesar, and Classical Ciphers tools. Everything runs locally in your browser.",
+    category: "Text",
+    icon: "🪛",
+    added: "2026-07-12T10:00:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
