@@ -2835,6 +2835,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T09:40:00Z",
   },
   {
+    slug: "playfair-cipher",
+    name: "Playfair Cipher",
+    description: "Encrypt and decrypt with the Playfair cipher, the famous digraph substitution cipher invented in 1854 and used militarily through World War I and World War II — the first practical cipher to encrypt pairs of letters, defeating simple frequency analysis. It builds a 5x5 key square from a keyword (J merged into I) and applies three rules to each letter pair: same row shifts right, same column shifts down, otherwise the rectangle rule swaps columns. Identical letters in a pair are split with an X and an odd-length message is padded with X. Enter a keyword and text to encipher or decipher, with the key square and prepared digraphs shown for reference. Pairs with the Caesar, Vigenere, Beaufort, Bacon, Columnar Transposition, and Classical Ciphers tools. Everything runs locally in your browser.",
+    category: "Text",
+    icon: "🪖",
+    added: "2026-07-12T09:50:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
