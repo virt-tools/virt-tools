@@ -2715,6 +2715,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T07:10:00Z",
   },
   {
+    slug: "reactance-impedance",
+    name: "Reactance & Impedance Calculator",
+    description: "For a series RLC circuit, enter frequency f, resistance R, inductance L, and capacitance C to get the inductive reactance X_L = 2*pi*f*L, the capacitive reactance X_C = 1/(2*pi*f*C), the net reactance X = X_L - X_C, the impedance magnitude |Z| = sqrt(R^2 + X^2), and the phase angle phi = atan2(X, R) in degrees (positive = inductive, current lags voltage; negative = capacitive, current leads). Shows the complex form Z = R + jX, classifies the circuit as inductive/capacitive/resistive, and computes the resonant frequency f0 = 1/(2*pi*sqrt(L*C)), the quality factor Q = (1/R)*sqrt(L/C), and the bandwidth BW = f0/Q. At resonance the reactances cancel and |Z| = R. Pairs with the LC Resonant Frequency, Ohm's Law, Voltage Divider, and PWM Duty Cycle tools. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "Φ",
+    added: "2026-07-12T07:20:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
