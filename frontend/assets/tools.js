@@ -2675,6 +2675,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T06:20:00Z",
   },
   {
+    slug: "doubling-time-calculator",
+    name: "Rule of 72 / Doubling Time Calculator",
+    description: "How long does it take money to double at a fixed annual rate? The exact doubling time is ln 2 / ln(1 + r); the rule of 72 approximates it as 72 / r (in percent) - a mental shortcut most accurate near 8% (at 6% money doubles in ~11.9 years, rule says 12; at 10% in ~7.3 years, rule says 7.2). See the exact time, the rule-of-72 estimate and its error, the tripling time (rule of 114), a general time-to-multiply-by-N solver, continuous-compounding doubling (the rule of 69.3), and a comparison table across rates. Pairs with the Compound Interest, Inflation, Loan, and Margin / Markup calculators. Everything runs locally in your browser.",
+    category: "Finance",
+    icon: "⌛",
+    added: "2026-07-12T06:30:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
