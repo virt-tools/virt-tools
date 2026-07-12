@@ -2619,6 +2619,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T05:10:00Z",
   },
   {
+    slug: "josephus",
+    name: "Josephus Problem Solver",
+    description: "Solve the Josephus problem: n people stand in a circle and eliminate every k-th person until one remains. Find the survivor's position via the O(n) recurrence g(i) = (g(i−1) + k) mod i, see the full elimination order (the Josephus permutation), and — for k = 2 — the closed form 2ℓ+1 where n = 2^a + ℓ (so for n = 41 the k=2 survivor is position 19, and for any power of two it is position 1). The legend holds that the historian Flavius Josephus used exactly this mathematics to survive a cave siege of 41 with every third eliminated (position 31); the same counting-out recurrence drives nursery rhymes like eeny-meeny-miny-moe and round-robin scheduling. Pairs with the Collatz Conjecture, Kaprekar's Routine, and N-Queens tools. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "⭕",
+    added: "2026-07-12T05:20:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
