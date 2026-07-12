@@ -2771,6 +2771,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T08:20:00Z",
   },
   {
+    slug: "chord-identifier",
+    name: "Chord Identifier",
+    description: "Identify a chord from its notes, or build a named chord from a root and a quality, in 12-tone equal temperament. Enter the notes of a chord (e.g. C E G or Eb G Bb D, with optional octaves like C4 E4 G4) to name it — the tool tries every note as a possible root, matches the interval stack against the standard formulas (major, minor, diminished, augmented, suspended, 6ths, 7ths, 9ths, 11ths, 13ths and variants), reports the chord name with slash-notation inversion when octaves are given, and lists every alternative spelling for symmetric chords like augmented and diminished-7th. Or pick a root and chord type to list the notes, interval formula, and the scale-degree of each tone. Pairs with the Scale & Key Generator and the Note Frequency Calculator. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🎸",
+    added: "2026-07-12T08:30:00Z",
+  },
+  {
     slug: "normal-distribution",
     name: "Normal Distribution Calculator",
     description: "Work with the normal (Gaussian) distribution. Enter a mean μ and standard deviation σ, then either find the cumulative probability P(X ≤ x) for a given value (with its z-score and density), invert a percentile to find the value x for a given probability, or compute the probability P(a ≤ X ≤ b) of an interval. The CDF uses the error function and the percentile inversion uses Newton's method; results match standard normal tables to about six significant figures. Everything runs locally in your browser.",
