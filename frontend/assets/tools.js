@@ -1219,6 +1219,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-12T00:00:00Z",
   },
   {
+    slug: "beaufort-cipher",
+    name: "Beaufort Cipher",
+    description: "A polyalphabetic substitution cipher and variant of Vigenère that is self-reciprocal. Runs locally.",
+    category: "Text",
+    icon: "🗝️",
+    added: "2026-07-12T00:00:00Z",
+  },
+  {
     slug: "rail-fence-cipher",
     name: "Rail Fence Cipher",
     description: "Encrypt and decrypt text by writing it in a zigzag pattern across multiple rails and reading them row by row. Runs locally.",
