@@ -3650,4 +3650,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎚️",
     added: "2026-07-14T07:15:00Z",
   },
+  {
+    slug: "npk-fertilizer-calculator",
+    name: "NPK Fertilizer Calculator",
+    description: "Work out how much nitrogen, phosphorus and potassium a fertilizer applies from its N-P-K grade and the amount spread over a lawn or garden area. Converts the oxide forms (P₂O₅, K₂O) to elemental P and K, reports pounds per 1000 ft² and per acre, and shows how much product is needed to hit a target nitrogen rate. Grade presets for common fertilizers (10-10-10, urea 46-0-0, muriate of potash 0-0-60, lawn high-N, starter). Pure arithmetic, in your browser.",
+    category: "Environment",
+    icon: "🌱",
+    added: "2026-07-14T07:45:00Z",
+  },
 ];
