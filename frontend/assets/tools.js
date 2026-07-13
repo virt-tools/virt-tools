@@ -3554,4 +3554,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔄",
     added: "2026-07-14T01:15:00Z",
   },
+  {
+    slug: "maidenhead-locator",
+    name: "Maidenhead Grid Locator Converter",
+    description: "Convert between latitude / longitude and a Maidenhead grid locator — the concise grid-square system used worldwide by amateur radio operators to report position (IO91wm for London, FN31mp for Connecticut). Encode a position to a 4, 6 or 8-character locator, or decode a locator back to its centre and bounding box. The grid nests field (20°×10°, two letters), square (2°×1°, two digits) and subsquare (5′×2.5′, two letters), with an optional 8-character extension. Pure arithmetic, in your browser.",
+    category: "Geography",
+    icon: "📡",
+    added: "2026-07-14T01:45:00Z",
+  },
 ];
