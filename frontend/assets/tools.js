@@ -3514,4 +3514,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🅂",
     added: "2026-07-13T22:45:00Z",
   },
+  {
+    slug: "unicode-inspector",
+    name: "Unicode Inspector",
+    description: "Break a string down character by character and see each codepoint's number, UTF-8, UTF-16 and UTF-32 byte encoding, and HTML decimal/hex entities. Handles surrogate pairs so astral-plane characters (emoji, historic scripts) are reported as single codepoints. Handy for debugging encoding and pasting entity references. Pure JS, in your browser.",
+    category: "Text",
+    icon: "🔬",
+    added: "2026-07-13T23:15:00Z",
+  },
 ];

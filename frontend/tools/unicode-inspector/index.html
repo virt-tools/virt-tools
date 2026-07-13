@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Unicode Inspector — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .out { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
+    .verdict { font-size: 1rem; font-weight: 600; }
+    .verdict.bad { color: var(--bad, #f87171); }
+    .verdict.ok { color: var(--ok, #4ade80); }
+    table.uni { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.8rem; table-layout: fixed; }
+    table.uni th, table.uni td { border: 1px solid var(--border); padding: 4px 6px; text-align: left; word-break: break-all; }
+    table.uni th { background: var(--bg-elev-2); color: var(--text-dim); font-weight: 600; }
+    table.uni td.ch { text-align: center; font-size: 1.15rem; }
+    table.uni col.c-ch { width: 44px; }
+    table.uni col.c-cp { width: 80px; }
+    .muted { color: var(--text-dim); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Unicode Inspector</h1>
+      <p>Break a string down character by character and see each codepoint's number, UTF-8, UTF-16 and UTF-32 byte encoding, and HTML decimal/hex entities. Handles surrogate pairs so astral-plane characters (emoji, historic scripts) are reported as single codepoints. Handy for debugging encoding and pasting entity references. Pure JS, in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="in">Text</label>
+        <input id="in" type="text" value="Héllo 😀" autocomplete="off" style="font-family:ui-monospace,monospace;">
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <p class="note" id="err"></p>
+
+      <table class="uni" id="table">
+        <colgroup><col class="c-ch"><col class="c-cp"><col><col><col><col><col></colgroup>
+        <tr><th>Char</th><th>Codepoint</th><th>Dec</th><th>UTF-8</th><th>UTF-16</th><th>UTF-32</th><th>HTML entities</th></tr>
+      </table>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var inEl = $("in"), verdictEl = $("verdict"), errEl = $("err"), tableEl = $("table");
+
+    function utf8(cp) {
+      if (cp < 0x80) return [cp];
+      if (cp < 0x800) return [0xC0 | (cp >> 6), 0x80 | (cp & 0x3F)];
+      if (cp < 0x10000) return [0xE0 | (cp >> 12), 0x80 | ((cp >> 6) & 0x3F), 0x80 | (cp & 0x3F)];
+      return [0xF0 | (cp >> 18), 0x80 | ((cp >> 12) & 0x3F), 0x80 | ((cp >> 6) & 0x3F), 0x80 | (cp & 0x3F)];
+    }
+    function utf16(cp) {
+      if (cp <= 0xFFFF) return [cp];
+      var v = cp - 0x10000;
+      return [0xD800 | (v >> 10), 0xDC00 | (v & 0x3FF)];
+    }
+    function hexByte(b) { return (b < 16 ? "0" : "") + b.toString(16).toUpperCase(); }
+    function hexU(n, w) { var s = n.toString(16).toUpperCase(); while (s.length < w) s = "0" + s; return s; }
+
+    function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+    function render() {
+      errEl.textContent = ""; verdictEl.textContent = ""; verdictEl.className = "verdict"; tableEl.innerHTML = "";
+      var s = inEl.value;
+      if (!s) { verdictEl.textContent = "Enter some text."; tableEl.innerHTML = "<tr><td colspan='7' class='muted' style='text-align:center;'>No characters.</td></tr>"; return; }
+
+      var rows = "", n = 0;
+      for (var i = 0; i < s.length;) {
+        var cp = s.codePointAt(i);
+        var stride = cp > 0xFFFF ? 2 : 1;
+        var ch = s.substr(i, stride);
+        var u8 = utf8(cp).map(hexByte).join(" ");
+        var u16 = utf16(cp).map(function (x) { return hexU(x, 4); }).join(" ");
+        var u32 = hexU(cp, 8);
+        var cpStr = "U+" + hexU(cp, cp > 0xFFFF ? 6 : 4);
+        var he = "&amp;#" + cp + "; &amp;#x" + cp.toString(16).toUpperCase() + ";";
+        var display = /[\x00-\x1F\x7F]/.test(ch) ? "<span class='muted'>U+" + hexU(cp, 4) + "</span>" : esc(ch);
+        rows += "<tr><td class='ch'>" + display + "</td><td>" + cpStr + "</td><td>" + cp + "</td><td>" + u8 + "</td><td>" + u16 + "</td><td>" + u32 + "</td><td>" + he + "</td></tr>";
+        i += stride; n++;
+      }
+      tableEl.innerHTML = "<colgroup><col class='c-ch'><col class='c-cp'><col><col><col><col><col></colgroup><tr><th>Char</th><th>Codepoint</th><th>Dec</th><th>UTF-8</th><th>UTF-16</th><th>UTF-32</th><th>HTML entities</th></tr>" + rows;
+      verdictEl.textContent = "✓ " + n + " codepoint" + (n === 1 ? "" : "s") + "  ·  " + s.length + " UTF-16 code unit" + (s.length === 1 ? "" : "s");
+      verdictEl.className = "verdict ok";
+    }
+
+    inEl.addEventListener("input", render);
+    render();
+  })();
+  </script>
+</body>
+</html>
