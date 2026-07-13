@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Text-to-Speech — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .ctrls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+    .ctrls button { min-width: 88px; }
+    .ctrls .gap { flex: 1 1 auto; }
+    .range-row { display: flex; align-items: center; gap: 10px; }
+    .range-row input[type="range"] { flex: 1 1 auto; }
+    .range-row .val { font-family: ui-monospace, monospace; font-size: 0.85rem; min-width: 38px; text-align: right; color: var(--text-dim); }
+    .speak-area { line-height: 1.6; }
+    .speak-area mark { background: rgba(110,168,255,.35); border-radius: 2px; padding: 0 1px; }
+    .note .ok { color: var(--ok, #4ade80); }
+    .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 0.78rem; background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text-dim); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Text-to-Speech</h1>
+      <p>Speak text aloud in your browser using the Web Speech API — pick a voice, adjust rate and pitch, and watch the words highlight as they're read. No audio leaves your device; the synthesis runs locally with the voices your browser and operating system provide.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="text">Text to speak</label>
+        <textarea id="text" rows="6" placeholder="Type or paste the text you'd like to hear read aloud…">Virtual Tools runs entirely in your browser. Your text never leaves this device.</textarea>
+      </div>
+
+      <div class="row" style="flex-wrap:wrap; gap:16px;">
+        <div class="field" style="flex:2 1 260px;">
+          <label for="voice">Voice</label>
+          <select id="voice"><option>Loading voices…</option></select>
+        </div>
+        <div class="field" style="flex:1 1 120px;">
+          <label for="rate">Rate <span class="val" id="rate-val">1.00×</span></label>
+          <div class="range-row"><input id="rate" type="range" min="0.5" max="2" step="0.05" value="1"></div>
+        </div>
+        <div class="field" style="flex:1 1 120px;">
+          <label for="pitch">Pitch <span class="val" id="pitch-val">1.00</span></label>
+          <div class="range-row"><input id="pitch" type="range" min="0" max="2" step="0.05" value="1"></div>
+        </div>
+        <div class="field" style="flex:1 1 120px;">
+          <label for="vol">Volume <span class="val" id="vol-val">100%</span></label>
+          <div class="range-row"><input id="vol" type="range" min="0" max="1" step="0.05" value="1"></div>
+        </div>
+      </div>
+
+      <div class="ctrls">
+        <button id="play">▶ Play</button>
+        <button id="pause" class="secondary">⏸ Pause</button>
+        <button id="resume" class="secondary">⏵ Resume</button>
+        <button id="stop" class="secondary">⏹ Stop</button>
+        <span class="gap"></span>
+        <span class="pill" id="state">Idle</span>
+      </div>
+      <p class="note" id="err"></p>
+
+      <div class="spacer"></div>
+      <label>Live transcript</label>
+      <div class="output speak-area" id="transcript"></div>
+      <p class="note" id="info"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var synth = window.speechSynthesis;
+    var textEl = $("text"), voiceEl = $("voice");
+    var rateEl = $("rate"), pitchEl = $("pitch"), volEl = $("vol");
+    var rateVal = $("rate-val"), pitchVal = $("pitch-val"), volVal = $("vol-val");
+    var playBtn = $("play"), pauseBtn = $("pause"), resumeBtn = $("resume"), stopBtn = $("stop");
+    var state = $("state"), errEl = $("err"), infoEl = $("info"), transcript = $("transcript");
+
+    var voices = [];
+    var utter = null;
+    var spoken = "";          // text being spoken
+    var markIdx = -1;         // current highlighted char index end
+
+    function fmtRate(v) { return v.toFixed(2) + "×"; }
+    function fmtPct(v) { return Math.round(v * 100) + "%"; }
+
+    function updateRanges() {
+      rateVal.textContent = fmtRate(parseFloat(rateEl.value));
+      pitchVal.textContent = parseFloat(pitchEl.value).toFixed(2);
+      volVal.textContent = fmtPct(parseFloat(volEl.value));
+    }
+
+    function loadVoices() {
+      if (!synth) { voiceEl.innerHTML = '<option>Speech synthesis not supported</option>'; voiceEl.disabled = true; return; }
+      voices = synth.getVoices();
+      if (!voices.length) return;
+      // Group: prefer default first, then sort by language then name.
+      voices.sort(function (a, b) {
+        var al = (a.lang || "").toLowerCase(), bl = (b.lang || "").toLowerCase();
+        if (a.default && !b.default) return -1;
+        if (!a.default && b.default) return 1;
+        if (al < bl) return -1; if (al > bl) return 1;
+        return (a.name || "").localeCompare(b.name || "");
+      });
+      var html = voices.map(function (v) {
+        var label = v.name + " (" + (v.lang || "?") + (v.default ? " · default" : "") + ")";
+        return '<option value="' + voices.indexOf(v) + '">' + label + "</option>";
+      }).join("");
+      voiceEl.innerHTML = html;
+    }
+
+    function setState(s) { state.textContent = s; }
+
+    function renderTranscript() {
+      if (markIdx < 0 || !spoken) { transcript.textContent = spoken; return; }
+      var before = escapeHtml(spoken.slice(0, markIdx));
+      var mark = escapeHtml(spoken.slice(markIdx, markIdx + 1));
+      var after = escapeHtml(spoken.slice(markIdx + 1));
+      transcript.innerHTML = before + "<mark>" + mark + "</mark>" + after;
+      // Scroll the mark into view.
+      var m = transcript.querySelector("mark");
+      if (m && m.scrollIntoView) m.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+    function escapeHtml(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+    function speak() {
+      errEl.textContent = "";
+      if (!synth) { errEl.textContent = "This browser does not support the Web Speech API."; return; }
+      var t = textEl.value.trim();
+      if (!t) { errEl.textContent = "Enter some text to speak."; return; }
+      if (synth.speaking) synth.cancel();   // restart cleanly
+
+      utter = new SpeechSynthesisUtterance(t);
+      var vi = parseInt(voiceEl.value, 10);
+      if (!isNaN(vi) && voices[vi]) { utter.voice = voices[vi]; utter.lang = voices[vi].lang; }
+      utter.rate = parseFloat(rateEl.value);
+      utter.pitch = parseFloat(pitchEl.value);
+      utter.volume = parseFloat(volEl.value);
+
+      spoken = t; markIdx = -1; renderTranscript();
+
+      utter.onstart = function () { setState("Speaking"); };
+      utter.onend = function () { setState("Done"); markIdx = -1; renderTranscript(); };
+      utter.onerror = function (e) { setState("Error"); errEl.textContent = "Speech error: " + (e.error || "unknown") + "."; };
+      utter.onboundary = function (e) {
+        if (typeof e.charIndex === "number") {
+          // charIndex points at a word boundary; advance the mark to the start of that word.
+          markIdx = e.charIndex;
+          renderTranscript();
+        }
+      };
+      utter.onpause = function () { setState("Paused"); };
+      utter.onresume = function () { setState("Speaking"); };
+
+      synth.speak(utter);
+      infoEl.textContent = "Voices come from your browser/OS — availability varies by device.";
+    }
+
+    // Wire controls.
+    playBtn.addEventListener("click", speak);
+    pauseBtn.addEventListener("click", function () { if (synth && synth.speaking) { synth.pause(); } });
+    resumeBtn.addEventListener("click", function () { if (synth && synth.paused) { synth.resume(); } });
+    stopBtn.addEventListener("click", function () { if (synth) { synth.cancel(); setState("Stopped"); markIdx = -1; renderTranscript(); } });
+
+    [rateEl, pitchEl, volEl].forEach(function (el) { el.addEventListener("input", updateRanges); });
+
+    // When the page is hidden (tab switch) some browsers pause synthesis; resync state on return.
+    document.addEventListener("visibilitychange", function () {
+      if (!document.hidden && synth) { if (!synth.speaking && !synth.paused) setState("Idle"); }
+    });
+
+    // Load voices (may be async).
+    if (synth) {
+      loadVoices();
+      if (typeof synth.onvoiceschanged !== "undefined") synth.onvoiceschanged = loadVoices;
+      // Fallback poll in case the event doesn't fire.
+      var tries = 0;
+      var iv = setInterval(function () {
+        if (voices.length || tries++ > 10) { clearInterval(iv); return; }
+        loadVoices();
+      }, 200);
+    } else {
+      loadVoices();
+    }
+
+    updateRanges();
+    transcript.textContent = textEl.value.trim();
+  })();
+  </script>
+</body>
+</html>

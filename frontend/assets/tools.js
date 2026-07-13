@@ -3370,4 +3370,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📮",
     added: "2026-07-13T13:45:00Z",
   },
+  {
+    slug: "text-to-speech",
+    name: "Text-to-Speech",
+    description: "Speak text aloud in your browser with the Web Speech API — pick a voice and adjust rate, pitch and volume while the words highlight as they're read. Synthesis runs locally; no audio leaves your device.",
+    category: "Text",
+    icon: "🔊",
+    added: "2026-07-13T14:15:00Z",
+  },
 ];
