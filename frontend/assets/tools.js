@@ -3626,4 +3626,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌬️",
     added: "2026-07-14T05:45:00Z",
   },
+  {
+    slug: "raid-calculator",
+    name: "RAID Storage Calculator",
+    description: "Work out the usable capacity, redundancy overhead and fault tolerance of a disk array for each common RAID level (0, 1, 5, 6, 10, 50, 60). Enter the number of disks and the size of each and get usable space, raw capacity, parity/mirror overhead, how many disks can fail at once, and minimum-disk validation. Useful when sizing a NAS or server array. Pure arithmetic — no rebuild-time or formatting overhead. Everything runs locally in your browser.",
+    category: "System",
+    icon: "🗄️",
+    added: "2026-07-14T06:15:00Z",
+  },
 ];

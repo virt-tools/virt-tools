@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>RAID Storage Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .row2 { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+    .row2 .field { margin-bottom: 0; }
+    input[type="number"] { font-family: ui-monospace, monospace; width: 110px; }
+    select { min-width: 140px; }
+    .kv { display: grid; grid-template-columns: 220px 1fr; gap: 6px 12px; margin-top: 12px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.95rem; }
+    .verdict { font-size: 1.5rem; font-weight: 800; font-family: ui-monospace, monospace; margin-top: 8px; }
+    .verdict.ok { color: var(--ok, #4ade80); }
+    .verdict.bad { color: var(--bad, #f87171); }
+    .verdict.warn { color: var(--accent, #6ea8ff); }
+    .big { font-size: 1.05rem; font-weight: 700; }
+    .levels { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin-top: 4px; }
+    .levels label { display: flex; flex-direction: column; gap: 4px; align-items: center; border: 1px solid var(--border); border-radius: 8px; padding: 8px 4px; cursor: pointer; background: var(--bg-elev-2); }
+    .levels label.active { border-color: var(--accent, #6ea8ff); background: color-mix(in srgb, var(--accent, #6ea8ff) 14%, var(--bg-elev-2)); }
+    .levels input { display: none; }
+    .levels .lv { font-family: ui-monospace, monospace; font-weight: 700; font-size: 1rem; }
+    .levels .nm { font-size: 0.72rem; color: var(--text-dim); text-align: center; line-height: 1.2; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>RAID Storage Calculator</h1>
+      <p>Work out the usable capacity, redundancy overhead and fault tolerance of a disk array for each common RAID level. Enter the number of disks and the size of each, pick a level (0, 1, 5, 6, 10, 50 or 60), and get usable space, raw capacity, parity/mirror overhead, how many disks can fail at once, and minimum-disk validation. Useful when sizing a NAS or server array. Pure arithmetic — no account of rebuild time or real-world formatting overhead. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label>RAID level</label>
+        <div class="levels" id="levels"></div>
+      </div>
+
+      <div class="row2">
+        <div class="field">
+          <label for="n">Number of disks</label>
+          <input id="n" type="number" min="1" step="1" value="4">
+        </div>
+        <div class="field">
+          <label for="size">Capacity per disk</label>
+          <input id="size" type="number" min="0" step="any" value="4">
+          <select id="sunit" style="min-width:90px;margin-left:6px;">
+            <option value="TB" selected>TB</option>
+            <option value="GB">GB</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <dl class="kv" id="kv"></dl>
+      <p class="note" id="err"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var nEl = $("n"), sizeEl = $("size"), sunitEl = $("sunit");
+    var verdictEl = $("verdict"), kvEl = $("kv"), errEl = $("err"), levelsEl = $("levels");
+    var cur = "5";
+
+    var LEVELS = [
+      { lv: "0",  name: "Striping",         min: 1, fault: "0 disks", note: "No redundancy — a single disk failure loses the array." },
+      { lv: "1",  name: "Mirroring",        min: 2, fault: "½ of disks (a mirror pair)", note: "Two-disk mirror; with N mirrors, one disk per mirror can fail." },
+      { lv: "5",  name: "Striped parity",   min: 3, fault: "1 disk", note: "Single distributed-parity disk; can survive one failure." },
+      { lv: "6",  name: "Double parity",    min: 4, fault: "2 disks", note: "Two distributed-parity disks; survives two simultaneous failures." },
+      { lv: "10", name: "Mirror + stripe",  min: 4, fault: "1 per mirror (≥1)", note: "RAID 1+0: striped mirrors. One disk per mirror set can fail; needs even disk count." },
+      { lv: "50", name: "Parity stripe",   min: 6, fault: "1 per sub-array", note: "Two RAID 5 groups striped together; one disk per group can fail. Needs even count ≥6." },
+      { lv: "60", name: "Double-parity stripe", min: 8, fault: "2 per sub-array", note: "Two RAID 6 groups striped; two disks per group can fail. Needs even count ≥8." }
+    ];
+
+    LEVELS.forEach(function (L) {
+      var lbl = document.createElement("label");
+      lbl.innerHTML = '<input type="radio" name="lv" value="' + L.lv + '">' +
+        '<span class="lv">RAID ' + L.lv + '</span><span class="nm">' + L.name + '</span>';
+      lbl.addEventListener("click", function () {
+        levelsEl.querySelectorAll("label").forEach(function (x) { x.classList.remove("active"); });
+        lbl.classList.add("active");
+        cur = L.lv;
+        render();
+      });
+      if (L.lv === cur) lbl.classList.add("active");
+      levelsEl.appendChild(lbl);
+    });
+
+    function num(el) { var n = parseFloat(el.value); return isNaN(n) ? NaN : n; }
+    function fmt(n, d) { return Number(n).toFixed(d); }
+
+    function usable(level, n, sz) {
+      var u;
+      switch (level) {
+        case "0":  u = n * sz; break;
+        case "1":  u = (Math.floor(n / 2)) * sz; break;
+        case "5":  u = Math.max(0, n - 1) * sz; break;
+        case "6":  u = Math.max(0, n - 2) * sz; break;
+        case "10": u = Math.floor(n / 2) * sz; break;
+        case "50": { var g = Math.floor(n / 2); u = 2 * Math.max(0, g - 1) * sz; break; } // 2 RAID5 groups, each (g-1) data disks
+        case "60": { var g2 = Math.floor(n / 2); u = 2 * Math.max(0, g2 - 2) * sz; break; } // 2 RAID6 groups, each (g-2) data disks
+        default: u = 0;
+      }
+      return u;
+    }
+    function minDisks(level) {
+      var m = { "0": 1, "1": 2, "5": 3, "6": 4, "10": 4, "50": 6, "60": 8 };
+      return m[level] || 1;
+    }
+    function parityCount(level, n) {
+      switch (level) {
+        case "0": return 0;
+        case "1": return Math.ceil(n / 2); // mirror copy
+        case "5": return n >= 3 ? 1 : 0;
+        case "6": return n >= 4 ? 2 : 0;
+        case "10": return Math.ceil(n / 2);
+        case "50": { var g = Math.floor(n / 2); return 2 * (g >= 3 ? 1 : 0); } // 1 parity per RAID5 group ×2
+        case "60": { var g2 = Math.floor(n / 2); return 2 * (g2 >= 4 ? 2 : 0); } // 2 parity per RAID6 group ×2
+      }
+      return 0;
+    }
+
+    function render() {
+      errEl.textContent = ""; verdictEl.textContent = ""; verdictEl.className = "verdict"; kvEl.innerHTML = "";
+      var n = num(nEl), sz = num(sizeEl);
+      if (isNaN(n) || isNaN(sz)) { verdictEl.textContent = "✗ Enter valid disk count and size."; verdictEl.className = "verdict bad"; return; }
+      if (n < 1 || sz <= 0) { verdictEl.textContent = "✗ Need ≥1 disk and positive capacity."; verdictEl.className = "verdict bad"; return; }
+      n = Math.floor(n);
+
+      var L = LEVELS.filter(function (x) { return x.lv === cur; })[0];
+      var minN = minDisks(cur);
+      var raw = n * sz;
+      var u = usable(cur, n, sz);
+      var par = parityCount(cur, n);
+      var overhead = raw - u;
+      var overheadPct = raw > 0 ? overhead / raw * 100 : 0;
+
+      if (n < minN) {
+        verdictEl.textContent = "✗ RAID " + cur + " needs ≥" + minN + " disks (you entered " + n + ").";
+        verdictEl.className = "verdict bad";
+        kvEl.innerHTML = "<dt>Minimum disks</dt><dd>" + minN + " for RAID " + cur + "</dd>";
+        errEl.textContent = L.note;
+        errEl.className = "note";
+        return;
+      }
+      if ((cur === "1" || cur === "10" || cur === "50" || cur === "60") && (n % 2 !== 0)) {
+        // Round down to an even count for mirror levels — warn.
+        verdictEl.textContent = "⚠ RAID " + cur + " uses pairs; " + n + " disks rounds down to " + (Math.floor(n / 2) * 2) + " in the formula below.";
+        verdictEl.className = "verdict warn";
+      } else {
+        verdictEl.textContent = fmt(u, 2) + " " + sunitEl.value + " usable";
+        verdictEl.className = "verdict ok";
+      }
+
+      kvEl.innerHTML =
+        "<dt>Usable capacity</dt><dd class='big'>" + fmt(u, 2) + " " + sunitEl.value + "</dd>" +
+        "<dt>Raw capacity</dt><dd>" + fmt(raw, 2) + " " + sunitEl.value + "  (" + n + " × " + fmt(sz, 2) + ")</dd>" +
+        "<dt>Redundancy overhead</dt><dd>" + fmt(overhead, 2) + " " + sunitEl.value + "  (" + fmt(overheadPct, 1) + "%)</dd>" +
+        "<dt>Parity / mirror disks</dt><dd>" + par + " of " + n + " disks</dd>" +
+        "<dt>Fault tolerance</dt><dd>Survives " + L.fault + " failing</dd>" +
+        "<dt>Read penalty</dt><dd>" + (cur === "0" ? "none (fast reads)" : (cur === "1" ? "good (mirrored reads)" : (cur === "10" ? "good" : "small (distributed parity)"))) + "</dd>" +
+        "<dt>Write penalty</dt><dd>" + (cur === "0" || cur === "1" || cur === "10" ? "none" : (cur === "5" ? "moderate (2× reads + 1× write per I/O)" : (cur === "6" ? "high (6× per small write)" : "highest (nested parity)"))) + "</dd>";
+
+      errEl.textContent = "Capacity is theoretical — actual usable space is smaller after the filesystem, metadata and any hot spares, and large arrays lose capacity during a rebuild as parity is recomputed. " + L.note + " RAID 10 gives the best random-write performance and fastest rebuilds; RAID 6 is preferred over RAID 5 for large disks where a second failure during a long rebuild is realistic. ZFS RAIDZ1/Z2/Z3 mirror RAID 5/6 but with variable stripe widths and per-block checksums — treat the usable figures here as a rough guide only.";
+      errEl.className = "note";
+    }
+
+    [nEl, sizeEl, sunitEl].forEach(function (el) { el.addEventListener("input", render); el.addEventListener("change", render); });
+    render();
+  })();
+  </script>
+</body>
+</html>
