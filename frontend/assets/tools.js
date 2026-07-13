@@ -3578,4 +3578,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📶",
     added: "2026-07-14T02:45:00Z",
   },
+  {
+    slug: "umask-calculator",
+    name: "umask Calculator",
+    description: "See exactly what permissions a Unix umask produces on newly created files and directories. Files are created with a base of 666 (rw-rw-rw-) and directories with 777 (rwxrwxrwx); the umask is AND-complemented away (base & ~umask), so 022 yields 644 files and 755 directories. Works in reverse too — enter the file or directory permissions you want and get the umask that produces them, with symbolic rwx and a bit-grid for each. Pure bit arithmetic, in your browser.",
+    category: "System",
+    icon: "🛡️",
+    added: "2026-07-14T03:15:00Z",
+  },
 ];
