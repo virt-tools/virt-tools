@@ -3594,4 +3594,12 @@ window.VIRTUAL_TOOLS = [
     icon: "☀️",
     added: "2026-07-14T03:45:00Z",
   },
+  {
+    slug: "bsa-calculator",
+    name: "Body Surface Area (BSA) Calculator",
+    description: "Compute body surface area in m² from height and weight using four standard clinical formulas — Mosteller (the common default), Du Bois & Du Bois, Haycock and Boyd. BSA is used alongside BMI for indexing cardiac output, renal clearance and many drug doses. Height and weight accept metric or imperial, and the worked Mosteller formula is shown. Pure arithmetic, in your browser.",
+    category: "Health",
+    icon: "🧍",
+    added: "2026-07-14T04:15:00Z",
+  },
 ];
