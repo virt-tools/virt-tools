@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Reverberation Time (RT60) Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .row2 { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+    .row2 .field { margin-bottom: 0; }
+    input[type="number"] { font-family: ui-monospace, monospace; width: 90px; }
+    select { min-width: 150px; }
+    table.surf { width: 100%; border-collapse: collapse; margin-top: 6px; }
+    table.surf th, table.surf td { padding: 5px 6px; text-align: left; border-bottom: 1px solid var(--border); font-size: 0.88rem; }
+    table.surf th { color: var(--text-dim); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    table.surf td.num { font-family: ui-monospace, monospace; text-align: right; }
+    table.surf select, table.surf input { width: 100%; box-sizing: border-box; font-family: ui-monospace, monospace; }
+    table.surf input[type="number"] { width: 70px; }
+    .kv { display: grid; grid-template-columns: 210px 1fr; gap: 6px 12px; margin-top: 12px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.95rem; }
+    .verdict { font-size: 1.5rem; font-weight: 800; font-family: ui-monospace, monospace; margin-top: 8px; }
+    .verdict.ok { color: var(--ok, #4ade80); }
+    .verdict.bad { color: var(--bad, #f87171); }
+    .verdict.warn { color: var(--accent, #6ea8ff); }
+    .big { font-size: 1.05rem; font-weight: 700; }
+    .presets button { background: var(--bg-elev-2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 5px 9px; font-size: 0.8rem; cursor: pointer; margin: 0 4px 4px 0; }
+    .addrow { background: var(--bg-elev-2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 5px 11px; font-size: 0.82rem; cursor: pointer; margin-top: 6px; }
+    h3.sec { font-size: 0.92rem; font-weight: 600; margin: 18px 0 4px; color: var(--text-dim); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Reverberation Time (RT60) Calculator</h1>
+      <p>Estimate the reverberation time (RT60 — the seconds for sound to decay 60 dB) of a room from its volume and the absorption of its surfaces, using both the classic Sabine formula and the more accurate Eyring formula. Add each surface with its area and an absorption coefficient (common materials are preset), and the tool totals the absorption, the average coefficient, and both RT60 values, then suggests whether the room suits speech, music or neither. Pure arithmetic, in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label>Room presets</label>
+        <div class="presets" id="presets"></div>
+      </div>
+
+      <h3 class="sec">Room volume</h3>
+      <div class="row2">
+        <div class="field">
+          <label for="L">Length</label>
+          <input id="L" type="number" min="0" step="any" value="6"> m
+        </div>
+        <div class="field">
+          <label for="W">Width</label>
+          <input id="W" type="number" min="0" step="any" value="5"> m
+        </div>
+        <div class="field">
+          <label for="H">Height</label>
+          <input id="H" type="number" min="0" step="any" value="3"> m
+        </div>
+        <div class="field" style="font-size:0.8rem;color:var(--text-dim);padding-bottom:6px;">
+          V = <code id="vOut" style="color:var(--accent,#6ea8ff)">90.0</code> m³
+        </div>
+      </div>
+
+      <h3 class="sec">Surfaces (area × absorption coefficient)</h3>
+      <table class="surf">
+        <thead><tr><th style="width:34%">Surface / material</th><th style="width:18%">Area (m²)</th><th style="width:30%">Absorption α (0–1)</th><th style="width:18%;text-align:right">Sabins (A)</th></tr></thead>
+        <tbody id="surfBody"></tbody>
+      </table>
+      <button class="addrow" id="addRow">+ Add surface</button>
+
+      <div class="verdict" id="verdict"></div>
+      <dl class="kv" id="kv"></dl>
+      <p class="note" id="err"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var LEl = $("L"), WEl = $("W"), HEl = $("H"), vOut = $("vOut");
+    var surfBody = $("surfBody"), addRowBtn = $("addRow"), presetsEl = $("presets");
+    var verdictEl = $("verdict"), kvEl = $("kv"), errEl = $("err");
+
+    // Absorption coefficients α (sabins/m²) at ~500–1000 Hz. (NRC is the rounded average of 250/500/1k/2k.)
+    var MATERIALS = [
+      { name: "Concrete / brick (painted)", a: 0.02 },
+      { name: "Plaster on lath", a: 0.04 },
+      { name: "Glass window", a: 0.18 },
+      { name: "Wood paneling on studs", a: 0.10 },
+      { name: "Wood floor on joists", a: 0.08 },
+      { name: "Carpet, heavy on pad", a: 0.35 },
+      { name: "Curtains, heavy draped", a: 0.55 },
+      { name: "Upholstered audience/seats", a: 0.50 },
+      { name: "Acoustic ceiling tile", a: 0.70 },
+      { name: "2-inch acoustic foam/wedge", a: 0.80 },
+      { name: "4-inch mineral wool / fiberglass", a: 0.95 },
+      { name: "Open window / door", a: 1.00 },
+      { name: "Custom — enter α", a: null }
+    ];
+
+    var PRESETS = [
+      { name: "Empty living room", L: 6, W: 5, H: 3, surfs: [
+        { m: "Wood floor on joists", a: 0.08, s: 30 },
+        { m: "Plaster on lath", a: 0.04, s: 30 },
+        { m: "Plaster on lath", a: 0.04, s: 66 },
+        { m: "Glass window", a: 0.18, s: 8 }
+      ] },
+      { name: "Recording studio (treated)", L: 6, W: 5, H: 3, surfs: [
+        { m: "Carpet, heavy on pad", a: 0.35, s: 30 },
+        { m: "Acoustic ceiling tile", a: 0.70, s: 30 },
+        { m: "4-inch mineral wool / fiberglass", a: 0.95, s: 30 },
+        { m: "2-inch acoustic foam/wedge", a: 0.80, s: 36 }
+      ] },
+      { name: "Large hall / church", L: 20, W: 12, H: 7, surfs: [
+        { m: "Wood floor on joists", a: 0.08, s: 240 },
+        { m: "Plaster on lath", a: 0.04, s: 240 },
+        { m: "Plaster on lath", a: 0.04, s: 448 },
+        { m: "Wood paneling on studs", a: 0.10, s: 100 }
+      ] }
+    ];
+
+    function num(el) { var n = parseFloat(el.value); return isNaN(n) ? NaN : n; }
+    function fmt(n, d) { return Number(n).toFixed(d); }
+
+    function rowHTML(idx, matName, area, alpha) {
+      var opts = MATERIALS.map(function (m) {
+        var sel = (m.name === matName) ? " selected" : "";
+        return "<option" + sel + ">" + m.name + "</option>";
+      }).join("");
+      return '<tr data-idx="' + idx + '">' +
+        '<td><select class="mat">' + opts + '</select></td>' +
+        '<td><input class="area" type="number" min="0" step="any" value="' + (area == null ? "" : area) + '"></td>' +
+        '<td><input class="alpha" type="number" min="0" max="1" step="0.01" value="' + (alpha == null ? "" : alpha) + '"></td>' +
+        '<td class="num sab">—</td>' +
+        '<td style="text-align:right;width:32px;"><button class="delrow" title="Remove" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:1rem;padding:2px 6px;">×</button></td>' +
+        '</tr>';
+    }
+
+    function addSurface(matName, area, alpha) {
+      var idx = surfBody.children.length;
+      var tr = document.createElement("tr");
+      tr.innerHTML = rowHTML(idx, matName || MATERIALS[0].name, area, alpha);
+      surfBody.appendChild(tr);
+      wireRow(tr);
+    }
+
+    function wireRow(tr) {
+      var matSel = tr.querySelector(".mat");
+      var areaIn = tr.querySelector(".area");
+      var alphaIn = tr.querySelector(".alpha");
+      var delBtn = tr.querySelector(".delrow");
+      function onMat() {
+        var m = MATERIALS.filter(function (x) { return x.name === matSel.value; })[0];
+        if (m && m.a !== null) { alphaIn.value = m.a; }
+        alphaIn.disabled = (m && m.a !== null) ? false : false; // custom lets them type
+        render();
+      }
+      matSel.addEventListener("change", onMat);
+      areaIn.addEventListener("input", render);
+      alphaIn.addEventListener("input", render);
+      delBtn.addEventListener("click", function () { tr.remove(); render(); });
+      onMat();
+    }
+
+    function render() {
+      errEl.textContent = ""; verdictEl.textContent = ""; verdictEl.className = "verdict"; kvEl.innerHTML = "";
+
+      var L = num(LEl), W = num(WEl), H = num(HEl);
+      var V;
+      if ([L, W, H].some(isNaN) || L <= 0 || W <= 0 || H <= 0) {
+        vOut.textContent = "—";
+        verdictEl.textContent = "✗ Enter positive room dimensions.";
+        verdictEl.className = "verdict bad";
+        return;
+      }
+      V = L * W * H;
+      vOut.textContent = fmt(V, 1);
+
+      var A = 0, S = 0;
+      var rows = surfBody.children;
+      for (var i = 0; i < rows.length; i++) {
+        var area = parseFloat(rows[i].querySelector(".area").value);
+        var alpha = parseFloat(rows[i].querySelector(".alpha").value);
+        var sabCell = rows[i].querySelector(".sab");
+        if (isNaN(area) || isNaN(alpha)) { sabCell.textContent = "—"; continue; }
+        if (area < 0) area = 0;
+        if (alpha < 0) alpha = 0; if (alpha > 1) alpha = 1;
+        var s = area * alpha;
+        sabCell.textContent = fmt(s, 2);
+        A += s; S += area;
+      }
+
+      if (A <= 0) {
+        verdictEl.textContent = "✗ Add at least one surface with area and α.";
+        verdictEl.className = "verdict bad";
+        return;
+      }
+
+      var sabine = 0.161 * V / A;
+      var aAvg = A / S;
+      var eyring = 0.161 * V / (-S * Math.log(1 - aAvg));
+
+      // Suitability guidance (mid-frequency RT60).
+      var rt = (sabine + eyring) / 2; // report Sabine as the headline; use Eyring for guidance
+      var guide, cls;
+      if (rt < 0.3) { guide = "Very dry — anechoic-like, good for control rooms & voice booths."; cls = "warn"; }
+      else if (rt < 0.6) { guide = "Dry — good for speech, broadcast, home theater."; cls = "ok"; }
+      else if (rt < 0.9) { guide = "Balanced — ideal for speech, recording studios, control rooms."; cls = "ok"; }
+      else if (rt < 1.2) { guide = "Live — good for chamber music, rehearsals, small halls."; cls = "ok"; }
+      else if (rt < 1.8) { guide = "Reverberant — good for orchestral / choral music, large halls."; cls = "warn"; }
+      else if (rt < 3.0) { guide = "Boomy — fine for cathedrals/organ, poor for speech intelligibility."; cls = "warn"; }
+      else { guide = "Excessively reverberant — untreated hard room; speech will be unintelligible."; cls = "bad"; }
+
+      verdictEl.textContent = "RT60 ≈ " + fmt(sabine, 2) + " s (Sabine)  ·  " + fmt(eyring, 2) + " s (Eyring)";
+      verdictEl.className = "verdict " + cls;
+      kvEl.innerHTML =
+        "<dt>Room volume</dt><dd>" + fmt(V, 1) + " m³</dd>" +
+        "<dt>Total absorption A</dt><dd>" + fmt(A, 2) + " sabins</dd>" +
+        "<dt>Total surface area S</dt><dd>" + fmt(S, 1) + " m²</dd>" +
+        "<dt>Average α (A/S)</dt><dd>" + fmt(aAvg, 3) + "</dd>" +
+        "<dt>Sabine RT60</dt><dd class='big'>" + fmt(sabine, 2) + " s  <span class='muted'>(0.161·V/A)</span></dd>" +
+        "<dt>Eyring RT60</dt><dd class='big'>" + fmt(eyring, 2) + " s  <span class='muted'>(0.161·V / −S·ln(1−ᾱ))</span></dd>" +
+        "<dt>Guidance</dt><dd>" + guide + "</dd>";
+
+      errEl.textContent = "Sabine (RT60 = 0.161·V/A) is the classic estimate and works well for living rooms (ᾱ below ~0.3). Eyring is identical for lightly-absorbing rooms but stays finite and accurate as the average α approaches 1, so trust Eyring in heavily-treated studios. Coefficients are mid-band (≈500–1000 Hz); real RT60 varies with frequency — hard surfaces absorb little bass, so a room often sounds bass-heavy even when mid-band RT60 is fine. This is a planning estimate, not a measurement.";
+      errEl.className = "note";
+    }
+
+    PRESETS.forEach(function (p) {
+      var b = document.createElement("button");
+      b.textContent = p.name;
+      b.addEventListener("click", function () {
+        LEl.value = p.L; WEl.value = p.W; HEl.value = p.H;
+        surfBody.innerHTML = "";
+        p.surfs.forEach(function (s) { addSurface(s.m, s.s, s.a); });
+        render();
+      });
+      presetsEl.appendChild(b);
+    });
+
+    addRowBtn.addEventListener("click", function () { addSurface(MATERIALS[0].name, null, MATERIALS[0].a); render(); });
+    [LEl, WEl, HEl].forEach(function (el) { el.addEventListener("input", render); });
+
+    // Seed with the empty living-room preset surfaces.
+    PRESETS[0].surfs.forEach(function (s) { addSurface(s.m, s.s, s.a); });
+    render();
+  })();
+  </script>
+</body>
+</html>

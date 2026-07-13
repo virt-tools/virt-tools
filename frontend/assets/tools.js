@@ -3610,4 +3610,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🍯",
     added: "2026-07-14T04:45:00Z",
   },
+  {
+    slug: "reverberation-time-calculator",
+    name: "Reverberation Time (RT60) Calculator",
+    description: "Estimate a room's reverberation time (RT60 — seconds for sound to decay 60 dB) from its volume and the absorption of its surfaces, using both the Sabine and Eyring formulas. Add each surface with its area and an absorption coefficient (common materials preset), and get total absorption, average α, both RT60 values, and guidance on whether the room suits speech, music or neither. Pure arithmetic, in your browser.",
+    category: "Audio",
+    icon: "🔊",
+    added: "2026-07-14T05:15:00Z",
+  },
 ];
