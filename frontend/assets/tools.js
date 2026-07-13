@@ -3602,4 +3602,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🧍",
     added: "2026-07-14T04:15:00Z",
   },
+  {
+    slug: "syrup-calculator",
+    name: "Simple Syrup Calculator",
+    description: "Work out how much sugar and water to weigh out for a batch of simple syrup at any ratio by weight. Enter the target syrup mass and the sugar:water ratio (1:1 standard, 2:1 rich, 3:1 gomme) and get grams of sugar and water, the resulting °Brix (sugar by mass), and approximate volumes. Weighing by mass is accurate since sugar volume isn't additive with water. Pure arithmetic, in your browser.",
+    category: "Food",
+    icon: "🍯",
+    added: "2026-07-14T04:45:00Z",
+  },
 ];
