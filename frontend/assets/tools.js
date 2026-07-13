@@ -3634,4 +3634,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🗄️",
     added: "2026-07-14T06:15:00Z",
   },
+  {
+    slug: "great-circle-navigation",
+    name: "Great-Circle Navigation Calculator",
+    description: "Solve great-circle navigation on a spherical Earth: the initial and final compass bearing between two latitude/longitude points, the great-circle distance, the midpoint, and — in reverse — the destination reached from a start, a bearing and a distance. Two modes (point-to-point and destination) with DMS output and a compass rose. Mean Earth radius 6371 km; pure trigonometry, in your browser.",
+    category: "Geography",
+    icon: "🧭",
+    added: "2026-07-14T06:45:00Z",
+  },
 ];

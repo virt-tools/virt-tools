@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Great-Circle Navigation Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .row2 { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+    .row2 .field { margin-bottom: 0; }
+    input[type="number"] { font-family: ui-monospace, monospace; width: 120px; }
+    select { min-width: 130px; }
+    .kv { display: grid; grid-template-columns: 210px 1fr; gap: 6px 12px; margin-top: 12px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.95rem; }
+    .verdict { font-size: 1.4rem; font-weight: 800; font-family: ui-monospace, monospace; margin-top: 8px; }
+    .verdict.ok { color: var(--ok, #4ade80); }
+    .verdict.bad { color: var(--bad, #f87171); }
+    .big { font-size: 1.05rem; font-weight: 700; }
+    .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+    .seg button { background: var(--bg-elev-2); color: var(--text); border: none; padding: 5px 12px; cursor: pointer; font-size: 0.85rem; }
+    .seg button.active { background: var(--accent, #6ea8ff); color: #08111f; font-weight: 600; }
+    h3.sec { font-size: 0.92rem; font-weight: 600; margin: 14px 0 4px; color: var(--text-dim); }
+    .pt { display:grid; grid-template-columns: 60px 1fr 1fr; gap: 6px 10px; align-items: center; }
+    .pt label { font-size: 0.8rem; color: var(--text-dim); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Great-Circle Navigation Calculator</h1>
+      <p>Solve great-circle navigation on a sphere: the initial and final compass bearing between two latitude/longitude points, the great-circle distance, the midpoint, and — in reverse — the destination point reached from a start, a bearing and a distance. Two modes: point-to-point (enter start and end) or destination (enter start, bearing and distance). All on a spherical Earth (mean radius 6371 km); accurate enough for everyday navigation, less precise than ellipsoidal methods for very long routes. Pure trigonometry, in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label>Mode</label>
+        <div class="seg" id="seg">
+          <button data-mode="two" class="active">Two points → bearing &amp; distance</button>
+          <button data-mode="dest">Bearing &amp; distance → destination</button>
+        </div>
+      </div>
+
+      <div class="pt">
+        <label>Start</label>
+        <div><input id="la1" type="number" step="any" value="51.5074" placeholder="lat"></div>
+        <div><input id="lo1" type="number" step="any" value="-0.1278" placeholder="lon"></div>
+      </div>
+
+      <div id="endRow" class="pt" style="margin-top:6px;">
+        <label>End</label>
+        <div><input id="la2" type="number" step="any" value="40.7128" placeholder="lat"></div>
+        <div><input id="lo2" type="number" step="any" value="-74.0060" placeholder="lon"></div>
+      </div>
+
+      <div id="destRow" style="display:none;margin-top:6px;">
+        <div class="row2">
+          <div class="field">
+            <label for="brng">Bearing (°)</label>
+            <input id="brng" type="number" step="any" value="288" style="width:90px;"> <span class="muted" style="font-size:0.8rem;">0=N, 90=E</span>
+          </div>
+          <div class="field">
+            <label for="dist">Distance</label>
+            <input id="dist" type="number" min="0" step="any" value="5570" style="width:90px;">
+            <select id="dunit" style="min-width:80px;margin-left:6px;">
+              <option value="km" selected>km</option>
+              <option value="mi">mi</option>
+              <option value="nm">nmi</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <p class="muted" style="font-size:0.78rem;margin-top:6px;">Latitudes −90…90, longitudes −180…180 (decimal degrees; east/north positive). Lat 40.7128, lon −74.0060 = New York City.</p>
+
+      <div class="verdict" id="verdict"></div>
+      <dl class="kv" id="kv"></dl>
+      <p class="note" id="err"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var seg = $("seg"), endRow = $("endRow"), destRow = $("destRow");
+    var la1 = $("la1"), lo1 = $("lo1"), la2 = $("la2"), lo2 = $("lo2");
+    var brng = $("brng"), dist = $("dist"), dunit = $("dunit");
+    var verdictEl = $("verdict"), kvEl = $("kv"), errEl = $("err");
+    var mode = "two";
+    var R_KM = 6371;
+
+    function num(el) { var n = parseFloat(el.value); return isNaN(n) ? NaN : n; }
+    function fmt(n, d) { return Number(n).toFixed(d); }
+    function norm360(x) { return ((x % 360) + 360) % 360; }
+    function norm180(x) { return ((((x + 180) % 360) + 360) % 360) - 180; }
+
+    // Distance unit → km
+    function toKm(d, u) { return u === "mi" ? d * 1.609344 : (u === "nm" ? d * 1.852 : d); }
+    function fromKm(km, u) { return u === "mi" ? km / 1.609344 : (u === "nm" ? km / 1.852 : km); }
+
+    function initBearing(f1, l1, f2, l2) { // degrees
+      var D2R = Math.PI / 180, R2D = 180 / Math.PI;
+      var dL = (l2 - l1) * D2R;
+      f1 *= D2R; f2 *= D2R;
+      var y = Math.sin(dL) * Math.cos(f2);
+      var x = Math.cos(f1) * Math.sin(f2) - Math.sin(f1) * Math.cos(f2) * Math.cos(dL);
+      return norm360(Math.atan2(y, x) * R2D);
+    }
+    function finalBearing(f1, l1, f2, l2) {
+      // reverse initial bearing, then +180
+      return norm360(initBearing(f2, l2, f1, l1) + 180);
+    }
+    function gcDist(f1, l1, f2, l2) { // haversine, km
+      var D2R = Math.PI / 180;
+      f1 *= D2R; f2 *= D2R; var dL = (l2 - l1) * D2R;
+      var a = Math.sin((f2 - f1) / 2) ** 2 + Math.cos(f1) * Math.cos(f2) * Math.sin(dL / 2) ** 2;
+      return 2 * R_KM * Math.asin(Math.sqrt(a));
+    }
+    function midpoint(f1, l1, f2, l2) {
+      var D2R = Math.PI / 180, R2D = 180 / Math.PI;
+      f1 *= D2R; f2 *= D2R; var dL = (l2 - l1) * D2R;
+      var Bx = Math.cos(f2) * Math.cos(dL), By = Math.cos(f2) * Math.sin(dL);
+      var fm = Math.atan2(Math.sin(f1) + Math.sin(f2), Math.sqrt((Math.cos(f1) + Bx) ** 2 + By ** 2));
+      var lm = l1 * D2R + Math.atan2(By, Math.cos(f1) + Bx);
+      return { lat: fm * R2D, lon: norm180(lm * R2D) };
+    }
+    function destination(f1, l1, th, distKm) {
+      var D2R = Math.PI / 180, R2D = 180 / Math.PI;
+      var dA = distKm / R_KM;
+      f1 *= D2R; l1 *= D2R; th *= D2R;
+      var f2 = Math.asin(Math.sin(f1) * Math.cos(dA) + Math.cos(f1) * Math.sin(dA) * Math.cos(th));
+      var l2 = l1 + Math.atan2(Math.sin(th) * Math.sin(dA) * Math.cos(f1), Math.cos(dA) - Math.sin(f1) * Math.sin(f2));
+      return { lat: f2 * R2D, lon: norm180(l2 * R2D) };
+    }
+
+    function render() {
+      errEl.textContent = ""; verdictEl.textContent = ""; verdictEl.className = "verdict"; kvEl.innerHTML = "";
+      var a1 = num(la1), o1 = num(lo1);
+      if (isNaN(a1) || isNaN(o1)) { verdictEl.textContent = "✗ Enter start latitude and longitude."; verdictEl.className = "verdict bad"; return; }
+      if (Math.abs(a1) > 90) { verdictEl.textContent = "✗ Start latitude must be −90…90."; verdictEl.className = "verdict bad"; return; }
+
+      if (mode === "two") {
+        var a2 = num(la2), o2 = num(lo2);
+        if (isNaN(a2) || isNaN(o2)) { verdictEl.textContent = "✗ Enter end latitude and longitude."; verdictEl.className = "verdict bad"; return; }
+        if (Math.abs(a2) > 90) { verdictEl.textContent = "✗ End latitude must be −90…90."; verdictEl.className = "verdict bad"; return; }
+        if (a1 === a2 && o1 === o2) { verdictEl.textContent = "✗ Start and end are the same point."; verdictEl.className = "verdict bad"; return; }
+
+        var dKm = gcDist(a1, o1, a2, o2);
+        var ib = initBearing(a1, o1, a2, o2);
+        var fb = finalBearing(a1, o1, a2, o2);
+        var mp = midpoint(a1, o1, a2, o2);
+
+        verdictEl.textContent = fmt(dKm, 1) + " km  ·  bearing " + fmt(ib, 1) + "°";
+        verdictEl.className = "verdict ok";
+        kvEl.innerHTML =
+          "<dt>Great-circle distance</dt><dd class='big'>" + fmt(dKm, 1) + " km  (" + fmt(fromKm(dKm, "mi"), 1) + " mi, " + fmt(fromKm(dKm, "nm"), 1) + " nmi)</dd>" +
+          "<dt>Initial bearing</dt><dd>" + fmt(ib, 1) + "°  (" + compass(ib) + ") — set this heading at the start</dd>" +
+          "<dt>Final bearing</dt><dd>" + fmt(fb, 1) + "°  (" + compass(fb) + ") — heading on arrival</dd>" +
+          "<dt>Midpoint</dt><dd>" + fmt(mp.lat, 5) + ", " + fmt(mp.lon, 5) + "</dd>" +
+          "<dt>Antipode of start</dt><dd>" + fmt(-a1, 5) + ", " + fmt(norm180(o1 + 180), 5) + "</dd>";
+        errEl.textContent = "Initial bearing is the heading to steer at departure; on a great circle the bearing constantly changes, arriving as the final bearing. The straight-line rhumb-line (constant compass) route is longer but simpler — great-circle is shortest on a sphere. Distance uses the Haversine formula with R = 6371 km (spherical mean Earth radius). For sub-metre or transcontinental precision use an ellipsoidal method (Vincenty/Karney); this is a planning tool.";
+      } else {
+        var b = num(brng), d = num(dist);
+        if (isNaN(b) || isNaN(d)) { verdictEl.textContent = "✗ Enter bearing and distance."; verdictEl.className = "verdict bad"; return; }
+        if (d < 0) { verdictEl.textContent = "✗ Distance must be positive."; verdictEl.className = "verdict bad"; return; }
+        var dKm = toKm(d, dunit.value);
+        var r = destination(a1, o1, b, dKm);
+        verdictEl.textContent = fmt(r.lat, 5) + ", " + fmt(r.lon, 5);
+        verdictEl.className = "verdict ok";
+        kvEl.innerHTML =
+          "<dt>Destination</dt><dd class='big'>" + fmt(r.lat, 5) + ", " + fmt(r.lon, 5) + "</dd>" +
+          "<dt>As DMS</dt><dd>" + toDMS(r.lat, true) + ", " + toDMS(r.lon, false) + "</dd>" +
+          "<dt>From start</dt><dd>" + fmt(a1, 5) + ", " + fmt(o1, 5) + "  →  bearing " + fmt(norm360(b), 1) + "°  for " + fmt(d, 1) + " " + dunit.value + "</dd>" +
+          "<dt>Distance (km)</dt><dd>" + fmt(dKm, 1) + " km</dd>";
+        errEl.textContent = "Destination formula: φ₂ = asin(sin φ₁ cos δ + cos φ₁ sin δ cos θ), λ₂ = λ₁ + atan2(sin θ sin δ cos φ₁, cos δ − sin φ₁ sin φ₂), with angular distance δ = d / R. Longitudes are normalized to −180…180. The destination is on the great circle; on a globe the compass bearing changes along the route but the great-circle destination is well-defined from the initial bearing.";
+      }
+      errEl.className = "note";
+    }
+
+    function compass(b) {
+      var dirs = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+      return dirs[Math.round(b / 22.5) % 16];
+    }
+    function toDMS(deg, isLat) {
+      var h = deg < 0 ? (isLat ? "S" : "W") : (isLat ? "N" : "E");
+      deg = Math.abs(deg);
+      var d = Math.floor(deg), mf = (deg - d) * 60, m = Math.floor(mf), s = (mf - m) * 60;
+      return d + "°" + m + "′" + s.toFixed(1) + "″" + h;
+    }
+
+    seg.querySelectorAll("button").forEach(function (bt) {
+      bt.addEventListener("click", function () {
+        seg.querySelectorAll("button").forEach(function (x) { x.classList.remove("active"); });
+        bt.classList.add("active");
+        mode = bt.getAttribute("data-mode");
+        endRow.style.display = mode === "two" ? "" : "none";
+        destRow.style.display = mode === "dest" ? "" : "none";
+        render();
+      });
+    });
+    [la1, lo1, la2, lo2, brng, dist, dunit].forEach(function (el) {
+      el.addEventListener("input", render); el.addEventListener("change", render);
+    });
+    render();
+  })();
+  </script>
+</body>
+</html>
