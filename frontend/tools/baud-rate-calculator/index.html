@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Serial Baud Rate Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0 14px; }
+    @media (max-width: 620px) { .grid4 { grid-template-columns: 1fr 1fr; } }
+    .grid4 .field { margin-bottom: 0; }
+    .kv { display: grid; grid-template-columns: 170px 1fr; gap: 6px 12px; margin-top: 10px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.92rem; word-break: break-all; }
+    .verdict { font-size: 1rem; font-weight: 600; }
+    .verdict.bad { color: var(--bad, #f87171); }
+    table.std { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.85rem; }
+    table.std th, table.std td { border: 1px solid var(--border); padding: 5px 8px; text-align: right; }
+    table.std th { background: var(--bg-elev-2); color: var(--text-dim); font-weight: 600; text-align: left; }
+    table.std td:first-child, table.std th:first-child { text-align: left; }
+    table.std tr.match td { background: rgba(110,168,255,.12); font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Serial Baud Rate Calculator</h1>
+      <p>Work out serial-port timing from a baud rate and UART frame configuration — bit period, frame length, per-byte transfer time, characters per second, effective data throughput, and the total wall-clock time to send a block of bytes. Includes a reference table of standard baud rates (300 to 921600). Handy for embedded and UART work. Pure arithmetic, in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="grid4">
+        <div class="field">
+          <label for="baud">Baud rate</label>
+          <input id="baud" type="number" min="1" step="any" value="9600" style="font-family:monospace;">
+        </div>
+        <div class="field">
+          <label for="data">Data bits</label>
+          <select id="data">
+            <option>5</option><option>6</option><option>7</option>
+            <option selected>8</option><option>9</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="parity">Parity</label>
+          <select id="parity">
+            <option value="none" selected>none</option>
+            <option value="even">even</option>
+            <option value="odd">odd</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="stop">Stop bits</label>
+          <select id="stop">
+            <option value="1" selected>1</option>
+            <option value="1.5">1.5</option>
+            <option value="2">2</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field" style="margin-top:14px;">
+        <label for="size">Transfer size (bytes, optional)</label>
+        <input id="size" type="number" min="0" step="any" value="1024" style="font-family:monospace;">
+        <p class="note" style="margin-top:6px;">Compute the total time to push this many bytes over the line at the configured frame.</p>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <dl class="kv" id="kv"></dl>
+      <p class="note" id="err"></p>
+
+      <div class="spacer"></div>
+      <label>Standard baud rates <span class="muted" style="font-weight:400;">(at the current frame config)</span></label>
+      <table class="std" id="table">
+        <tr><th>Baud</th><th>Bit period</th><th>Frame</th><th>Byte time</th><th>Bytes/s</th></tr>
+      </table>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var baudEl = $("baud"), dataEl = $("data"), parityEl = $("parity"), stopEl = $("stop"), sizeEl = $("size");
+    var verdictEl = $("verdict"), kvEl = $("kv"), errEl = $("err"), tableEl = $("table");
+
+    var STD = [300, 600, 1200, 2400, 4800, 9600, 14400, 19200, 28800, 38400, 57600, 76800, 115200, 230400, 250000, 460800, 921600];
+
+    function fmt(n, d) { return (Math.round(n * Math.pow(10, d)) / Math.pow(10, d)).toFixed(d); }
+
+    // Pretty-print a duration in seconds, scaling to µs/ms/s as appropriate.
+    function dur(sec) {
+      if (sec === 0) return "0 s";
+      var a = Math.abs(sec);
+      if (a < 1e-6) return fmt(sec * 1e9, 2) + " ns";
+      if (a < 1e-3) return fmt(sec * 1e6, 3) + " µs";
+      if (a < 1) return fmt(sec * 1e3, 3) + " ms";
+      if (a < 60) return fmt(sec, 3) + " s";
+      var m = Math.floor(sec / 60), s = sec - m * 60;
+      return m + " min " + fmt(s, 1) + " s";
+    }
+
+    function frameBits() {
+      var db = parseInt(dataEl.value, 10);
+      var pb = parityEl.value === "none" ? 0 : 1;
+      var sb = parseFloat(stopEl.value);
+      return 1 + db + pb + sb; // 1 start + data + parity + stop
+    }
+
+    function render() {
+      errEl.textContent = ""; verdictEl.textContent = ""; verdictEl.className = "verdict"; kvEl.innerHTML = "";
+      var baud = parseFloat(baudEl.value);
+      if (isNaN(baud) || baud <= 0) { verdictEl.textContent = "✗ Enter a positive baud rate."; verdictEl.className = "verdict bad"; renderTable(0); return; }
+      var db = parseInt(dataEl.value, 10);
+      var fb = frameBits();
+      var bitPeriod = 1 / baud;            // seconds
+      var byteTime = fb / baud;            // seconds per frame (one byte)
+      var bytesPerSec = baud / fb;         // frames/sec
+      var dataBitsPerSec = bytesPerSec * db; // useful data throughput
+
+      verdictEl.textContent = "✓ " + fmt(baud, baud < 10 ? 2 : 0) + " baud · " + db + dbitLabel() + parityLabel() + stopLabel() + " (" + fmt(fb, 1) + " bits/frame)";
+      verdictEl.className = "verdict ok";
+
+      var size = sizeEl.value.trim();
+      var transferLine = "";
+      if (size !== "") {
+        var n = parseFloat(size);
+        if (!isNaN(n) && n >= 0) {
+          var total = n * byteTime;
+          transferLine = "<dt>Transfer " + fmt(n, n < 10 ? 2 : 0) + " bytes</dt><dd>" + dur(total) + " (" + fmt(total, 4) + " s)</dd>";
+        }
+      }
+
+      kvEl.innerHTML =
+        "<dt>Bit period</dt><dd>" + dur(bitPeriod) + " (" + fmt(bitPeriod * 1e6, 4) + " µs)</dd>" +
+        "<dt>Frame length</dt><dd>" + fmt(fb, 1) + " bits</dd>" +
+        "<dt>Byte time</dt><dd>" + dur(byteTime) + " (" + fmt(byteTime * 1e3, 4) + " ms)</dd>" +
+        "<dt>Characters / sec</dt><dd>" + fmt(bytesPerSec, 2) + "</dd>" +
+        "<dt>Data throughput</dt><dd>" + fmt(dataBitsPerSec, 2) + " bit/s (" + fmt(dataBitsPerSec / 8, 2) + " B/s)</dd>" +
+        transferLine;
+
+      renderTable(baud);
+    }
+
+    function dbitLabel() { return "N"; }
+    function parityLabel() { return parityEl.value === "none" ? "" : parityEl.value === "even" ? "E" : "O"; }
+    function stopLabel() { return parseFloat(stopEl.value) % 1 === 0 ? parseInt(stopEl.value, 10) : stopEl.value; }
+
+    function renderTable(baud) {
+      var fb = frameBits();
+      var rows = "";
+      for (var i = 0; i < STD.length; i++) {
+        var b = STD[i];
+        var bp = 1 / b, bt = fb / b, bps = b / fb;
+        var match = b === baud;
+        rows += "<tr class='" + (match ? "match" : "") + "'><td>" + b + "</td><td>" + fmt(bp * 1e6, 3) + " µs</td><td>" + fmt(fb, 1) + "</td><td>" + fmt(bt * 1e3, 4) + " ms</td><td>" + fmt(bps, 1) + "</td></tr>";
+      }
+      tableEl.innerHTML = "<tr><th>Baud</th><th>Bit period</th><th>Frame</th><th>Byte time</th><th>Bytes/s</th></tr>" + rows;
+    }
+
+    [baudEl, dataEl, parityEl, stopEl, sizeEl].forEach(function (el) {
+      el.addEventListener("input", render); el.addEventListener("change", render);
+    });
+    render();
+  })();
+  </script>
+</body>
+</html>

@@ -3450,4 +3450,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📦",
     added: "2026-07-13T18:45:00Z",
   },
+  {
+    slug: "baud-rate-calculator",
+    name: "Serial Baud Rate Calculator",
+    description: "Work out serial-port timing from a baud rate and UART frame configuration — bit period, frame length, per-byte transfer time, characters per second, effective data throughput, and total time to send a block of bytes. Configurable data bits (5–9), parity, and stop bits, with a reference table of standard baud rates (300 to 921600). Useful for embedded and UART work. Pure arithmetic, in your browser.",
+    category: "System",
+    icon: "🔌",
+    added: "2026-07-13T19:15:00Z",
+  },
 ];
