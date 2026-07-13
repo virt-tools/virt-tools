@@ -248,17 +248,34 @@
     countEl = document.getElementById("tool-count");
     renderView();
     wireTabs();
-    if (searchInput) searchInput.addEventListener("input", filter);
+    if (searchInput) searchInput.addEventListener("input", function () {
+      filter();
+      // Remember the active search so pressing Back to return here restores it.
+      try { sessionStorage.setItem("vt-search", searchInput.value); } catch (e) {}
+    });
     // Honour ?q=… so the site-search action advertised in JSON-LD resolves to a
     // real, linkable results view (e.g. https://virt.tools/?q=base64).
     try {
       var q = new URLSearchParams(window.location.search).get("q");
       if (q && searchInput) {
         searchInput.value = q;
+        try { sessionStorage.setItem("vt-search", q); } catch (e2) {}
         // "Recent" view is flat, so a search there is most useful.
         if (currentView !== "recent") switchView("recent");
         else filter();
         searchInput.focus();
+      }
+    } catch (e) {}
+    // Restore a search that was active before navigating away, but only on a
+    // back/forward navigation — a fresh visit still starts with an empty box,
+    // and an explicit ?q= deep link (handled above) always wins.
+    try {
+      if (!new URLSearchParams(window.location.search).get("q") && searchInput) {
+        var navType = (performance.getEntriesByType("navigation")[0] || {}).type;
+        if (navType === "back_forward") {
+          var saved = sessionStorage.getItem("vt-search") || "";
+          if (saved) searchInput.value = saved;
+        }
       }
     } catch (e) {}
     filter();
