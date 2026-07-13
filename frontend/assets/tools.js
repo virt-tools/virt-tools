@@ -3522,4 +3522,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔬",
     added: "2026-07-13T23:15:00Z",
   },
+  {
+    slug: "frequency-analyzer",
+    name: "Frequency Analyzer",
+    description: "Analyse letter frequency, the Index of Coincidence and common digraphs in a text — the core statistics for breaking classical substitution ciphers (Caesar, Vigenère). Compares observed percentages against standard English letter frequencies with a bar chart. Counts A–Z only, case-insensitive. Pure JS, in your browser.",
+    category: "Text",
+    icon: "📊",
+    added: "2026-07-13T23:45:00Z",
+  },
 ];
