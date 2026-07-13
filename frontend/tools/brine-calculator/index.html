@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Brine Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .row2 { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+    .row2 .field { margin-bottom: 0; }
+    input[type="number"] { font-family: ui-monospace, monospace; width: 110px; }
+    select { min-width: 200px; }
+    .kv { display: grid; grid-template-columns: 180px 1fr; gap: 6px 12px; margin-top: 10px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.95rem; }
+    .verdict { font-size: 1.2rem; font-weight: 700; }
+    .verdict.ok { color: var(--ok, #4ade80); }
+    .verdict.bad { color: var(--bad, #f87171); }
+    .mode { display: flex; gap: 8px; margin-bottom: 12px; }
+    .mode button { background: var(--bg-elev-2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; cursor: pointer; font-size: 0.9rem; }
+    .mode button.active { background: var(--accent, #6ea8ff); color: #08111f; border-color: var(--accent, #6ea8ff); }
+    .meat-field { display: none; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Brine Calculator</h1>
+      <p>Work out the right amount of salt (and optional sugar) for a meat or poultry brine. Choose <em>standard</em> submersion brining — salt as a percentage of the water — or the modern <em>equilibrium</em> method, where the brine is formulated so the meat and liquid reach a target final salt concentration together. Pick your salt (table, Diamond Crystal or Morton kosher, fine sea) and the grams are also given in teaspoons and tablespoons, since salt density varies a lot by type. Pure arithmetic, in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="mode">
+        <button id="modeStd" class="active">Standard (submersion)</button>
+        <button id="modeEq">Equilibrium</button>
+      </div>
+
+      <div class="row2">
+        <div class="field">
+          <label for="water">Water</label>
+          <input id="water" type="number" min="0" step="any" value="1000">
+          <p class="muted" style="font-size:0.75rem;margin-top:2px;">grams (= ml)</p>
+        </div>
+        <div class="field meat-field" id="meatField">
+          <label for="meat">Meat / poultry</label>
+          <input id="meat" type="number" min="0" step="any" value="1000">
+          <p class="muted" style="font-size:0.75rem;margin-top:2px;">grams</p>
+        </div>
+        <div class="field">
+          <label for="salt">Salt</label>
+          <select id="salt">
+            <option value="table">Table salt (~6.0 g/tsp)</option>
+            <option value="kosher-dc">Kosher — Diamond Crystal (~1.9 g/tsp)</option>
+            <option value="kosher-m">Kosher — Morton (~3.1 g/tsp)</option>
+            <option value="sea">Fine sea salt (~5.4 g/tsp)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="row2">
+        <div class="field">
+          <label for="conc">Salt target <span class="muted" style="font-weight:400;">(%)</span></label>
+          <input id="conc" type="number" min="0" step="any" value="5">
+          <p class="muted" style="font-size:0.75rem;margin-top:2px;" id="concHint">of water weight</p>
+        </div>
+        <div class="field">
+          <label for="sugar">Sugar <span class="muted" style="font-weight:400;">(%, optional)</span></label>
+          <input id="sugar" type="number" min="0" step="any" value="0">
+        </div>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <dl class="kv" id="kv"></dl>
+      <p class="note" id="err"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var modeStd = $("modeStd"), modeEq = $("modeEq"), meatField = $("meatField");
+    var waterEl = $("water"), meatEl = $("meat"), saltEl = $("salt"), concEl = $("conc"), sugarEl = $("sugar");
+    var concHint = $("concHint"), verdictEl = $("verdict"), kvEl = $("kv"), errEl = $("err");
+
+    var DENSITY = { table: 6.0, "kosher-dc": 1.9, "kosher-m": 3.1, sea: 5.4 };
+    var SALTNAME = { table: "table salt", "kosher-dc": "Diamond Crystal kosher", "kosher-m": "Morton kosher", sea: "fine sea salt" };
+
+    var eq = false;
+
+    function num(el) { var n = parseFloat(el.value); return isNaN(n) ? NaN : n; }
+
+    function fmt(n, d) { return (Math.round(n * Math.pow(10, d)) / Math.pow(10, d)).toFixed(d); }
+    function gToVol(g, density) {
+      var tsp = g / density;
+      return fmt(tsp, 1) + " tsp  (" + fmt(tsp / 3, 2) + " Tbsp)";
+    }
+
+    function render() {
+      errEl.textContent = ""; verdictEl.textContent = ""; verdictEl.className = "verdict"; kvEl.innerHTML = "";
+      var water = num(waterEl), meat = num(meatEl), conc = num(concEl), sugar = num(sugarEl);
+      if ([water, conc, sugar].some(isNaN) || (eq && isNaN(meat))) { verdictEl.textContent = "✗ Enter valid numbers."; verdictEl.className = "verdict bad"; return; }
+      if (water <= 0 || conc <= 0) { verdictEl.textContent = "✗ Water and salt % must be greater than zero."; verdictEl.className = "verdict bad"; return; }
+      if (sugar < 0) sugar = 0;
+
+      var basis, saltG, sugarG;
+      if (eq) {
+        basis = water + meat;
+        saltG = basis * conc / 100;
+        sugarG = basis * sugar / 100;
+      } else {
+        basis = water;
+        saltG = water * conc / 100;
+        sugarG = water * sugar / 100;
+      }
+      var density = DENSITY[saltEl.value];
+      var totalBrine = (eq ? water + meat : water) + saltG + sugarG;
+
+      verdictEl.textContent = "✓ " + fmt(saltG, 1) + " g salt" + (sugarG > 0 ? " + " + fmt(sugarG, 1) + " g sugar" : "");
+      verdictEl.className = "verdict ok";
+
+      kvEl.innerHTML =
+        "<dt>Salt (by weight)</dt><dd>" + fmt(saltG, 1) + " g</dd>" +
+        "<dt>Salt (by volume)</dt><dd>" + gToVol(saltG, density) + "  <span class='muted'>" + SALTNAME[saltEl.value] + "</span></dd>" +
+        (sugarG > 0 ? "<dt>Sugar</dt><dd>" + fmt(sugarG, 1) + " g</dd>" : "") +
+        "<dt>Brine concentration</dt><dd>" + fmt(conc, 2) + "% of " + (eq ? "meat + water" : "water") + " weight</dd>" +
+        "<dt>Total brine mass</dt><dd>" + fmt(totalBrine, 0) + " g</dd>" +
+        "<dt>Final salt in liquid</dt><dd>" + fmt(saltG / (water + saltG + sugarG) * 100, 2) + "% (in the water phase)</dd>";
+
+      var note = eq
+        ? "Equilibrium brine: salt = " + fmt(basis, 0) + " g (meat + water) × " + fmt(conc, 2) + "% = " + fmt(saltG, 1) + " g. Brine 12–24 h; the meat can't over-salt because it stops at the target concentration. Typical targets: 0.5–1% (gentle), 1–1.5% (classic), up to 2% (short, intense)."
+        : "Standard brine: salt = " + fmt(water, 0) + " g water × " + fmt(conc, 2) + "% = " + fmt(saltG, 1) + " g. Use 5–6% for a 1–2 hour soak, 3–4% for longer. Watch the clock — a strong standard brine can over-salt. Always weigh salt by grams for accuracy; the volume figures are approximate because salt density varies by brand.";
+      errEl.textContent = note;
+      errEl.className = "note";
+    }
+
+    function setMode(isEq) {
+      eq = isEq;
+      modeStd.classList.toggle("active", !eq);
+      modeEq.classList.toggle("active", eq);
+      meatField.style.display = eq ? "block" : "none";
+      concHint.textContent = eq ? "of (meat + water)" : "of water weight";
+      concEl.value = eq ? "1" : "5";
+      render();
+    }
+
+    modeStd.addEventListener("click", function () { setMode(false); });
+    modeEq.addEventListener("click", function () { setMode(true); });
+    [waterEl, meatEl, concEl, sugarEl].forEach(function (el) { el.addEventListener("input", render); el.addEventListener("change", render); });
+    saltEl.addEventListener("change", render);
+    render();
+  })();
+  </script>
+</body>
+</html>

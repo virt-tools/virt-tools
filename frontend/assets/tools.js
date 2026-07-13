@@ -3562,4 +3562,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📡",
     added: "2026-07-14T01:45:00Z",
   },
+  {
+    slug: "brine-calculator",
+    name: "Brine Calculator",
+    description: "Work out the right amount of salt (and optional sugar) for a meat or poultry brine. Choose standard submersion brining — salt as a percentage of the water — or the modern equilibrium method, where the brine is formulated so the meat and liquid reach a target final salt concentration together. Pick your salt (table, Diamond Crystal or Morton kosher, fine sea) and the grams are also given in teaspoons and tablespoons, since salt density varies a lot by type. Pure arithmetic, in your browser.",
+    category: "Food",
+    icon: "🧂",
+    added: "2026-07-14T02:15:00Z",
+  },
 ];
