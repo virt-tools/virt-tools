@@ -3674,4 +3674,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🍺",
     added: "2026-07-14T08:45:00Z",
   },
+  {
+    slug: "field-of-view-calculator",
+    name: "Field of View & Crop Factor Calculator",
+    description: "Work out a camera lens's horizontal, vertical and diagonal angle of view from focal length and sensor size, plus the crop factor and the 35 mm-equivalent focal length. Sensor presets for full frame, APS-C (Sony/Nikon/Fuji and Canon), Micro 4/3, 1-inch and medium format, or a custom sensor. Useful for camera, lens and videography planning. Pure trigonometry on a rectilinear projection — fisheye projection and wide-angle edge stretch aren't modelled. Everything runs locally in your browser.",
+    category: "Image",
+    icon: "📷",
+    added: "2026-07-14T09:15:00Z",
+  },
 ];
