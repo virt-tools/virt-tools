@@ -3474,4 +3474,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔢",
     added: "2026-07-13T20:15:00Z",
   },
+  {
+    slug: "haversine-distance",
+    name: "Haversine Distance Calculator",
+    description: "Measure the great-circle distance between two points on Earth from their latitude and longitude, using the haversine formula over a spherical Earth (mean radius 6371 km). Reports kilometres, metres, miles and nautical miles, plus the initial compass bearing. Useful for geo work and route estimates. Pure trigonometry, in your browser.",
+    category: "Geography",
+    icon: "🧭",
+    added: "2026-07-13T20:45:00Z",
+  },
 ];

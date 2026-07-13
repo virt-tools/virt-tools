@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Haversine Distance Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+    @media (max-width: 560px) { .grid2 { grid-template-columns: 1fr; } }
+    .grid2 .field { margin-bottom: 0; }
+    .pair { border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 14px; }
+    .pair h3 { margin: 0 0 10px 0; font-size: 0.95rem; font-weight: 600; color: var(--text-dim); }
+    .latlon { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+    .latlon .field { margin-bottom: 0; }
+    .kv { display: grid; grid-template-columns: 120px 1fr; gap: 6px 12px; margin-top: 10px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.95rem; }
+    .verdict { font-size: 1.15rem; font-weight: 700; }
+    .verdict.bad { color: var(--bad, #f87171); }
+    .verdict.ok { color: var(--ok, #4ade80); }
+    .presets button { background: var(--bg-elev-2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 4px 9px; font-size: 0.8rem; cursor: pointer; margin: 0 4px 4px 0; }
+    .bearing { display: inline-block; margin-left: 8px; font-size: 0.9rem; color: var(--text-dim); font-weight: 400; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Haversine Distance Calculator</h1>
+      <p>Measure the great-circle distance between two points on Earth from their latitude and longitude, using the haversine formula over a spherical Earth (mean radius 6371 km). Reports the distance in kilometres, metres, miles and nautical miles, plus the initial compass bearing. Useful for geo work and route estimates. Pure trigonometry, in your browser — nothing sent over the network.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label>Examples</label>
+        <div class="presets" id="presets"></div>
+      </div>
+
+      <div class="pair">
+        <h3>Point A</h3>
+        <div class="latlon">
+          <div class="field"><label for="lat1">Latitude (°)</label><input id="lat1" type="number" step="any" value="51.5074" style="font-family:monospace;"></div>
+          <div class="field"><label for="lon1">Longitude (°)</label><input id="lon1" type="number" step="any" value="-0.1278" style="font-family:monospace;"></div>
+        </div>
+      </div>
+
+      <div class="pair">
+        <h3>Point B</h3>
+        <div class="latlon">
+          <div class="field"><label for="lat2">Latitude (°)</label><input id="lat2" type="number" step="any" value="48.8566" style="font-family:monospace;"></div>
+          <div class="field"><label for="lon2">Longitude (°)</label><input id="lon2" type="number" step="any" value="2.3522" style="font-family:monospace;"></div>
+        </div>
+      </div>
+
+      <p class="note">Decimal degrees; negative for south latitude or west longitude (e.g. <code>-33.8688, 151.2093</code> for Sydney).</p>
+
+      <div class="verdict" id="verdict"></div>
+      <dl class="kv" id="kv"></dl>
+      <p class="note" id="err"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var lat1El = $("lat1"), lon1El = $("lon1"), lat2El = $("lat2"), lon2El = $("lon2");
+    var verdictEl = $("verdict"), kvEl = $("kv"), errEl = $("err"), presetsEl = $("presets");
+
+    var R_KM = 6371, R_MI = 6371 / 1.609344, R_NMI = 6371 / 1.852;
+
+    var PRESETS = [
+      { name: "London → Paris", a: [51.5074, -0.1278], b: [48.8566, 2.3522] },
+      { name: "New York → LA", a: [40.7128, -74.0060], b: [34.0522, -118.2437] },
+      { name: "Sydney → Perth", a: [-33.8688, 151.2093], b: [-31.9505, 115.8605] },
+      { name: "Antipode test", a: [0, 0], b: [0, 180] }
+    ];
+    PRESETS.forEach(function (p) {
+      var b = document.createElement("button");
+      b.textContent = p.name;
+      b.addEventListener("click", function () {
+        lat1El.value = p.a[0]; lon1El.value = p.a[1]; lat2El.value = p.b[0]; lon2El.value = p.b[1]; render();
+      });
+      presetsEl.appendChild(b);
+    });
+
+    function rad(d) { return d * Math.PI / 180; }
+    function deg(r) { return r * 180 / Math.PI; }
+
+    function compass(b) {
+      var dirs = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
+      return dirs[Math.round(b / 22.5) % 16];
+    }
+
+    function fmt(n, d) { return (Math.round(n * Math.pow(10, d)) / Math.pow(10, d)).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d }); }
+
+    function render() {
+      errEl.textContent = ""; verdictEl.textContent = ""; verdictEl.className = "verdict"; kvEl.innerHTML = "";
+      var lat1 = parseFloat(lat1El.value), lon1 = parseFloat(lon1El.value);
+      var lat2 = parseFloat(lat2El.value), lon2 = parseFloat(lon2El.value);
+      if ([lat1, lon1, lat2, lon2].some(isNaN)) { verdictEl.textContent = "✗ Enter numeric degrees for all four fields."; verdictEl.className = "verdict bad"; return; }
+      if (lat1 < -90 || lat1 > 90 || lat2 < -90 || lat2 > 90) { verdictEl.textContent = "✗ Latitude must be between −90° and 90°."; verdictEl.className = "verdict bad"; return; }
+      if (lon1 < -180 || lon1 > 180 || lon2 < -180 || lon2 > 180) { verdictEl.textContent = "✗ Longitude must be between −180° and 180°."; verdictEl.className = "verdict bad"; return; }
+
+      var p1 = rad(lat1), p2 = rad(lat2), dp = rad(lat2 - lat1), dl = rad(lon2 - lon1);
+      var a = Math.sin(dp / 2) * Math.sin(dp / 2) + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) * Math.sin(dl / 2);
+      var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      var km = R_KM * c;
+
+      // initial bearing
+      var y = Math.sin(dl) * Math.cos(p2);
+      var x = Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl);
+      var brg = (deg(Math.atan2(y, x)) + 360) % 360;
+
+      var same = km < 1e-9;
+      verdictEl.textContent = same ? "✓ Same point" : "✓ " + fmt(km, km < 100 ? 2 : 0) + " km";
+      verdictEl.className = "verdict ok";
+
+      kvEl.innerHTML =
+        "<dt>Kilometres</dt><dd>" + fmt(km, km < 1 ? 4 : 2) + " km</dd>" +
+        "<dt>Metres</dt><dd>" + fmt(km * 1000, 1) + " m</dd>" +
+        "<dt>Miles</dt><dd>" + fmt(km * R_MI / R_KM, 2) + " mi</dd>" +
+        "<dt>Nautical miles</dt><dd>" + fmt(km * R_NMI / R_KM, 2) + " nmi</dd>" +
+        "<dt>Initial bearing</dt><dd>" + (same ? "—" : fmt(brg, 1) + "° <span class='bearing'>" + compass(brg) + "</span>") + "</dd>";
+    }
+
+    [lat1El, lon1El, lat2El, lon2El].forEach(function (el) {
+      el.addEventListener("input", render); el.addEventListener("change", render);
+    });
+    render();
+  })();
+  </script>
+</body>
+</html>
