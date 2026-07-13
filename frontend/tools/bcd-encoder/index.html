@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>BCD Encoder — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+    .tabs button { background: var(--bg-elev-2); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; font-weight: 600; cursor: pointer; }
+    .tabs button.active { background: var(--accent); color: #0b0d12; border-color: var(--accent); }
+    .modes { display: flex; flex-wrap: wrap; gap: 18px; }
+    .modes .seg { display: flex; flex-direction: column; gap: 6px; }
+    .modes .seg > span { font-size: 0.78rem; color: var(--text-dim); }
+    .modes label { display: flex; align-items: center; gap: 5px; font-size: 0.88rem; }
+    .out { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 14px; white-space: pre-wrap; word-break: break-all; }
+    .out.empty { color: var(--text-dim); font-style: italic; }
+    .kv { display: grid; grid-template-columns: 130px 1fr; gap: 6px 12px; margin-top: 10px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.92rem; word-break: break-all; }
+    .verdict { font-size: 1rem; font-weight: 600; }
+    .verdict.bad { color: var(--bad, #f87171); }
+    .verdict.ok { color: var(--ok, #4ade80); }
+    table.bcd { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.82rem; }
+    table.bcd th, table.bcd td { border: 1px solid var(--border); padding: 4px 8px; text-align: center; }
+    table.bcd th { background: var(--bg-elev-2); color: var(--text-dim); }
+    table.bcd td:first-child, table.bcd th:first-child { text-align: left; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>BCD Encoder</h1>
+      <p>Convert decimal digits to and from Binary-Coded Decimal — the digit-per-nibble encoding used in electronic displays, financial calculators and the COBOL <code>COMP-3</code> packed type. Supports the natural 8421 (BCD) and Excess-3 (XS-3) variants, in both packed (two digits per byte) and unpacked (one byte per digit) layouts, with a full digit-to-nibble reference table. Pure arithmetic, in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="tabs">
+        <button id="tab-enc" class="active">Encode</button>
+        <button id="tab-dec">Decode</button>
+      </div>
+
+      <div class="field">
+        <div class="modes">
+          <div class="seg">
+            <span>Variant</span>
+            <label><input type="radio" name="variant" value="8421" checked> 8421 (natural BCD)</label>
+            <label><input type="radio" name="variant" value="xs3"> Excess-3 (XS-3)</label>
+          </div>
+          <div class="seg">
+            <span>Layout</span>
+            <label><input type="radio" name="layout" value="packed" checked> Packed (2 digits/byte)</label>
+            <label><input type="radio" name="layout" value="unpacked"> Unpacked (1 digit/byte)</label>
+          </div>
+        </div>
+      </div>
+
+      <div id="enc-pane">
+        <div class="field">
+          <label for="enc-in">Decimal digits</label>
+          <input id="enc-in" type="text" value="01239" autocomplete="off" style="font-family:monospace;">
+          <p class="note" style="margin-top:6px;">Only the characters 0–9. In packed mode an odd digit count is left-padded with a 0 (encoded as 0 in 8421, 3 in XS-3).</p>
+        </div>
+        <div class="verdict" id="enc-verdict"></div>
+        <dl class="kv" id="enc-kv"></dl>
+        <p class="note" id="enc-err"></p>
+      </div>
+
+      <div id="dec-pane" hidden>
+        <div class="field">
+          <label for="dec-in">BCD bytes (hex, space/comma-separated)</label>
+          <input id="dec-in" type="text" value="12 39" autocomplete="off" style="font-family:monospace;">
+          <p class="note" style="margin-top:6px;">Each nibble must encode a valid digit (0–9 for 8421; 3–12 / 0x3–0xC for XS-3).</p>
+        </div>
+        <div class="verdict" id="dec-verdict"></div>
+        <dl class="kv" id="dec-kv"></dl>
+        <p class="note" id="dec-err"></p>
+      </div>
+
+      <div class="spacer"></div>
+      <label>Digit → nibble mapping</label>
+      <table class="bcd" id="table"></table>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var tabEnc = $("tab-enc"), tabDec = $("tab-dec"), encPane = $("enc-pane"), decPane = $("dec-pane");
+    var encIn = $("enc-in"), encVerdict = $("enc-verdict"), encKv = $("enc-kv"), encErr = $("enc-err");
+    var decIn = $("dec-in"), decVerdict = $("dec-verdict"), decKv = $("dec-kv"), decErr = $("dec-err");
+    var tableEl = $("table");
+
+    function variant() { var e = document.querySelector('input[name="variant"]:checked'); return e ? e.value : "8421"; }
+    function layout() { var e = document.querySelector('input[name="layout"]:checked'); return e ? e.value : "packed"; }
+
+    function nibOf(d, v) { return v === "xs3" ? d + 3 : d; }
+    function digitOf(nib, v) {
+      if (v === "xs3") { var d = nib - 3; return (d >= 0 && d <= 9) ? d : null; }
+      return (nib >= 0 && nib <= 9) ? nib : null;
+    }
+    function padNib(v) { return v === "xs3" ? 3 : 0; }
+
+    function toHex(bytes) { return bytes.map(function (b) { return (b < 16 ? "0" : "") + b.toString(16).toUpperCase(); }).join(" "); }
+    function toBin(bytes) {
+      return bytes.map(function (b) { var s = b.toString(2); while (s.length < 8) s = "0" + s; return s; }).join(" ");
+    }
+
+    function encode() {
+      encErr.textContent = ""; encVerdict.textContent = ""; encVerdict.className = "verdict"; encKv.innerHTML = "";
+      var raw = encIn.value.trim();
+      if (!raw) { encKv.innerHTML = ""; return; }
+      if (!/^[0-9]+$/.test(raw)) { encVerdict.textContent = "✗ Only decimal digits (0–9) are allowed."; encVerdict.className = "verdict bad"; return; }
+      var v = variant(), packed = layout() === "packed";
+      var nibs = raw.split("").map(function (c) { return nibOf(parseInt(c, 10), v); });
+      var padNote = "";
+      if (packed) {
+        if (nibs.length % 2) { nibs.unshift(padNib(v)); padNote = "1 pad nibble added on the left"; }
+        var bytes = [];
+        for (var i = 0; i < nibs.length; i += 2) bytes.push((nibs[i] << 4) | nibs[i + 1]);
+      } else {
+        bytes = nibs;
+      }
+      encVerdict.textContent = "✓ " + raw.length + " digit" + (raw.length === 1 ? "" : "s") + " → " + bytes.length + " byte" + (bytes.length === 1 ? "" : "s");
+      encVerdict.className = "verdict ok";
+      if (padNote) encErr.textContent = padNote + ".";
+      encKv.innerHTML =
+        "<dt>Hex bytes</dt><dd>" + toHex(bytes) + "</dd>" +
+        "<dt>Binary</dt><dd>" + toBin(bytes) + "</dd>" +
+        "<dt>Byte count</dt><dd>" + bytes.length + "</dd>" +
+        "<dt>Nibbles</dt><dd>" + nibs.map(function (n) { return n.toString(16).toUpperCase(); }).join(" ") + "</dd>";
+    }
+
+    function parseHexBytes(s) {
+      var parts = s.replace(/0x/gi, "").split(/[,\s]+/).filter(Boolean);
+      var bytes = [];
+      for (var i = 0; i < parts.length; i++) {
+        var p = parts[i];
+        if (!/^[0-9a-fA-F]{1,2}$/.test(p)) throw new Error("Invalid hex byte: “" + p + "”.");
+        bytes.push(parseInt(p, 16));
+      }
+      return bytes;
+    }
+
+    function decode() {
+      decErr.textContent = ""; decVerdict.textContent = ""; decVerdict.className = "verdict"; decKv.innerHTML = "";
+      var raw = decIn.value.trim();
+      if (!raw) { decKv.innerHTML = ""; return; }
+      var bytes;
+      try { bytes = parseHexBytes(raw); }
+      catch (e) { decVerdict.textContent = "✗ " + e.message; decVerdict.className = "verdict bad"; return; }
+      if (!bytes.length) { decVerdict.textContent = "✗ Enter one or more hex bytes."; decVerdict.className = "verdict bad"; return; }
+      var v = variant(), packed = layout() === "packed";
+      var nibs = [];
+      for (var i = 0; i < bytes.length; i++) {
+        if (packed) { nibs.push((bytes[i] >> 4) & 0xf); nibs.push(bytes[i] & 0xf); }
+        else { nibs.push(bytes[i]); }
+      }
+      var digits = "";
+      for (var j = 0; j < nibs.length; j++) {
+        var d = digitOf(nibs[j], v);
+        if (d === null) {
+          decVerdict.textContent = "✗ Invalid " + v + " nibble 0x" + nibs[j].toString(16).toUpperCase() + " at position " + (j + 1) + ".";
+          decVerdict.className = "verdict bad";
+          decKv.innerHTML = "<dt>Nibbles so far</dt><dd>" + nibs.slice(0, j).map(function (n) { return n.toString(16).toUpperCase(); }).join(" ") + "</dd>";
+          return;
+        }
+        digits += d;
+      }
+      // Strip a leading pad nibble in packed mode (a leading 0-digit encoded as pad).
+      var stripped = "";
+      if (packed && digits.length > 1 && digits[0] === "0") { stripped = digits.slice(1); }
+      decVerdict.textContent = "✓ " + digits.length + " nibbles decoded";
+      decVerdict.className = "verdict ok";
+      decKv.innerHTML =
+        "<dt>Decimal</dt><dd>" + digits + (stripped !== "" ? "  <span class=\"muted\">(→ " + stripped + " if first nibble is pad)</span>" : "") + "</dd>" +
+        "<dt>Nibbles</dt><dd>" + nibs.map(function (n) { return n.toString(16).toUpperCase(); }).join(" ") + "</dd>" +
+        "<dt>Bytes</dt><dd>" + toHex(bytes) + "</dd>";
+    }
+
+    function renderTable() {
+      var v = variant();
+      var rows = "<tr><th>Digit</th><th>8421 nibble</th><th>XS-3 nibble</th></tr>";
+      for (var d = 0; d <= 9; d++) {
+        rows += "<tr><td>" + d + "</td><td>" + d.toString(16).toUpperCase() + "</td><td>" + nibOf(d, "xs3").toString(16).toUpperCase() + "</td></tr>";
+      }
+      rows += "<tr><td colspan=\"3\" style=\"text-align:left;font-size:0.78rem;\">Invalid nibbles: 8421 rejects 0xA–0xF; XS-3 rejects 0x0–0x2 and 0xD–0xF.</td></tr>";
+      tableEl.innerHTML = rows;
+    }
+
+    function setTab(which) {
+      var e = which === "enc";
+      tabEnc.classList.toggle("active", e); tabDec.classList.toggle("active", !e);
+      encPane.hidden = !e; decPane.hidden = e;
+      if (e) encode(); else decode();
+    }
+    tabEnc.addEventListener("click", function () { setTab("enc"); });
+    tabDec.addEventListener("click", function () { setTab("dec"); });
+
+    encIn.addEventListener("input", encode);
+    decIn.addEventListener("input", decode);
+    [].forEach.call(document.getElementsByName("variant"), function (r) {
+      r.addEventListener("change", function () { renderTable(); if (encPane.hidden) decode(); else encode(); });
+    });
+    [].forEach.call(document.getElementsByName("layout"), function (r) {
+      r.addEventListener("change", function () { if (encPane.hidden) decode(); else encode(); });
+    });
+
+    renderTable();
+    encode();
+  })();
+  </script>
+</body>
+</html>

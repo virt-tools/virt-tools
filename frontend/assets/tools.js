@@ -3466,4 +3466,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔁",
     added: "2026-07-13T19:45:00Z",
   },
+  {
+    slug: "bcd-encoder",
+    name: "BCD Encoder",
+    description: "Convert decimal digits to and from Binary-Coded Decimal — the digit-per-nibble encoding used in electronic displays, financial calculators and COBOL COMP-3 packed fields. Supports the natural 8421 (BCD) and Excess-3 (XS-3) variants, in packed (two digits per byte) and unpacked layouts, with a full digit-to-nibble reference table. Pure arithmetic, in your browser.",
+    category: "Encoding",
+    icon: "🔢",
+    added: "2026-07-13T20:15:00Z",
+  },
 ];
