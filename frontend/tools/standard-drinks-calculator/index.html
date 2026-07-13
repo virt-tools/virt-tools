@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Standard Drinks Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .row2 { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+    .row2 .field { margin-bottom: 0; }
+    input[type="number"] { font-family: ui-monospace, monospace; width: 110px; }
+    select { min-width: 130px; }
+    .kv { display: grid; grid-template-columns: 220px 1fr; gap: 6px 12px; margin-top: 12px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.95rem; }
+    .verdict { font-size: 1.5rem; font-weight: 800; font-family: ui-monospace, monospace; margin-top: 8px; }
+    .verdict.ok { color: var(--ok, #4ade80); }
+    .verdict.bad { color: var(--bad, #f87171); }
+    .big { font-size: 1.05rem; font-weight: 700; }
+    .presets button { background: var(--bg-elev-2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 5px 9px; font-size: 0.8rem; cursor: pointer; margin: 0 4px 4px 0; }
+    .presets button b { color: var(--accent, #6ea8ff); }
+    h3.sec { font-size: 0.92rem; font-weight: 600; margin: 14px 0 4px; color: var(--text-dim); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Standard Drinks Calculator</h1>
+      <p>Convert a drink's size and alcohol-by-volume into the number of standard drinks or alcohol units used in different countries — the US standard drink (14 g ethanol), the UK unit (8 g), the Australian standard drink (10 g) and an approximate EU unit (10–12 g). Enter the volume and ABV (with presets for typical beer, wine, spirits and cocktails) and get the count in every region plus the grams of pure ethanol, which you can carry into the BAC estimator. Pure arithmetic, in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label>Drink presets</label>
+        <div class="presets" id="presets"></div>
+      </div>
+
+      <div class="row2">
+        <div class="field">
+          <label for="vol">Volume</label>
+          <input id="vol" type="number" min="0" step="any" value="355">
+          <select id="vunit" style="min-width:90px;margin-left:6px;">
+            <option value="ml" selected>ml</option>
+            <option value="oz">fl oz (US)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="abv">ABV</label>
+          <input id="abv" type="number" min="0" step="any" value="5"> <span class="muted">%</span>
+        </div>
+        <div class="field">
+          <label for="count">Number of these drinks</label>
+          <input id="count" type="number" min="1" step="1" value="1">
+        </div>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <dl class="kv" id="kv"></dl>
+      <p class="note" id="err"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var volEl = $("vol"), vunitEl = $("vunit"), abvEl = $("abv"), countEl = $("count");
+    var verdictEl = $("verdict"), kvEl = $("kv"), errEl = $("err"), presetsEl = $("presets");
+
+    var ETH_DENSITY = 0.789; // g/ml
+    // Region definitions: grams of pure ethanol per standard drink / unit.
+    var REGIONS = [
+      { key: "US",  g: 14,   label: "US standard drink" },
+      { key: "UK",  g: 8,    label: "UK alcohol unit" },
+      { key: "AU",  g: 10,   label: "Australian standard drink" },
+      { key: "EU",  g: 10,   label: "EU unit (~10 g, varies)" }
+    ];
+
+    var PRESETS = [
+      { name: "US beer", vol: 355, u: "ml", abv: 5 },
+      { name: "US pint", vol: 473, u: "ml", abv: 5 },
+      { name: "UK pint", vol: 568, u: "ml", abv: 4 },
+      { name: "Wine glass", vol: 148, u: "ml", abv: 12 },
+      { name: "Bottle wine", vol: 750, u: "ml", abv: 12 },
+      { name: "Shot (1.5 oz)", vol: 44.4, u: "ml", abv: 40 },
+      { name: "Double shot", vol: 59, u: "ml", abv: 40 },
+      { name: "Cocktail", vol: 180, u: "ml", abv: 18 },
+      { name: "Light beer can", vol: 330, u: "ml", abv: 4.2 }
+    ];
+    PRESETS.forEach(function (p) {
+      var b = document.createElement("button");
+      b.innerHTML = p.name + " <b>" + p.vol + "ml " + p.abv + "%</b>";
+      b.addEventListener("click", function () { volEl.value = p.vol; vunitEl.value = p.u; abvEl.value = p.abv; render(); });
+      presetsEl.appendChild(b);
+    });
+
+    function num(el) { var n = parseFloat(el.value); return isNaN(n) ? NaN : n; }
+    function fmt(n, d) { return Number(n).toFixed(d); }
+    function toMl(v, u) { return u === "oz" ? v * 29.5735 : v; }
+
+    function render() {
+      errEl.textContent = ""; verdictEl.textContent = ""; verdictEl.className = "verdict"; kvEl.innerHTML = "";
+      var v = num(volEl), abv = num(abvEl), count = num(countEl);
+      if ([v, abv, count].some(isNaN)) { verdictEl.textContent = "✗ Enter valid numbers."; verdictEl.className = "verdict bad"; return; }
+      if (v <= 0 || abv < 0 || count < 1) { verdictEl.textContent = "✗ Volume >0, ABV ≥0, count ≥1."; verdictEl.className = "verdict bad"; return; }
+
+      var mlTotal = toMl(v, vunitEl.value) * count;
+      var ethMl = mlTotal * abv / 100;
+      var ethG = ethMl * ETH_DENSITY;
+
+      // US count for the headline.
+      var usDrinks = ethG / 14;
+
+      verdictEl.textContent = fmt(usDrinks, 2) + " US standard drinks  ·  " + fmt(ethG, 1) + " g ethanol";
+      verdictEl.className = "verdict ok";
+
+      var rows = REGIONS.map(function (r) {
+        return "<dt>" + r.label + "</dt><dd>" + fmt(ethG / r.g, 2) + (r.key === "US" ? "  <span class='big'>" : "  ") + "(" + r.g + " g each)</dd>";
+      }).join("");
+      kvEl.innerHTML =
+        "<dt>Pure ethanol</dt><dd class='big'>" + fmt(ethG, 1) + " g  (" + fmt(ethMl, 1) + " ml)</dd>" +
+        "<dt>Total volume</dt><dd>" + fmt(mlTotal, 1) + " ml at " + fmt(abv, 1) + "% ABV</dd>" +
+        rows +
+        "<dt>Per single drink</dt><dd>" + fmt(ethG / count, 1) + " g ethanol each</dd>";
+
+      errEl.textContent = "A 'standard drink' is a country's fixed amount of pure ethanol used for health guidance, not a serving size — a real glass usually contains more than one. US: 14 g (≈0.6 fl oz); UK unit: 8 g (10 ml); Australia: 10 g; EU ~10–12 g depending on country. Low-risk drinking limits: US ≤2/day (men) / ≤1/day (women); UK ≤14 units/week spread across days. The exact count depends on the drink's real ABV and pour size, which vary widely. Carry the US standard-drink total into the BAC Calculator to estimate blood alcohol. For health decisions follow your local guidance.";
+      errEl.className = "note";
+    }
+
+    [volEl, vunitEl, abvEl, countEl].forEach(function (el) { el.addEventListener("input", render); el.addEventListener("change", render); });
+    render();
+  })();
+  </script>
+</body>
+</html>

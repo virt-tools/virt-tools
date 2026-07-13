@@ -3666,4 +3666,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🥩",
     added: "2026-07-14T08:15:00Z",
   },
+  {
+    slug: "standard-drinks-calculator",
+    name: "Standard Drinks Calculator",
+    description: "Convert a drink's volume and ABV into the number of standard drinks or alcohol units used in different countries — the US standard drink (14 g ethanol), the UK unit (8 g), the Australian standard drink (10 g) and an approximate EU unit. Enter volume and ABV with presets for typical beer, wine, spirits and cocktails, and get the count per region plus grams of pure ethanol, which you can carry into the BAC estimator. Pure arithmetic, in your browser.",
+    category: "Health",
+    icon: "🍺",
+    added: "2026-07-14T08:45:00Z",
+  },
 ];
