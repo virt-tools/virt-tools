@@ -3354,4 +3354,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🟦",
     added: "2026-07-09T14:00:00Z",
   },
+  {
+    slug: "ics-generator",
+    name: "iCalendar (.ics) Event Generator",
+    description: "Build a calendar event (title, location, description, repeat, alarm) and download an .ics file that imports into Google, Apple and Outlook calendars — runs entirely in your browser.",
+    category: "Time",
+    icon: "📅",
+    added: "2026-07-13T13:00:00Z",
+  },
 ];

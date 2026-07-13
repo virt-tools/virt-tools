@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>iCalendar (.ics) Event Generator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .ics-out { font-family: monospace; font-size: 13px; white-space: pre-wrap; word-break: break-all; max-height: 320px; overflow: auto; }
+    .ics-out.empty { color: var(--muted, #888); font-style: italic; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+    @media (max-width: 560px) { .grid2 { grid-template-columns: 1fr; } }
+    .row-tight { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+    .row-tight .field { flex: 1 1 160px; }
+    .chk { display: flex; align-items: center; gap: 6px; font-size: 14px; }
+    .field { margin-bottom: 14px; }
+    .req { color: var(--bad, #f87171); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>iCalendar (.ics) Event Generator</h1>
+      <p>Build a calendar event and download it as an <code>.ics</code> file that imports into Google Calendar, Apple Calendar, Outlook and more. Entirely in your browser — nothing uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="title">Title <span class="req">*</span></label>
+        <input id="title" type="text" placeholder="Project kickoff meeting" autocomplete="off">
+      </div>
+
+      <div class="field">
+        <label for="location">Location</label>
+        <input id="location" type="text" placeholder="Conference Room B / https://meet.example/abc" autocomplete="off">
+      </div>
+
+      <div class="field">
+        <label for="desc">Description</label>
+        <textarea id="desc" rows="3" placeholder="Agenda and notes…"></textarea>
+      </div>
+
+      <div class="row-tight" style="margin-top:12px;">
+        <div class="field">
+          <label for="start">Start <span class="req">*</span></label>
+          <input id="start" type="datetime-local">
+        </div>
+        <div class="field">
+          <label for="end">End</label>
+          <input id="end" type="datetime-local">
+        </div>
+      </div>
+
+      <div class="row-tight" style="margin-top:12px;">
+        <div class="field">
+          <label for="tz">Timezone</label>
+          <select id="tz">
+            <option value="local" selected>Local (floating)</option>
+            <option value="utc">UTC</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="rrule">Repeat</label>
+          <select id="rrule">
+            <option value="none" selected>Once (no repeat)</option>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+            <option value="yearly">Yearly</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="alarm">Alarm</label>
+          <select id="alarm">
+            <option value="0" selected>None</option>
+            <option value="5">5 min before</option>
+            <option value="10">10 min before</option>
+            <option value="15">15 min before</option>
+            <option value="30">30 min before</option>
+            <option value="60">1 hour before</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+      <p class="note" id="err"></p>
+
+      <div class="row" style="justify-content:space-between; align-items:center;">
+        <label for="out">.ics output</label>
+        <div style="display:flex; gap:8px;">
+          <button id="download">⬇ Download .ics</button>
+          <button id="copy" class="secondary">Copy</button>
+        </div>
+      </div>
+      <div class="output ics-out" id="out"></div>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var titleEl = $("title"), locEl = $("location"), descEl = $("desc");
+    var startEl = $("start"), endEl = $("end"), tzEl = $("tz");
+    var rruleEl = $("rrule"), alarmEl = $("alarm");
+    var out = $("out"), err = $("err"), dl = $("download"), copy = $("copy");
+
+    // Pad two digits.
+    function p2(n) { return (n < 10 ? "0" : "") + n; }
+
+    // Default sensible start/end (today, next top-of-hour).
+    function seedTimes() {
+      var now = new Date();
+      var start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours() + 1, 0, 0, 0);
+      var end = new Date(start.getTime() + 60 * 60 * 1000);
+      startEl.value = localInputValue(start);
+      endEl.value = localInputValue(end);
+    }
+    function localInputValue(d) {
+      return d.getFullYear() + "-" + p2(d.getMonth() + 1) + "-" + p2(d.getDate()) +
+        "T" + p2(d.getHours()) + ":" + p2(d.getMinutes());
+    }
+
+    // Escape a text property value per RFC 5545: \ ; , newline.
+    function esc(s) {
+      return String(s).replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+    }
+
+    // Fold long lines at 75 octets, prepending a space on continuation lines.
+    function fold(line) {
+      if (line.length <= 75) return line;
+      var chunks = [];
+      var s = line;
+      chunks.push(s.slice(0, 75));
+      s = s.slice(75);
+      while (s.length > 74) { chunks.push(" " + s.slice(0, 73)); s = s.slice(73); }
+      if (s.length) chunks.push(" " + s);
+      return chunks.join("\r\n");
+    }
+
+    // Format a Date as basic UTC: 20260713T140000Z
+    function fmtUtc(d) {
+      return d.getUTCFullYear() + p2(d.getUTCMonth() + 1) + p2(d.getUTCDate()) +
+        "T" + p2(d.getUTCHours()) + p2(d.getUTCMinutes()) + p2(d.getUTCSeconds()) + "Z";
+    }
+
+    // Format a datetime-local string (local) as floating local time: 20260713T140000
+    function fmtLocal(inputVal) {
+      // inputVal like "2026-07-13T14:00"
+      var m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(inputVal || "");
+      if (!m) return null;
+      return m[1] + m[2] + m[3] + "T" + m[4] + m[5] + "00";
+    }
+
+    function parseLocalDate(inputVal) {
+      return new Date(inputVal);
+    }
+
+    function build() {
+      err.textContent = "";
+      var title = titleEl.value.trim();
+      var startVal = startEl.value;
+      if (!title) { setEmpty("Enter a title to generate the .ics output."); return ""; }
+      if (!startVal) { setEmpty("Pick a start date and time."); return ""; }
+
+      var tz = tzEl.value;
+      var dtstart, dtend;
+      if (tz === "utc") {
+        var sd = parseLocalDate(startVal);
+        if (isNaN(sd.getTime())) { setEmpty("Invalid start date."); return ""; }
+        dtstart = "DTSTART:" + fmtUtc(sd);
+        if (endEl.value) {
+          var ed = parseLocalDate(endEl.value);
+          if (!isNaN(ed.getTime())) dtend = "DTEND:" + fmtUtc(ed);
+        }
+      } else {
+        dtstart = "DTSTART:" + fmtLocal(startVal);
+        if (!dtstart) { setEmpty("Invalid start date."); return ""; }
+        if (endEl.value) {
+          var fe = fmtLocal(endEl.value);
+          if (fe) dtend = "DTEND:" + fe;
+        }
+      }
+
+      // UID: stable-ish per event (uuid + virt.tools).
+      var uid = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() :
+        (Date.now().toString(16) + Math.random().toString(16).slice(2));
+      var dtstamp = "DTSTAMP:" + fmtUtc(new Date());
+
+      var lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//virt.tools//iCalendar Generator//EN",
+        "CALSCALE:GREGORIAN",
+        "BEGIN:VEVENT",
+        "UID:" + uid + "@virt.tools",
+        dtstamp,
+        dtstart
+      ];
+      if (dtend) lines.push(dtend);
+      lines.push("SUMMARY:" + esc(title));
+      if (locEl.value.trim()) lines.push("LOCATION:" + esc(locEl.value.trim()));
+      if (descEl.value.trim()) lines.push("DESCRIPTION:" + esc(descEl.value.trim()));
+
+      var rr = rruleEl.value;
+      if (rr !== "none") lines.push("RRULE:FREQ=" + rr.toUpperCase());
+
+      var alarmMin = parseInt(alarmEl.value, 10);
+      if (alarmMin > 0) {
+        lines.push("BEGIN:VALARM", "ACTION:DISPLAY", "DESCRIPTION:" + esc(title),
+          "TRIGGER:-PT" + alarmMin + "M", "END:VALARM");
+      }
+
+      lines.push("END:VEVENT", "END:VCALENDAR");
+
+      var raw = lines.join("\r\n");
+      // Apply line folding to each property line.
+      return raw.split("\r\n").map(fold).join("\r\n");
+    }
+
+    function setEmpty(msg) {
+      out.textContent = msg;
+      out.classList.add("empty");
+    }
+
+    function render() {
+      var ics = build();
+      if (!ics) return;
+      out.classList.remove("empty");
+      out.textContent = ics;
+    }
+
+    function download() {
+      var ics = build();
+      if (!ics) { err.textContent = "Fill in a title and start time first."; return; }
+      var blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      var safe = (titleEl.value.trim() || "event").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "event";
+      a.href = url; a.download = safe + ".ics";
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    }
+
+    [titleEl, locEl, descEl, startEl, endEl, tzEl, rruleEl, alarmEl].forEach(function (el) {
+      el.addEventListener("input", render);
+      el.addEventListener("change", render);
+    });
+
+    dl.addEventListener("click", download);
+    copy.addEventListener("click", function () {
+      var t = out.textContent;
+      if (!t || out.classList.contains("empty")) return;
+      var b = this;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(t).then(function () {
+          b.textContent = "Copied!"; setTimeout(function () { b.textContent = "Copy"; }, 1200);
+        });
+      } else {
+        var ta = document.createElement("textarea"); ta.value = t; document.body.appendChild(ta);
+        ta.select(); try { document.execCommand("copy"); b.textContent = "Copied!"; setTimeout(function () { b.textContent = "Copy"; }, 1200); } catch (e) {} ta.remove();
+      }
+    });
+
+    seedTimes();
+    render();
+  })();
+  </script>
+</body>
+</html>
