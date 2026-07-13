@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>UUencode / UUdecode — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+    .tabs button { background: var(--bg-elev-2); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; font-weight: 600; cursor: pointer; }
+    .tabs button.active { background: var(--accent); color: #0b0d12; border-color: var(--accent); }
+    .field { margin-bottom: 14px; }
+    .out { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; white-space: pre-wrap; word-break: break-all; }
+    .out.empty { color: var(--text-dim); font-style: italic; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>UUencode / UUdecode</h1>
+      <p>Encode binary or text into the classic Unix-to-Unix (uuencode) format, or decode it back to the original bytes — including the <code>begin</code> / <code>end</code> envelope with filename and permissions. Runs entirely in your browser, nothing uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="tabs">
+        <button id="tab-enc" class="active">Encode</button>
+        <button id="tab-dec">Decode</button>
+      </div>
+
+      <div id="enc-pane">
+        <div class="row" style="align-items:flex-end; flex-wrap:wrap;">
+          <div class="field" style="flex:1 1 120px;">
+            <label for="mode">Permissions (octal)</label>
+            <input id="mode" type="text" value="644" placeholder="644" maxlength="4" style="font-family:monospace;">
+          </div>
+          <div class="field" style="flex:2 1 240px;">
+            <label for="filename">Filename</label>
+            <input id="filename" type="text" value="output.txt" autocomplete="off">
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="enc-in">Input (text)</label>
+          <textarea id="enc-in" rows="6" placeholder="Type or paste text to uuencode…"></textarea>
+        </div>
+
+        <div class="row" style="justify-content:space-between; align-items:center;">
+          <label for="enc-out">Encoded output</label>
+          <div style="display:flex; gap:8px;">
+            <button id="enc-copy" class="secondary">Copy</button>
+          </div>
+        </div>
+        <div class="output out" id="enc-out"></div>
+        <p class="note" id="enc-err"></p>
+      </div>
+
+      <div id="dec-pane" hidden>
+        <div class="field">
+          <label for="dec-in">UUencoded input</label>
+          <textarea id="dec-in" rows="8" placeholder="begin 644 output.txt&#10;…encoded lines…&#10;end" style="font-family:monospace;"></textarea>
+        </div>
+
+        <div class="row" style="justify-content:space-between; align-items:center;">
+          <label for="dec-out">Decoded output</label>
+          <div style="display:flex; gap:8px;">
+            <button id="dec-dl" class="secondary">⬇ Download</button>
+            <button id="dec-copy" class="secondary">Copy</button>
+          </div>
+        </div>
+        <div class="output out" id="dec-out"></div>
+        <p class="note" id="dec-info"></p>
+        <p class="note" id="dec-err"></p>
+      </div>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var tabEnc = $("tab-enc"), tabDec = $("tab-dec");
+    var encPane = $("enc-pane"), decPane = $("dec-pane");
+    var encIn = $("enc-in"), encOut = $("enc-out"), encErr = $("enc-err"), encCopy = $("enc-copy");
+    var modeEl = $("mode"), fnameEl = $("filename");
+    var decIn = $("dec-in"), decOut = $("dec-out"), decErr = $("dec-err"), decInfo = $("dec-info");
+    var decDl = $("dec-dl"), decCopy = $("dec-copy");
+
+    var lastDecoded = null; // Uint8Array
+
+    function p2(n) { return (n < 10 ? "0" : "") + n; }
+
+    // ---- Encoding ----
+    function toBytes(str) {
+      return new TextEncoder().encode(str);
+    }
+
+    function encByte(v) { return String.fromCharCode((v & 0x3f) + 0x20); }
+
+    function uuencode(bytes, mode, filename) {
+      var lines = [];
+      lines.push("begin " + mode + " " + filename);
+      var i = 0, n = bytes.length;
+      while (i < n) {
+        var chunkLen = Math.min(n - i, 45);
+        var chunk = bytes.subarray(i, i + chunkLen);
+        var line = encByte(chunkLen);
+        for (var j = 0; j < chunkLen; j += 3) {
+          var a = chunk[j] || 0;
+          var b = (j + 1 < chunkLen) ? chunk[j + 1] : 0;
+          var c = (j + 2 < chunkLen) ? chunk[j + 2] : 0;
+          var v = (a << 16) | (b << 8) | c;
+          line += encByte((v >> 18) & 0x3f);
+          line += encByte((v >> 12) & 0x3f);
+          line += encByte((v >> 6) & 0x3f);
+          line += encByte(v & 0x3f);
+        }
+        lines.push(line);
+        i += chunkLen;
+      }
+      // Empty input still needs a zero-length data line.
+      if (n === 0) lines.push(encByte(0));
+      lines.push("`");      // backtick line (historical)
+      lines.push("end");
+      return lines.join("\n") + "\n";
+    }
+
+    function renderEnc() {
+      encErr.textContent = "";
+      var mode = (modeEl.value || "644").trim();
+      if (!/^[0-7]{3,4}$/.test(mode)) { encOut.textContent = ""; encOut.classList.add("empty"); encErr.textContent = "Permissions must be 3–4 octal digits (e.g. 644, 0755)."; return; }
+      var filename = (fnameEl.value || "output.txt").trim();
+      var text = encIn.value;
+      if (!text) { encOut.textContent = "Type something to encode."; encOut.classList.add("empty"); return; }
+      var bytes = toBytes(text);
+      encOut.classList.remove("empty");
+      encOut.textContent = uuencode(bytes, mode, filename);
+    }
+
+    // ---- Decoding ----
+    function decVal(ch) {
+      var cc = ch.charCodeAt(0);
+      if (cc === 0x60) return 0;          // backtick variant for zero
+      return cc - 0x20;
+    }
+
+    function stripDecoded(bytes) {
+      // returns {ok, reason, filename, mode, data}
+      var text = bytes; // Uint8Array
+      // Decode to text assuming ASCII/Latin1 for header parsing.
+      var latin1 = "";
+      for (var k = 0; k < text.length; k++) latin1 += String.fromCharCode(text[k]);
+
+      var rawLines = latin1.split(/\r\n|\r|\n/);
+      // Drop leading blank lines.
+      var lines = rawLines.filter(function (l) { return l.length > 0; });
+      if (!lines.length) return { ok: false, reason: "Input is empty." };
+      if (!/^begin\s+/.test(lines[0])) return { ok: false, reason: "Missing 'begin' header line." };
+
+      var m = /^begin\s+(\S+)\s+(.*)$/.exec(lines[0]);
+      if (!m) return { ok: false, reason: "Malformed 'begin' line (expected: begin MODE FILENAME)." };
+      var mode = m[1], filename = m[2].trim() || "output.bin";
+
+      var dataChunks = [];
+      var byteCount = 0;
+      for (var i = 1; i < lines.length; i++) {
+        var line = lines[i];
+        if (/^\s*end\s*$/i.test(line)) break;
+        if (line === "`") continue;            // backtick separator line
+        if (line === "") continue;
+        if (!line.length) continue;
+        var lineLen = decVal(line.charAt(0));
+        if (lineLen < 0 || lineLen > 45) return { ok: false, reason: "Invalid line length byte on line " + (i + 1) + "." };
+        if (lineLen === 0) continue;            // zero-length data line
+        var body = line.slice(1);
+        // each group of 4 chars → 3 bytes; pad missing chars as 0x20 (space).
+        for (var j = 0; j < body.length; j += 4) {
+          var g = body.slice(j, j + 4);
+          while (g.length < 4) g += " ";       // pad
+          var vs = [decVal(g.charAt(0)), decVal(g.charAt(1)), decVal(g.charAt(2)), decVal(g.charAt(3))];
+          for (var x = 0; x < 4; x++) {
+            if (vs[x] < 0 || vs[x] > 63) return { ok: false, reason: "Invalid character '" + g.charAt(x) + "' on line " + (i + 1) + "." };
+          }
+          var triple = (vs[0] << 18) | (vs[1] << 12) | (vs[2] << 6) | vs[3];
+          dataChunks.push((triple >> 16) & 0xff);
+          dataChunks.push((triple >> 8) & 0xff);
+          dataChunks.push(triple & 0xff);
+        }
+        byteCount += lineLen;
+      }
+      // Trim the accumulated bytes to the declared byte count.
+      if (dataChunks.length < byteCount) return { ok: false, reason: "Truncated data (fewer bytes than declared)." };
+      var data = new Uint8Array(dataChunks.slice(0, byteCount));
+      return { ok: true, filename: filename, mode: mode, data: data };
+    }
+
+    function bytesToText(bytes) {
+      // Try UTF-8 first, fall back to Latin-1.
+      try {
+        var dec = new TextDecoder("utf-8", { fatal: true });
+        return { text: dec.decode(bytes), isBinary: false };
+      } catch (e) {
+        var latin = "";
+        for (var i = 0; i < bytes.length; i++) latin += String.fromCharCode(bytes[i]);
+        return { text: latin, isBinary: true };
+      }
+    }
+
+    function renderDec() {
+      decErr.textContent = ""; decInfo.textContent = "";
+      decOut.classList.remove("empty");
+      var input = decIn.value;
+      if (!input.trim()) { decOut.textContent = "Paste uuencoded text to decode."; decOut.classList.add("empty"); lastDecoded = null; return; }
+      var bytes = toBytes(input);
+      var res = stripDecoded(bytes);
+      if (!res.ok) { decOut.textContent = ""; lastDecoded = null; decErr.textContent = "Error: " + res.reason; return; }
+      lastDecoded = res.data;
+      var shown = bytesToText(res.data);
+      decOut.textContent = shown.text;
+      decInfo.textContent = "Filename: " + res.filename + " · Permissions: " + res.mode + " · " + res.data.length + " bytes" + (shown.isBinary ? " (decoded as Latin-1; UTF-8 was invalid)" : "");
+    }
+
+    // ---- Tabs ----
+    function setTab(which) {
+      var enc = (which === "enc");
+      tabEnc.classList.toggle("active", enc);
+      tabDec.classList.toggle("active", !enc);
+      encPane.hidden = !enc;
+      decPane.hidden = enc;
+    }
+    tabEnc.addEventListener("click", function () { setTab("enc"); });
+    tabDec.addEventListener("click", function () { setTab("dec"); });
+
+    // ---- Wiring ----
+    [encIn, modeEl, fnameEl].forEach(function (el) {
+      el.addEventListener("input", renderEnc);
+      el.addEventListener("change", renderEnc);
+    });
+    decIn.addEventListener("input", renderDec);
+
+    encCopy.addEventListener("click", function () {
+      var t = encOut.textContent;
+      if (!t || encOut.classList.contains("empty")) return;
+      var b = this;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(t).then(function () { b.textContent = "Copied!"; setTimeout(function () { b.textContent = "Copy"; }, 1200); });
+      }
+    });
+
+    decCopy.addEventListener("click", function () {
+      var t = decOut.textContent;
+      if (!t || decOut.classList.contains("empty")) return;
+      var b = this;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(t).then(function () { b.textContent = "Copied!"; setTimeout(function () { b.textContent = "Copy"; }, 1200); });
+      }
+    });
+
+    decDl.addEventListener("click", function () {
+      if (!lastDecoded) { decErr.textContent = "Nothing decoded yet."; return; }
+      var shown = bytesToText(lastDecoded);
+      // Reconstruct raw bytes for download (use the binary-safe form).
+      var blob;
+      if (shown.isBinary) {
+        blob = new Blob([lastDecoded], { type: "application/octet-stream" });
+      } else {
+        blob = new Blob([lastDecoded], { type: "text/plain;charset=utf-8" });
+      }
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url; a.download = "decoded.bin";
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    });
+
+    renderEnc();
+    renderDec();
+  })();
+  </script>
+</body>
+</html>

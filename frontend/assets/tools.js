@@ -3362,4 +3362,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📅",
     added: "2026-07-13T13:00:00Z",
   },
+  {
+    slug: "uuencode",
+    name: "UUencode / UUdecode",
+    description: "Encode text into the classic Unix-to-Unix (uuencode) format with the begin/end envelope, or decode it back to the original bytes — including filename and permissions. Runs entirely in your browser.",
+    category: "Encoding",
+    icon: "📮",
+    added: "2026-07-13T13:45:00Z",
+  },
 ];
