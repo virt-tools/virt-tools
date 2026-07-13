@@ -3538,4 +3538,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔊",
     added: "2026-07-14T00:15:00Z",
   },
+  {
+    slug: "aqi-calculator",
+    name: "AQI Calculator",
+    description: "Convert a pollutant concentration into the US EPA Air Quality Index. Pick PM2.5, PM10, ground-level ozone (with the EPA's 8-hour and 1-hour scales), carbon monoxide, nitrogen dioxide or sulphur dioxide, enter the measured value, and get the AQI number, its category with the official colour band, and the matching health advisory. The AQI is computed by piecewise-linear interpolation across the EPA breakpoint table, with the worked formula shown. Everything runs locally in your browser.",
+    category: "Environment",
+    icon: "🌫️",
+    added: "2026-07-14T00:45:00Z",
+  },
 ];

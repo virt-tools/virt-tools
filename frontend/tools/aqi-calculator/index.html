@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>AQI Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .row2 { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+    .row2 .field { margin-bottom: 0; }
+    input[type="number"] { font-family: ui-monospace, monospace; width: 130px; }
+    select { min-width: 150px; }
+    .kv { display: grid; grid-template-columns: 170px 1fr; gap: 6px 12px; margin-top: 10px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.92rem; }
+    .verdict { display: flex; align-items: center; gap: 14px; margin-top: 6px; }
+    .verdict .num { font-size: 2.4rem; font-weight: 800; font-family: ui-monospace, monospace; line-height: 1; }
+    .verdict .cat { font-size: 1.15rem; font-weight: 700; }
+    .swatch { display: inline-block; width: 18px; height: 18px; border-radius: 4px; vertical-align: middle; border: 1px solid rgba(0,0,0,0.25); }
+    .advice { margin-top: 8px; font-size: 0.92rem; line-height: 1.4; }
+    .bandnote { font-family: ui-monospace, monospace; font-size: 0.82rem; color: var(--text-dim); margin-top: 6px; }
+    .o3toggle { display: none; margin-top: 6px; font-size: 0.88rem; }
+    .o3toggle label { margin-right: 14px; }
+    .verdict.bad { color: var(--bad, #f87171); }
+    .tbl { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.8rem; }
+    .tbl th, .tbl td { border: 1px solid var(--border); padding: 3px 7px; text-align: left; }
+    .tbl th { background: var(--bg-elev-2); color: var(--text-dim); }
+    .tbl td.sw { width: 18px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>AQI Calculator</h1>
+      <p>Convert a pollutant concentration into the US EPA Air Quality Index. Pick a pollutant (PM2.5, PM10, ground-level ozone, carbon monoxide, nitrogen dioxide or sulphur dioxide), enter the measured concentration, and get the AQI value, its category with the official colour band, and the corresponding health advisory. The ozone entry offers the EPA's 8-hour and 1-hour scales. The AQI is computed by piecewise-linear interpolation across the EPA breakpoint table. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row2">
+        <div class="field">
+          <label for="pol">Pollutant</label>
+          <select id="pol">
+            <option value="pm25">PM2.5 (24-h, µg/m³)</option>
+            <option value="pm10">PM10 (24-h, µg/m³)</option>
+            <option value="o3">Ozone — O₃</option>
+            <option value="co">Carbon monoxide — CO (8-h, ppm)</option>
+            <option value="no2">Nitrogen dioxide — NO₂ (1-h, ppb)</option>
+            <option value="so2">Sulphur dioxide — SO₂ (1-h, ppb)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="c">Concentration <span id="unit" class="muted" style="font-weight:400;"></span></label>
+          <input id="c" type="number" min="0" step="any" value="35.4">
+        </div>
+      </div>
+      <div class="o3toggle" id="o3toggle">
+        <label><input type="radio" name="o3avg" value="8" checked> 8-hour average</label>
+        <label><input type="radio" name="o3avg" value="1"> 1-hour average</label>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <dl class="kv" id="kv"></dl>
+      <p class="advice" id="advice"></p>
+      <p class="bandnote" id="bandnote"></p>
+      <p class="note" id="err"></p>
+
+      <p class="muted" style="font-size:0.8rem;margin-top:14px;">Reference: US EPA AQI breakpoint tables (Technical Assistance Document). AQI = (I_hi − I_lo)/(C_hi − C_lo)·(C − C_lo) + I_lo, rounded. The overall daily AQI reported by agencies is the maximum of all pollutant sub-indices — compute each pollutant here and take the highest.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var polEl = $("pol"), cEl = $("c"), unitEl = $("unit"), o3El = $("o3toggle");
+    var verdictEl = $("verdict"), kvEl = $("kv"), adviceEl = $("advice"), bandEl = $("bandnote"), errEl = $("err");
+
+    // EPA AQI breakpoint tables. Each row: [Ilo, Ihi, Clo, Chi].
+    var BP = {
+      pm25: [[0,50,0.0,12.0],[51,100,12.1,35.4],[101,150,35.5,55.4],[151,200,55.5,150.4],[201,300,150.5,250.4],[301,400,250.5,350.4],[401,500,350.5,500.4]],
+      pm10: [[0,50,0,54],[51,100,55,154],[101,150,155,254],[151,200,255,354],[201,300,355,424],[301,400,425,504],[401,500,505,604]],
+      o3_8: [[0,50,0.000,0.054],[51,100,0.055,0.070],[101,150,0.071,0.085],[151,200,0.086,0.105],[201,300,0.106,0.200]],
+      o3_1: [[151,200,0.125,0.164],[201,300,0.165,0.404],[401,500,0.405,0.604]],
+      co:   [[0,50,0.0,4.4],[51,100,4.5,9.4],[101,150,9.5,12.4],[151,200,12.5,15.4],[201,300,15.5,30.4],[301,400,30.5,40.4],[401,500,40.5,50.4]],
+      no2:  [[0,50,0,53],[51,100,54,100],[101,150,101,360],[151,200,361,649],[201,300,650,1249],[301,400,1250,1649],[401,500,1650,2049]],
+      so2:  [[0,50,0,35],[51,100,36,75],[101,150,76,185],[151,200,186,304],[201,300,305,604],[301,500,605,1004]]
+    };
+    var UNITS = { pm25: "µg/m³", pm10: "µg/m³", o3: "ppm", co: "ppm", no2: "ppb", so2: "ppb" };
+
+    // AQI categories: name, colour, advisory.
+    var CATS = [
+      { max: 50,  name: "Good",                            color: "#00e400", advice: "Air quality is satisfactory and air pollution poses little or no risk. Enjoy the outdoors." },
+      { max: 100, name: "Moderate",                       color: "#ffff00", advice: "Air quality is acceptable. Unusually sensitive people should consider reducing prolonged or heavy outdoor exertion." },
+      { max: 150, name: "Unhealthy for Sensitive Groups", color: "#ff7e00", advice: "Sensitive groups — children, older adults, and people with heart or lung disease — should limit prolonged outdoor exertion." },
+      { max: 200, name: "Unhealthy",                      color: "#ff0000", advice: "Everyone may begin to be affected. Sensitive groups should avoid prolonged outdoor exertion; everyone else should reduce it." },
+      { max: 300, name: "Very Unhealthy",                  color: "#8f3f97", advice: "Health alert: significant aggravation of symptoms. Sensitive groups should avoid all outdoor exertion; everyone else should limit outdoor exertion." },
+      { max: 400, name: "Hazardous",                       color: "#7e0023", advice: "Health warning of emergency conditions. The entire population should avoid outdoor exertion." },
+      { max: 500, name: "Hazardous",                      color: "#7e0023", advice: "Severe health warning: the entire population is even more likely to be affected. Stay indoors." }
+    ];
+    function catFor(aqi) {
+      for (var i = 0; i < CATS.length; i++) if (aqi <= CATS[i].max) return CATS[i];
+      return CATS[CATS.length - 1];
+    }
+
+    function activeRows() {
+      if (polEl.value === "o3") {
+        var avg = (document.querySelector('input[name="o3avg"]:checked') || {}).value || "8";
+        return avg === "8" ? BP.o3_8 : BP.o3_1;
+      }
+      return BP[polEl.value];
+    }
+
+    function compute(rows, c) {
+      for (var i = 0; i < rows.length; i++) {
+        var r = rows[i];
+        if (c >= r[2] && c <= r[3]) {
+          var v = (r[1] - r[0]) / (r[3] - r[2]) * (c - r[2]) + r[0];
+          return { aqi: Math.round(v), band: r, exact: v };
+        }
+      }
+      // above top of table
+      var top = rows[rows.length - 1];
+      if (c > top[3]) return { aqi: 501, band: null, above: true, top: top };
+      return { aqi: 0, band: rows[0], exact: 0 };
+    }
+
+    function fmt(n, d) { return Number(n).toFixed(d); }
+
+    function render() {
+      errEl.textContent = ""; kvEl.innerHTML = ""; adviceEl.textContent = ""; bandEl.textContent = ""; verdictEl.innerHTML = ""; verdictEl.className = "verdict";
+      var pol = polEl.value;
+      unitEl.textContent = "(" + UNITS[pol] + ")";
+      o3El.style.display = pol === "o3" ? "block" : "none";
+
+      var c = parseFloat(cEl.value);
+      if (isNaN(c) || c < 0) { verdictEl.innerHTML = "<span style='color:var(--bad,#f87171);font-weight:600;'>✗ Enter a non-negative concentration.</span>"; return; }
+
+      var rows = activeRows();
+      var res = compute(rows, c);
+
+      var aqi = res.aqi;
+      if (res.above) {
+        var cat = catFor(501);
+        verdictEl.innerHTML = "<span class='num'>500+</span><div><span class='swatch' style='background:" + cat.color + "'></span> <span class='cat' style='color:" + cat.color + "'>" + cat.name + "</span></div>";
+        adviceEl.innerHTML = "<strong>" + cat.advice + "</strong>";
+        bandEl.textContent = "Concentration is above the highest defined breakpoint (" + res.top[3] + " " + UNITS[pol] + " → AQI " + res.top[1] + "). Reported as AQI ≥ 401.";
+        return;
+      }
+
+      var cat = catFor(aqi);
+      verdictEl.innerHTML = "<span class='num'>" + aqi + "</span><div><span class='swatch' style='background:" + cat.color + "'></span> <span class='cat' style='color:" + cat.color + "'>" + cat.name + "</span></div>";
+      adviceEl.innerHTML = "<strong style='color:" + cat.color + ";'>" + cat.name + ".</strong> " + cat.advice;
+
+      var b = res.band;
+      kvEl.innerHTML =
+        "<dt>AQI</dt><dd>" + aqi + "</dd>" +
+        "<dt>Category</dt><dd>" + cat.name + " (" + (aqi <= 50 ? "0–50" : aqi <= 100 ? "51–100" : aqi <= 150 ? "101–150" : aqi <= 200 ? "151–200" : aqi <= 300 ? "201–300" : aqi <= 400 ? "301–400" : "401–500") + ")</dd>" +
+        "<dt>Breakpoint band</dt><dd>" + fmt(b[2], UNITS[pol] === "ppm" ? 3 : 1) + " – " + fmt(b[3], UNITS[pol] === "ppm" ? 3 : 1) + " " + UNITS[pol] + " → AQI " + b[0] + "–" + b[1] + "</dd>" +
+        "<dt>Exact (pre-round)</dt><dd>" + fmt(res.exact, 1) + "</dd>";
+
+      bandEl.textContent = "AQI = " + b[0] + " + (" + fmt(b[1] - b[0], 0) + " / " + fmt(b[3] - b[2], UNITS[pol] === "ppm" ? 3 : 1) + ") × (" + fmt(c, UNITS[pol] === "ppm" ? 3 : 1) + " − " + fmt(b[2], UNITS[pol] === "ppm" ? 3 : 1) + ") = " + fmt(res.exact, 1) + " ≈ " + aqi;
+    }
+
+    polEl.addEventListener("change", render);
+    cEl.addEventListener("input", render);
+    cEl.addEventListener("change", render);
+    [].forEach.call(document.getElementsByName("o3avg"), function (r) { r.addEventListener("change", render); });
+    render();
+  })();
+  </script>
+</body>
+</html>
