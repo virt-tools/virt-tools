@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Battery Runtime & Charge Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .row2 { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+    .row2 .field { margin-bottom: 0; }
+    input[type="number"] { font-family: ui-monospace, monospace; width: 100px; }
+    select { min-width: 130px; }
+    .kv { display: grid; grid-template-columns: 230px 1fr; gap: 6px 12px; margin-top: 12px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.95rem; }
+    .verdict { font-size: 1.3rem; font-weight: 800; font-family: ui-monospace, monospace; margin-top: 8px; }
+    .verdict.ok { color: var(--ok, #4ade80); }
+    .verdict.bad { color: var(--bad, #f87171); }
+    .big { font-size: 1.05rem; font-weight: 700; }
+    .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+    .seg button { background: var(--bg-elev-2); color: var(--text); border: none; padding: 5px 12px; cursor: pointer; font-size: 0.85rem; }
+    .seg button.active { background: var(--accent, #6ea8ff); color: #08111f; font-weight: 600; }
+    h3.sec { font-size: 0.92rem; font-weight: 600; margin: 14px 0 4px; color: var(--text-dim); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Battery Runtime &amp; Charge Calculator</h1>
+      <p>Estimate how long a battery will power a load and how long it takes to recharge. Enter the battery capacity (in mAh or Ah), nominal voltage and a usable-fraction derating to get watt-hours; then enter the load (in watts or amps) for the runtime, and the charge current and chemistry for the charge time. Useful for UPS sizing, drones, portable electronics and off-grid power. The usable fraction reflects the part of the rated capacity you can actually draw before the cutoff — pure arithmetic, not a real discharge model. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <h3 class="sec">Battery</h3>
+      <div class="row2">
+        <div class="field">
+          <label for="cap">Capacity</label>
+          <input id="cap" type="number" min="0" step="any" value="10000">
+          <select id="cunit" style="min-width:80px;margin-left:6px;">
+            <option value="mAh" selected>mAh</option>
+            <option value="Ah">Ah</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="v">Voltage</label>
+          <input id="v" type="number" min="0" step="any" value="3.7"> <span class="muted">V</span>
+        </div>
+        <div class="field">
+          <label for="usable">Usable fraction</label>
+          <input id="usable" type="number" min="0" max="1" step="0.01" value="0.85">
+        </div>
+      </div>
+
+      <h3 class="sec">Load &rarr; runtime</h3>
+      <div class="field">
+        <label>Load entered as</label>
+        <div class="seg" id="lseg">
+          <button data-lu="W" class="active">Watts</button>
+          <button data-lu="A">Amps</button>
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label for="load">Load</label>
+          <input id="load" type="number" min="0" step="any" value="0.5">
+          <span class="muted" id="lunitLabel">W</span>
+        </div>
+      </div>
+
+      <h3 class="sec">Charge &rarr; time</h3>
+      <div class="row2">
+        <div class="field">
+          <label for="icharge">Charge current</label>
+          <input id="icharge" type="number" min="0" step="any" value="2"> <span class="muted">A</span>
+        </div>
+        <div class="field">
+          <label for="chem">Chemistry factor</label>
+          <select id="chem">
+            <option value="1.0" selected>Li-ion / LiPo (1.0×)</option>
+            <option value="1.1">Li-ion CC-CV avg (1.1×)</option>
+            <option value="1.25">Lead-acid (1.25×)</option>
+            <option value="1.4">NiMH / NiCd (1.4×)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <dl class="kv" id="kv"></dl>
+      <p class="note" id="err"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var capEl = $("cap"), cunitEl = $("cunit"), vEl = $("v"), usableEl = $("usable");
+    var lseg = $("lseg"), loadEl = $("load"), lunitLabel = $("lunitLabel");
+    var ichargeEl = $("icharge"), chemEl = $("chem");
+    var verdictEl = $("verdict"), kvEl = $("kv"), errEl = $("err");
+    var loadUnit = "W";
+
+    function num(el) { var n = parseFloat(el.value); return isNaN(n) ? NaN : n; }
+    function fmt(n, d) { return Number(n).toFixed(d); }
+    function fmtDur(h) {
+      if (h < 1) return fmt(h * 60, 0) + " min";
+      if (h < 48) return fmt(h, 1) + " h";
+      return fmt(h / 24, 1) + " days";
+    }
+
+    function render() {
+      errEl.textContent = ""; verdictEl.textContent = ""; verdictEl.className = "verdict"; kvEl.innerHTML = "";
+      lunitLabel.textContent = loadUnit;
+
+      var cap = num(capEl), v = num(vEl), usable = num(usableEl);
+      var load = num(loadEl), icharge = num(ichargeEl), chem = parseFloat(chemEl.value);
+
+      if ([cap, v, usable, load, icharge].some(isNaN)) { verdictEl.textContent = "✗ Enter valid numbers."; verdictEl.className = "verdict bad"; return; }
+      if (cap <= 0 || v <= 0 || load <= 0 || icharge <= 0) { verdictEl.textContent = "✗ Capacity, voltage, load and charge current must be positive."; verdictEl.className = "verdict bad"; return; }
+      if (usable <= 0 || usable > 1) usable = 1;
+
+      var ah = cunitEl.value === "Ah" ? cap : cap / 1000;
+      var whNom = ah * v;
+      var whUsable = whNom * usable;
+
+      // Runtime.
+      var loadW = loadUnit === "A" ? load * v : load;
+      var runtimeH = whUsable / loadW;
+
+      // Charge time.
+      var chargeH = (ah / icharge) * chem;
+      var cRate = icharge / ah;
+
+      verdictEl.textContent = fmtDur(runtimeH) + " runtime  ·  " + fmtDur(chargeH) + " to charge";
+      verdictEl.className = "verdict ok";
+      kvEl.innerHTML =
+        "<dt>Capacity</dt><dd>" + fmt(ah, 2) + " Ah  (" + fmt(ah * 1000, 0) + " mAh)</dd>" +
+        "<dt>Nominal energy</dt><dd>" + fmt(whNom, 1) + " Wh  (" + fmt(whNom / 1000, 3) + " kWh)</dd>" +
+        "<dt>Usable energy</dt><dd class='big'>" + fmt(whUsable, 1) + " Wh  (× " + fmt(usable, 2) + " derating)</dd>" +
+        "<dt>Load</dt><dd>" + fmt(loadW, 2) + " W  (" + fmt(loadW / v, 3) + " A at " + fmt(v, 1) + " V)</dd>" +
+        "<dt>Runtime</dt><dd class='big'>" + fmtDur(runtimeH) + "  (" + fmt(runtimeH, 1) + " h)</dd>" +
+        "<dt>Charge time</dt><dd class='big'>" + fmtDur(chargeH) + "  (" + fmt(chargeH, 2) + " h)</dd>" +
+        "<dt>Charge C-rate</dt><dd>" + fmt(cRate, 2) + "C  (" + fmt(icharge, 2) + " A ÷ " + fmt(ah, 2) + " Ah)</dd>";
+
+      errEl.textContent = "Energy (Wh) = capacity (Ah) × voltage (V); runtime (h) = usable Wh ÷ load (W). The usable fraction is the share of the label capacity you can actually draw before the voltage cutoff — typical 0.80–0.90 for lithium (cell protection and the flat-curve tail) and 0.50 for lead-acid (recommended 50% depth of discharge for cycle life). Charge time = capacity ÷ charge current × chemistry factor, where the factor covers the CV taper and charge losses: ~1.0–1.1 for Li-ion/LiPo, ~1.25 for lead-acid, ~1.4 for NiMH/NiCd. A charge C-rate above 1C charges a lithium cell in roughly an hour or less; for cycle life keep lithium charge/discharge below ~1C unless the cell is rated for it. Peukert's effect shortens lead-acid runtime at high discharge rates and isn't modelled here.";
+      errEl.className = "note";
+    }
+
+    lseg.querySelectorAll("button").forEach(function (b) {
+      b.addEventListener("click", function () {
+        lseg.querySelectorAll("button").forEach(function (x) { x.classList.remove("active"); });
+        b.classList.add("active");
+        loadUnit = b.getAttribute("data-lu");
+        render();
+      });
+    });
+    [capEl, cunitEl, vEl, usableEl, loadEl, ichargeEl, chemEl].forEach(function (el) {
+      el.addEventListener("input", render); el.addEventListener("change", render);
+    });
+    render();
+  })();
+  </script>
+</body>
+</html>

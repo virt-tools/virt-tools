@@ -3690,4 +3690,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🖨️",
     added: "2026-07-14T09:45:00Z",
   },
+  {
+    slug: "battery-runtime-calculator",
+    name: "Battery Runtime & Charge Calculator",
+    description: "Estimate how long a battery will power a load and how long it takes to recharge. Enter capacity (mAh or Ah), nominal voltage and a usable-fraction derating to get watt-hours, then the load (W or A) for the runtime and the charge current and chemistry for the charge time. Useful for UPS sizing, drones, portable electronics and off-grid power. Pure arithmetic — Peukert's effect and real discharge curves aren't modelled. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🔋",
+    added: "2026-07-14T10:15:00Z",
+  },
 ];
