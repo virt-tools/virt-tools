@@ -3490,4 +3490,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔥",
     added: "2026-07-13T21:15:00Z",
   },
+  {
+    slug: "image-to-data-uri",
+    name: "Image ↔ Data URI Converter",
+    description: "Convert an image to a data: URI ready to embed inline in HTML or CSS with no external file request, and convert a data URI back to a viewable, downloadable image. Reads and renders locally with the FileReader API — your image never leaves the browser. Reports MIME type, byte size, encoded length and overhead, with one-click copy of the raw URI, an <img> tag, or a CSS url().",
+    category: "Image",
+    icon: "🖼️",
+    added: "2026-07-13T21:45:00Z",
+  },
 ];
