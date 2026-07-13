@@ -3418,4 +3418,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🩹",
     added: "2026-07-13T16:45:00Z",
   },
+  {
+    slug: "uuid-v7-generator",
+    name: "UUID v7 Generator",
+    description: "Generate RFC 9562 UUIDv7 identifiers — a 48-bit Unix-millisecond timestamp prefix plus 74 random bits, so they sort chronologically and index well as database primary keys. Bulk, with or without hyphens, optional prefix, and a decode mode that reads the embedded timestamp back. Powered by Web Crypto; runs entirely in your browser.",
+    category: "Encoding",
+    icon: "🆔",
+    added: "2026-07-13T17:15:00Z",
+  },
 ];

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>UUID v7 Generator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .rowrow { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+    .rowrow .field { flex: 1 1 auto; margin-bottom: 0; }
+    .checks { display: flex; flex-wrap: wrap; gap: 14px; }
+    .checks label { display: flex; align-items: center; gap: 5px; font-size: 0.88rem; color: var(--text); }
+    .out { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 14px; white-space: pre-wrap; word-break: break-all; }
+    .out.empty { color: var(--text-dim); font-style: italic; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+    .tabs button { background: var(--bg-elev-2); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; font-weight: 600; cursor: pointer; }
+    .tabs button.active { background: var(--accent); color: #0b0d12; border-color: var(--accent); }
+    .kv { display: grid; grid-template-columns: 150px 1fr; gap: 4px 12px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.92rem; word-break: break-all; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>UUID v7 Generator</h1>
+      <p>Generate RFC 9562 UUIDv7 identifiers — 48-bit Unix-millisecond timestamp prefix plus 74 random bits, so they sort chronologically and index well as database primary keys. Powered by the Web Crypto API. Also decode a UUIDv7 to read back its embedded timestamp. Runs entirely in your browser; nothing uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="tabs">
+        <button id="tab-gen" class="active">Generate</button>
+        <button id="tab-dec">Decode</button>
+      </div>
+
+      <div id="gen-pane">
+        <div class="rowrow">
+          <div class="field" style="flex:0 0 120px;">
+            <label for="count">How many</label>
+            <input id="count" type="number" min="1" max="1000" value="10" style="font-family:monospace;">
+          </div>
+          <div class="field" style="flex:0 0 160px;">
+            <label for="prefix">Prefix</label>
+            <select id="prefix">
+              <option value="">none</option>
+              <option value="uuid:">uuid:</option>
+              <option value="urn:uuid:">urn:uuid:</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="checks" style="margin: 10px 0;">
+          <label><input type="checkbox" id="hyphens" checked> Hyphens</label>
+          <label><input type="checkbox" id="upper"> Uppercase</label>
+          <label><input type="checkbox" id="ts"> Show timestamps</label>
+        </div>
+
+        <div class="row" style="justify-content:space-between; align-items:center;">
+          <label for="gen-out">Generated UUIDv7s</label>
+          <div style="display:flex; gap:8px;">
+            <button id="gen-btn">Generate</button>
+            <button id="copy" class="secondary">Copy</button>
+          </div>
+        </div>
+        <div class="output out" id="gen-out"></div>
+        <p class="note" id="gen-err"></p>
+      </div>
+
+      <div id="dec-pane" hidden>
+        <div class="field">
+          <label for="dec-in">UUIDv7 to decode</label>
+          <input id="dec-in" type="text" placeholder="0194a2c4-07e7-7ce0-8a3f-… (or without hyphens)" autocomplete="off" style="font-family:monospace;">
+        </div>
+        <div class="verdict" id="dec-verdict"></div>
+        <dl class="kv" id="dec-kv"></dl>
+        <p class="note" id="dec-err"></p>
+      </div>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var tabGen = $("tab-gen"), tabDec = $("tab-dec"), genPane = $("gen-pane"), decPane = $("dec-pane");
+    var countEl = $("count"), prefixEl = $("prefix"), hyphensEl = $("hyphens"), upperEl = $("upper"), tsEl = $("ts");
+    var genOut = $("gen-out"), genErr = $("gen-err"), genBtn = $("gen-btn"), copyBtn = $("copy");
+    var decIn = $("dec-in"), decKv = $("dec-kv"), decErr = $("dec-err"), decVerdict = $("dec-verdict");
+
+    function hex(n, len) { var s = n.toString(16); while (s.length < len) s = "0" + s; return s; }
+
+    function uuidv7Bytes() {
+      var b = crypto.getRandomValues(new Uint8Array(16));
+      var ts = Date.now(); // ms since epoch (works in browser JS)
+      var high = Math.floor(ts / 4294967296); // 32-bit high part of ts
+      var low = ts % 4294967296;             // 32-bit low part
+      b[0] = (high >>> 8) & 0xff;
+      b[1] = high & 0xff;
+      b[2] = (low >>> 24) & 0xff;
+      b[3] = (low >>> 16) & 0xff;
+      b[4] = (low >>> 8) & 0xff;
+      b[5] = low & 0xff;
+      // version 7 in high nibble of byte 6; rand_a (12 bits) = byte6 low nibble + byte7
+      b[6] = (b[6] & 0x0f) | 0x70;
+      // variant 10 in high 2 bits of byte 8; rand_b high 14 bits + bytes 10-15
+      b[8] = (b[8] & 0x3f) | 0x80;
+      return b;
+    }
+
+    function bytesToUuid(b, hyphens, upper) {
+      var h =
+        hex(b[0], 2) + hex(b[1], 2) + hex(b[2], 2) + hex(b[3], 2) +
+        (hyphens ? "-" : "") +
+        hex(b[4], 2) + hex(b[5], 2) +
+        (hyphens ? "-" : "") +
+        hex(b[6], 2) + hex(b[7], 2) +
+        (hyphens ? "-" : "") +
+        hex(b[8], 2) + hex(b[9], 2) +
+        (hyphens ? "-" : "") +
+        hex(b[10], 2) + hex(b[11], 2) + hex(b[12], 2) + hex(b[13], 2) + hex(b[14], 2) + hex(b[15], 2);
+      return upper ? h.toUpperCase() : h;
+    }
+
+    function tsFromUuid(uuid) {
+      // Extract 48-bit ms timestamp from first 12 hex chars (ignoring hyphens).
+      var clean = uuid.replace(/[^0-9a-fA-F]/g, "");
+      if (clean.length < 12) return null;
+      var tsHex = clean.slice(0, 12);
+      // 48-bit value; JS Number holds up to 2^53 safely (~year 2255), fine for ms timestamps.
+      var ts = parseInt(tsHex, 16);
+      if (!isFinite(ts)) return null;
+      return ts;
+    }
+    function versionFromUuid(uuid) {
+      var clean = uuid.replace(/[^0-9a-fA-F]/g, "");
+      if (clean.length < 13) return null;
+      return parseInt(clean.slice(12, 13), 16); // first nibble of 3rd group
+    }
+
+    function generate() {
+      genErr.textContent = "";
+      var n = parseInt(countEl.value, 10);
+      if (isNaN(n) || n < 1) { genOut.textContent = "Enter a count ≥ 1."; genOut.classList.add("empty"); return; }
+      if (n > 1000) { genOut.textContent = ""; genOut.classList.add("empty"); genErr.textContent = "Maximum 1000 at a time."; return; }
+      var hyphens = hyphensEl.checked, upper = upperEl.checked, showTs = tsEl.checked, prefix = prefixEl.value;
+      var lines = [];
+      for (var i = 0; i < n; i++) {
+        var b = uuidv7Bytes();
+        var id = prefix + bytesToUuid(b, hyphens, upper);
+        if (showTs) {
+          var ts = (b[0] * 0x10000000000) + (b[1] * 0x100000000) + (b[2] * 0x1000000) + (b[3] * 0x10000) + (b[4] * 0x100) + b[5];
+          id += "  " + new Date(ts).toISOString();
+        }
+        lines.push(id);
+      }
+      genOut.classList.remove("empty");
+      genOut.textContent = lines.join("\n");
+    }
+
+    function decode() {
+      decErr.textContent = ""; decVerdict.textContent = ""; decVerdict.className = "verdict"; decKv.innerHTML = "";
+      var uuid = decIn.value.trim();
+      if (!uuid) { decKv.innerHTML = ""; decVerdict.textContent = ""; return; }
+      var clean = uuid.replace(/[^0-9a-fA-F]/g, "");
+      if (clean.length !== 32) { decVerdict.textContent = "✗ Not a 128-bit UUID (expected 32 hex digits)."; decVerdict.className = "verdict bad"; return; }
+      var ver = versionFromUuid(uuid);
+      var ts = tsFromUuid(uuid);
+      if (ver !== 7) {
+        decVerdict.textContent = "✗ This is UUID version " + ver + ", not v7 — it has no embedded timestamp.";
+        decVerdict.className = "verdict bad";
+        decKv.innerHTML = "<dt>Version</dt><dd>" + ver + "</dd>";
+        return;
+      }
+      var d = new Date(ts);
+      decVerdict.textContent = "✓ Valid UUIDv7";
+      decVerdict.className = "verdict ok";
+      decKv.innerHTML =
+        "<dt>Version</dt><dd>7</dd>" +
+        "<dt>Timestamp (ms)</dt><dd>" + ts + "</dd>" +
+        "<dt>UTC</dt><dd>" + d.toISOString() + "</dd>" +
+        "<dt>Local</dt><dd>" + d.toLocaleString() + "</dd>";
+    }
+
+    function setTab(which) {
+      var g = which === "gen";
+      tabGen.classList.toggle("active", g); tabDec.classList.toggle("active", !g);
+      genPane.hidden = !g; decPane.hidden = g;
+    }
+    tabGen.addEventListener("click", function () { setTab("gen"); });
+    tabDec.addEventListener("click", function () { setTab("dec"); });
+
+    genBtn.addEventListener("click", generate);
+    [countEl, hyphensEl, upperEl, tsEl, prefixEl].forEach(function (el) { el.addEventListener("change", generate); el.addEventListener("input", generate); });
+    copyBtn.addEventListener("click", function () {
+      var t = genOut.textContent; if (!t || genOut.classList.contains("empty")) return;
+      var b = this;
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(function () { b.textContent = "Copied!"; setTimeout(function () { b.textContent = "Copy"; }, 1200); });
+    });
+    decIn.addEventListener("input", decode);
+
+    if (!window.crypto || !crypto.getRandomValues) { genErr.textContent = "Web Crypto not available."; }
+    generate();
+  })();
+  </script>
+</body>
+</html>
