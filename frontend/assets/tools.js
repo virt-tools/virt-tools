@@ -3402,4 +3402,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎛️",
     added: "2026-07-13T15:45:00Z",
   },
+  {
+    slug: "curl-builder",
+    name: "cURL Command Builder",
+    description: "Compose a curl command from a friendly form — URL, method, headers, auth and body — with proper single-quote shell escaping, then copy the ready-to-paste command. Generates the command string only; never runs anything or makes a request.",
+    category: "Text",
+    icon: "🐚",
+    added: "2026-07-13T16:15:00Z",
+  },
 ];
