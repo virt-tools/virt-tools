@@ -3434,4 +3434,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌐",
     added: "2026-07-13T17:45:00Z",
   },
+  {
+    slug: "beaufort-scale",
+    name: "Beaufort Wind Scale Converter",
+    description: "Convert a wind speed to its Beaufort force (0–12, Calm to Hurricane) with the descriptive name, sea and land effects, and the canonical speed range in knots, m/s, km/h and mph. The WMO table has been stable since 1946, so it never goes stale. The scale is defined in knots; classification and all unit conversions are pure arithmetic in your browser.",
+    category: "Environment",
+    icon: "🌬️",
+    added: "2026-07-13T18:15:00Z",
+  },
 ];

@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Beaufort Wind Scale Converter — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+    @media (max-width: 560px) { .grid2 { grid-template-columns: 1fr; } }
+    .verdict { font-size: 1.4rem; font-weight: 700; }
+    .force-badge { display: inline-block; background: var(--bg-elev-2); border: 1px solid var(--border); border-radius: 999px; padding: 2px 12px; font-family: ui-monospace, monospace; }
+    .kv { display: grid; grid-template-columns: 130px 1fr; gap: 6px 12px; margin-top: 10px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-size: 0.9rem; }
+    .sea { color: var(--text-dim); font-size: 0.88rem; }
+    table.bf { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.82rem; }
+    table.bf th, table.bf td { border: 1px solid var(--border); padding: 5px 8px; text-align: left; }
+    table.bf th { background: var(--bg-elev-2); color: var(--text-dim); font-weight: 600; }
+    table.bf tr.active td { background: rgba(110,168,255,.12); font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Beaufort Wind Scale Converter</h1>
+      <p>Convert a wind speed to its Beaufort force (0–12) — from Calm to Hurricane — with the descriptive name, sea and land effects, and the canonical speed range in knots, m/s, km/h and mph. The WMO table has been stable since 1946, so the result never goes stale. Pure arithmetic, in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="grid2">
+        <div class="field">
+          <label for="speed">Wind speed</label>
+          <input id="speed" type="number" min="0" step="any" value="20" style="font-family:monospace;">
+        </div>
+        <div class="field">
+          <label for="unit">Unit</label>
+          <select id="unit">
+            <option value="ms" selected>m/s</option>
+            <option value="kmh">km/h</option>
+            <option value="mph">mph</option>
+            <option value="kn">knots</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <dl class="kv" id="kv"></dl>
+      <p class="note sea" id="sea"></p>
+      <p class="note" id="err"></p>
+
+      <div class="spacer"></div>
+      <p class="note muted" style="font-size:0.8rem;">The Beaufort scale is defined by wind speed in <strong>knots</strong>; the m/s, km/h and mph columns are the WMO's published rounded equivalents. Near a boundary, a value may classify by knots slightly differently than a rounded published range in another unit suggests — this is inherent to the table, not an error.</p>
+      <label>Beaufort scale (WMO)</label>
+      <table class="bf" id="table">
+        <tr><th>Force</th><th>Name</th><th>Knots</th><th>m/s</th><th>km/h</th><th>mph</th></tr>
+      </table>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var speedEl = $("speed"), unitEl = $("unit"), verdictEl = $("verdict"), kvEl = $("kv"), seaEl = $("sea"), errEl = $("err"), tableEl = $("table");
+
+    // Conversion factors TO knots. 1 knot = 0.514444 m/s = 1.852 km/h = 1.150779 mph.
+    var TO_KN = { ms: 1 / 0.514444, kmh: 1 / 1.852, mph: 0.868976, kn: 1 };
+    var KN_TO = { ms: 0.514444, kmh: 1.852, mph: 1.150779, kn: 1 };
+    function fmt(n, d) { return (Math.round(n * Math.pow(10, d)) / Math.pow(10, d)).toFixed(d); }
+
+    // Canonical WMO Beaufort table — defined by KNOT ranges; m/s, km/h, mph are the published ranges.
+    // Each entry: { lo, hi (kn, hi=Infinity for 12), name, sea, land }
+    var SCALE = [
+      { lo: 0, hi: 1, name: "Calm", sea: "Sea like a mirror.", land: "Smoke rises vertically." },
+      { lo: 1, hi: 4, name: "Light air", sea: "Ripples with the appearance of scales, no foam crests.", land: "Smoke drifts; wind vanes unmoved." },
+      { lo: 4, hi: 7, name: "Light breeze", sea: "Small wavelets, glassy crests, no breaking.", land: "Wind felt on face; leaves rustle." },
+      { lo: 7, hi: 11, name: "Gentle breeze", sea: "Large wavelets, crests begin to break, scattered whitecaps.", land: "Leaves and small twigs move; light flags extend." },
+      { lo: 11, hi: 17, name: "Moderate breeze", sea: "Small waves, frequent whitecaps.", land: "Dust and loose paper raised; small branches move." },
+      { lo: 17, hi: 22, name: "Fresh breeze", sea: "Moderate waves, many whitecaps, some spray.", land: "Small trees sway; wavelets on inland waters." },
+      { lo: 22, hi: 28, name: "Strong breeze", sea: "Large waves, extensive whitecaps, spray everywhere.", land: "Large branches move; umbrellas hard to control." },
+      { lo: 28, hi: 34, name: "Near gale", sea: "Sea heaps up, foam blows in streaks.", land: "Whole trees in motion; resistance felt when walking." },
+      { lo: 34, hi: 41, name: "Gale", sea: "Moderately high waves, crests break into spindrift.", land: "Twigs break off; walking impeded." },
+      { lo: 41, hi: 48, name: "Strong gale", sea: "High waves, dense foam, rolling sea.", land: "Branches break from trees; slight structural damage." },
+      { lo: 48, hi: 56, name: "Storm", sea: "Very high waves, sea surface whitish, visibility reduced.", land: "Trees uprooted; considerable structural damage." },
+      { lo: 56, hi: 64, name: "Violent storm", sea: "Exceptionally high waves, sea covered in foam.", land: "Widespread damage." },
+      { lo: 64, hi: Infinity, name: "Hurricane", sea: "Air filled with spray, sea white with driving spray, very poor visibility.", land: "Devastation." }
+    ];
+
+    function beaufort(kn) {
+      for (var i = 0; i < SCALE.length; i++) {
+        if (kn >= SCALE[i].lo && kn < SCALE[i].hi) return { force: i, entry: SCALE[i] };
+      }
+      return { force: 0, entry: SCALE[0] };
+    }
+
+    // Published range strings for each unit, per force. We compute display ranges from knots using
+    // the standard published conversions, but show the canonical published integer ranges.
+    var RANGES = [
+      // [knots, m/s, km/h, mph] range strings per force
+      ["< 1", "0–0.2", "1–1", "0–1"],
+      ["1–3", "0.3–1.5", "1–5", "1–3"],
+      ["4–6", "1.6–3.3", "6–11", "4–7"],
+      ["7–10", "3.4–5.5", "12–19", "8–12"],
+      ["11–16", "5.5–7.9", "20–28", "13–18"],
+      ["17–21", "8–10.7", "29–38", "19–24"],
+      ["22–27", "10.8–13.8", "39–49", "25–31"],
+      ["28–33", "13.9–17.1", "50–61", "32–38"],
+      ["34–40", "15.5–20.7", "62–74", "39–46"],
+      ["41–47", "20.8–24.4", "75–88", "47–54"],
+      ["48–55", "24.5–28.4", "89–102", "55–63"],
+      ["56–63", "28.5–32.6", "103–117", "64–72"],
+      ["≥ 64", "≥ 32.7", "≥ 118", "≥ 73"]
+    ];
+
+    function render() {
+      errEl.textContent = "";
+      var v = parseFloat(speedEl.value);
+      if (isNaN(v) || v < 0) { verdictEl.textContent = ""; kvEl.innerHTML = ""; seaEl.textContent = ""; errEl.textContent = "Enter a non-negative wind speed."; renderTable(-1); return; }
+      var unit = unitEl.value;
+      var kn = v * TO_KN[unit];
+      var res = beaufort(kn);
+      var r = RANGES[res.force];
+      verdictEl.innerHTML = '<span class="force-badge">Force ' + res.force + '</span> ' + res.entry.name;
+      kvEl.innerHTML =
+        "<dt>Your input</dt><dd>" + fmt(v, v < 10 ? 1 : 0) + " " + unitLabel(unit) + " (" + fmt(kn, 1) + " kn)</dd>" +
+        "<dt>Range (kn)</dt><dd>" + r[0] + "</dd>" +
+        "<dt>Range (m/s)</dt><dd>" + r[1] + "</dd>" +
+        "<dt>Range (km/h)</dt><dd>" + r[2] + "</dd>" +
+        "<dt>Range (mph)</dt><dd>" + r[3] + "</dd>";
+      seaEl.textContent = "Sea: " + res.entry.sea + "  Land: " + res.entry.land;
+      renderTable(res.force);
+    }
+
+    function unitLabel(u) { return { ms: "m/s", kmh: "km/h", mph: "mph", kn: "knots" }[u]; }
+
+    function renderTable(active) {
+      var rows = "";
+      for (var i = 0; i < SCALE.length; i++) {
+        rows += "<tr class='" + (i === active ? "active" : "") + "'><td>" + i + "</td><td>" + SCALE[i].name + "</td><td>" + RANGES[i][0] + "</td><td>" + RANGES[i][1] + "</td><td>" + RANGES[i][2] + "</td><td>" + RANGES[i][3] + "</td></tr>";
+      }
+      // keep header, replace body
+      tableEl.innerHTML = "<tr><th>Force</th><th>Name</th><th>Knots</th><th>m/s</th><th>km/h</th><th>mph</th></tr>" + rows;
+    }
+
+    speedEl.addEventListener("input", render);
+    unitEl.addEventListener("change", render);
+    render();
+  })();
+  </script>
+</body>
+</html>
