@@ -3458,4 +3458,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔌",
     added: "2026-07-13T19:15:00Z",
   },
+  {
+    slug: "lfsr-generator",
+    name: "LFSR Sequence Generator",
+    description: "Generate a pseudo-random bit stream from a Linear Feedback Shift Register — the engine behind CRC checksums, PN sequences, spread-spectrum scramblers and hardware PRNGs. Configure register width, tap positions and a non-zero seed; the tool produces the output sequence and empirically determines the period by simulation, flagging maximal-length taps (period 2ⁿ−1). Maximal-length presets included. Pure integer arithmetic, in your browser.",
+    category: "Encoding",
+    icon: "🔁",
+    added: "2026-07-13T19:45:00Z",
+  },
 ];

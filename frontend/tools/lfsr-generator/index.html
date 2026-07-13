@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>LFSR Sequence Generator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0 14px; }
+    @media (max-width: 620px) { .grid3 { grid-template-columns: 1fr; } }
+    .grid3 .field { margin-bottom: 0; }
+    .out { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; white-space: pre-wrap; word-break: break-all; }
+    .out.empty { color: var(--text-dim); font-style: italic; }
+    .kv { display: grid; grid-template-columns: 150px 1fr; gap: 6px 12px; margin-top: 10px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.9rem; word-break: break-all; }
+    .verdict { font-size: 1rem; font-weight: 600; }
+    .verdict.bad { color: var(--bad, #f87171); }
+    .verdict.ok { color: var(--ok, #4ade80); }
+    .states { font-family: ui-monospace, monospace; font-size: 12px; color: var(--text-dim); white-space: pre-wrap; word-break: break-all; margin-top: 6px; }
+    .presets button { background: var(--bg-elev-2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 4px 9px; font-size: 0.8rem; cursor: pointer; margin: 0 4px 4px 0; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>LFSR Sequence Generator</h1>
+      <p>Generate a pseudo-random bit stream from a Linear Feedback Shift Register — the engine behind CRC checksums, PN sequences, spread-spectrum scramblers and hardware PRNGs. Configure the register width, tap positions and a non-zero seed; the tool produces the output sequence and <em>empirically determines the period</em> by simulation, flagging maximal-length taps (period 2<sup>n</sup>−1). Pure integer arithmetic, in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label>Quick presets (maximal-length)</label>
+        <div class="presets" id="presets"></div>
+      </div>
+
+      <div class="grid3">
+        <div class="field">
+          <label for="width">Register width n</label>
+          <input id="width" type="number" min="2" max="24" value="8" style="font-family:monospace;">
+        </div>
+        <div class="field">
+          <label for="taps">Taps (comma list)</label>
+          <input id="taps" type="text" value="8,6,5,4" autocomplete="off" style="font-family:monospace;">
+        </div>
+        <div class="field">
+          <label for="seed">Seed (hex)</label>
+          <input id="seed" type="text" value="0x01" autocomplete="off" style="font-family:monospace;">
+        </div>
+      </div>
+
+      <div class="field" style="margin-top:14px;">
+        <label for="bits">Output bits to generate</label>
+        <input id="bits" type="number" min="1" max="4096" value="64" style="font-family:monospace;">
+        <p class="note" style="margin-top:6px;">Taps are 1-indexed from the <strong>input (left)</strong> end of the register; the seed's most-significant bit is the leftmost cell. This matches the standard maximal-length tap tables.</p>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <dl class="kv" id="kv"></dl>
+      <p class="note" id="err"></p>
+
+      <div class="spacer"></div>
+      <label>Output sequence</label>
+      <div class="output out" id="seq"></div>
+
+      <div class="spacer"></div>
+      <label>First 12 internal states (left → right)</label>
+      <div class="states" id="states"></div>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var widthEl = $("width"), tapsEl = $("taps"), seedEl = $("seed"), bitsEl = $("bits");
+    var verdictEl = $("verdict"), kvEl = $("kv"), errEl = $("err"), seqEl = $("seq"), statesEl = $("states");
+    var presetsEl = $("presets");
+
+    // Maximal-length taps (1-indexed from input/left end) for select widths.
+    var PRESETS = [
+      { n: 4, taps: "4,3" },
+      { n: 7, taps: "7,6" },
+      { n: 8, taps: "8,6,5,4" },
+      { n: 9, taps: "9,5" },
+      { n: 10, taps: "10,7" },
+      { n: 11, taps: "11,9" },
+      { n: 16, taps: "16,14,13,11" },
+      { n: 23, taps: "23,18" }
+    ];
+
+    PRESETS.forEach(function (p) {
+      var b = document.createElement("button");
+      b.textContent = "n=" + p.n + " [" + p.taps + "]";
+      b.addEventListener("click", function () {
+        widthEl.value = p.n; tapsEl.value = p.taps; seedEl.value = "0x01"; render();
+      });
+      presetsEl.appendChild(b);
+    });
+
+    function hexToBig(s) {
+      s = s.trim().replace(/^0x/i, "");
+      if (!/^[0-9a-fA-F]+$/.test(s)) return null;
+      return BigInt("0x" + (s || "0"));
+    }
+
+    function buildState(n, seedInt) {
+      var st = new Array(n);
+      for (var i = 0; i < n; i++) st[i] = Number((seedInt >> BigInt(n - 1 - i)) & 1n);
+      return st;
+    }
+    function stateToInt(st) {
+      var v = 0n;
+      for (var i = 0; i < st.length; i++) v = (v << 1n) | BigInt(st[i]);
+      return v;
+    }
+
+    // Fibonacci LFSR: state[0]=input/left, state[n-1]=output/right.
+    // fb = XOR of state[tap-1]; shift right; new bit at state[0]; output = old state[n-1].
+    function run(n, taps, seedInt, outBits, collectStates) {
+      var st = buildState(n, seedInt);
+      var bits = [];
+      var states = [];
+      if (collectStates) states.push(st.join(""));
+      for (var k = 0; k < outBits; k++) {
+        var fb = 0;
+        for (var ti = 0; ti < taps.length; ti++) fb ^= st[taps[ti] - 1];
+        var out = st[n - 1];
+        for (var i = n - 1; i > 0; i--) st[i] = st[i - 1];
+        st[0] = fb;
+        bits.push(out);
+        if (collectStates && k < 11) states.push(st.join(""));
+      }
+      return { bits: bits, states: states };
+    }
+
+    function detectPeriod(n, taps, seedInt) {
+      var cap = Math.min(Math.pow(2, n), 1 << 20);
+      var st = buildState(n, seedInt);
+      var start = stateToInt(st);
+      var c = 0;
+      // simulate one full cycle: count steps until state returns to start
+      while (true) {
+        var fb = 0;
+        for (var ti = 0; ti < taps.length; ti++) fb ^= st[taps[ti] - 1];
+        for (var i = n - 1; i > 0; i--) st[i] = st[i - 1];
+        st[0] = fb;
+        c++;
+        if (stateToInt(st) === start) return { period: c, capped: false, cap: cap };
+        if (c >= cap) return { period: null, capped: true, cap: cap };
+      }
+    }
+
+    function bitsToHex(bits) {
+      // pack bits MSB-first into bytes
+      var hex = "";
+      for (var i = 0; i < bits.length; i += 8) {
+        var byte = 0;
+        for (var b = 0; b < 8 && i + b < bits.length; b++) byte = (byte << 1) | bits[i + b];
+        var pad = i + 7 < bits.length ? 8 : (bits.length - i);
+        // left-pad final partial nibble
+        hex += (byte << (8 - pad) & 0xff).toString(16).toUpperCase().padStart(2, "0");
+      }
+      return hex;
+    }
+
+    function render() {
+      errEl.textContent = ""; verdictEl.textContent = ""; verdictEl.className = "verdict"; kvEl.innerHTML = "";
+      seqEl.textContent = ""; seqEl.classList.add("empty"); statesEl.textContent = "";
+
+      var n = parseInt(widthEl.value, 10);
+      if (isNaN(n) || n < 2 || n > 24) { verdictEl.textContent = "✗ Width must be 2–24."; verdictEl.className = "verdict bad"; return; }
+
+      var tapErr = "";
+      var taps = tapsEl.value.split(",").map(function (s) { return parseInt(s.trim(), 10); });
+      if (!taps.length || taps.some(function (t) { return isNaN(t) || t < 1 || t > n; })) tapErr = "Taps must be integers in 1–" + n + ".";
+      // dedupe
+      var seen = {}; taps = taps.filter(function (t) { if (seen[t]) return false; seen[t] = true; return true; });
+      if (tapErr) { verdictEl.textContent = "✗ " + tapErr; verdictEl.className = "verdict bad"; return; }
+
+      var seedInt = hexToBig(seedEl.value);
+      if (seedInt === null) { verdictEl.textContent = "✗ Seed must be a hex integer."; verdictEl.className = "verdict bad"; return; }
+      if (seedInt === 0n) { verdictEl.textContent = "✗ Seed must be non-zero (a zero seed locks the register at all zeros)."; verdictEl.className = "verdict bad"; return; }
+      if (seedInt >> BigInt(n) !== 0n) {
+        verdictEl.textContent = "✗ Seed needs more than " + n + " bits.";
+        verdictEl.className = "verdict bad";
+        return;
+      }
+
+      var outBits = parseInt(bitsEl.value, 10);
+      if (isNaN(outBits) || outBits < 1) { verdictEl.textContent = "✗ Output bits must be ≥ 1."; verdictEl.className = "verdict bad"; return; }
+      if (outBits > 4096) outBits = 4096;
+
+      var res = run(n, taps, seedInt, outBits, true);
+      var bitStr = res.bits.join("");
+      var periodInfo = detectPeriod(n, taps, seedInt);
+      var maxPeriod = (1n << BigInt(n)) - 1n;
+      var isMax = periodInfo.period !== null && BigInt(periodInfo.period) === maxPeriod;
+
+      verdictEl.textContent = (isMax ? "✓ Maximal-length" : (periodInfo.period === null ? "✓ Generated" : "✓ Generated (non-maximal)"));
+      verdictEl.className = "verdict ok";
+
+      var periodLine;
+      if (periodInfo.period === null) {
+        periodLine = "not found within " + periodInfo.cap.toLocaleString() + "-step cap (maximal would be " + maxPeriod.toString() + ")";
+      } else {
+        periodLine = periodInfo.period.toLocaleString() + (isMax ? "  (= 2^" + n + " − 1, maximal)" : "  (2^" + n + " − 1 = " + maxPeriod.toString() + ")");
+      }
+
+      kvEl.innerHTML =
+        "<dt>Width</dt><dd>" + n + " bits</dd>" +
+        "<dt>Taps</dt><dd>[" + taps.join(", ") + "]</dd>" +
+        "<dt>Seed</dt><dd>0x" + seedInt.toString(16).toUpperCase() + "</dd>" +
+        "<dt>Detected period</dt><dd>" + periodLine + "</dd>" +
+        "<dt>Output as hex</dt><dd>0x" + bitsToHex(res.bits) + "</dd>";
+
+      seqEl.classList.remove("empty");
+      seqEl.textContent = bitStr.match(/.{1,8}/g).join(" ");
+      statesEl.textContent = res.states.map(function (s, i) { return (i === 0 ? "seed " : "t" + (i) + "   ") + s; }).join("\n");
+    }
+
+    [widthEl, tapsEl, seedEl, bitsEl].forEach(function (el) {
+      el.addEventListener("input", render); el.addEventListener("change", render);
+    });
+    render();
+  })();
+  </script>
+</body>
+</html>
