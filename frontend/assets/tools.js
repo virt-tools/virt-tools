@@ -3618,4 +3618,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔊",
     added: "2026-07-14T05:15:00Z",
   },
+  {
+    slug: "air-density-calculator",
+    name: "Air Density Calculator",
+    description: "Compute the density of moist air in kg/m³ from temperature, pressure and relative humidity using the ideal-gas mixture formula, plus the derived pressure and density altitude and the difference from the ICAO standard atmosphere (1.225 kg/m³ at 15 °C, 1013.25 hPa). Enter station pressure or switch to altitude mode. Useful for engine tuning, drone and aircraft performance, HVAC, ballistics and cycling aerodynamics. Pure arithmetic, in your browser.",
+    category: "Environment",
+    icon: "🌬️",
+    added: "2026-07-14T05:45:00Z",
+  },
 ];

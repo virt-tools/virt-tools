@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Air Density Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .row2 { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+    .row2 .field { margin-bottom: 0; }
+    input[type="number"] { font-family: ui-monospace, monospace; width: 110px; }
+    select { min-width: 130px; }
+    .kv { display: grid; grid-template-columns: 230px 1fr; gap: 6px 12px; margin-top: 12px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.95rem; }
+    .verdict { font-size: 1.6rem; font-weight: 800; font-family: ui-monospace, monospace; margin-top: 8px; }
+    .verdict.ok { color: var(--ok, #4ade80); }
+    .verdict.bad { color: var(--bad, #f87171); }
+    .big { font-size: 1.05rem; font-weight: 700; }
+    .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+    .seg button { background: var(--bg-elev-2); color: var(--text); border: none; padding: 5px 12px; cursor: pointer; font-size: 0.85rem; }
+    .seg button.active { background: var(--accent, #6ea8ff); color: #08111f; font-weight: 600; }
+    h3.sec { font-size: 0.92rem; font-weight: 600; margin: 18px 0 4px; color: var(--text-dim); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Air Density Calculator</h1>
+      <p>Compute the density of moist air in kg/m³ from temperature, pressure and relative humidity, plus the derived pressure altitude and the difference from the ICAO standard atmosphere (1.225 kg/m³ at 15 °C, 1013.25 hPa). Useful for engine tuning, drone and aircraft performance, HVAC, ballistics and cycling aerodynamics where thinner air means less drag but also less oxygen. Enter station pressure, or switch to altitude mode and let the barometric formula estimate it. Pure arithmetic, in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label>Pressure source</label>
+        <div class="seg" id="seg">
+          <button data-mode="press" class="active">Station pressure</button>
+          <button data-mode="alt">Altitude</button>
+        </div>
+      </div>
+
+      <div class="row2">
+        <div class="field" id="pressField">
+          <label for="press">Station pressure</label>
+          <input id="press" type="number" min="0" step="any" value="1013.25">
+          <select id="punit" style="min-width:80px;margin-left:6px;">
+            <option value="hPa" selected>hPa</option>
+            <option value="inHg">inHg</option>
+          </select>
+        </div>
+        <div class="field" id="altField" style="display:none;">
+          <label for="alt">Altitude</label>
+          <input id="alt" type="number" step="any" value="0">
+          <select id="aunit" style="min-width:80px;margin-left:6px;">
+            <option value="m" selected>m</option>
+            <option value="ft">ft</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="temp">Temperature</label>
+          <input id="temp" type="number" step="any" value="15">
+          <select id="tunit" style="min-width:80px;margin-left:6px;">
+            <option value="C" selected>°C</option>
+            <option value="F">°F</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="rh">Relative humidity</label>
+          <input id="rh" type="number" min="0" max="100" step="any" value="50" style="width:80px;"> %
+        </div>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <dl class="kv" id="kv"></dl>
+      <p class="note" id="err"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var seg = $("seg"), pressField = $("pressField"), altField = $("altField");
+    var pressEl = $("press"), punitEl = $("punit"), altEl = $("alt"), aunitEl = $("aunit");
+    var tempEl = $("temp"), tunitEl = $("tunit"), rhEl = $("rh");
+    var verdictEl = $("verdict"), kvEl = $("kv"), errEl = $("err");
+    var mode = "press";
+
+    function num(el) { var n = parseFloat(el.value); return isNaN(n) ? NaN : n; }
+    function fmt(n, d) { return Number(n).toFixed(d); }
+
+    function pressureFromAlt(alt_m) {
+      // ICAO barometric formula (troposphere).
+      return 101325 * Math.pow(1 - 2.25577e-5 * alt_m, 5.25588);
+    }
+    function altFromPressure(P_pa) {
+      return 44330 * (1 - Math.pow(P_pa / 101325, 1 / 5.255));
+    }
+
+    function render() {
+      errEl.textContent = ""; verdictEl.textContent = ""; verdictEl.className = "verdict"; kvEl.innerHTML = "";
+      var t = num(tempEl), rh = num(rhEl);
+      if (isNaN(t) || isNaN(rh)) { verdictEl.textContent = "✗ Enter valid temperature and humidity."; verdictEl.className = "verdict bad"; return; }
+      if (rh < 0) rh = 0; if (rh > 100) rh = 100;
+
+      // Resolve pressure in Pa.
+      var P;
+      if (mode === "alt") {
+        var a = num(altEl);
+        if (isNaN(a)) { verdictEl.textContent = "✗ Enter a valid altitude."; verdictEl.className = "verdict bad"; return; }
+        var am = aunitEl.value === "ft" ? a * 0.3048 : a;
+        P = pressureFromAlt(am);
+      } else {
+        var p = num(pressEl);
+        if (isNaN(p) || p <= 0) { verdictEl.textContent = "✗ Enter a positive station pressure."; verdictEl.className = "verdict bad"; return; }
+        P = punitEl.value === "inHg" ? p * 3386.39 : p * 100; // hPa->Pa, inHg->Pa
+      }
+
+      // Temperature to °C then K.
+      var Tc = tunitEl.value === "F" ? (t - 32) * 5 / 9 : t;
+      var T = Tc + 273.15;
+
+      var Rd = 287.058, Rv = 461.495;
+      var es = 0.61094 * Math.exp(17.625 * Tc / (Tc + 243.04)) * 1000; // saturation vapor pressure, Pa (Tetens)
+      var e = rh / 100 * es;                                          // actual vapor pressure, Pa
+      var pd = P - e;                                                 // dry-air partial pressure, Pa
+      var rho = pd / (Rd * T) + e / (Rv * T);
+
+      // Density altitude (approx): altitude at which ISA air would have this density.
+      // Solve P_isa such that rho_dry(P) = rho (dry ref). Use: rho_dry(P) = P/(Rd*288.15) -> P = rho*Rd*288.15
+      // then alt from that P. (Humidity baked into rho; close enough as an indicator.)
+      var P_equiv = rho * Rd * 288.15;
+      var densityAlt = altFromPressure(P_equiv);
+      var pressureAlt = altFromPressure(P);
+      var rhoISA = 1.225;
+      var deltaPct = (rho / rhoISA - 1) * 100;
+
+      verdictEl.textContent = fmt(rho, 4) + " kg/m³";
+      verdictEl.className = "verdict ok";
+      kvEl.innerHTML =
+        "<dt>Air density</dt><dd class='big'>" + fmt(rho, 4) + " kg/m³</dd>" +
+        "<dt>vs ICAO standard</dt><dd>" + (deltaPct >= 0 ? "+" : "") + fmt(deltaPct, 2) + "%  (vs 1.225 kg/m³)</dd>" +
+        "<dt>Saturation vapor pressure</dt><dd>" + fmt(es / 100, 2) + " hPa</dd>" +
+        "<dt>Actual vapor pressure</dt><dd>" + fmt(e / 100, 2) + " hPa</dd>" +
+        "<dt>Station pressure</dt><dd>" + fmt(P / 100, 2) + " hPa  (" + fmt(P / 3386.39, 2) + " inHg)</dd>" +
+        "<dt>Pressure altitude</dt><dd>" + fmt(pressureAlt, 0) + " m  (" + fmt(pressureAlt * 3.28084, 0) + " ft)</dd>" +
+        "<dt>Density altitude (approx.)</dt><dd>" + fmt(densityAlt, 0) + " m  (" + fmt(densityAlt * 3.28084, 0) + " ft)</dd>";
+
+      errEl.textContent = "Moist air is modeled as two ideal gases: ρ = p_d/(R_d·T) + e/(R_v·T), where p_d is the dry-air partial pressure, e the water-vapor partial pressure from the Tetens saturation formula, R_d = 287.058 and R_v = 461.495 J/(kg·K). Humid air is slightly less dense than dry air at the same T and P because water vapor (M = 18) is lighter than the displaced dry air (M ≈ 29). Density altitude is an approximation that folds humidity into the density; for exact aviation performance use a dedicated flight computer. Station pressure is the uncorrected barometer reading — not sea-level-corrected (altimeter) pressure.";
+      errEl.className = "note";
+    }
+
+    seg.querySelectorAll("button").forEach(function (b) {
+      b.addEventListener("click", function () {
+        seg.querySelectorAll("button").forEach(function (x) { x.classList.remove("active"); });
+        b.classList.add("active");
+        mode = b.getAttribute("data-mode");
+        pressField.style.display = mode === "press" ? "" : "none";
+        altField.style.display = mode === "alt" ? "" : "none";
+        render();
+      });
+    });
+    [pressEl, punitEl, altEl, aunitEl, tempEl, tunitEl, rhEl].forEach(function (el) {
+      el.addEventListener("input", render); el.addEventListener("change", render);
+    });
+    render();
+  })();
+  </script>
+</body>
+</html>
