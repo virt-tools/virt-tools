@@ -86,6 +86,7 @@
     catch (e) { return "all"; }
   })();
   var searchInput = null, emptyNote = null, catalogMount = null, countEl = null;
+  var emptyNoteDefault = "";
 
   // Relative "added X ago" label, with the exact ISO timestamp as a tooltip so
   // the precise add time is available on hover without crowding the card.
@@ -187,7 +188,22 @@
       flat.style.display = seen ? "" : "none";
       visibleCount += seen;
     }
-    if (emptyNote) emptyNote.hidden = visibleCount !== 0;
+    if (emptyNote) {
+      var rawQ = (searchInput ? searchInput.value : "").trim();
+      if (visibleCount === 0 && rawQ.length > 0) {
+        // No matches for a real search — invite the user to suggest the tool
+        // they were looking for, pre-filling the feedback form with the query.
+        var safeQ = rawQ.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+        var linkMsg = "I searched for \"" + rawQ + "\" but couldn't find a matching tool. Could you add one for this?";
+        emptyNote.innerHTML =
+          "No tools match \"" + safeQ + "\". " +
+          "<a href=\"/feedback/?kind=suggestion&amp;message=" + encodeURIComponent(linkMsg) + "\">Suggest “" + safeQ + "” as a new tool</a>.";
+        emptyNote.hidden = false;
+      } else {
+        emptyNote.innerHTML = emptyNoteDefault;
+        emptyNote.hidden = visibleCount !== 0;
+      }
+    }
     if (countEl) {
       var total = (window.VIRTUAL_TOOLS || []).length;
       var q = (searchInput ? searchInput.value : "").trim();
@@ -228,6 +244,7 @@
     if (!catalogMount || !window.VIRTUAL_TOOLS) return;
     searchInput = document.getElementById("tool-search");
     emptyNote = document.getElementById("search-empty");
+    if (emptyNote) emptyNoteDefault = emptyNote.innerHTML;
     countEl = document.getElementById("tool-count");
     renderView();
     wireTabs();
