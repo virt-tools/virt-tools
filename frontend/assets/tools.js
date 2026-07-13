@@ -3586,4 +3586,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🛡️",
     added: "2026-07-14T03:15:00Z",
   },
+  {
+    slug: "solar-panel-estimator",
+    name: "Solar Panel Output Estimator",
+    description: "Estimate the annual electricity a rooftop solar (photovoltaic) system will generate from its size, your local peak-sun-hours, and a performance ratio covering inverter, soiling, wiring and temperature losses. Also shows the capacity factor, avoided grid CO₂ emissions, and rough everyday equivalences. Pick a city preset for an indicative peak-sun-hours figure or enter your own. Pure arithmetic — a planning sanity check, not a substitute for a site survey. Everything runs locally in your browser.",
+    category: "Environment",
+    icon: "☀️",
+    added: "2026-07-14T03:45:00Z",
+  },
 ];
