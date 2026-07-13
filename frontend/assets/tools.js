@@ -3482,4 +3482,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🧭",
     added: "2026-07-13T20:45:00Z",
   },
+  {
+    slug: "oven-temperature-converter",
+    name: "Oven Temperature Converter",
+    description: "Convert oven temperatures between Celsius, Fahrenheit and the UK/Commonwealth Gas Mark scale (¼–10), with the fan-oven equivalent (conventional − 20 °C) and a descriptive term. The °C↔°F conversion is exact; gas marks follow the standard UK convention and include a full reference table. Handy for adapting recipes across regions. Pure arithmetic, in your browser.",
+    category: "Food",
+    icon: "🔥",
+    added: "2026-07-13T21:15:00Z",
+  },
 ];
