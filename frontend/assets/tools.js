@@ -3410,4 +3410,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🐚",
     added: "2026-07-13T16:15:00Z",
   },
+  {
+    slug: "unified-diff",
+    name: "Unified Diff Generator",
+    description: "Compare two blocks of text and emit a portable diff -u style unified diff — the ---/+++ headers and @@ hunks that patch and git apply. Adjustable context lines, custom file labels, \\\\ No newline at end of file handling, and .patch download. Distinct from the visual Text Diff; output verified byte-for-byte against GNU diff. Runs entirely in your browser.",
+    category: "Text",
+    icon: "🩹",
+    added: "2026-07-13T16:45:00Z",
+  },
 ];
