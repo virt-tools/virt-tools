@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Meat Doneness &amp; Resting Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .row2 { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+    .row2 .field { margin-bottom: 0; }
+    input[type="number"] { font-family: ui-monospace, monospace; width: 110px; }
+    select { min-width: 180px; }
+    .kv { display: grid; grid-template-columns: 240px 1fr; gap: 6px 12px; margin-top: 12px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.95rem; }
+    .verdict { font-size: 1.4rem; font-weight: 800; font-family: ui-monospace, monospace; margin-top: 8px; }
+    .verdict.ok { color: var(--ok, #4ade80); }
+    .verdict.bad { color: var(--bad, #f87171); }
+    .verdict.warn { color: var(--accent, #6ea8ff); }
+    .big { font-size: 1.05rem; font-weight: 700; }
+    h3.sec { font-size: 0.92rem; font-weight: 600; margin: 14px 0 4px; color: var(--text-dim); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Meat Doneness &amp; Resting Calculator</h1>
+      <p>Look up the target internal temperature for each doneness of common meats (beef, lamb, pork, poultry, fish, ground), in °F and °C, and work out the temperature to pull the meat off the heat so that carryover cooking during the rest brings it up to the target. Enter the doneness you want and a carryover estimate (size presets provided) and get the pull-from-heat temp plus USDA food-safety guidance. Reference values for home cooks — a thermometer is the only reliable judge. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row2">
+        <div class="field">
+          <label for="meat">Meat</label>
+          <select id="meat"></select>
+        </div>
+        <div class="field">
+          <label for="doneness">Doneness</label>
+          <select id="doneness"></select>
+        </div>
+      </div>
+
+      <h3 class="sec">Carryover cooking during rest</h3>
+      <div class="row2">
+        <div class="field">
+          <label for="carry">Carryover rise</label>
+          <input id="carry" type="number" min="0" step="any" value="5">
+          <select id="cunit" style="min-width:60px;margin-left:6px;">
+            <option value="F" selected>°F</option>
+            <option value="C">°C</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Roast size presets</label>
+          <select id="size" style="min-width:200px;">
+            <option value="2" data-unit="F">Steak / chop (~2 °F)</option>
+            <option value="5" data-unit="F" selected>Medium roast (~5 °F)</option>
+            <option value="9" data-unit="F">Large roast / prime rib (~9 °F)</option>
+            <option value="12" data-unit="F">Whole turkey / big roast (~12 °F)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <dl class="kv" id="kv"></dl>
+      <p class="note" id="err"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var meatSel = $("meat"), donenessSel = $("doneness"), carryEl = $("carry"), cunitEl = $("cunit"), sizeSel = $("size");
+    var verdictEl = $("verdict"), kvEl = $("kv"), errEl = $("err");
+
+    // Each meat: list of {doneness, tempF, usdaNote}. tempF = target final internal temp.
+    var MEATS = [
+      { name: "Beef steak / roast", levels: [
+        { d: "Rare",        f: 120, note: "USDA: whole beef cuts are 'safe' at 145 °F (63 °C) with a 3-min rest; rare is a personal preference below that." },
+        { d: "Medium-rare", f: 130, note: "USDA safe minimum 145 °F (63 °C) + 3-min rest; medium-rare is a common chef preference." },
+        { d: "Medium",      f: 140, note: "Pink centre, firm. Above the USDA 145 °F (63 °C) rest guideline." },
+        { d: "Medium-well", f: 150, note: "Slightly pink, mostly grey. Safe." },
+        { d: "Well done",   f: 160, note: "Fully cooked, little pink. Safe." }
+      ] },
+      { name: "Lamb", levels: [
+        { d: "Rare",        f: 125, note: "USDA: whole lamb cuts safe at 145 °F (63 °C) + 3-min rest." },
+        { d: "Medium-rare", f: 130, note: "USDA safe minimum 145 °F (63 °C) + 3-min rest." },
+        { d: "Medium",      f: 140, note: "Pink, tender. Above USDA guideline." },
+        { d: "Well done",   f: 160, note: "Fully cooked. Safe." }
+      ] },
+      { name: "Pork (chops/roast)", levels: [
+        { d: "Medium",      f: 145, note: "USDA: whole pork cuts safe at 145 °F (63 °C) + 3-min rest; slightly pink is fine." },
+        { d: "Medium-well", f: 155, note: "Less pink; safe." },
+        { d: "Well done",   f: 160, note: "Fully cooked; safe." }
+      ] },
+      { name: "Pork tenderloin", levels: [
+        { d: "Medium",      f: 145, note: "USDA 145 °F (63 °C) + 3-min rest; tenderloin is best just past pink." },
+        { d: "Well done",   f: 160, note: "Firmer, drier; safe." }
+      ] },
+      { name: "Chicken / turkey breast", levels: [
+        { d: "Cooked (USDA)", f: 165, note: "USDA: all poultry must reach 165 °F (74 °C) — the only safe doneness for poultry." }
+      ] },
+      { name: "Poultry thighs / legs", levels: [
+        { d: "Tender (chef)",  f: 175, note: "Dark meat is safe at 165 °F (74 °C) but more tender and rendered at 175–185 °F (79–85 °C)." },
+        { d: "Fall-off-bone",  f: 185, note: "Very tender, fully rendered connective tissue. Safe." }
+      ] },
+      { name: "Ground meat (beef/pork)", levels: [
+        { d: "Cooked (USDA)", f: 160, note: "USDA: all ground meats must reach 160 °F (71 °C); colour is not a safe indicator." }
+      ] },
+      { name: "Ground poultry", levels: [
+        { d: "Cooked (USDA)", f: 165, note: "USDA: ground poultry must reach 165 °F (74 °C)." }
+      ] },
+      { name: "Fish", levels: [
+        { d: "Medium (just flaking)", f: 140, note: "USDA: fish safe at 145 °F (63 °C) or opaque and flaking; 140 °F suits tuna/salmon kept slightly translucent." },
+        { d: "Cooked (USDA)",         f: 145, note: "USDA safe minimum 145 °F (63 °C); opaque and flakes easily." }
+      ] }
+    ];
+
+    meatSel.innerHTML = MEATS.map(function (m, i) { return '<option value="' + i + '">' + m.name + '</option>'; }).join("");
+
+    function rebuildDoneness() {
+      var m = MEATS[+meatSel.value];
+      donenessSel.innerHTML = m.levels.map(function (l, i) { return '<option value="' + i + '">' + l.d + '</option>'; }).join("");
+    }
+
+    function num(el) { var n = parseFloat(el.value); return isNaN(n) ? NaN : n; }
+    function fmt(n, d) { return Number(n).toFixed(d); }
+    function fToC(f) { return (f - 32) * 5 / 9; }
+    function cToF(c) { return c * 9 / 5 + 32; }
+
+    function render() {
+      errEl.textContent = ""; verdictEl.textContent = ""; verdictEl.className = "verdict"; kvEl.innerHTML = "";
+      var m = MEATS[+meatSel.value];
+      var lvl = m.levels[+donenessSel.value];
+      var targetF = lvl.f;
+      var targetC = fToC(targetF);
+
+      var carry = num(carryEl);
+      if (isNaN(carry) || carry < 0) { verdictEl.textContent = "✗ Enter a non-negative carryover rise."; verdictEl.className = "verdict bad"; return; }
+
+      // Carryover is entered in cunit; convert to a °F delta for subtraction from targetF (delta°F = delta°C × 9/5).
+      var carryF = cunitEl.value === "C" ? carry * 9 / 5 : carry;
+      var pullF = targetF - carryF;
+      var pullC = fToC(pullF);
+
+      verdictEl.textContent = "Pull at " + fmt(pullF, 0) + " °F / " + fmt(pullC, 0) + " °C";
+      verdictEl.className = carry >= (cunitEl.value === "C" ? 15 : 25) ? "verdict warn" : "verdict ok";
+
+      kvEl.innerHTML =
+        "<dt>Target internal temp</dt><dd class='big'>" + fmt(targetF, 0) + " °F  (" + fmt(targetC, 1) + " °C)</dd>" +
+        "<dt>Carryover rise during rest</dt><dd>+" + fmt(carry, 1) + " " + cunitEl.value + "  (" + fmt(carryF, 1) + " °F)</dd>" +
+        "<dt>Pull from heat at</dt><dd class='big'>" + fmt(pullF, 0) + " °F  (" + fmt(pullC, 0) + " °C)</dd>" +
+        "<dt>Rest time</dt><dd>" + restGuide() + "</dd>";
+
+      errEl.textContent = lvl.note + " Carryover cooking is the rise in internal temperature after the meat leaves the heat, driven by residual heat moving inward while it rests — larger, hotter roasts rise more. Rest on a warm plate, loosely tented with foil: steaks 5 min, chops 5 min, small roasts 10 min, large roasts/turkey 20–30 min. Always verify with a thermometer in the thickest part; undercooking poultry and ground meats carries real food-safety risk, so for vulnerable groups follow the USDA temperatures rather than doneness preferences.";
+      errEl.className = "note";
+    }
+
+    function restGuide() {
+      var m = MEATS[+meatSel.value].name;
+      if (/turkey|Chicken/.test(m)) return "20–30 min (whole bird: 20–30 min)";
+      if (/roast|tenderloin/i.test(m)) return "10–15 min";
+      return "5 min (steaks & chops)";
+    }
+
+    sizeSel.addEventListener("change", function () {
+      var opt = sizeSel.options[sizeSel.selectedIndex];
+      carryEl.value = opt.value;
+      cunitEl.value = opt.getAttribute("data-unit") || "F";
+      render();
+    });
+    meatSel.addEventListener("change", function () { rebuildDoneness(); render(); });
+    donenessSel.addEventListener("change", render);
+    [carryEl, cunitEl].forEach(function (el) { el.addEventListener("input", render); el.addEventListener("change", render); });
+
+    rebuildDoneness();
+    render();
+  })();
+  </script>
+</body>
+</html>

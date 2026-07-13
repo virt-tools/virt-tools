@@ -3658,4 +3658,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌱",
     added: "2026-07-14T07:45:00Z",
   },
+  {
+    slug: "meat-doneness-calculator",
+    name: "Meat Doneness & Resting Calculator",
+    description: "Look up the target internal temperature for each doneness of common meats (beef, lamb, pork, poultry, fish, ground) in °F and °C, and work out the pull-from-heat temperature so that carryover cooking during the rest brings the meat up to target. Enter doneness and a carryover estimate (roast-size presets provided) and get the pull temp plus USDA food-safety guidance and rest times. Reference values for home cooks — a thermometer is the only reliable judge. Everything runs locally in your browser.",
+    category: "Food",
+    icon: "🥩",
+    added: "2026-07-14T08:15:00Z",
+  },
 ];
