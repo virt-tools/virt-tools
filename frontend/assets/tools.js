@@ -3570,4 +3570,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🧂",
     added: "2026-07-14T02:15:00Z",
   },
+  {
+    slug: "tcp-throughput-calculator",
+    name: "TCP Throughput Calculator",
+    description: "Estimate the upper bound on a single TCP flow's throughput from the round-trip time and packet-loss rate using the Mathis formula, T ≤ (MSS × C) / (RTT × √p) — the classic model that shows why even tiny packet loss caps long-distance throughput (a 100 ms path at 0.1% loss tops out near 4.5 Mbps). Also computes the bandwidth-delay product (the window needed to fill the pipe) and the inverse — the maximum loss sustainable for a target throughput — plus a sensitivity table showing throughput collapsing as loss rises. Pure arithmetic, in your browser.",
+    category: "Networking",
+    icon: "📶",
+    added: "2026-07-14T02:45:00Z",
+  },
 ];

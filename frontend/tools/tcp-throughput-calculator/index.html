@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>TCP Throughput Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .row2 { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+    .row2 .field { margin-bottom: 0; }
+    input[type="number"] { font-family: ui-monospace, monospace; width: 110px; }
+    .kv { display: grid; grid-template-columns: 220px 1fr; gap: 6px 12px; margin-top: 8px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.92rem; }
+    .verdict { font-size: 1.5rem; font-weight: 800; }
+    .verdict.ok { color: var(--accent, #6ea8ff); }
+    .verdict.bad { color: var(--bad, #f87171); }
+    table.sens { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.85rem; }
+    table.sens th, table.sens td { border: 1px solid var(--border); padding: 4px 9px; text-align: right; }
+    table.sens th { background: var(--bg-elev-2); color: var(--text-dim); text-align: left; }
+    table.sens td.n { font-family: ui-monospace, monospace; }
+    table.sens td.l { text-align: left; }
+    h3.sec { font-size: 0.92rem; font-weight: 600; margin: 16px 0 4px; color: var(--text-dim); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>TCP Throughput Calculator</h1>
+      <p>Estimate the upper bound on a single TCP flow's throughput from the round-trip time and packet-loss rate using the Mathis formula: <code>T ≤ (MSS × C) / (RTT × √p)</code>. It's the classic back-of-envelope model that shows why even small packet loss caps long-distance throughput — e.g. a 100 ms path with 0.1% loss tops out around 4.5 Mbps regardless of link capacity. Also computes the bandwidth-delay product (the window needed to fill the pipe) and the inverse: the maximum packet loss sustainable for a target throughput. The sensitivity table shows throughput collapsing as loss rises. Pure arithmetic, in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <h3 class="sec">Forward: throughput from RTT &amp; loss</h3>
+      <div class="row2">
+        <div class="field">
+          <label for="mss">MSS (bytes)</label>
+          <input id="mss" type="number" min="1" step="any" value="1460">
+        </div>
+        <div class="field">
+          <label for="rtt">RTT (ms)</label>
+          <input id="rtt" type="number" min="1" step="any" value="100">
+        </div>
+        <div class="field">
+          <label for="loss">Packet loss (%)</label>
+          <input id="loss" type="number" min="0" step="any" value="0.1">
+        </div>
+        <div class="field">
+          <label for="c">Mathis C</label>
+          <input id="c" type="number" min="0.1" step="any" value="1.22">
+        </div>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <dl class="kv" id="kv"></dl>
+      <p class="note" id="err"></p>
+
+      <h3 class="sec">Inverse: max loss for a target throughput</h3>
+      <div class="row2">
+        <div class="field">
+          <label for="target">Target throughput (Mbps)</label>
+          <input id="target" type="number" min="0.001" step="any" value="100">
+        </div>
+        <div class="field" style="font-size:0.85rem;color:var(--text-dim);padding-bottom:6px;">
+          Using the MSS, RTT and C above →
+        </div>
+      </div>
+      <dl class="kv" id="invKv"></dl>
+
+      <h3 class="sec">Sensitivity — throughput vs loss (at this RTT)</h3>
+      <table class="sens" id="sens">
+        <tr><th>Packet loss</th><th>Max throughput</th></tr>
+      </table>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var mssEl = $("mss"), rttEl = $("rtt"), lossEl = $("loss"), cEl = $("c"), targetEl = $("target");
+    var verdictEl = $("verdict"), kvEl = $("kv"), errEl = $("err"), invKvEl = $("invKv"), sensEl = $("sens");
+
+    function num(el) { var n = parseFloat(el.value); return isNaN(n) ? NaN : n; }
+    function fmt(n, d) { return Number(n).toFixed(d); }
+
+    function mathis(mss, rttMs, p, C) { // bits/sec
+      var mssBits = mss * 8, rttS = rttMs / 1000;
+      return mssBits * C / (rttS * Math.sqrt(p));
+    }
+    function invP(mss, rttMs, Tbps, C) {
+      var mssBits = mss * 8, rttS = rttMs / 1000;
+      return Math.pow(mssBits * C / (rttS * Tbps), 2);
+    }
+
+    function fmtMbps(bps) {
+      if (bps >= 1e9) return fmt(bps / 1e9, 2) + " Gbps";
+      if (bps >= 1e6) return fmt(bps / 1e6, 2) + " Mbps";
+      if (bps >= 1e3) return fmt(bps / 1e3, 2) + " Kbps";
+      return fmt(bps, 0) + " bps";
+    }
+
+    function render() {
+      errEl.textContent = ""; verdictEl.textContent = ""; verdictEl.className = "verdict"; kvEl.innerHTML = ""; invKvEl.innerHTML = ""; sensEl.innerHTML = "";
+      var mss = num(mssEl), rtt = num(rttEl), lossPct = num(lossEl), C = num(cEl), target = num(targetEl);
+      if ([mss, rtt, lossPct, C, target].some(isNaN)) { verdictEl.textContent = "✗ Enter valid numbers."; verdictEl.className = "verdict bad"; return; }
+      if (mss <= 0 || rtt <= 0 || C <= 0) { verdictEl.textContent = "✗ MSS, RTT and C must be positive."; verdictEl.className = "verdict bad"; return; }
+      var p = lossPct / 100;
+
+      if (p <= 0) {
+        verdictEl.textContent = "∞ (no loss → not bound by Mathis)";
+        verdictEl.className = "verdict ok";
+        kvEl.innerHTML = "<dt>Note</dt><dd>With zero packet loss the Mathis model is unbounded; real throughput is then limited by link capacity, receive window and pacing, not loss.</dd>";
+      } else {
+        var bps = mathis(mss, rtt, p, C);
+        verdictEl.textContent = fmtMbps(bps);
+        verdictEl.className = "verdict ok";
+        var bdpBytes = bps * (rtt / 1000) / 8;
+        kvEl.innerHTML =
+          "<dt>Max throughput</dt><dd>" + fmtMbps(bps) + "  (" + fmt(bps / 8 / 1e6, 2) + " MB/s)</dd>" +
+          "<dt>Formula</dt><dd>(MSS×8 × C) / (RTT × √p) = (" + (mss * 8) + " × " + C + ") / (" + (rtt / 1000) + " × " + Math.sqrt(p).toFixed(5) + ")</dd>" +
+          "<dt>Bandwidth-delay product</dt><dd>" + fmt(bdpBytes, 0) + " bytes  (" + fmt(bdpBytes / mss, 1) + " MSS-sized packets) — the window needed to fill the pipe</dd>";
+      }
+
+      // Inverse
+      var Tbps = target * 1e6;
+      var maxP = invP(mss, rtt, Tbps, C);
+      invKvEl.innerHTML =
+        "<dt>Max sustainable packet loss</dt><dd>" + (maxP * 100).toExponential(2) + " %  (≈ " + (maxP * 1e6).toFixed(2) + " ppm) for " + fmt(target, 1) + " Mbps</dd>" +
+        "<dt>Derived from</dt><dd>p ≤ (MSS×8 × C / (RTT × T))²</dd>" +
+        "<dt>Implied BDP</dt><dd>" + fmt(Tbps * (rtt / 1000) / 8, 0) + " bytes window at target</dd>";
+
+      // Sensitivity table
+      var losses = [0.0001, 0.001, 0.01, 0.1, 0.5, 1, 2];
+      var rows = "";
+      for (var i = 0; i < losses.length; i++) {
+        var lp = losses[i] / 100;
+        rows += "<tr><td class='l'>" + losses[i] + "%</td><td class='n'>" + fmtMbps(mathis(mss, rtt, lp, C)) + "</td></tr>";
+      }
+      sensEl.innerHTML = "<tr><th>Packet loss</th><th>Max throughput</th></tr>" + rows;
+
+      errEl.textContent = "Mathis is an upper bound for a single Reno-style TCP flow over a path with small, independent loss; it ignores link capacity, window scaling, bufferbloat, modern congestion control (CUBIC/BBR recover far better) and parallel flows. Treat it as a sanity check on how harshly loss caps throughput, not a prediction of real bandwidth.";
+      errEl.className = "note";
+    }
+
+    [mssEl, rttEl, lossEl, cEl, targetEl].forEach(function (el) { el.addEventListener("input", render); el.addEventListener("change", render); });
+    render();
+  })();
+  </script>
+</body>
+</html>
