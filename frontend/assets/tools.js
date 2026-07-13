@@ -3498,4 +3498,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🖼️",
     added: "2026-07-13T21:45:00Z",
   },
+  {
+    slug: "coffee-ratio-calculator",
+    name: "Coffee Brew Ratio Calculator",
+    description: "Work out the right coffee-to-water ratio for your brew. Enter any two of dose (grams of coffee), water (grams or millilitres) and ratio (1:N) — leave the third blank and the tool solves it. Includes presets for common methods (espresso, AeroPress, pour-over, French press, moka, cold brew), a per-cup estimate and a strength read-out. Pure arithmetic, in your browser.",
+    category: "Food",
+    icon: "☕",
+    added: "2026-07-13T22:15:00Z",
+  },
 ];
