@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Audio Dynamic Range &amp; Data Rate Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .row2 { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+    .row2 .field { margin-bottom: 0; }
+    input[type="number"] { font-family: ui-monospace, monospace; width: 110px; }
+    select { min-width: 130px; }
+    .kv { display: grid; grid-template-columns: 220px 1fr; gap: 6px 12px; margin-top: 12px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.95rem; }
+    .verdict { font-size: 1.5rem; font-weight: 800; font-family: ui-monospace, monospace; margin-top: 8px; }
+    .verdict.ok { color: var(--ok, #4ade80); }
+    .verdict.bad { color: var(--bad, #f87171); }
+    .big { font-size: 1.05rem; font-weight: 700; }
+    .presets button { background: var(--bg-elev-2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 5px 9px; font-size: 0.8rem; cursor: pointer; margin: 0 4px 4px 0; }
+    .presets button b { color: var(--accent, #6ea8ff); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Audio Dynamic Range &amp; Data Rate Calculator</h1>
+      <p>Compute the theoretical dynamic range and signal-to-noise ratio of a PCM digital audio format from its bit depth, and the uncompressed PCM data rate and storage per minute from the sample rate, bit depth and channel count. Useful when comparing CD, hi-res, 24-bit studio and broadcast formats, or sizing storage and bandwidth for recording. Pure arithmetic — ideal-quantizer figures, no accounting for dither, lossless compression or real-world analog noise floors. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label>Format presets</label>
+        <div class="presets" id="presets"></div>
+      </div>
+
+      <div class="row2">
+        <div class="field">
+          <label for="sr">Sample rate (Hz)</label>
+          <input id="sr" type="number" min="1" step="any" value="44100">
+        </div>
+        <div class="field">
+          <label for="bits">Bit depth</label>
+          <input id="bits" type="number" min="1" step="1" value="16">
+        </div>
+        <div class="field">
+          <label for="ch">Channels</label>
+          <input id="ch" type="number" min="1" step="1" value="2">
+        </div>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <dl class="kv" id="kv"></dl>
+      <p class="note" id="err"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var srEl = $("sr"), bitsEl = $("bits"), chEl = $("ch");
+    var verdictEl = $("verdict"), kvEl = $("kv"), errEl = $("err"), presetsEl = $("presets");
+
+    var PRESETS = [
+      { name: "CD", sr: 44100, bits: 16, ch: 2 },
+      { name: "DAT", sr: 48000, bits: 16, ch: 2 },
+      { name: "DVD-V / 48k/24", sr: 48000, bits: 24, ch: 6 },
+      { name: "Studio 96k/24", sr: 96000, bits: 24, ch: 2 },
+      { name: "Hi-res 192k/24", sr: 192000, bits: 24, ch: 2 },
+      { name: "Telco 8k/8", sr: 8000, bits: 8, ch: 1 },
+      { name: "Mono voice 16k/16", sr: 16000, bits: 16, ch: 1 }
+    ];
+    PRESETS.forEach(function (p) {
+      var b = document.createElement("button");
+      b.innerHTML = p.name + " <b>" + p.sr / 1000 + "k/" + p.bits + "/" + p.ch + "ch</b>";
+      b.addEventListener("click", function () { srEl.value = p.sr; bitsEl.value = p.bits; chEl.value = p.ch; render(); });
+      presetsEl.appendChild(b);
+    });
+
+    function num(el) { var n = parseFloat(el.value); return isNaN(n) ? NaN : n; }
+    function fmt(n, d) { return Number(n).toFixed(d); }
+    function humanBytes(bps, seconds) {
+      var bytes = bps * seconds / 8;
+      if (bytes >= 1e9) return fmt(bytes / 1e9, 2) + " GB";
+      if (bytes >= 1e6) return fmt(bytes / 1e6, 2) + " MB";
+      if (bytes >= 1e3) return fmt(bytes / 1e3, 2) + " MB";
+      return fmt(bytes, 0) + " bytes";
+    }
+
+    function render() {
+      errEl.textContent = ""; verdictEl.textContent = ""; verdictEl.className = "verdict"; kvEl.innerHTML = "";
+      var sr = num(srEl), bits = num(bitsEl), ch = num(chEl);
+      if ([sr, bits, ch].some(isNaN)) { verdictEl.textContent = "✗ Enter valid numbers."; verdictEl.className = "verdict bad"; return; }
+      if (sr <= 0 || bits <= 0 || ch <= 0) { verdictEl.textContent = "✗ Sample rate, bit depth and channels must be positive."; verdictEl.className = "verdict bad"; return; }
+      bits = Math.floor(bits); ch = Math.floor(ch);
+
+      // Ideal-quantizer full-scale-sine SNR / dynamic range.
+      var dr = 6.02 * bits + 1.76;     // dB
+      var snrApprox = 6.02 * bits;      // ~1 dB per bit rule of thumb
+      var levels = Math.pow(2, bits);
+      var dataBps = sr * bits * ch;     // bits per second (PCM)
+      var kBps = dataBps / 8000;        // kilobytes/s
+      var kbps = dataBps / 1000;        // kilobits/s
+
+      verdictEl.textContent = fmt(dr, 1) + " dB dynamic range  ·  " + fmt(kbps, 0) + " kbps";
+      verdictEl.className = "verdict ok";
+      kvEl.innerHTML =
+        "<dt>Dynamic range</dt><dd class='big'>" + fmt(dr, 2) + " dB  <span class='muted'>(6.02·N + 1.76)</span></dd>" +
+        "<dt>SQN / SNR (rule of thumb)</dt><dd>" + fmt(snrApprox, 1) + " dB  <span class='muted'>(~6 dB per bit)</span></dd>" +
+        "<dt>Quantization levels</dt><dd>2^" + bits + " = " + levels.toLocaleString() + "</dd>" +
+        "<dt>PCM data rate</dt><dd class='big'>" + fmt(kbps, 1) + " kbps  (" + fmt(kBps, 1) + " kB/s)</dd>" +
+        "<dt>Per minute</dt><dd>" + humanBytes(dataBps, 60) + "</dd>" +
+        "<dt>Per hour</dt><dd>" + humanBytes(dataBps, 3600) + "</dd>" +
+        "<dt>Nyquist frequency</dt><dd>" + fmt(sr / 2, 0) + " Hz  (highest representable frequency)</dd>";
+
+      errEl.textContent = "Dynamic range uses the ideal-quantizer formula for a full-scale sine: DR = 6.02·N + 1.76 dB, where N is the bit depth — each added bit buys ~6 dB. Real-world figures are lower: dither to remove quantization distortion costs ~2 dB, and the analog noise floor of converters rarely reaches the theoretical limit (24-bit converters typically deliver ~110–120 dB, not 146). Data rate is uncompressed PCM; lossless (FLAC/ALAC) roughly halves it and lossy (MP3/AAC) is far smaller. The Nyquist limit (sample rate ÷ 2) is the highest frequency that can be captured without aliasing.";
+      errEl.className = "note";
+    }
+
+    [srEl, bitsEl, chEl].forEach(function (el) { el.addEventListener("input", render); el.addEventListener("change", render); });
+    render();
+  })();
+  </script>
+</body>
+</html>

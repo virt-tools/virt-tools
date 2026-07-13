@@ -3642,4 +3642,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🧭",
     added: "2026-07-14T06:45:00Z",
   },
+  {
+    slug: "audio-dynamic-range-calculator",
+    name: "Audio Dynamic Range & Data Rate Calculator",
+    description: "Compute the theoretical dynamic range and signal-to-noise ratio of a PCM digital audio format from its bit depth (6.02·N + 1.76 dB), and the uncompressed PCM data rate and storage per minute/hour from sample rate, bit depth and channel count. Compare CD, hi-res, 24-bit studio and broadcast formats, or size storage for recording. Pure arithmetic — ideal-quantizer figures, no dither or compression. Everything runs locally in your browser.",
+    category: "Audio",
+    icon: "🎚️",
+    added: "2026-07-14T07:15:00Z",
+  },
 ];
