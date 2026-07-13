@@ -3506,4 +3506,12 @@ window.VIRTUAL_TOOLS = [
     icon: "☕",
     added: "2026-07-13T22:15:00Z",
   },
+  {
+    slug: "scrabble-scorer",
+    name: "Scrabble Score Calculator",
+    description: "Score a word for Scrabble (English / TWL) or Words with Friends, including per-letter double/triple bonuses, double/triple word bonuses and the 50-point bingo for using all seven tiles, with a tile-by-tile breakdown. Pure arithmetic, in your browser — handy for settling board-game disputes.",
+    category: "Text",
+    icon: "🅂",
+    added: "2026-07-13T22:45:00Z",
+  },
 ];
