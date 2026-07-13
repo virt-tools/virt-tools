@@ -3682,4 +3682,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📷",
     added: "2026-07-14T09:15:00Z",
   },
+  {
+    slug: "filament-calculator",
+    name: "3D Print Filament Calculator",
+    description: "Work out the mass and cost of 3D-printing filament for a print. Enter filament length (or object mass), the filament diameter and material density, and the price per kilogram or per spool; the tool gives the mass or length, the solid filament volume, the cost, and the length per kilogram. Material presets for PLA, PETG, ABS, ASA, TPU, nylon, polycarbonate, PVA, HIPS and resin. Pure arithmetic — does not account for infill, supports or print failures. Everything runs locally in your browser.",
+    category: "Design",
+    icon: "🖨️",
+    added: "2026-07-14T09:45:00Z",
+  },
 ];
