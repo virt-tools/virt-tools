@@ -3426,4 +3426,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🆔",
     added: "2026-07-13T17:15:00Z",
   },
+  {
+    slug: "ipv4-converter",
+    name: "IPv4 Address Converter",
+    description: "Convert an IPv4 address between dotted-decimal, integer, hexadecimal, binary and octal — and get the in-addr.arpa reverse-DNS name. Enter any format and see every representation at once. Pure 32-bit integer math, in your browser, nothing sent over the network.",
+    category: "Networking",
+    icon: "🌐",
+    added: "2026-07-13T17:45:00Z",
+  },
 ];
