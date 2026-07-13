@@ -3530,4 +3530,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📊",
     added: "2026-07-13T23:45:00Z",
   },
+  {
+    slug: "room-mode-calculator",
+    name: "Room Mode Calculator",
+    description: "Compute the low-frequency standing-wave (room mode) frequencies of a rectangular room — the axial, tangential and oblique modes behind bass boom and nulls in studios and home theatres. Enter the room's three internal dimensions and the tool lists every mode up to a cutoff, flags clusters where modes pile up (colouration), and gives the Schroeder crossover frequency above which the field turns diffuse. The speed of sound is derived from air temperature; dimensions accept metres or feet. Pure JS, in your browser.",
+    category: "Audio",
+    icon: "🔊",
+    added: "2026-07-14T00:15:00Z",
+  },
 ];

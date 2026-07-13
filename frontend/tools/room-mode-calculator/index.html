@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Room Mode Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .row2 { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+    .row2 .field { margin-bottom: 0; }
+    input[type="number"] { font-family: ui-monospace, monospace; width: 96px; }
+    .kv { display: grid; grid-template-columns: 180px 1fr; gap: 6px 12px; margin-top: 8px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.92rem; }
+    .verdict { font-size: 1rem; font-weight: 600; }
+    .verdict.bad { color: var(--bad, #f87171); }
+    .verdict.ok { color: var(--ok, #4ade80); }
+    .tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+    .tabs button { background: var(--bg-elev-2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; cursor: pointer; font-size: 0.9rem; }
+    .tabs button.active { background: var(--accent, #6ea8ff); color: #08111f; border-color: var(--accent, #6ea8ff); }
+    table.modes { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.85rem; }
+    table.modes th, table.modes td { border: 1px solid var(--border); padding: 3px 8px; text-align: left; }
+    table.modes th { background: var(--bg-elev-2); color: var(--text-dim); }
+    table.modes td.f { text-align: right; font-family: ui-monospace, monospace; width: 90px; }
+    table.modes td.idx { text-align: center; font-family: ui-monospace, monospace; width: 90px; }
+    table.modes td.typ { width: 110px; }
+    table.modes td.typ .axial { color: var(--accent, #6ea8ff); font-weight: 600; }
+    table.modes td.typ .tang { color: #f5b14e; font-weight: 600; }
+    table.modes td.typ .obl { color: var(--text-dim); font-weight: 600; }
+    table.modes tr.cluster td { background: rgba(248,113,113,0.10); }
+    .legend { font-size: 0.8rem; color: var(--text-dim); margin-top: 6px; }
+    .legend span { margin-right: 14px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Room Mode Calculator</h1>
+      <p>Compute the low-frequency standing-wave (room mode) frequencies of a rectangular room — the axial, tangential and oblique modes that cause bass boom and nulls in studios and home theatres. Enter the room's three internal dimensions and the tool lists every mode up to a cutoff, flags clusters where modes pile up (colouration), and gives the Schroeder crossover frequency above which the sound field turns diffuse. The speed of sound is derived from air temperature. Pure JS, in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row2">
+        <div class="field">
+          <label for="lx">Length</label>
+          <input id="lx" type="number" min="0.1" step="any" value="4.0">
+        </div>
+        <div class="field">
+          <label for="ly">Width</label>
+          <input id="ly" type="number" min="0.1" step="any" value="3.0">
+        </div>
+        <div class="field">
+          <label for="lz">Height</label>
+          <input id="lz" type="number" min="0.1" step="any" value="2.5">
+        </div>
+        <div class="field">
+          <label for="unit">Units</label>
+          <select id="unit">
+            <option value="m" selected>metres</option>
+            <option value="ft">feet</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="row2">
+        <div class="field">
+          <label for="temp">Air temp (°C)</label>
+          <input id="temp" type="number" step="any" value="20">
+        </div>
+        <div class="field">
+          <label for="cutoff">Cutoff (Hz)</label>
+          <input id="cutoff" type="number" min="20" step="any" value="300">
+        </div>
+        <div class="field">
+          <label for="maxn">Max order</label>
+          <input id="maxn" type="number" min="1" max="12" value="6">
+        </div>
+        <div class="field">
+          <label for="rt60">RT60 (s) <span class="muted" style="font-weight:400;">optional</span></label>
+          <input id="rt60" type="number" min="0" step="any" value="0.5">
+        </div>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <dl class="kv" id="kv"></dl>
+      <p class="note" id="err"></p>
+
+      <div class="legend">
+        <span><span class="axial" style="color:var(--accent,#6ea8ff);font-weight:600;">axial</span> — one dimension</span>
+        <span><span class="tang" style="color:#f5b14e;font-weight:600;">tangential</span> — two dimensions</span>
+        <span><span class="obl" style="color:var(--text-dim);font-weight:600;">oblique</span> — all three</span>
+        <span><span style="background:rgba(248,113,113,0.25);padding:0 6px;border-radius:3px;">highlighted</span> — cluster within 3 Hz</span>
+      </div>
+      <table class="modes" id="table">
+        <tr><th>Hz</th><th>Type</th><th>Indices (nx, ny, nz)</th></tr>
+      </table>
+      <p class="note" id="note"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var lxEl = $("lx"), lyEl = $("ly"), lzEl = $("lz"), unitEl = $("unit");
+    var tempEl = $("temp"), cutoffEl = $("cutoff"), maxnEl = $("maxn"), rt60El = $("rt60");
+    var verdictEl = $("verdict"), kvEl = $("kv"), errEl = $("err"), tableEl = $("table"), noteEl = $("note");
+
+    function num(el) { var n = parseFloat(el.value); return isNaN(n) ? NaN : n; }
+
+    function render() {
+      errEl.textContent = ""; verdictEl.textContent = ""; verdictEl.className = "verdict"; kvEl.innerHTML = ""; tableEl.innerHTML = ""; noteEl.textContent = "";
+      var lx = num(lxEl), ly = num(lyEl), lz = num(lzEl);
+      var temp = num(tempEl), cutoff = num(cutoffEl), maxN = num(maxnEl), rt60 = num(rt60El);
+      var ft = unitEl.value === "ft";
+
+      if (!(lx > 0) || !(ly > 0) || !(lz > 0)) { verdictEl.textContent = "✗ Enter positive room dimensions."; verdictEl.className = "verdict bad"; return; }
+      if (isNaN(temp) || temp < -100 || temp > 100) { verdictEl.textContent = "✗ Enter a plausible air temperature (°C)."; verdictEl.className = "verdict bad"; return; }
+      if (!(cutoff > 0) || !(maxN >= 1)) { verdictEl.textContent = "✗ Cutoff and max order must be positive."; verdictEl.className = "verdict bad"; return; }
+      if (maxN > 12) maxN = 12;
+
+      // Convert feet to metres for the speed-of-sound formula (c in m/s, dims in m).
+      var cf = ft ? 0.3048 : 1;
+      var Lx = lx * cf, Ly = ly * cf, Lz = lz * cf;
+      // Speed of sound in air: c = 331.3 + 0.606 * T  (m/s, T in °C). Good approximation 0–30 °C.
+      var c = 331.3 + 0.606 * temp;
+
+      var modes = [];
+      for (var nx = 0; nx <= maxN; nx++) {
+        for (var ny = 0; ny <= maxN; ny++) {
+          for (var nz = 0; nz <= maxN; nz++) {
+            if (nx + ny + nz === 0) continue;
+            var f = c / 2 * Math.sqrt((nx / Lx) * (nx / Lx) + (ny / Ly) * (ny / Ly) + (nz / Lz) * (nz / Lz));
+            if (f > cutoff) continue;
+            var nonzero = (nx > 0 ? 1 : 0) + (ny > 0 ? 1 : 0) + (nz > 0 ? 1 : 0);
+            var label = nonzero === 1 ? "axial" : nonzero === 2 ? "tangential" : "oblique";
+            modes.push({ f: f, nx: nx, ny: ny, nz: nz, label: label, cls: nonzero === 1 ? "axial" : nonzero === 2 ? "tang" : "obl" });
+          }
+        }
+      }
+      modes.sort(function (a, b) { return a.f - b.f; });
+
+      // Flag clusters: modes within 3 Hz of the immediately previous mode.
+      var clusterCount = 0;
+      for (var i = 0; i < modes.length; i++) {
+        var cluster = i > 0 && (modes[i].f - modes[i - 1].f) < 3.0;
+        modes[i].cluster = cluster;
+        if (cluster) clusterCount++;
+      }
+
+      var counts = { axial: 0, tangential: 0, oblique: 0 };
+      for (var j = 0; j < modes.length; j++) counts[modes[j].label]++;
+
+      // Schroeder frequency: fs = 2000 * sqrt(RT60 / V), V in m^3. Below fs the field is modal.
+      var vol = Lx * Ly * Lz;
+      var fs = rt60 > 0 ? 2000 * Math.sqrt(rt60 / vol) : NaN;
+
+      verdictEl.textContent = "✓ " + modes.length + " modes below " + cutoff + " Hz  ·  c = " + c.toFixed(1) + " m/s";
+      verdictEl.className = "verdict ok";
+
+      kvEl.innerHTML =
+        "<dt>Room volume</dt><dd>" + vol.toFixed(2) + " m³ (" + (vol / 0.0283168).toFixed(0) + " ft³)</dd>" +
+        "<dt>Speed of sound</dt><dd>" + c.toFixed(2) + " m/s at " + temp + " °C</dd>" +
+        "<dt>Axial modes</dt><dd>" + counts.axial + "</dd>" +
+        "<dt>Tangential modes</dt><dd>" + counts.tangential + "</dd>" +
+        "<dt>Oblique modes</dt><dd>" + counts.oblique + "</dd>" +
+        "<dt>Schroeder frequency</dt><dd>" + (isNaN(fs) ? "—" : fs.toFixed(1) + " Hz" ) + " <span class='muted'>(modal below, diffuse above)</span></dd>" +
+        "<dt>Clustered modes</dt><dd>" + clusterCount + " <span class='muted'>(within 3 Hz of a neighbour — likely colouration)</span></dd>";
+
+      var rows = "";
+      for (var k = 0; k < modes.length; k++) {
+        var m = modes[k];
+        rows += "<tr" + (m.cluster ? " class='cluster'" : "") + "><td class='f'>" + m.f.toFixed(2) + "</td><td class='typ'><span class='" + m.cls + "'>" + m.label + "</span></td><td class='idx'>" + m.nx + ", " + m.ny + ", " + m.nz + "</td></tr>";
+      }
+      tableEl.innerHTML = "<tr><th>Hz</th><th>Type</th><th>Indices (nx, ny, nz)</th></tr>" + rows;
+
+      noteEl.textContent = "Axial modes (one wall pair) are the strongest and most audible; tangential (two pairs) about half as energetic; oblique (all three) weakest but they fill in between. Modes bunch up most where two room dimensions are equal or integer-related — a cube is the worst case. Aim for non-coincident dimensions and treat the lowest axial modes with bass traps.";
+    }
+
+    [lxEl, lyEl, lzEl, tempEl, cutoffEl, maxnEl, rt60El].forEach(function (el) { el.addEventListener("input", render); el.addEventListener("change", render); });
+    unitEl.addEventListener("change", render);
+    render();
+  })();
+  </script>
+</body>
+</html>
