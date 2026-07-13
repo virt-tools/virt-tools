@@ -3386,4 +3386,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔤",
     added: "2026-07-13T14:45:00Z",
   },
+  {
+    slug: "gtin-check-digit",
+    name: "EAN / UPC / GTIN Check Digit",
+    description: "Calculate or validate the check digit of an EAN-8, EAN-13, UPC-A, or GTIN-14 product barcode with the standard mod-10 alternating-weight algorithm. Companion to the EAN/UPC Barcode Generator — runs entirely in your browser.",
+    category: "Encoding",
+    icon: "🛒",
+    added: "2026-07-13T15:15:00Z",
+  },
 ];
