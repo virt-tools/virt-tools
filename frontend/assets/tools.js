@@ -3698,4 +3698,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔋",
     added: "2026-07-14T10:15:00Z",
   },
+  {
+    slug: "tire-size-calculator",
+    name: "Tire Size & Speedometer Calculator",
+    description: "Decode a tire size like 225/45R17 into its diameter, circumference and revs per mile/km, then compare an original and new tire to see the speedometer and odometer error and the ride-height change from swapping sizes. Useful before changing wheels or tires so you know how far off your speedo will read and whether the new rubber clears. Assumes the same load and inflation; real rolling radius is slightly smaller than the geometric radius. Pure arithmetic, in your browser.",
+    category: "Math",
+    icon: "🚗",
+    added: "2026-07-14T10:45:00Z",
+  },
 ];

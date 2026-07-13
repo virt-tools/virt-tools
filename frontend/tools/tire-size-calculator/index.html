@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Tire Size &amp; Speedometer Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .row2 { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-end; }
+    .row2 .field { margin-bottom: 0; }
+    input[type="text"] { font-family: ui-monospace, monospace; width: 130px; letter-spacing: 1px; }
+    input[type="number"] { font-family: ui-monospace, monospace; width: 90px; }
+    .kv { display: grid; grid-template-columns: 230px 1fr; gap: 6px 12px; margin-top: 12px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.95rem; }
+    .verdict { font-size: 1.25rem; font-weight: 800; font-family: ui-monospace, monospace; margin-top: 8px; }
+    .verdict.ok { color: var(--ok, #4ade80); }
+    .verdict.bad { color: var(--bad, #f87171); }
+    .verdict.warn { color: var(--accent, #6ea8ff); }
+    .big { font-size: 1.05rem; font-weight: 700; }
+    h3.sec { font-size: 0.92rem; font-weight: 600; margin: 14px 0 4px; color: var(--text-dim); }
+    .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 4px; }
+    .pair .cell { background: var(--bg-elev-2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-family: ui-monospace, monospace; font-size: 0.85rem; }
+    .pair .cell b { color: var(--text); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Tire Size &amp; Speedometer Calculator</h1>
+      <p>Decode a tire size like 225/45R17 into its diameter, circumference and revs per mile/km, then compare an old and new tire size to see the speedometer and odometer error and the ride-height change from the swap. Useful before changing wheel or tire sizes so you know how far off your speedo will read and whether the new rubber will clear. Assumes the same load/inflation; real rolling radius is slightly smaller than the geometric radius. Pure arithmetic, in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row2">
+        <div class="field">
+          <label for="old">Original tire</label>
+          <input id="old" type="text" value="225/45R17" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="nw">New tire</label>
+          <input id="nw" type="text" value="225/50R17" autocomplete="off">
+        </div>
+      </div>
+
+      <h3 class="sec">Speedometer check</h3>
+      <div class="field">
+        <label for="spd">Speedometer reads</label>
+        <input id="spd" type="number" min="0" step="any" value="60"> <span class="muted">mph</span>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <dl class="kv" id="kv"></dl>
+      <div class="pair" id="pair"></div>
+      <p class="note" id="err"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var oldEl = $("old"), nwEl = $("nw"), spdEl = $("spd");
+    var verdictEl = $("verdict"), kvEl = $("kv"), pairEl = $("pair"), errEl = $("err");
+
+    // Parse "225/45R17" (or 225/45ZR17, 225/45-17, with optional leading P/LT/T/ST).
+    function parse(s) {
+      s = (s || "").trim().toUpperCase().replace(/^[A-Z]{1,2}\s*/, ""); // strip P/LT etc.
+      var m = s.match(/^(\d{2,3})\s*[\/]\s*(\d{2,3})\s*[R-Z\-]?\s*(\d{1,2}(?:\.\d)?)$/);
+      if (!m) return null;
+      return { w: +m[1], a: +m[2], rim: +m[3] };
+    }
+    function tire(p) {
+      var sidewall = p.w * p.a / 100;
+      var dia = p.rim * 25.4 + 2 * sidewall; // mm
+      var circ = Math.PI * dia;              // mm
+      var revPerMile = 1609344 / circ;
+      var revPerKm = 1000000 / circ;
+      return { w: p.w, a: p.a, rim: p.rim, dia: dia, circ: circ, revPerMile: revPerMile, revPerKm: revPerKm, sidewall: sidewall };
+    }
+    function fmt(n, d) { return Number(n).toFixed(d); }
+
+    function render() {
+      verdictEl.textContent = ""; verdictEl.className = "verdict"; kvEl.innerHTML = ""; pairEl.innerHTML = ""; errEl.textContent = "";
+      var o = parse(oldEl.value), n = parse(nwEl.value);
+      if (!o) { verdictEl.textContent = "✗ Original tire format: use e.g. 225/45R17."; verdictEl.className = "verdict bad"; return; }
+      if (!n) { verdictEl.textContent = "✗ New tire format: use e.g. 225/50R17."; verdictEl.className = "verdict bad"; return; }
+
+      var ot = tire(o), nt = tire(n);
+      var spd = parseFloat(spdEl.value); if (isNaN(spd) || spd < 0) spd = 0;
+
+      var diaDiff = nt.dia - ot.dia;                 // mm
+      var ratio = nt.circ / ot.circ;                 // new/old
+      var speedoErr = (ratio - 1) * 100;             // % (positive = going faster than indicated)
+      var actual = spd * ratio;                      // actual speed when speedo reads spd (calibrated to old)
+      var indicatedForActual = spd / ratio;          // what speedo shows for true spd
+      var odomErr = speedoErr;
+
+      var cls = Math.abs(speedoErr) < 2.5 ? "ok" : (Math.abs(speedoErr) < 5 ? "warn" : "bad");
+      verdictEl.textContent = "Speedo " + (speedoErr >= 0 ? "reads " + fmt(Math.abs(speedoErr), 2) + "% LOW" : "reads " + fmt(Math.abs(speedoErr), 2) + "% HIGH");
+      verdictEl.className = "verdict " + cls;
+
+      kvEl.innerHTML =
+        "<dt>Diameter change</dt><dd class='big'>" + (diaDiff >= 0 ? "+" : "") + fmt(diaDiff, 1) + " mm  (" + (diaDiff >= 0 ? "+" : "") + fmt(diaDiff / 25.4, 2) + " in)  <span class='muted'>ride height ± " + fmt(diaDiff / 2, 1) + " mm</span></dd>" +
+        "<dt>Circumference change</dt><dd>" + fmt(ot.circ, 1) + " → " + fmt(nt.circ, 1) + " mm  (" + (ratio - 1 >= 0 ? "+" : "") + fmt((ratio - 1) * 100, 2) + "%)</dd>" +
+        "<dt>Speedometer error</dt><dd class='big'>" + (speedoErr >= 0 ? "+" : "") + fmt(speedoErr, 2) + "%  (actual " + fmt(actual, 1) + " when speedo reads " + fmt(spd, 0) + ")</dd>" +
+        "<dt>Odometer error</dt><dd>" + (odomErr >= 0 ? "+" : "") + fmt(odomErr, 2) + "%  (new tires roll " + (ratio > 1 ? "fewer" : "more") + " revs per mile)</dd>";
+
+      function cell(t, label) {
+        return '<div class="cell"><b>' + label + ' ' + t.w + '/' + t.a + 'R' + t.rim + '</b><br>' +
+          "diameter: " + fmt(t.dia, 1) + " mm (" + fmt(t.dia / 25.4, 2) + " in)<br>" +
+          "sidewall: " + fmt(t.sidewall, 1) + " mm<br>" +
+          "circumference: " + fmt(t.circ, 1) + " mm<br>" +
+          "revs/mile: " + fmt(t.revPerMile, 1) + "<br>" +
+          "revs/km: " + fmt(t.revPerKm, 1) + "</div>";
+      }
+      pairEl.innerHTML = cell(ot, "Original") + cell(nt, "New");
+
+      errEl.textContent = "Tire size <width>/<aspect>R<rim>: width in mm, sidewall height = width × aspect ÷ 100, diameter = rim × 25.4 + 2 × sidewall. A taller (larger-diameter) tire travels farther per revolution, so your speedometer — calibrated for the original size — reads low (you're going faster than it shows) and your odometer ticks up slower. A smaller tire does the opposite. ±2.5% is a common guideline for staying within ABS/ESP and clearance tolerances; beyond ±3% check clearance at full lock and suspension travel. Rolling circumference is ~3% smaller than the geometric circumference used here because a tire squats under load, but the new/old ratio is what drives the speedo error and cancels most of that bias.";
+      errEl.className = "note";
+    }
+
+    [oldEl, nwEl, spdEl].forEach(function (el) { el.addEventListener("input", render); el.addEventListener("change", render); });
+    render();
+  })();
+  </script>
+</body>
+</html>
