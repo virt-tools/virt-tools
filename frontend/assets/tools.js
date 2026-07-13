@@ -3378,4 +3378,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔊",
     added: "2026-07-13T14:15:00Z",
   },
+  {
+    slug: "affine-cipher",
+    name: "Affine Cipher",
+    description: "Encrypt or decrypt with the Affine cipher, E(x) = (a·x + b) mod 26 — a classical monoalphabetic substitution. Validates that a is coprime with 26 and inverts it for decryption. Runs entirely in your browser.",
+    category: "Text",
+    icon: "🔤",
+    added: "2026-07-13T14:45:00Z",
+  },
 ];
