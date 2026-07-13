@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Backoff & Retry Delay Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .row2 { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+    .row2 .field { margin-bottom: 0; }
+    input[type="number"] { font-family: ui-monospace, monospace; width: 110px; }
+    select { min-width: 170px; }
+    .kv { display: grid; grid-template-columns: 200px 1fr; gap: 6px 12px; margin-top: 8px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.92rem; }
+    .verdict { font-size: 1rem; font-weight: 600; }
+    .verdict.ok { color: var(--ok, #4ade80); }
+    .verdict.bad { color: var(--bad, #f87171); }
+    table.bo { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.86rem; }
+    table.bo th, table.bo td { border: 1px solid var(--border); padding: 4px 9px; text-align: right; }
+    table.bo th { background: var(--bg-elev-2); color: var(--text-dim); text-align: left; }
+    table.bo td.n { font-family: ui-monospace, monospace; }
+    table.bo td.l { text-align: center; width: 70px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Backoff &amp; Retry Delay Calculator</h1>
+      <p>Plan the delay schedule for an exponential-backoff retry loop — the kind every resilient HTTP client, queue consumer and circuit breaker uses. Enter the base delay, backoff factor, maximum cap and number of attempts, pick a jitter strategy (none, full, equal, or decorrelated), and the tool lists the deterministic delay envelope and jitter range per attempt, plus the worst-case cumulative wait. Jitter is shown as a range rather than a single random draw, which is what you actually need for capacity and timeout planning. Pure arithmetic, in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row2">
+        <div class="field">
+          <label for="base">Base delay (ms)</label>
+          <input id="base" type="number" min="0" step="any" value="100">
+        </div>
+        <div class="field">
+          <label for="mult">Backoff factor</label>
+          <input id="mult" type="number" min="1" step="any" value="2">
+        </div>
+        <div class="field">
+          <label for="cap">Max delay cap (ms)</label>
+          <input id="cap" type="number" min="0" step="any" value="30000">
+        </div>
+        <div class="field">
+          <label for="att">Attempts</label>
+          <input id="att" type="number" min="1" max="64" value="8">
+        </div>
+        <div class="field">
+          <label for="jitter">Jitter</label>
+          <select id="jitter">
+            <option value="none">None (pure exponential)</option>
+            <option value="full">Full jitter</option>
+            <option value="equal">Equal jitter</option>
+            <option value="decorr">Decorrelated jitter (AWS)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <dl class="kv" id="kv"></dl>
+      <p class="note" id="err"></p>
+
+      <table class="bo" id="table">
+        <tr><th>#</th><th>Delay envelope</th><th>Jitter range</th><th>Cumulative worst-case</th></tr>
+      </table>
+      <p class="note" id="note"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var baseEl = $("base"), multEl = $("mult"), capEl = $("cap"), attEl = $("att"), jitterEl = $("jitter");
+    var verdictEl = $("verdict"), kvEl = $("kv"), errEl = $("err"), tableEl = $("table"), noteEl = $("note");
+
+    function num(el, lo) { var n = parseFloat(el.value); if (isNaN(n) || (lo !== undefined && n < lo)) return NaN; return n; }
+
+    function fmtMs(ms) {
+      if (ms >= 60000) return (ms / 60000).toFixed(2) + " min";
+      if (ms >= 1000) return (ms / 1000).toFixed(2) + " s";
+      return ms.toFixed(1) + " ms";
+    }
+
+    function render() {
+      errEl.textContent = ""; verdictEl.textContent = ""; verdictEl.className = "verdict"; kvEl.innerHTML = ""; tableEl.innerHTML = ""; noteEl.textContent = "";
+      var base = num(baseEl, 0), mult = num(multEl), cap = num(capEl, 0), att = num(attEl, 1), j = jitterEl.value;
+      if ([base, mult, cap, att].some(isNaN)) { verdictEl.textContent = "✗ Enter valid numbers (base ≥ 0, factor ≥ 1, cap ≥ 0, attempts ≥ 1)."; verdictEl.className = "verdict bad"; return; }
+      if (mult < 1) { verdictEl.textContent = "✗ Backoff factor must be ≥ 1."; verdictEl.className = "verdict bad"; return; }
+      if (att > 64) att = 64;
+
+      var rows = "";
+      var cum = 0, prev = base; // prev for decorrelated seed
+      for (var n = 1; n <= att; n++) {
+        var env = Math.min(cap, base * Math.pow(mult, n - 1));
+        var lo, hi, range;
+        if (j === "none") { lo = hi = env; range = fmtMs(env); }
+        else if (j === "full") { lo = 0; hi = env; range = "[" + fmtMs(lo) + ", " + fmtMs(hi) + "]"; }
+        else if (j === "equal") { lo = env / 2; hi = env; range = "[" + fmtMs(lo) + ", " + fmtMs(hi) + "]"; }
+        else { // decorrelated: sleep = min(cap, random(base, prev*3)); seed = base
+          hi = Math.min(cap, prev * 3);
+          lo = base;
+          range = "[" + fmtMs(lo) + ", " + fmtMs(hi) + "]";
+        }
+        cum += env; // worst-case cumulative uses the envelope upper bound
+        rows += "<tr><td class='l'>" + n + "</td><td class='n'>" + fmtMs(env) + "</td><td class='n'>" + range + "</td><td class='n'>" + fmtMs(cum) + "</td></tr>";
+        // evolve prev deterministically to the envelope so the decorrelated bound is reproducible
+        prev = env;
+      }
+
+      verdictEl.textContent = "✓ " + att + " attempts  ·  factor ×" + mult + "  ·  cap " + fmtMs(cap);
+      verdictEl.className = "verdict ok";
+      kvEl.innerHTML =
+        "<dt>Worst-case total wait</dt><dd>" + fmtMs(cum) + "</dd>" +
+        "<dt>Final attempt delay</dt><dd>" + fmtMs(Math.min(cap, base * Math.pow(mult, att - 1))) + "</dd>" +
+        "<dt>Cap reached at attempt</dt><dd>" + (base * Math.pow(mult, att - 1) >= cap ? "yes" : "no (within " + att + ")") + "</dd>";
+
+      tableEl.innerHTML = "<tr><th>#</th><th>Delay envelope</th><th>Jitter range</th><th>Cumulative worst-case</th></tr>" + rows;
+
+      var explain = {
+        none: "Pure exponential delay = min(cap, base × factor^(n−1)). Synchronous retries from many clients 'thunder' in lockstep — add jitter in production.",
+        full: "Full jitter: sleep = random(0, envelope). Spreads retries maximally; AWS's recommended default. Range shown is [0, envelope].",
+        equal: "Equal jitter: sleep = envelope/2 + random(0, envelope/2). Keeps a floor so retries aren't starved while still de-synchronising. Range shown is [envelope/2, envelope].",
+        decorr: "Decorrelated jitter (AWS): sleep = min(cap, random(base, prev×3)), seed = base. 'prev' carries the last delay so consecutive sleeps are loosely correlated. Range shown is [base, min(cap, prev×3)] with prev evolving along the envelope for a reproducible bound."
+      };
+      noteEl.textContent = explain[j];
+    }
+
+    [baseEl, multEl, capEl, attEl].forEach(function (el) { el.addEventListener("input", render); el.addEventListener("change", render); });
+    jitterEl.addEventListener("change", render);
+    render();
+  })();
+  </script>
+</body>
+</html>

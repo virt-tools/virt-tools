@@ -3546,4 +3546,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌫️",
     added: "2026-07-14T00:45:00Z",
   },
+  {
+    slug: "backoff-calculator",
+    name: "Backoff & Retry Delay Calculator",
+    description: "Plan the delay schedule for an exponential-backoff retry loop — the kind every resilient HTTP client, queue consumer and circuit breaker uses. Enter the base delay, backoff factor, maximum cap and number of attempts, pick a jitter strategy (none, full, equal, or the AWS decorrelated variant), and the tool lists the deterministic delay envelope and jitter range per attempt plus the worst-case cumulative wait. Jitter is shown as a range rather than a single random draw, which is what capacity and timeout planning needs. Pure arithmetic, in your browser.",
+    category: "Networking",
+    icon: "🔄",
+    added: "2026-07-14T01:15:00Z",
+  },
 ];
