@@ -3442,4 +3442,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌬️",
     added: "2026-07-13T18:15:00Z",
   },
+  {
+    slug: "leb128-encoder",
+    name: "LEB128 Varint Encoder",
+    description: "Encode and decode LEB128 variable-length integers — the compact byte format behind Protocol Buffers, DWARF debug info, MIDI files, Android binary and Bitcoin CompactSize. Supports Unsigned (ULEB128), Signed (SLEB128 with DWARF sign-extension) and Zig-zag (protobuf sint32/sint64) variants over the full 64-bit range via BigInt. Pure arithmetic, in your browser.",
+    category: "Encoding",
+    icon: "📦",
+    added: "2026-07-13T18:45:00Z",
+  },
 ];

@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>LEB128 Varint Encoder — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+    .tabs button { background: var(--bg-elev-2); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; font-weight: 600; cursor: pointer; }
+    .tabs button.active { background: var(--accent); color: #0b0d12; border-color: var(--accent); }
+    .modes { display: flex; flex-wrap: wrap; gap: 14px; }
+    .modes label { display: flex; align-items: center; gap: 5px; font-size: 0.9rem; }
+    .out { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 14px; white-space: pre-wrap; word-break: break-all; }
+    .out.empty { color: var(--text-dim); font-style: italic; }
+    .kv { display: grid; grid-template-columns: 130px 1fr; gap: 6px 12px; margin-top: 10px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.92rem; word-break: break-all; }
+    .verdict { font-size: 1rem; font-weight: 600; }
+    .verdict.bad { color: var(--bad, #f87171); }
+    .verdict.ok { color: var(--ok, #4ade80); }
+    .row { display: flex; gap: 8px; align-items: center; }
+    button.secondary { background: var(--bg-elev-2); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>LEB128 Varint Encoder</h1>
+      <p>Encode and decode LEB128 variable-length integers — the compact byte format behind Protocol Buffers, DWARF debug info, MIDI files, Android's binary format and Bitcoin's CompactSize. Supports Unsigned (ULEB128), Signed (SLEB128 with DWARF sign-extension) and Zig-zag (protobuf <code>sint32</code>/<code>sint64</code>) variants, with full 64-bit range via BigInt. Pure arithmetic, in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="tabs">
+        <button id="tab-enc" class="active">Encode</button>
+        <button id="tab-dec">Decode</button>
+      </div>
+
+      <div class="field">
+        <label>Variant</label>
+        <div class="modes">
+          <label><input type="radio" name="variant" value="unsigned" checked> Unsigned (ULEB128)</label>
+          <label><input type="radio" name="variant" value="signed"> Signed (SLEB128 / DWARF)</label>
+          <label><input type="radio" name="variant" value="zigzag"> Zig-zag (protobuf sint)</label>
+        </div>
+      </div>
+
+      <div id="enc-pane">
+        <div class="field">
+          <label for="enc-in">Integer value (decimal, optional sign)</label>
+          <input id="enc-in" type="text" placeholder="e.g. 624485  ·  -65  ·  300" autocomplete="off" style="font-family:monospace;">
+          <p class="note" style="margin-top:6px;">Unsigned expects ≥ 0. Signed &amp; Zig-zag accept negative values. Up to 64-bit range.</p>
+        </div>
+        <div class="verdict" id="enc-verdict"></div>
+        <dl class="kv" id="enc-kv"></dl>
+        <p class="note" id="enc-err"></p>
+      </div>
+
+      <div id="dec-pane" hidden>
+        <div class="field">
+          <label for="dec-in">LEB128 bytes (hex, space/comma-separated)</label>
+          <input id="dec-in" type="text" placeholder="e.g. E5 8E 26  ·  0x80 0xE3" autocomplete="off" style="font-family:monospace;">
+          <p class="note" style="margin-top:6px;">High bit of each byte is the continuation flag. The last byte has its high bit clear.</p>
+        </div>
+        <div class="verdict" id="dec-verdict"></div>
+        <dl class="kv" id="dec-kv"></dl>
+        <p class="note" id="dec-err"></p>
+      </div>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var tabEnc = $("tab-enc"), tabDec = $("tab-dec"), encPane = $("enc-pane"), decPane = $("dec-pane");
+    var encIn = $("enc-in"), encVerdict = $("enc-verdict"), encKv = $("enc-kv"), encErr = $("enc-err");
+    var decIn = $("dec-in"), decVerdict = $("dec-verdict"), decKv = $("dec-kv"), decErr = $("dec-err");
+
+    function variant() {
+      var els = document.getElementsByName("variant");
+      for (var i = 0; i < els.length; i++) if (els[i].checked) return els[i].value;
+      return "unsigned";
+    }
+
+    // --- Encode ---
+    function encUnsigned(v) { // v: BigInt >= 0
+      var out = [];
+      do {
+        var b = Number(v & 0x7fn);
+        v >>= 7n;
+        if (v !== 0n) b |= 0x80;
+        out.push(b);
+      } while (v !== 0n);
+      return out;
+    }
+
+    function encSigned(v) { // v: BigInt (signed)
+      var out = [];
+      var more = true;
+      while (more) {
+        var b = Number(v & 0x7fn);
+        v >>= 7n; // BigInt arithmetic shift (sign-propagating)
+        if ((v === 0n && (b & 0x40) === 0) || (v === -1n && (b & 0x40) !== 0)) {
+          more = false;
+        } else {
+          b |= 0x80;
+        }
+        out.push(b);
+      }
+      return out;
+    }
+
+    function zigzagEnc(v) { // signed BigInt -> unsigned BigInt
+      return (v << 1n) ^ (v >> 63n);
+    }
+
+    function toHex(bytes) {
+      return bytes.map(function (b) { return (b < 16 ? "0" : "") + b.toString(16).toUpperCase(); }).join(" ");
+    }
+    function toBin(bytes) {
+      return bytes.map(function (b) {
+        var s = b.toString(2);
+        while (s.length < 8) s = "0" + s;
+        return s;
+      }).join(" ");
+    }
+
+    function encode() {
+      encErr.textContent = ""; encVerdict.textContent = ""; encVerdict.className = "verdict"; encKv.innerHTML = "";
+      var raw = encIn.value.trim();
+      if (!raw) { encKv.innerHTML = ""; return; }
+      var v;
+      try {
+        if (!/^-?\d+$/.test(raw)) throw new Error("Not a decimal integer.");
+        v = BigInt(raw);
+      } catch (e) {
+        encVerdict.textContent = "✗ " + (e.message || "Invalid integer."); encVerdict.className = "verdict bad"; return;
+      }
+      var mode = variant();
+      var bytes;
+      if (mode === "unsigned") {
+        if (v < 0n) { encVerdict.textContent = "✗ Unsigned variant requires a non-negative value."; encVerdict.className = "verdict bad"; return; }
+        if (v > 0xFFFFFFFFFFFFFFFFn) { encVerdict.textContent = "✗ Exceeds 64-bit range."; encVerdict.className = "verdict bad"; return; }
+        bytes = encUnsigned(v);
+      } else if (mode === "signed") {
+        if (v > 0x7FFFFFFFFFFFFFFFn || v < -0x8000000000000000n) { encVerdict.textContent = "✗ Exceeds signed 64-bit range."; encVerdict.className = "verdict bad"; return; }
+        bytes = encSigned(v);
+      } else { // zigzag
+        if (v > 0x7FFFFFFFFFFFFFFFn || v < -0x8000000000000000n) { encVerdict.textContent = "✗ Exceeds 64-bit range."; encVerdict.className = "verdict bad"; return; }
+        bytes = encUnsigned(zigzagEnc(v));
+      }
+      encVerdict.textContent = "✓ " + bytes.length + " byte" + (bytes.length === 1 ? "" : "s");
+      encVerdict.className = "verdict ok";
+      encKv.innerHTML =
+        "<dt>Hex bytes</dt><dd>" + toHex(bytes) + "</dd>" +
+        "<dt>Binary</dt><dd>" + toBin(bytes) + "</dd>" +
+        "<dt>Byte count</dt><dd>" + bytes.length + "</dd>" +
+        "<dt>0x prefix</dt><dd>0x" + bytes.map(function (b) { return (b < 16 ? "0" : "") + b.toString(16).toUpperCase(); }).join("") + "</dd>";
+    }
+
+    // --- Decode ---
+    function parseHexBytes(s) {
+      var parts = s.replace(/0x/gi, "").split(/[,\s]+/).filter(Boolean);
+      var bytes = [];
+      for (var i = 0; i < parts.length; i++) {
+        var p = parts[i];
+        if (!/^[0-9a-fA-F]{1,2}$/.test(p)) throw new Error("Invalid hex byte: “" + p + "”.");
+        bytes.push(parseInt(p, 16));
+      }
+      return bytes;
+    }
+
+    function decUnsigned(bytes) {
+      var v = 0n, shift = 0n;
+      for (var i = 0; i < bytes.length; i++) {
+        var b = bytes[i];
+        v |= BigInt(b & 0x7f) << shift;
+        if ((b & 0x80) === 0) return { value: v, complete: true, consumed: i + 1 };
+        shift += 7n;
+      }
+      return { value: v, complete: false, consumed: bytes.length };
+    }
+
+    function decSigned(bytes) {
+      var v = 0n, shift = 0n;
+      for (var i = 0; i < bytes.length; i++) {
+        var b = bytes[i];
+        v |= BigInt(b & 0x7f) << shift;
+        shift += 7n;
+        if ((b & 0x80) === 0) {
+          if ((b & 0x40) !== 0) v |= (-1n << shift); // sign-extend
+          return { value: v, complete: true, consumed: i + 1 };
+        }
+      }
+      return { value: v, complete: false, consumed: bytes.length };
+    }
+
+    function zigzagDec(v) { return (v >> 1n) ^ -(v & 1n); }
+
+    function decode() {
+      decErr.textContent = ""; decVerdict.textContent = ""; decVerdict.className = "verdict"; decKv.innerHTML = "";
+      var raw = decIn.value.trim();
+      if (!raw) { decKv.innerHTML = ""; return; }
+      var bytes;
+      try { bytes = parseHexBytes(raw); }
+      catch (e) { decVerdict.textContent = "✗ " + e.message; decVerdict.className = "verdict bad"; return; }
+      if (!bytes.length) { decVerdict.textContent = "✗ Enter one or more hex bytes."; decVerdict.className = "verdict bad"; return; }
+
+      var mode = variant();
+      var r;
+      if (mode === "signed") r = decSigned(bytes);
+      else r = decUnsigned(bytes); // unsigned & zigzag both decode the varint unsigned first
+
+      if (!r.complete) {
+        decVerdict.textContent = "✗ Truncated — last byte still has the continuation bit set.";
+        decVerdict.className = "verdict bad";
+        decKv.innerHTML = "<dt>Partial value</dt><dd>" + r.value.toString() + "</dd>";
+        return;
+      }
+      if (r.consumed < bytes.length) {
+        decErr.textContent = "Note: " + (bytes.length - r.consumed) + " trailing byte(s) ignored after the first complete varint.";
+      }
+
+      var val = r.value;
+      var label = "Unsigned value";
+      if (mode === "signed") label = "Signed value";
+      if (mode === "zigzag") { val = zigzagDec(r.value); label = "Zig-zag value"; }
+
+      // range sanity for 64-bit (unsigned varint can exceed 64 bits if many bytes)
+      if (mode === "unsigned" && r.value > 0xFFFFFFFFFFFFFFFFn) {
+        decVerdict.textContent = "✓ Decoded (exceeds 64-bit unsigned range)";
+      } else {
+        decVerdict.textContent = "✓ Valid";
+      }
+      decVerdict.className = "verdict ok";
+      decKv.innerHTML =
+        "<dt>" + label + " (dec)</dt><dd>" + val.toString() + "</dd>" +
+        "<dt>Hex</dt><dd>0x" + val.toString(16).toUpperCase() + "</dd>" +
+        (val < 0n ? "" : "<dt>Unsigned as</dt><dd>" + r.value.toString() + "</dd>") +
+        "<dt>Bytes consumed</dt><dd>" + r.consumed + " of " + bytes.length + "</dd>";
+    }
+
+    function setTab(which) {
+      var e = which === "enc";
+      tabEnc.classList.toggle("active", e); tabDec.classList.toggle("active", !e);
+      encPane.hidden = !e; decPane.hidden = e;
+      if (e) encode(); else decode();
+    }
+    tabEnc.addEventListener("click", function () { setTab("enc"); });
+    tabDec.addEventListener("click", function () { setTab("dec"); });
+
+    encIn.addEventListener("input", encode);
+    decIn.addEventListener("input", decode);
+    [].forEach.call(document.getElementsByName("variant"), function (r) {
+      r.addEventListener("change", function () { if (encPane.hidden) decode(); else encode(); });
+    });
+
+    encode();
+  })();
+  </script>
+</body>
+</html>
