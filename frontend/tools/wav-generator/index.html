@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>WAV File Generator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+    @media (max-width: 560px) { .grid2 { grid-template-columns: 1fr; } }
+    .range-row { display: flex; align-items: center; gap: 10px; }
+    .range-row input[type="range"] { flex: 1 1 auto; }
+    .range-row .val { font-family: ui-monospace, monospace; font-size: 0.85rem; min-width: 46px; text-align: right; color: var(--text-dim); }
+    .ctrls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
+    .ctrls button { min-width: 110px; }
+    .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 0.78rem; background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text-dim); }
+    canvas { width: 100%; height: 96px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; display: block; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>WAV File Generator</h1>
+      <p>Synthesize a tone or frequency sweep and download it as a <code>.wav</code> file (16-bit PCM) — choose waveform, duration, sample rate, volume and fades. Listen to a live preview first, then export. Everything is generated in your browser; nothing is uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="grid2">
+        <div class="field">
+          <label for="wave">Waveform</label>
+          <select id="wave">
+            <option value="sine">Sine</option>
+            <option value="square">Square</option>
+            <option value="triangle">Triangle</option>
+            <option value="sawtooth">Sawtooth</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="sr">Sample rate</label>
+          <select id="sr">
+            <option value="8000">8000 Hz</option>
+            <option value="11025">11025 Hz</option>
+            <option value="22050">22050 Hz</option>
+            <option value="44100" selected>44100 Hz</option>
+            <option value="48000">48000 Hz</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="field">
+          <label for="f0">Start frequency (Hz)</label>
+          <input id="f0" type="number" min="1" max="20000" step="1" value="440" style="font-family:monospace;">
+        </div>
+        <div class="field">
+          <label for="f1">End frequency (Hz) <span style="color:var(--text-dim);">(= start for a steady tone)</span></label>
+          <input id="f1" type="number" min="1" max="20000" step="1" value="440" style="font-family:monospace;">
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="dur">Duration <span class="val" id="dur-val">1.00 s</span></label>
+        <div class="range-row"><input id="dur" type="range" min="0.1" max="10" step="0.1" value="1"></div>
+      </div>
+
+      <div class="grid2">
+        <div class="field">
+          <label for="vol">Volume <span class="val" id="vol-val">80%</span></label>
+          <div class="range-row"><input id="vol" type="range" min="0" max="1" step="0.05" value="0.8"></div>
+        </div>
+        <div class="field">
+          <label for="ch">Channels</label>
+          <select id="ch">
+            <option value="1" selected>Mono</option>
+            <option value="2">Stereo</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="field">
+          <label for="fadein">Fade in <span class="val" id="fadein-val">0 ms</span></label>
+          <div class="range-row"><input id="fadein" type="range" min="0" max="2000" step="10" value="0"></div>
+        </div>
+        <div class="field">
+          <label for="fadeout">Fade out <span class="val" id="fadeout-val">0 ms</span></label>
+          <div class="range-row"><input id="fadeout" type="range" min="0" max="2000" step="10" value="0"></div>
+        </div>
+      </div>
+
+      <label>Waveform preview</label>
+      <canvas id="canvas"></canvas>
+
+      <div class="ctrls">
+        <button id="play">▶ Preview</button>
+        <button id="stop" class="secondary">⏹ Stop</button>
+        <button id="dl" class="secondary">⬇ Download .wav</button>
+        <span class="pill" id="info">—</span>
+      </div>
+      <p class="note" id="err"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var waveEl = $("wave"), srEl = $("sr"), f0El = $("f0"), f1El = $("f1");
+    var durEl = $("dur"), volEl = $("vol"), chEl = $("ch");
+    var fadeinEl = $("fadein"), fadeoutEl = $("fadeout");
+    var durVal = $("dur-val"), volVal = $("vol-val"), fadeinVal = $("fadein-val"), fadeoutVal = $("fadeout-val");
+    var canvas = $("canvas"), infoEl = $("info"), errEl = $("err");
+    var playBtn = $("play"), stopBtn = $("stop"), dlBtn = $("dl");
+    var actx = null, src = null;
+
+    function fmtPct(v) { return Math.round(v * 100) + "%"; }
+
+    function updateLabels() {
+      durVal.textContent = parseFloat(durEl.value).toFixed(2) + " s";
+      volVal.textContent = fmtPct(parseFloat(volEl.value));
+      fadeinVal.textContent = parseInt(fadeinEl.value, 10) + " ms";
+      fadeoutVal.textContent = parseInt(fadeoutEl.value, 10) + " ms";
+    }
+
+    // Generate Float32 samples (mono) for the configured tone/sweep.
+    function generateMono() {
+      var sr = parseInt(srEl.value, 10);
+      var dur = parseFloat(durEl.value);
+      var f0 = parseFloat(f0El.value), f1 = parseFloat(f1El.value);
+      var wave = waveEl.value;
+      var n = Math.round(sr * dur);
+      var samples = new Float32Array(n);
+      var phase = 0;
+      var sweep = Math.abs(f1 - f0) > 0.5;
+      for (var i = 0; i < n; i++) {
+        var t = i / sr;
+        var inst;
+        if (sweep) {
+          inst = f0 + (f1 - f0) * (t / dur); // linear chirp
+        } else {
+          inst = f0;
+        }
+        phase += (2 * Math.PI * inst) / sr; // phase accumulation avoids drift
+        var ph = phase;
+        var v;
+        if (wave === "sine") v = Math.sin(ph);
+        else if (wave === "square") v = Math.sin(ph) >= 0 ? 1 : -1;
+        else if (wave === "triangle") v = (2 / Math.PI) * Math.asin(Math.sin(ph));
+        else v = 2 * (((ph / (2 * Math.PI)) % 1 + 1) % 1) - 1; // sawtooth
+        samples[i] = v;
+      }
+      applyFadesAndVol(samples, sr);
+      return samples;
+    }
+
+    function applyFadesAndVol(samples, sr) {
+      var vol = parseFloat(volEl.value);
+      var fin = parseInt(fadeinEl.value, 10) / 1000;
+      var fout = parseInt(fadeoutEl.value, 10) / 1000;
+      var n = samples.length, total = n / sr;
+      for (var i = 0; i < n; i++) {
+        var t = i / sr;
+        var g = vol;
+        if (fin > 0 && t < fin) g *= (t / fin);
+        if (fout > 0 && t > total - fout) g *= Math.max(0, (total - t) / fout);
+        samples[i] *= g;
+      }
+    }
+
+    function buildWavBytes(mono, channels, sr) {
+      var bits = 16;
+      var blockAlign = channels * (bits / 8);
+      var dataBytes = mono.length * blockAlign;
+      var buf = new ArrayBuffer(44 + dataBytes);
+      var dv = new DataView(buf);
+      var o = 0;
+      function ws(s) { for (var i = 0; i < s.length; i++) dv.setUint8(o++, s.charCodeAt(i)); }
+      function u32(v) { dv.setUint32(o, v, true); o += 4; }
+      function u16(v) { dv.setUint16(o, v, true); o += 2; }
+      ws("RIFF"); u32(36 + dataBytes); ws("WAVE");
+      ws("fmt "); u32(16); u16(1); u16(channels); u32(sr); u32(sr * blockAlign); u16(blockAlign); u16(bits);
+      ws("data"); u32(dataBytes);
+      for (var i = 0; i < mono.length; i++) {
+        var s = Math.max(-1, Math.min(1, mono[i]));
+        var int16 = s < 0 ? s * 0x8000 : s * 0x7fff;
+        int16 = int16 | 0;
+        if (channels === 1) { dv.setInt16(o, int16, true); o += 2; }
+        else { dv.setInt16(o, int16, true); dv.setInt16(o + 2, int16, true); o += 4; }
+      }
+      return new Uint8Array(buf);
+    }
+
+    function buildPreview() {
+      try {
+        var mono = generateMono();
+        var sr = parseInt(srEl.value, 10);
+        var ch = parseInt(chEl.value, 10);
+        var bytes = buildWavBytes(mono, ch, sr);
+        infoEl.textContent = (ch === 1 ? "Mono" : "Stereo") + " · " + sr + " Hz · 16-bit · " + (bytes.length / 1024).toFixed(1) + " KB · " + parseFloat(durEl.value).toFixed(2) + " s";
+        return { mono: mono, sr: sr, ch: ch, bytes: bytes };
+      } catch (e) {
+        errEl.textContent = "Error: " + e.message;
+        return null;
+      }
+    }
+
+    function drawWave(mono) {
+      var ctx = canvas.getContext("2d");
+      var w = canvas.width = canvas.clientWidth, h = canvas.height = 96;
+      ctx.clearRect(0, 0, w, h);
+      ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue("--accent") || "#6ea8fe";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      var mid = h / 2;
+      // Downsample to fit width.
+      var step = Math.max(1, Math.floor(mono.length / w));
+      for (var x = 0; x < w; x++) {
+        var idx = x * step;
+        var v = mono[idx] || 0;
+        var y = mid - v * (mid - 2);
+        if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      // Center line
+      ctx.strokeStyle = "rgba(128,128,128,0.25)";
+      ctx.beginPath(); ctx.moveTo(0, mid); ctx.lineTo(w, mid); ctx.stroke();
+    }
+
+    function render() {
+      errEl.textContent = "";
+      updateLabels();
+      var f0 = parseFloat(f0El.value), f1 = parseFloat(f1El.value);
+      if (!(f0 > 0) || !(f1 > 0)) { errEl.textContent = "Frequencies must be positive numbers."; return; }
+      if (f0 > 20000 || f1 > 20000) { errEl.textContent = "Frequencies above 20 kHz may be inaudible."; }
+      var res = buildPreview();
+      if (res) drawWave(res.mono);
+    }
+
+    // Live preview via AudioContext (decode the generated WAV back).
+    function preview() {
+      var res = buildPreview();
+      if (!res) return;
+      stopPreview();
+      if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { errEl.textContent = "Audio playback not supported."; return; } }
+      var blob = new Blob([res.bytes], { type: "audio/wav" });
+      var url = URL.createObjectURL(blob);
+      var audio = new Audio(url);
+      audio.onended = function () { URL.revokeObjectURL(url); playBtn.textContent = "▶ Preview"; };
+      audio.onerror = function () { errEl.textContent = "Playback error."; URL.revokeObjectURL(url); };
+      audio.play().then(function () { playBtn.textContent = "⏸ Playing…"; }).catch(function (e) { errEl.textContent = "Playback failed: " + e.message; });
+      src = audio;
+    }
+    function stopPreview() {
+      if (src) { try { src.pause(); } catch (e) {} src = null; }
+      playBtn.textContent = "▶ Preview";
+    }
+
+    function download() {
+      var res = buildPreview();
+      if (!res) return;
+      var blob = new Blob([res.bytes], { type: "audio/wav" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      var f0 = parseFloat(f0El.value), f1 = parseFloat(f1El.value);
+      var name = (Math.abs(f1 - f0) > 0.5 ? "chirp-" + f0 + "-" + f1 : "tone-" + f0) + "Hz_" + res.sr + ".wav";
+      a.href = url; a.download = name;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    }
+
+    [waveEl, srEl, f0El, f1El, durEl, volEl, chEl, fadeinEl, fadeoutEl].forEach(function (el) {
+      el.addEventListener("input", render);
+      el.addEventListener("change", render);
+    });
+    playBtn.addEventListener("click", preview);
+    stopBtn.addEventListener("click", stopPreview);
+    dlBtn.addEventListener("click", download);
+
+    render();
+  })();
+  </script>
+</body>
+</html>

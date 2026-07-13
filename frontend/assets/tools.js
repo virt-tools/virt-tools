@@ -3394,4 +3394,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🛒",
     added: "2026-07-13T15:15:00Z",
   },
+  {
+    slug: "wav-generator",
+    name: "WAV File Generator",
+    description: "Synthesize a tone or frequency sweep (sine, square, triangle, sawtooth) and download a 16-bit PCM .wav file — with adjustable duration, sample rate, volume and fades, plus a live preview. Companion to the live Tone Generator; everything runs in your browser.",
+    category: "Audio",
+    icon: "🎛️",
+    added: "2026-07-13T15:45:00Z",
+  },
 ];
