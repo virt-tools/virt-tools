@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>CSV Join &amp; Merge — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    textarea { width:100%; font-family:monospace; font-size:12px; min-height:120px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; margin:10px 0; }
+    .field { margin-bottom:0; }
+    .full { grid-column: 1 / -1; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:10px 0; }
+    .seg { display:inline-flex; border:1px solid var(--border,#2a2f3a); border-radius:8px; overflow:hidden; margin-bottom:10px; }
+    .seg button { border:none; border-radius:0; background:transparent; color:inherit; padding:6px 14px; cursor:pointer; }
+    .seg button.active { background: var(--accent,#6ea8fe); color:#08101f; }
+    .wrap { overflow:auto; max-height:55vh; border:1px solid var(--border,#2a2f3a); border-radius:8px; margin-top:10px; }
+    table.result { border-collapse:collapse; font-size:12px; }
+    table.result th, table.result td { padding:4px 8px; border-bottom:1px solid var(--border,#2a2f3a); border-right:1px solid var(--border,#2a2f3a); white-space:nowrap; }
+    table.result th { background:var(--panel-2,#161a22); position:sticky; top:0; font-weight:600; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    @media (max-width:780px){ .grid2 { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>CSV Join &amp; Merge</h1>
+      <p>Join two CSV tables on a common key column — inner, left, right, or full outer join — like SQL JOIN for CSV files. Pick the key column from each side, choose the join type, and copy or download the merged result. Right-side column names are suffixed to avoid collisions; rows that don't match are handled per the join type. Handles quoted fields, embedded commas, and newlines. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="grid2">
+        <div>
+          <label for="csv1">Left CSV</label>
+          <textarea id="csv1" spellcheck="false" autocomplete="off" placeholder="id,name&#10;1,Ada&#10;2,Lin&#10;3,Jay"></textarea>
+        </div>
+        <div>
+          <label for="csv2">Right CSV</label>
+          <textarea id="csv2" spellcheck="false" autocomplete="off" placeholder="id,city&#10;1,London&#10;2,New York&#10;4,Tokyo"></textarea>
+        </div>
+      </div>
+
+      <div class="seg" id="joinType">
+        <button type="button" data-j="inner" class="active">Inner</button>
+        <button type="button" data-j="left" class="secondary">Left</button>
+        <button type="button" data-j="right" class="secondary">Right</button>
+        <button type="button" data-j="outer" class="secondary">Outer</button>
+      </div>
+
+      <div class="grid">
+        <div class="field"><label for="key1">Left key column</label><select id="key1"><option>(parse left CSV)</option></select></div>
+        <div class="field"><label for="key2">Right key column</label><select id="key2"><option>(parse right CSV)</option></select></div>
+        <div class="field"><label>Output delimiter: <select id="outDelim"><option value=",">comma</option><option value=";">semicolon</option><option value="\t">tab</option><option value="|">pipe</option></select></label></div>
+      </div>
+
+      <div class="row">
+        <label><input type="checkbox" id="keepBothKeys"> Keep both key columns</label>
+        <button id="run">Join</button>
+        <button id="copy" class="secondary">Copy result</button>
+        <button id="download" class="secondary">Download .csv</button>
+      </div>
+
+      <p class="err" id="err"></p>
+      <p class="note" id="note">Paste two CSV tables above.</p>
+      <div class="wrap"><table class="result" id="out"><tbody></tbody></table></div>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var joinType = "inner";
+
+    function actualOutDelim() { var d = $("outDelim").value; return d === "\\t" ? "\t" : d; }
+    function parseCSV(text, delim) {
+      var rows = [];
+      var i = 0, n = text.length, field = "", row = [], inQ = false;
+      while (i < n) {
+        var c = text[i];
+        if (inQ) {
+          if (c === '"') {
+            if (text[i + 1] === '"') { field += '"'; i += 2; }
+            else { inQ = false; i++; }
+          } else { field += c; i++; }
+        } else {
+          if (c === '"') { inQ = true; i++; }
+          else if (c === delim) { row.push(field); field = ""; i++; }
+          else if (c === "\r") { i++; }
+          else if (c === "\n") { row.push(field); rows.push(row); row = []; field = ""; i++; }
+          else { field += c; i++; }
+        }
+      }
+      if (field !== "" || row.length) { row.push(field); rows.push(row); }
+      while (rows.length && rows[rows.length - 1].length === 1 && rows[rows.length - 1][0] === "") rows.pop();
+      var w = rows.reduce(function (m, r) { return Math.max(m, r.length); }, 0);
+      rows.forEach(function (r) { while (r.length < w) r.push(""); });
+      return rows;
+    }
+    function sniffDelim(text) {
+      // pick the delimiter that yields the most consistent column counts
+      var cands = [",", "\t", ";", "|"];
+      var best = ",", bestScore = -1;
+      cands.forEach(function (d) {
+        try {
+          var r = parseCSV(text, d);
+          if (r.length < 2) return;
+          var w0 = r[0].length;
+          var consistent = r.every(function (row) { return row.length === w0; });
+          var score = consistent ? w0 * r.length : -1;
+          if (score > bestScore) { bestScore = score; best = d; }
+        } catch (e) {}
+      });
+      return best;
+    }
+    function csvField(s, delim) {
+      s = String(s);
+      if (s === "") return "";
+      if (new RegExp('["' + delim + '\\n]').test(s)) return '"' + s.replace(/"/g, '""') + '"';
+      return s;
+    }
+    function buildCSV(rows, delim) {
+      return rows.map(function (r) { return r.map(function (c) { return csvField(c, delim); }).join(delim); }).join("\n") + "\n";
+    }
+    function esc(s) { return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+    function fillSelect(selId, header) {
+      var sel = $(selId);
+      sel.innerHTML = "";
+      header.forEach(function (h, i) {
+        var o = document.createElement("option");
+        o.value = i; o.textContent = h || ("col" + (i + 1));
+        sel.appendChild(o);
+      });
+    }
+
+    function parseSide(id) {
+      var text = $(id).value.trim();
+      if (!text) return null;
+      var delim = sniffDelim(text);
+      var rows = parseCSV(text, delim);
+      if (!rows.length) return null;
+      var header = rows.shift();
+      return { header: header, rows: rows };
+    }
+
+    function refresh() {
+      var l = parseSide("csv1"), r = parseSide("csv2");
+      if (l) fillSelect("key1", l.header); else fillSelect("key1", []);
+      if (r) fillSelect("key2", r.header); else fillSelect("key2", []);
+    }
+
+    function join() {
+      var errEl = $("err"); errEl.textContent = "";
+      var l = parseSide("csv1"), r = parseSide("csv2");
+      if (!l || !r) { errEl.textContent = "Paste both CSV tables."; return; }
+      if (!l.rows.length && !r.rows.length) { errEl.textContent = "Both tables are empty."; return; }
+      var li = parseInt($("key1").value, 10);
+      var ri = parseInt($("key2").value, 10);
+      if (isNaN(li) || isNaN(ri)) { errEl.textContent = "Pick a key column on each side."; return; }
+      var keepBoth = $("keepBothKeys").checked;
+
+      // Index right rows by key value (last wins)
+      var rIndex = {};
+      var rKeys = [];
+      r.rows.forEach(function (row) {
+        var k = String(row[ri] === undefined ? "" : row[ri]);
+        if (!(k in rIndex)) rKeys.push(k);
+        rIndex[k] = row;
+      });
+      var lMatched = {};
+      // Build output header
+      var rHeaderSuffix = r.header.map(function (h, i) {
+        if (i === ri) return keepBoth ? h + "_r" : null;
+        return h + "_r";
+      });
+      var outHeader = l.header.slice();
+      if (keepBoth) outHeader.push(l.header[li] + "_r");
+      rHeaderSuffix.forEach(function (h) { if (h !== null) outHeader.push(h); });
+      var outRows = [outHeader];
+
+      // Inner + Left: iterate left
+      if (joinType === "inner" || joinType === "left") {
+        l.rows.forEach(function (lrow) {
+          var k = String(lrow[li] === undefined ? "" : lrow[li]);
+          var rrow = rIndex[k];
+          if (rrow) {
+            lMatched[k] = true;
+            var out = lrow.slice();
+            if (keepBoth) out.push(rrow[ri] === undefined ? "" : rrow[ri]);
+            r.header.forEach(function (_, i) {
+              if (i === ri && !keepBoth) return;
+              out.push(rrow[i] === undefined ? "" : rrow[i]);
+            });
+            outRows.push(out);
+          } else if (joinType === "left") {
+            var out2 = lrow.slice();
+            if (keepBoth) out2.push("");
+            r.header.forEach(function (_, i) {
+              if (i === ri && !keepBoth) return;
+              out2.push("");
+            });
+            outRows.push(out2);
+          }
+        });
+      }
+      // Right + Outer: iterate right for unmatched
+      if (joinType === "right" || joinType === "outer") {
+        // For 'right', include all right rows (matched or not) and left data when matched
+        if (joinType === "right") {
+          r.rows.forEach(function (rrow) {
+            var k = String(rrow[ri] === undefined ? "" : rrow[ri]);
+            // find left rows matching this key (all)
+            var lmatches = l.rows.filter(function (lrow) { return String(lrow[li] === undefined ? "" : lrow[li]) === k; });
+            if (lmatches.length) {
+              lmatches.forEach(function (lrow) {
+                var out = lrow.slice();
+                if (keepBoth) out.push(rrow[ri] === undefined ? "" : rrow[ri]);
+                r.header.forEach(function (_, i) {
+                  if (i === ri && !keepBoth) return;
+                  out.push(rrow[i] === undefined ? "" : rrow[i]);
+                });
+                outRows.push(out);
+              });
+            } else {
+              var out2 = l.header.map(function () { return ""; });
+              if (keepBoth) out2.push(rrow[ri] === undefined ? "" : rrow[ri]);
+              r.header.forEach(function (_, i) {
+                if (i === ri && !keepBoth) return;
+                out2.push(rrow[i] === undefined ? "" : rrow[i]);
+              });
+              outRows.push(out2);
+            }
+          });
+        } else {
+          // outer: add right rows whose key didn't match any left
+          r.rows.forEach(function (rrow) {
+            var k = String(rrow[ri] === undefined ? "" : rrow[ri]);
+            if (lMatched[k]) return;
+            var out = l.header.map(function () { return ""; });
+            if (keepBoth) out.push(rrow[ri] === undefined ? "" : rrow[ri]);
+            r.header.forEach(function (_, i) {
+              if (i === ri && !keepBoth) return;
+              out.push(rrow[i] === undefined ? "" : rrow[i]);
+            });
+            outRows.push(out);
+          });
+        }
+      }
+
+      // Render
+      var tbody = $("out").querySelector("tbody");
+      tbody.innerHTML = "";
+      outRows.slice(0, 300).forEach(function (r, ri) {
+        var tr = document.createElement("tr");
+        r.forEach(function (c, ci) {
+          var cell = document.createElement(ri === 0 ? "th" : "td");
+          cell.textContent = c;
+          tr.appendChild(cell);
+        });
+        tbody.appendChild(tr);
+      });
+      var data = outRows.length - 1;
+      $("note").textContent = joinType + " join → " + data + " row(s), " + outHeader.length + " column(s)." + (outRows.length > 301 ? " (Preview shows first 300 rows.)" : "");
+      window._csv = buildCSV(outRows, actualOutDelim());
+    }
+
+    $("joinType").addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-j]"); if (!b) return;
+      joinType = b.getAttribute("data-j");
+      Array.prototype.forEach.call($("joinType").querySelectorAll("button"), function (x) { x.classList.remove("active"); });
+      b.classList.add("active");
+      join();
+    });
+    $("run").addEventListener("click", join);
+    ["csv1", "csv2"].forEach(function (id) { $(id).addEventListener("input", refresh); });
+    ["key1", "key2", "outDelim", "keepBothKeys"].forEach(function (id) { $(id).addEventListener("change", join); });
+    $("copy").addEventListener("click", function () {
+      if (!window._csv) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(window._csv).then(function () { $("note").textContent = "Copied."; }, function () { $("note").textContent = "Copy failed."; });
+      } else $("note").textContent = "Clipboard unavailable.";
+    });
+    $("download").addEventListener("click", function () {
+      if (!window._csv) return;
+      var blob = new Blob([window._csv], { type: "text/csv" });
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "joined.csv";
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+    refresh();
+  })();
+  </script>
+</body>
+</html>

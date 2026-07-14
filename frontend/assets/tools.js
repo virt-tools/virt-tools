@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "csv-join",
+    name: "CSV Join & Merge",
+    description: "Join two CSV tables on a common key column — inner, left, right, or full outer join — like SQL JOIN for CSV files. Pick the key column from each side, choose the join type, and copy or download the merged result. Right-side columns are suffixed to avoid collisions. Handles quoted fields, embedded commas and newlines, and auto-sniffs the delimiter. Everything runs locally in your browser.",
+    category: "Data",
+    icon: "🔗",
+    added: "2026-07-14T22:30:00Z",
+  },
+  {
     slug: "csv-formula",
     name: "CSV Column Formula",
     description: "Add a derived column to a CSV by applying a JavaScript math expression that references other columns by name — price * quantity, subtotal * (1 + tax_rate), Math.round(amount / 100). Column names become variables (spaces/dashes → underscores); non-numeric cells stay blank; optional decimal rounding. Handles quoted fields and embedded newlines. Everything runs locally in your browser.",
