@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Stopping Distance Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .row2 { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+    .row2 .field { margin-bottom: 0; }
+    input[type="number"] { font-family: ui-monospace, monospace; width: 95px; }
+    select { min-width: 150px; }
+    .kv { display: grid; grid-template-columns: 220px 1fr; gap: 6px 12px; margin-top: 12px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.95rem; }
+    .verdict { font-size: 1.5rem; font-weight: 800; font-family: ui-monospace, monospace; margin-top: 10px; }
+    .verdict.ok { color: var(--ok, #4ade80); }
+    .verdict.bad { color: var(--bad, #f87171); }
+    .big { font-size: 1.05rem; font-weight: 700; }
+    .bar { height: 14px; border-radius: 7px; background: var(--bg-elev-2); border: 1px solid var(--border); overflow: hidden; margin-top: 4px; display: flex; }
+    .bar .segT { background: #6ea8ff; }
+    .bar .segB { background: #f59e0b; }
+    .legend { font-size: 0.8rem; color: var(--text-dim); margin-top: 6px; display: flex; gap: 14px; }
+    .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Stopping Distance Calculator</h1>
+      <p>Estimate total stopping distance for a vehicle from its speed, the driver's reaction time and the road's grip, splitting it into thinking distance (covered before you react) and braking distance (covered while slowing). Pick a road condition preset to set the tyre–road friction coefficient (dry, wet, snow, ice) and a reaction-time preset, then adjust. The braking distance uses the constant-deceleration model v² ÷ (2·g·μ). Useful for driver education and understanding how speed and conditions multiply stopping distance. Pure arithmetic — a real emergency stop also depends on brakes, tyres, gradient, ABS, surface type and whether you were paying attention. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row2">
+        <div class="field">
+          <label for="speed">Speed</label>
+          <input id="speed" type="number" min="0" step="any" value="60">
+          <select id="sunit" style="min-width:70px;margin-left:6px;">
+            <option value="mph" selected>mph</option>
+            <option value="kmh">km/h</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="road">Road condition</label>
+          <select id="road">
+            <option value="0.7" selected>Dry asphalt (μ ≈ 0.7)</option>
+            <option value="0.5">Wet asphalt (μ ≈ 0.5)</option>
+            <option value="0.4">Heavy rain (μ ≈ 0.4)</option>
+            <option value="0.3">Packed snow (μ ≈ 0.3)</option>
+            <option value="0.15">Loose snow (μ ≈ 0.15)</option>
+            <option value="0.1">Ice (μ ≈ 0.1)</option>
+            <option value="-1">Custom…</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="row2">
+        <div class="field">
+          <label for="rt">Reaction time</label>
+          <input id="rt" type="number" min="0" step="0.05" value="1.0"> <span class="muted">s</span>
+        </div>
+        <div class="field">
+          <label for="mu">Friction coeff (μ)</label>
+          <input id="mu" type="number" min="0" max="1" step="0.01" value="0.7">
+        </div>
+        <div class="field">
+          <label for="grade">Road grade</label>
+          <input id="grade" type="number" step="any" value="0"> <span class="muted">%  (+ downhill)</span>
+        </div>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <div class="bar" id="bar"><div class="segT"></div><div class="segB"></div></div>
+      <div class="legend"><span><span class="swatch" style="background:#6ea8ff"></span>Thinking</span><span><span class="swatch" style="background:#f59e0b"></span>Braking</span></div>
+      <dl class="kv" id="kv"></dl>
+      <p class="note" id="err"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var speedEl = $("speed"), sunitEl = $("sunit"), roadEl = $("road"), rtEl = $("rt"), muEl = $("mu"), gradeEl = $("grade");
+    var verdictEl = $("verdict"), kvEl = $("kv"), errEl = $("err"), barEl = $("bar");
+    var G = 9.80665;
+
+    function num(el) { var n = parseFloat(el.value); return isNaN(n) ? NaN : n; }
+    function fmt(n, d) { return Number(n).toFixed(d); }
+    function ft(m) { return m / 0.3048; }
+
+    roadEl.addEventListener("change", function () {
+      var o = roadEl.options[roadEl.selectedIndex];
+      if (o.value !== "-1") muEl.value = o.value;
+      render();
+    });
+
+    function render() {
+      errEl.textContent = ""; verdictEl.textContent = ""; verdictEl.className = "verdict"; kvEl.innerHTML = "";
+      var sp = num(speedEl), rt = num(rtEl), mu = num(muEl), gr = num(gradeEl);
+      if ([sp, rt, mu].some(isNaN) || sp < 0 || rt < 0 || mu <= 0) {
+        verdictEl.textContent = "✗ Enter valid speed, reaction time and a positive friction coefficient."; verdictEl.className = "verdict bad"; return;
+      }
+      if (isNaN(gr)) gr = 0;
+      var v = sunitEl.value === "mph" ? sp * 0.44704 : sp / 3.6;   // m/s
+      // Effective deceleration: a = g*(mu*cosθ − sinθ). For small grades approximate cos≈1, sin≈grade/100.
+      var sinT = gr / 100 / Math.sqrt(1 + (gr / 100) * (gr / 100));
+      var cosT = 1 / Math.sqrt(1 + (gr / 100) * (gr / 100));
+      var a = G * (mu * cosT - sinT);                            // m/s² (positive = decelerating)
+      var think = v * rt;                                        // m
+      var brake = a > 0 ? (v * v) / (2 * a) : Infinity;          // m
+      var total = think + brake;
+
+      verdictEl.textContent = fmt(total, 1) + " m  (" + fmt(ft(total), 1) + " ft) total at " + fmt(sp, 0) + " " + sunitEl.value;
+      verdictEl.className = a > 0 ? "verdict ok" : "verdict bad";
+
+      var tp = total > 0 ? (think / total) * 100 : 0;
+      barEl.style.display = a > 0 ? "" : "none";
+      barEl.firstElementChild.style.width = tp.toFixed(1) + "%";
+      barEl.lastElementChild.style.width = (100 - tp).toFixed(1) + "%";
+
+      kvEl.innerHTML =
+        "<dt>Thinking distance</dt><dd class='big'>" + fmt(think, 1) + " m  (" + fmt(ft(think), 1) + " ft)  <span class='muted'>" + fmt(rt, 2) + " s reaction</span></dd>" +
+        "<dt>Braking distance</dt><dd class='big'>" + (a > 0 ? fmt(brake, 1) + " m  (" + fmt(ft(brake), 1) + " ft)" : "∞ (no grip — μ too low for this grade)") + "</dd>" +
+        "<dt>Total stopping distance</dt><dd class='big'>" + (a > 0 ? fmt(total, 1) + " m  (" + fmt(ft(total), 1) + " ft)" : "∞") + "</dd>" +
+        "<dt>Deceleration</dt><dd>" + (a > 0 ? fmt(a, 2) + " m/s²  (" + fmt(a / G, 2) + " g)" : "negative — vehicle won't stop") + "</dd>" +
+        "<dt>Time to stop</dt><dd>" + (a > 0 ? fmt(rt + v / a, 2) + " s  (" + fmt(rt, 2) + " react + " + fmt(v / a, 2) + " brake)" : "—") + "</dd>" +
+        "<dt>Split</dt><dd>" + (a > 0 ? fmt(tp, 0) + "% thinking / " + fmt(100 - tp, 0) + "% braking" : "—") + "</dd>";
+
+      errEl.textContent = "Total stopping distance = thinking distance + braking distance. Thinking distance = speed × reaction time — the road you cover before your foot reaches the pedal (a typical attentive reaction is about 1.0–1.5 s; highway codes often use ~0.67–0.68 s for their quoted figures). Braking distance uses the constant-deceleration model d = v² ÷ (2·a), where the deceleration a = g·(μ·cosθ − sinθ) and μ is the tyre–road friction coefficient. Typical μ: dry asphalt 0.7, wet 0.4–0.5, packed snow 0.3, ice 0.1 or less. Braking distance scales with the square of speed, so doubling your speed roughly quadruples the braking part — that's why 30 mph stops in a small fraction of 60 mph's distance. Downhill grades (positive %) lengthen the stop; a steep grade with poor grip can mean you never stop at all, which the tool flags. ABS prevents locked-wheel skids and usually shortens dry stopping only marginally but greatly helps control and wet/loose-surface stops.";
+      errEl.className = "note";
+    }
+
+    [speedEl, sunitEl, rtEl, muEl, gradeEl].forEach(function (el) {
+      el.addEventListener("input", render); el.addEventListener("change", render);
+    });
+    render();
+  })();
+  </script>
+</body>
+</html>

@@ -3754,4 +3754,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🛠️",
     added: "2026-07-14T13:45:00Z",
   },
+  {
+    slug: "stopping-distance-calculator",
+    name: "Stopping Distance Calculator",
+    description: "Estimate total stopping distance for a vehicle from its speed, the driver's reaction time and the road's grip, split into thinking distance (covered before you react) and braking distance (covered while slowing). Pick a road-condition preset to set the tyre–road friction coefficient (dry, wet, snow, ice) and a reaction-time preset, then adjust; an optional road grade lengthens or shortens the stop. Braking distance uses the constant-deceleration model v² ÷ (2·a). Useful for driver education and seeing how speed and conditions multiply stopping distance. Pure arithmetic — a real emergency stop also depends on brakes, tyres, ABS, surface and attention. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🛑",
+    added: "2026-07-14T14:15:00Z",
+  },
 ];
