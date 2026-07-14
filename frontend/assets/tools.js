@@ -3714,4 +3714,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🧶",
     added: "2026-07-14T11:15:00Z",
   },
+  {
+    slug: "ac-sizing-calculator",
+    name: "AC Sizing & Cooling Load Calculator",
+    description: "Estimate the cooling capacity a room needs in BTU/h, tons and kW from its floor area, ceiling height, occupancy, kitchen and sun exposure, using the standard room-sizing rule of thumb (about 20 BTU/h per square foot, scaled for tall ceilings, extra occupants and a kitchen, with ±10% for sun). Useful for picking a window, portable or split air-conditioner; the result is rounded up to a common nominal unit size. A planning estimate only — whole-house and commercial sizing needs an ACCA Manual J calculation. Pure arithmetic, in your browser.",
+    category: "Environment",
+    icon: "❄️",
+    added: "2026-07-14T11:45:00Z",
+  },
 ];

@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>AC Sizing &amp; Cooling Load Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .row2 { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+    .row2 .field { margin-bottom: 0; }
+    input[type="number"] { font-family: ui-monospace, monospace; width: 100px; }
+    select { min-width: 130px; }
+    .kv { display: grid; grid-template-columns: 230px 1fr; gap: 6px 12px; margin-top: 12px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.95rem; }
+    .verdict { font-size: 1.5rem; font-weight: 800; font-family: ui-monospace, monospace; margin-top: 8px; }
+    .verdict.ok { color: var(--ok, #4ade80); }
+    .verdict.bad { color: var(--bad, #f87171); }
+    .big { font-size: 1.05rem; font-weight: 700; }
+    .check { display:flex; gap:6px; align-items:center; }
+    .check input { width:auto; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>AC Sizing &amp; Cooling Load Calculator</h1>
+      <p>Estimate the cooling capacity (BTU/h, tons and kW) a room needs from its floor area, ceiling height, occupancy, kitchen and sun exposure, using the standard room-sizing rule of thumb. Useful for picking a window, portable or split air-conditioner. The result is a planning estimate — real cooling load depends on insulation, glazing, climate, internal heat gain and air infiltration, so for whole-house or commercial sizing use a proper Manual J calculation. Pure arithmetic, in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row2">
+        <div class="field">
+          <label for="area">Floor area</label>
+          <input id="area" type="number" min="0" step="any" value="400">
+          <select id="aunit" style="min-width:80px;margin-left:6px;">
+            <option value="sqft" selected>ft²</option>
+            <option value="sqm">m²</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="ceil">Ceiling height</label>
+          <input id="ceil" type="number" min="0" step="any" value="8">
+          <select id="cunit" style="min-width:70px;margin-left:6px;">
+            <option value="ft" selected>ft</option>
+            <option value="m">m</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="occ">Occupants</label>
+          <input id="occ" type="number" min="0" step="1" value="2">
+        </div>
+      </div>
+
+      <div class="row2">
+        <div class="field">
+          <label for="sun">Sun exposure</label>
+          <select id="sun">
+            <option value="0.9">Heavily shaded (−10%)</option>
+            <option value="1.0" selected>Normal</option>
+            <option value="1.1">Very sunny (+10%)</option>
+          </select>
+        </div>
+        <div class="field check">
+          <input id="kitchen" type="checkbox">
+          <label for="kitchen" style="margin:0;">Kitchen (+4000 BTU/h)</label>
+        </div>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <dl class="kv" id="kv"></dl>
+      <p class="note" id="err"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var areaEl = $("area"), aunitEl = $("aunit"), ceilEl = $("ceil"), cunitEl = $("cunit");
+    var occEl = $("occ"), sunEl = $("sun"), kitchenEl = $("kitchen");
+    var verdictEl = $("verdict"), kvEl = $("kv"), errEl = $("err");
+
+    // Common AC nominal sizes in BTU/h.
+    var SIZES = [5000, 6000, 8000, 10000, 12000, 14000, 18000, 24000, 30000, 36000];
+
+    function num(el) { var n = parseFloat(el.value); return isNaN(n) ? NaN : n; }
+    function fmt(n, d) { return Number(n).toFixed(d); }
+
+    function render() {
+      errEl.textContent = ""; verdictEl.textContent = ""; verdictEl.className = "verdict"; kvEl.innerHTML = "";
+      var area = num(areaEl), ceil = num(ceilEl), occ = num(occEl);
+      if ([area, ceil, occ].some(isNaN) || area <= 0 || ceil <= 0 || occ < 0) {
+        verdictEl.textContent = "✗ Enter positive area and ceiling height (occupants ≥ 0)."; verdictEl.className = "verdict bad"; return;
+      }
+
+      var areaSqft = aunitEl.value === "sqm" ? area * 10.7639 : area;
+      var ceilFt = cunitEl.value === "m" ? ceil / 0.3048 : ceil;
+      var sun = parseFloat(sunEl.value);
+
+      // Base: 20 BTU/h per sq ft, scaled by ceiling height vs the 8 ft baseline.
+      var base = areaSqft * 20 * (ceilFt / 8);
+      var occAdj = Math.max(0, occ - 2) * 600;
+      var kitAdj = kitchenEl.checked ? 4000 : 0;
+      var btu = (base + occAdj + kitAdj) * sun;
+      var tons = btu / 12000;
+      var kW = btu * 0.00029307107;
+
+      // Round up to the nearest common nominal size.
+      var rec = SIZES.filter(function (s) { return s >= btu; })[0] || Math.ceil(btu / 1000) * 1000;
+
+      verdictEl.textContent = fmt(btu, 0) + " BTU/h  (" + fmt(tons, 2) + " tons)";
+      verdictEl.className = "verdict ok";
+      kvEl.innerHTML =
+        "<dt>Required cooling</dt><dd class='big'>" + fmt(btu, 0) + " BTU/h</dd>" +
+        "<dt>In tons</dt><dd>" + fmt(tons, 2) + " tons  (1 ton = 12 000 BTU/h)</dd>" +
+        "<dt>In kW</dt><dd>" + fmt(kW, 2) + " kW  <span class='muted'>(cooling capacity, not electrical input)</span></dd>" +
+        "<dt>Recommended unit size</dt><dd class='big'>" + fmt(rec, 0) + " BTU/h  (" + fmt(rec / 12000, 2) + " ton) — round up</dd>" +
+        "<dt>Breakdown</dt><dd>area " + fmt(base / sun, 0) + (occAdj ? "  +  occ " + fmt(occAdj, 0) : "") + (kitAdj ? "  +  kitchen " + fmt(kitAdj, 0) : "") + (sun !== 1 ? "  ×  " + sun : "") + "</dd>";
+
+      errEl.textContent = "Base load is ~20 BTU/h per ft² of floor (about 215 BTU/h per m²), scaled up for ceilings taller than 8 ft, plus 600 BTU/h for each occupant beyond two, plus 4 000 BTU/h for a kitchen, with ±10% for sun exposure. Oversizing hurts: an AC that's too big short-cycles and dehumidifies poorly, leaving the room cold and clammy, so don't round up by more than one size. This rule-of-thumb works for single rooms; whole-house and commercial loads need an ACCA Manual J calculation accounting for insulation R-values, window U-factors and orientation, infiltration, duct losses and local design temperatures.";
+      errEl.className = "note";
+    }
+
+    [areaEl, aunitEl, ceilEl, cunitEl, occEl, sunEl, kitchenEl].forEach(function (el) {
+      el.addEventListener("input", render); el.addEventListener("change", render);
+    });
+    render();
+  })();
+  </script>
+</body>
+</html>
