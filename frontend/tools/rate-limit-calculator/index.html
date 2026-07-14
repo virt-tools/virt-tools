@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Rate Limit Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:12px; margin:10px 0; }
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    .field { margin-bottom:0; }
+    input, select { box-sizing:border-box; }
+    .seg { display:inline-flex; border:1px solid var(--border,#2a2f3a); border-radius:8px; overflow:hidden; margin-bottom:10px; }
+    .seg button { border:none; border-radius:0; background:transparent; color:inherit; padding:6px 14px; cursor:pointer; }
+    .seg button.active { background: var(--accent,#6ea8fe); color:#08101f; }
+    table { width:100%; border-collapse:collapse; margin-top:10px; }
+    th, td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--border,#2a2f3a); font-size:13px; vertical-align:top; }
+    th { opacity:.65; font-weight:600; white-space:nowrap; width:38%; }
+    td.v { font-family:monospace; }
+    .note b { color:var(--accent,#6ea8fe); }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+    .out { padding:10px; border:1px solid var(--border,#2a2f3a); border-radius:8px; background:var(--panel-2,#161a22); margin:8px 0; font-family:monospace; font-size:13px; }
+    svg { display:block; max-width:100%; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Rate Limit Calculator</h1>
+      <p>Work out the per-key behaviour of common API rate-limiting algorithms — token bucket, fixed window, sliding window, and leaky bucket — from a target request rate and burst capacity. See the refill rate, the effective sustained requests-per-second, the spacing enforced between bursts, and a timeline showing how the bucket recovers over time. Pure arithmetic, runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="seg" id="algo">
+        <button type="button" data-a="token" class="active">Token bucket</button>
+        <button type="button" data-a="fixed" class="secondary">Fixed window</button>
+        <button type="button" data-a="sliding" class="secondary">Sliding window</button>
+        <button type="button" data-a="leaky" class="secondary">Leaky bucket</button>
+      </div>
+
+      <div class="grid">
+        <div class="field"><label for="rate">Sustained rate (requests / sec)</label><input id="rate" type="number" min="0.01" step="0.01" value="10" style="width:120px;"></div>
+        <div class="field"><label for="burst">Burst capacity</label><input id="burst" type="number" min="1" value="20" style="width:120px;"></div>
+        <div class="field"><label for="window">Window size (sec) — fixed/sliding</label><input id="window" type="number" min="0.1" step="0.1" value="60" style="width:120px;"></div>
+        <div class="field"><label for="demand">Incoming demand (req / sec)</label><input id="demand" type="number" min="0" step="0.1" value="15" style="width:120px;"></div>
+      </div>
+
+      <div class="row" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:10px 0;">
+        <button id="calc">Calculate</button>
+      </div>
+
+      <h3>Result</h3>
+      <table id="results"><tbody></tbody></table>
+
+      <h3>Bucket timeline (tokens over 10 s)</h3>
+      <div class="out" id="timeline"></div>
+
+      <p class="note" id="note">Enter values and press Calculate.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var algo = "token";
+
+    function rateVal() { return Math.max(0.001, parseFloat($("rate").value) || 1); }
+    function burstVal() { return Math.max(1, parseInt($("burst").value, 10) || 1); }
+    function windowVal() { return Math.max(0.1, parseFloat($("window").value) || 60); }
+    function demandVal() { return Math.max(0, parseFloat($("demand").value) || 0); }
+
+    function fmt(n, d) { return Number(n.toFixed(d || 3)).toString(); }
+
+    function calc() {
+      var r = rateVal(), b = burstVal(), w = windowVal(), demand = demandVal();
+      var rows = [];
+      var note = "";
+      if (algo === "token") {
+        // refills at r req/s, capacity b. A burst of b is allowed instantly, then sustained at r/s.
+        var refuel = b / r; // seconds to refill from 0 to full
+        var sustainedRps = r;
+        var burstGap = 1 / r; // seconds between allowed requests once bucket runs low
+        rows.push(["Algorithm", "Token bucket"]);
+        rows.push(["Bucket capacity", b + " requests"]);
+        rows.push(["Refill rate", fmt(r) + " req/s"]);
+        rows.push(["Burst of", b + " allowed at once, then sustained at " + fmt(r) + " req/s"]);
+        rows.push(["Time to refill from empty", fmt(refuel) + " s"]);
+        rows.push(["Min spacing after burst", fmt(burstGap, 4) + " s between requests"]);
+        rows.push(["Demand " + fmt(demand) + " req/s vs capacity " + fmt(r), demand > r ? "OVER limit — " + fmt((demand - r) * 1) + " req/s throttled" : "within limit (no throttling)"]);
+        note = "A token bucket allows an initial burst of " + b + " requests, then a sustained " + fmt(r) + " req/s. The bucket refills at " + fmt(r) + " tokens per second up to capacity " + b + ".";
+      } else if (algo === "fixed") {
+        // limit = b per window w → equivalent sustained r = b/w
+        var rps = b / w;
+        var perCall = 1 / rps;
+        rows.push(["Algorithm", "Fixed window"]);
+        rows.push(["Window size", fmt(w) + " s"]);
+        rows.push(["Limit per window", b + " requests"]);
+        rows.push(["Sustained rate (limit / window)", fmt(rps, 4) + " req/s"]);
+        rows.push(["Average spacing", fmt(perCall, 4) + " s between requests"]);
+        rows.push(["Bursty at window edge?", "Yes — up to 2× b in a short window crossing a boundary"]);
+        rows.push(["Demand " + fmt(demand) + " req/s vs limit", demand > rps ? "OVER limit — " + fmt(demand - rps, 3) + " req/s rejected" : "within limit"]);
+        note = "Fixed window allows " + b + " requests every " + fmt(w) + " s, averaging " + fmt(rps, 4) + " req/s. Requests can burst to 2× the limit at a window boundary.";
+      } else if (algo === "sliding") {
+        var rps2 = b / w;
+        var perCall2 = 1 / rps2;
+        rows.push(["Algorithm", "Sliding window (rolling)"]);
+        rows.push(["Window size", fmt(w) + " s"]);
+        rows.push(["Limit per window", b + " requests"]);
+        rows.push(["Sustained rate (limit / window)", fmt(rps2, 4) + " req/s"]);
+        rows.push(["Average spacing", fmt(perCall2, 4) + " s between requests"]);
+        rows.push(["Burst at boundary?", "No — counts only the last " + fmt(w) + " s exactly"]);
+        rows.push(["Demand " + fmt(demand) + " req/s vs limit", demand > rps2 ? "OVER limit — " + fmt(demand - rps2, 3) + " req/s rejected" : "within limit"]);
+        note = "Sliding window counts requests in the trailing " + fmt(w) + " s, so it avoids the boundary-burst of fixed window. Sustained rate: " + fmt(rps2, 4) + " req/s.";
+      } else { // leaky
+        // processes at r req/s; queue capacity b. Requests beyond the queue are dropped.
+        var queueDrain = b / r;
+        rows.push(["Algorithm", "Leaky bucket"]);
+        rows.push(["Outflow rate", fmt(r) + " req/s (processed)"]);
+        rows.push(["Queue capacity", b + " pending requests"]);
+        rows.push(["Burst of", b + " queued; extra dropped. Processed over " + fmt(queueDrain) + " s"]);
+        rows.push(["Steady throughput", fmt(r) + " req/s"]);
+        rows.push(["Demand " + fmt(demand) + " req/s vs outflow", demand > r ? "OVER limit — " + fmt(demand - r) + " req/s either queued or dropped" : "within limit"]);
+        note = "Leaky bucket smooths traffic to a steady " + fmt(r) + " req/s. A queue of " + b + " holds bursts; further requests are dropped. The queue drains in " + fmt(queueDrain) + " s.";
+      }
+
+      var tbody = $("results").querySelector("tbody");
+      tbody.innerHTML = "";
+      rows.forEach(function (r) {
+        var tr = document.createElement("tr");
+        tr.innerHTML = "<th>" + r[0] + "</th><td class=\"v\">" + (r[1].replace(/</g, "&lt;")) + "</td>";
+        tbody.appendChild(tr);
+      });
+      $("note").textContent = note;
+      renderTimeline(r, b, w);
+    }
+
+    function renderTimeline(r, b, w) {
+      var W = 640, H = 120, padL = 36, padR = 12, padT = 12, padB = 26;
+      var duration = Math.min(10, (algo === "fixed" || algo === "sliding") ? Math.max(w, 10) : 10);
+      var steps = 200;
+      var xOf = function (t) { return padL + (t / duration) * (W - padL - padR); };
+      var yOf = function (v, vmax) { return H - padB - (v / vmax) * (H - padT - padB); };
+      var vmax = algo === "fixed" || algo === "sliding" ? b : b;
+      var parts = [];
+      parts.push('<svg viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" height="' + H + '">');
+      // grid + axis
+      parts.push('<line x1="' + padL + '" y1="' + (H - padB) + '" x2="' + (W - padR) + '" y2="' + (H - padB) + '" stroke="currentColor" stroke-width="1" opacity=".4"/>');
+      parts.push('<line x1="' + padL + '" y1="' + padT + '" x2="' + padL + '" y2="' + (H - padB) + '" stroke="currentColor" stroke-width="1" opacity=".4"/>');
+      // labels
+      parts.push('<text x="' + (padL - 6) + '" y="' + (padT + 4) + '" font-size="10" text-anchor="end" fill="currentColor" opacity=".5">' + b + '</text>');
+      parts.push('<text x="' + (padL - 6) + '" y="' + (H - padB + 2) + '" font-size="10" text-anchor="end" fill="currentColor" opacity=".5">0</text>');
+      parts.push('<text x="' + (W - padR) + '" y="' + (H - 6) + '" font-size="10" text-anchor="end" fill="currentColor" opacity=".5">' + duration + ' s</text>');
+      parts.push('<text x="' + (padL - 24) + '" y="' + (H / 2) + '" font-size="10" text-anchor="middle" fill="currentColor" opacity=".5" transform="rotate(-90 ' + (padL - 24) + ' ' + (H / 2) + ')">tokens</text>');
+
+      // Build curve
+      var pts = [];
+      var demand = demandVal();
+      if (algo === "token") {
+        var tokens = b;
+        for (var i = 0; i <= steps; i++) {
+          var t = (i / steps) * duration;
+          // drain at demand, refill at r
+          var net = r - demand;
+          tokens = Math.min(b, Math.max(0, tokens + net * (duration / steps)));
+          pts.push([xOf(t), yOf(tokens, vmax)]);
+        }
+      } else if (algo === "fixed") {
+        for (var i = 0; i <= steps; i++) {
+          var t = (i / steps) * duration;
+          // count over current window starting fresh — show sawtooth
+          var into = t % w;
+          var used = Math.min(b, demand * into);
+          pts.push([xOf(t), yOf(vmax - used, vmax)]);
+        }
+      } else if (algo === "sliding") {
+        for (var i = 0; i <= steps; i++) {
+          var t = (i / steps) * duration;
+          var inWin = Math.min(b, Math.max(0, demand * Math.min(t, w)));
+          pts.push([xOf(t), yOf(vmax - inWin, vmax)]);
+        }
+      } else { // leaky
+        var queue = 0;
+        for (var i = 0; i <= steps; i++) {
+          var t = (i / steps) * duration;
+          var dt = duration / steps;
+          var incoming = Math.min(demand * dt, Math.max(0, b - queue));
+          queue = Math.max(0, queue + incoming - r * dt);
+          pts.push([xOf(t), yOf(queue, vmax)]);
+        }
+      }
+      var d = pts.map(function (p, i) { return (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1); }).join(" ");
+      parts.push('<path d="' + d + '" fill="none" stroke="var(--accent,#6ea8fe)" stroke-width="2"/>');
+      parts.push('</svg>');
+      $("timeline").innerHTML = parts.join("");
+    }
+
+    $("algo").addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-a]"); if (!b) return;
+      algo = b.getAttribute("data-a");
+      Array.prototype.forEach.call($("algo").querySelectorAll("button"), function (x) { x.classList.remove("active"); });
+      b.classList.add("active");
+      calc();
+    });
+    $("calc").addEventListener("click", calc);
+    ["rate", "burst", "window", "demand"].forEach(function (id) {
+      $(id).addEventListener("input", calc);
+    });
+    calc();
+  })();
+  </script>
+</body>
+</html>

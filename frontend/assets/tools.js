@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "rate-limit-calculator",
+    name: "Rate Limit Calculator",
+    description: "Work out the per-key behaviour of common API rate-limiting algorithms — token bucket, fixed window, sliding window, and leaky bucket — from a target request rate and burst capacity. See the refill rate, sustained requests-per-second, burst handling, and a timeline showing the bucket over 10 s. Pure arithmetic, runs locally in your browser.",
+    category: "Networking",
+    icon: "🚦",
+    added: "2026-07-14T21:30:00Z",
+  },
+  {
     slug: "csv-splitter",
     name: "CSV Splitter",
     description: "Split a CSV file or pasted text into multiple chunks — by row count (every N rows, keeping the header on each part) or by the unique values in a chosen column (one file per distinct value). Handles quoted fields, embedded commas and newlines. Each chunk is downloadable as its own .csv. Everything runs locally in your browser; nothing is uploaded.",
