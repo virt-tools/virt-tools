@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>555 Timer Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .row2 { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+    .row2 .field { margin-bottom: 0; }
+    input[type="number"] { font-family: ui-monospace, monospace; width: 100px; }
+    select { min-width: 80px; }
+    .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+    .seg button { background: var(--bg-elev-2); color: var(--text); border: none; padding: 5px 12px; cursor: pointer; font-size: 0.85rem; }
+    .seg button.active { background: var(--accent, #6ea8ff); color: #08111f; font-weight: 600; }
+    .kv { display: grid; grid-template-columns: 220px 1fr; gap: 6px 12px; margin-top: 12px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.95rem; }
+    .verdict { font-size: 1.5rem; font-weight: 800; font-family: ui-monospace, monospace; margin-top: 10px; }
+    .verdict.ok { color: var(--ok, #4ade80); }
+    .verdict.bad { color: var(--bad, #f87171); }
+    .big { font-size: 1.05rem; font-weight: 700; }
+    h3.sec { font-size: 0.92rem; font-weight: 600; margin: 14px 0 2px; color: var(--text-dim); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>555 Timer Calculator</h1>
+      <p>Design or analyze the classic NE555 timer in astable (free-running oscillator) or monostable (one-shot) mode. Enter the timing resistors and capacitor to get frequency, period, high/low times and duty cycle, or flip to design mode and enter a target frequency to solve for the capacitor. The standard formulas use the internal resistor-divider thresholds at 1/3 and 2/3 of VCC. Useful for blinking LEDs, clock generation, debounce and time-delay circuits. Pure arithmetic — the 555's real accuracy depends on the chip variant, supply voltage, capacitor tolerance and temperature, so use 1% resistors and a low-leakage cap for precision timing. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row2">
+        <div class="field">
+          <label>Circuit mode</label>
+          <div class="seg" id="cseg">
+            <button data-c="astable" class="active">Astable</button>
+            <button data-c="mono">Monostable</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Direction</label>
+          <div class="seg" id="dseg">
+            <button data-d="analyze" class="active">Analyze (from R,C)</button>
+            <button data-d="design">Design (find C)</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="r1f" class="field">
+        <label for="r1">R1 (Ra)</label>
+        <input id="r1" type="number" min="0" step="any" value="10">
+        <select id="r1u" style="margin-left:6px;">
+          <option value="1">Ω</option>
+          <option value="1000" selected>kΩ</option>
+          <option value="1000000">MΩ</option>
+        </select>
+      </div>
+
+      <div id="r2f" class="field">
+        <label for="r2">R2 (Rb)</label>
+        <input id="r2" type="number" min="0" step="any" value="100">
+        <select id="r2u" style="margin-left:6px;">
+          <option value="1">Ω</option>
+          <option value="1000" selected>kΩ</option>
+          <option value="1000000">MΩ</option>
+        </select>
+      </div>
+
+      <div id="cf" class="field">
+        <label for="cv" id="clabel">Capacitor C</label>
+        <input id="cv" type="number" min="0" step="any" value="0.1">
+        <select id="cu" style="margin-left:6px;">
+          <option value="1">F</option>
+          <option value="0.000001" selected>µF</option>
+          <option value="0.000000001">nF</option>
+          <option value="0.000000000001">pF</option>
+        </select>
+      </div>
+
+      <div id="tf" class="field" style="display:none;">
+        <label for="tv" id="tlabel">Target frequency</label>
+        <input id="tv" type="number" min="0" step="any" value="1000">
+        <select id="tu" style="margin-left:6px;">
+          <option value="1" selected>Hz</option>
+          <option value="1000">kHz</option>
+          <option value="1000000">MHz</option>
+        </select>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <dl class="kv" id="kv"></dl>
+      <p class="note" id="err"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var cseg = $("cseg"), dseg = $("dseg");
+    var r1f = $("r1f"), r1El = $("r1"), r1u = $("r1u");
+    var r2f = $("r2f"), r2El = $("r2"), r2u = $("r2u");
+    var cf = $("cf"), cvEl = $("cv"), cu = $("cu"), clabel = $("clabel");
+    var tf = $("tf"), tvEl = $("tv"), tu = $("tu"), tlabel = $("tlabel");
+    var verdictEl = $("verdict"), kvEl = $("kv"), errEl = $("err");
+    var circuit = "astable", dir = "analyze";
+
+    function num(el) { var n = parseFloat(el.value); return isNaN(n) ? NaN : n; }
+    function fmt(n, d) { return Number(n).toFixed(d); }
+    function fmtT(s) {
+      if (s >= 1) return fmt(s, 3) + " s";
+      if (s >= 1e-3) return fmt(s * 1e3, 3) + " ms";
+      if (s >= 1e-6) return fmt(s * 1e6, 3) + " µs";
+      return fmt(s * 1e9, 3) + " ns";
+    }
+    function fmtF(h) {
+      if (h >= 1e6) return fmt(h / 1e6, 4) + " MHz";
+      if (h >= 1e3) return fmt(h / 1e3, 4) + " kHz";
+      return fmt(h, 4) + " Hz";
+    }
+    function fmtC(farads) {
+      if (farads >= 1e-3) return fmt(farads * 1e3, 3) + " mF";
+      if (farads >= 1e-6) return fmt(farads * 1e6, 3) + " µF";
+      if (farads >= 1e-9) return fmt(farads * 1e9, 3) + " nF";
+      return fmt(farads * 1e12, 3) + " pF";
+    }
+
+    cseg.querySelectorAll("button").forEach(function (b) {
+      b.addEventListener("click", function () {
+        cseg.querySelectorAll("button").forEach(function (x) { x.classList.remove("active"); });
+        b.classList.add("active"); circuit = b.getAttribute("data-c"); updateUI(); render();
+      });
+    });
+    dseg.querySelectorAll("button").forEach(function (b) {
+      b.addEventListener("click", function () {
+        dseg.querySelectorAll("button").forEach(function (x) { x.classList.remove("active"); });
+        b.classList.add("active"); dir = b.getAttribute("data-d"); updateUI(); render();
+      });
+    });
+
+    function updateUI() {
+      var astable = circuit === "astable";
+      r2f.style.display = astable ? "" : "none";
+      if (dir === "analyze") { cf.style.display = ""; tf.style.display = "none"; clabel.textContent = "Capacitor C"; }
+      else { cf.style.display = "none"; tf.style.display = ""; tlabel.textContent = astable ? "Target frequency" : "Target pulse width"; tu.style.display = astable ? "" : "none"; }
+    }
+
+    function render() {
+      errEl.textContent = ""; verdictEl.textContent = ""; verdictEl.className = "verdict"; kvEl.innerHTML = "";
+      var astable = circuit === "astable";
+      var R1 = num(r1El) * parseFloat(r1u.value);
+      if (astable) {
+        var R2 = num(r2El) * parseFloat(r2u.value);
+        if (isNaN(R1) || R1 <= 0 || isNaN(R2) || R2 <= 0) { bad("Enter positive R1 and R2."); return; }
+        if (dir === "analyze") {
+          var C = num(cvEl) * parseFloat(cu.value);
+          if (isNaN(C) || C <= 0) { bad("Enter a positive capacitor C."); return; }
+          var th = 0.693 * (R1 + R2) * C, tl = 0.693 * R2 * C, T = th + tl;
+          var f = 1 / T, duty = th / T * 100;
+          verdictEl.textContent = fmtF(f) + "  ·  " + fmtT(T) + "  ·  " + fmt(duty, 1) + "% duty";
+          verdictEl.className = "verdict ok";
+          kvEl.innerHTML =
+            "<dt>Frequency</dt><dd class='big'>" + fmtF(f) + "</dd>" +
+            "<dt>Period</dt><dd>" + fmtT(T) + "</dd>" +
+            "<dt>High time</dt><dd class='big'>" + fmtT(th) + "</dd>" +
+            "<dt>Low time</dt><dd class='big'>" + fmtT(tl) + "</dd>" +
+            "<dt>Duty cycle</dt><dd>" + fmt(duty, 2) + "%  <span class='muted'>(always > 50% in this circuit)</span></dd>" +
+            "<dt>Inputs</dt><dd>R1 " + fmt(R1, 0) + " Ω  ·  R2 " + fmt(R2, 0) + " Ω  ·  C " + fmtC(C) + "</dd>";
+        } else {
+          var fT = num(tvEl) * parseFloat(tu.value);
+          if (isNaN(fT) || fT <= 0) { bad("Enter a positive target frequency."); return; }
+          var Cd = 1.44 / (fT * (R1 + 2 * R2));
+          verdictEl.textContent = "C = " + fmtC(Cd) + "  ·  " + fmtF(fT) + " target";
+          verdictEl.className = "verdict ok";
+          var Td = 1 / fT, dutyd = (R1 + R2) / (R1 + 2 * R2) * 100;
+          kvEl.innerHTML =
+            "<dt>Required capacitor</dt><dd class='big'>" + fmtC(Cd) + "</dd>" +
+            "<dt>Resulting period</dt><dd>" + fmtT(Td) + "</dd>" +
+            "<dt>Duty cycle</dt><dd>" + fmt(dutyd, 2) + "%  <span class='muted'>(fixed by R1:R2 ratio)</span></dd>" +
+            "<dt>Formula</dt><dd>C = 1.44 ÷ ( f × (R1 + 2·R2) )</dd>";
+        }
+      } else {
+        if (isNaN(R1) || R1 <= 0) { bad("Enter a positive timing resistor R."); return; }
+        if (dir === "analyze") {
+          var Cm = num(cvEl) * parseFloat(cu.value);
+          if (isNaN(Cm) || Cm <= 0) { bad("Enter a positive capacitor C."); return; }
+          var Tm = 1.1 * R1 * Cm;
+          verdictEl.textContent = "Pulse width " + fmtT(Tm);
+          verdictEl.className = "verdict ok";
+          kvEl.innerHTML =
+            "<dt>Pulse width (T)</dt><dd class='big'>" + fmtT(Tm) + "</dd>" +
+            "<dt>Formula</dt><dd>T = 1.1 × R × C</dd>" +
+            "<dt>Inputs</dt><dd>R " + fmt(R1, 0) + " Ω  ·  C " + fmtC(Cm) + "</dd>";
+        } else {
+          var Ttarget = num(tvEl); // seconds (no unit select for mono design)
+          if (isNaN(Ttarget) || Ttarget <= 0) { bad("Enter a positive target pulse width (seconds)."); return; }
+          var Cdes = Ttarget / (1.1 * R1);
+          verdictEl.textContent = "C = " + fmtC(Cdes) + "  ·  " + fmtT(Ttarget) + " target";
+          verdictEl.className = "verdict ok";
+          kvEl.innerHTML =
+            "<dt>Required capacitor</dt><dd class='big'>" + fmtC(Cdes) + "</dd>" +
+            "<dt>Formula</dt><dd>C = T ÷ (1.1 × R)</dd>";
+        }
+      }
+      errEl.textContent = "Astable mode (free-running oscillator): the capacitor charges through R1+R2 to 2/3 VCC then discharges through R2 to 1/3 VCC, repeating. High time = 0.693·(R1+R2)·C, low time = 0.693·R2·C, so period = 0.693·(R1+2·R2)·C and frequency = 1.44 / ((R1+2·R2)·C). Duty cycle is (R1+R2)/(R1+2·R2), which is always above 50% in the standard circuit — to get near 50% make R2 ≫ R1, and for a true 50% square wave add a diode across R2 or use the CMOS 555 with R1 small. Monostable mode (one-shot): a trigger produces a single high pulse of T = 1.1·R·C, after which the output returns low until the next trigger. Design mode solves the timing capacitor from a target frequency (astable) or pulse width (monostable). Real timing varies with the chip (bipolar NE555 vs CMOS TLC555), supply voltage, capacitor tolerance (electrolytics are ±20% and leak) and temperature, so for accurate clocks use a crystal or resonator instead.";
+      errEl.className = "note";
+    }
+    function bad(msg) { verdictEl.textContent = "✗ " + msg; verdictEl.className = "verdict bad"; }
+
+    [r1El, r1u, r2El, r2u, cvEl, cu, tvEl, tu].forEach(function (el) {
+      el.addEventListener("input", render); el.addEventListener("change", render);
+    });
+    updateUI(); render();
+  })();
+  </script>
+</body>
+</html>

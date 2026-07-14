@@ -3794,4 +3794,12 @@ window.VIRTUAL_TOOLS = [
     icon: "✂️",
     added: "2026-07-14T16:15:00Z",
   },
+  {
+    slug: "fifty-five-timer-calculator",
+    name: "555 Timer Calculator",
+    description: "Design or analyze the classic NE555 timer in astable (free-running oscillator) or monostable (one-shot) mode. Enter the timing resistors and capacitor to get frequency, period, high and low times and duty cycle, or flip to design mode and enter a target frequency or pulse width to solve for the capacitor. The standard formulas use the internal resistor-divider thresholds at one-third and two-thirds of VCC. Useful for blinking LEDs, clock generation, debounce and time-delay circuits. Pure arithmetic — real accuracy depends on chip variant, supply voltage, capacitor tolerance and temperature, so use 1% resistors and a low-leakage cap for precision. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "⏱️",
+    added: "2026-07-14T16:45:00Z",
+  },
 ];
