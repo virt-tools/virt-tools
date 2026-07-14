@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "json-flatten",
+    name: "JSON Flatten & Unflatten",
+    description: "Collapse a nested JSON object into dot-path key/value pairs ({a:{b:1}} → {\"a.b\":1}), or expand a flat dot-path object back into its nested form. Handles arrays with numeric indices, escapes literal dots/slashes/underscores in keys, and preserves JSON value types. Choose dot, slash, or underscore separators. The reverse of the JSON Pointer addressing scheme — useful for spreadsheets, env-file generation, and diffing nested structures. Runs locally in your browser.",
+    category: "Data",
+    icon: "🥞",
+    added: "2026-07-14T20:00:00Z",
+  },
+  {
     slug: "css-named-colors",
     name: "CSS Named Color Explorer",
     description: "Browse all 148 standard CSS named colors (CSS Level 1–4) — search by name or hex, filter by hue family, sort by hue, and click any swatch for its RGB, HSL, hue family, and ready-to-paste CSS values. Pure static reference, runs locally in your browser.",

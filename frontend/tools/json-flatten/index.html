@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>JSON Flatten &amp; Unflatten — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    @media (max-width:780px){ .grid2 { grid-template-columns:1fr; } }
+    textarea { width:100%; font-family:monospace; font-size:12px; min-height:200px; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:10px 0; }
+    .seg { display:inline-flex; border:1px solid var(--border,#2a2f3a); border-radius:8px; overflow:hidden; margin-bottom:10px; }
+    .seg button { border:none; border-radius:0; background:transparent; color:inherit; padding:6px 14px; cursor:pointer; }
+    .seg button.active { background: var(--accent,#6ea8fe); color:#08101f; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>JSON Flatten &amp; Unflatten</h1>
+      <p>Collapse a nested JSON object into dot-path key/value pairs (<code>{"a":{"b":1}} → {"a.b":1}</code>), or expand a flat dot-path object back into its nested form. Handles arrays with numeric indices, escapes literal dots in keys, and preserves JSON value types (string, number, boolean, null). The reverse of the JSON Pointer tool's addressing scheme — useful for spreadsheets, env-file generation, and diffing nested structures. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="seg" id="mode">
+        <button type="button" data-m="flatten" class="active">Flatten</button>
+        <button type="button" data-m="unflatten" class="secondary">Unflatten</button>
+      </div>
+
+      <div class="grid2">
+        <div>
+          <label for="input">Input JSON</label>
+          <textarea id="input" spellcheck="false" autocomplete="off" placeholder='{"user":{"name":"Ada","tags":["x","y"]}}'></textarea>
+        </div>
+        <div>
+          <label for="output">Output</label>
+          <textarea id="output" readonly spellcheck="false"></textarea>
+        </div>
+      </div>
+
+      <div class="row">
+        <label>Path separator: <select id="sep"><option value=".">dot (.)</option><option value="/">slash (/)</option><option value="_">underscore (_)</option></select></label>
+        <label><input type="checkbox" id="escapeDots" checked> Escape literal separators in keys</label>
+        <label><input type="checkbox" id="arraysIndices" checked> Arrays as numeric indices</label>
+        <label>Indent: <select id="indent"><option value="2">2</option><option value="4">4</option><option value="0">min</option></select></label>
+      </div>
+
+      <div class="row">
+        <button id="run">Run</button>
+        <button id="copy" class="secondary">Copy output</button>
+        <button id="swap" class="secondary">↓ Use output as input</button>
+      </div>
+
+      <p class="err" id="err"></p>
+      <p class="note" id="note">Paste JSON above.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var mode = "flatten";
+
+    function sep() { return $("sep").value; }
+    function escapeDots() { return $("escapeDots").checked; }
+    function arraysIndices() { return $("arraysIndices").checked; }
+    function indent() { return parseInt($("indent").value, 10); }
+
+    function escPath(part) {
+      var s = sep();
+      if (escapeDots() && s === ".") return part.replace(/\\/g, "\\\\").replace(/\./g, "\\.");
+      if (escapeDots() && s === "/") return part.replace(/~/g, "~0").replace(/\//g, "~1");
+      if (escapeDots() && s === "_") return part.replace(/\\/g, "\\\\").replace(/_/g, "\\_");
+      return part;
+    }
+    function unescPath(part) {
+      var s = sep();
+      if (s === ".") return part.replace(/\\\./g, ".").replace(/\\\\/g, "\\");
+      if (s === "/") return part.replace(/~1/g, "/").replace(/~0/g, "~");
+      if (s === "_") return part.replace(/\\_/g, "_").replace(/\\\\/g, "\\");
+      return part;
+    }
+
+    function flatten(obj, prefix, out) {
+      if (obj === null || typeof obj !== "object") {
+        out[prefix] = obj;
+        return;
+      }
+      if (Array.isArray(obj)) {
+        if (obj.length === 0) { out[prefix] = []; return; }
+        for (var i = 0; i < obj.length; i++) {
+          var k = arraysIndices() ? String(i) : "[" + i + "]";
+          var path = prefix === "" ? k : (arraysIndices() ? prefix + sep() + k : prefix + k);
+          flatten(obj[i], path, out);
+        }
+      } else {
+        var keys = Object.keys(obj);
+        if (keys.length === 0) { out[prefix] = {}; return; }
+        for (var j = 0; j < keys.length; j++) {
+          var path = prefix === "" ? escPath(keys[j]) : prefix + sep() + escPath(keys[j]);
+          flatten(obj[keys[j]], path, out);
+        }
+      }
+    }
+
+    function splitPath(path) {
+      var s = sep();
+      if (s === ".") {
+        var parts = [], cur = "", i = 0;
+        while (i < path.length) {
+          if (path[i] === "\\" && i + 1 < path.length) { cur += path[i + 1]; i += 2; }
+          else if (path[i] === ".") { parts.push(cur); cur = ""; i++; }
+          else { cur += path[i]; i++; }
+        }
+        parts.push(cur);
+        return parts;
+      }
+      if (s === "/") {
+        return path.split("/").map(function (p) { return p.replace(/~1/g, "/").replace(/~0/g, "~"); });
+      }
+      if (s === "_") {
+        var parts2 = [], cur2 = "", i2 = 0;
+        while (i2 < path.length) {
+          if (path[i2] === "\\" && i2 + 1 < path.length) { cur2 += path[i2 + 1]; i2 += 2; }
+          else if (path[i2] === "_") { parts2.push(cur2); cur2 = ""; i2++; }
+          else { cur2 += path[i2]; i2++; }
+        }
+        parts2.push(cur2);
+        return parts2;
+      }
+      return [path];
+    }
+
+    function unflatten(flat) {
+      var root;
+      var keys = Object.keys(flat);
+      if (!keys.length) return {};
+      var allArrays = keys.every(function (k) {
+        var first = splitPath(k)[0];
+        return /^\d+$/.test(first);
+      });
+      root = allArrays ? [] : {};
+      keys.forEach(function (path) {
+        var parts = splitPath(path);
+        var cur = root;
+        for (var i = 0; i < parts.length; i++) {
+          var part = parts[i];
+          var isLast = i === parts.length - 1;
+          var nextIsIndex = !isLast && /^\d+$/.test(parts[i + 1]);
+          if (isLast) {
+            cur[part] = flat[path];
+          } else {
+            if (cur[part] === undefined) cur[part] = nextIsIndex ? [] : {};
+            cur = cur[part];
+          }
+        }
+      });
+      return root;
+    }
+
+    function run() {
+      var raw = $("input").value.trim();
+      var errEl = $("err");
+      errEl.textContent = "";
+      if (!raw) { $("output").value = ""; $("note").textContent = "Paste JSON above."; return; }
+      try {
+        var parsed = JSON.parse(raw);
+        var result;
+        if (mode === "flatten") {
+          var out = {};
+          if (parsed === null || typeof parsed !== "object") {
+            errEl.textContent = "Flatten expects an object or array at the top level.";
+            return;
+          }
+          flatten(parsed, "", out);
+          result = out;
+          var count = Object.keys(out).length;
+          $("note").textContent = "Flattened to " + count + " key/path pair(s).";
+        } else {
+          if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+            errEl.textContent = "Unflatten expects a flat object (key → value) at the top level.";
+            return;
+          }
+          result = unflatten(parsed);
+          $("note").textContent = "Unflattened " + Object.keys(parsed).length + " key(s).";
+        }
+        $("output").value = JSON.stringify(result, null, indent() || undefined);
+      } catch (e) {
+        errEl.textContent = e.message || String(e);
+        $("output").value = "";
+        $("note").textContent = "";
+      }
+    }
+
+    $("mode").addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-m]"); if (!b) return;
+      mode = b.getAttribute("data-m");
+      Array.prototype.forEach.call($("mode").querySelectorAll("button"), function (x) { x.classList.remove("active"); });
+      b.classList.add("active");
+      run();
+    });
+    $("run").addEventListener("click", run);
+    $("input").addEventListener("input", run);
+    ["sep", "escapeDots", "arraysIndices", "indent"].forEach(function (id) {
+      $(id).addEventListener("change", run);
+      $(id).addEventListener("input", run);
+    });
+    $("copy").addEventListener("click", function () {
+      var s = $("output").value;
+      if (!s) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(s).then(function () { $("note").textContent = "Copied."; }, function () { $("note").textContent = "Copy failed."; });
+      } else $("note").textContent = "Clipboard unavailable.";
+    });
+    $("swap").addEventListener("click", function () {
+      var s = $("output").value;
+      if (!s) return;
+      $("input").value = s;
+      // toggle mode
+      mode = mode === "flatten" ? "unflatten" : "flatten";
+      Array.prototype.forEach.call($("mode").querySelectorAll("button"), function (b) {
+        b.classList.toggle("active", b.getAttribute("data-m") === mode);
+      });
+      run();
+    });
+    run();
+  })();
+  </script>
+</body>
+</html>
