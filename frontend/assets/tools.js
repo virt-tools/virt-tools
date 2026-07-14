@@ -3866,4 +3866,12 @@ window.VIRTUAL_TOOLS = [
     icon: "⛲",
     added: "2026-07-14T20:45:00Z",
   },
+  {
+    slug: "candy-sugar-stages-calculator",
+    name: "Candy & Sugar Stages Calculator",
+    description: "Identify the candy stage of boiling sugar from a thermometer reading, or find the target temperature for a stage you want — both adjusted for altitude. Sugar syrup passes through seven named stages as its temperature climbs: thread, soft ball, firm ball, hard ball, soft crack, hard crack, and caramel. Because water's boiling point falls with altitude, the whole scale shifts down by the same amount, so a high-altitude batch reaches hard crack at a lower temperature than a sea-level one. Enter your reading to name the stage, or pick a stage to get its altitude-corrected target range. Useful for fudge, caramels, nougat, toffee, brittle, lollipops and spun sugar. Pure arithmetic — the stage boundaries are long-standing culinary conventions and the altitude rule is the usual 1 °F per 500 ft (1 °C per 285 m); trust a candy thermometer and the cold-water test. Everything runs locally in your browser.",
+    category: "Food",
+    icon: "🍬",
+    added: "2026-07-14T21:15:00Z",
+  },
 ];

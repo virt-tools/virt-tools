@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Candy &amp; Sugar Stages Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .row2 { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+    .row2 .field { margin-bottom: 0; }
+    input[type="number"] { font-family: ui-monospace, monospace; width: 110px; }
+    select { min-width: 130px; }
+    .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+    .seg button { background: var(--bg-elev-2); color: var(--text); border: none; padding: 5px 12px; cursor: pointer; font-size: 0.85rem; }
+    .seg button.active { background: var(--accent, #6ea8ff); color: #08111f; font-weight: 600; }
+    .kv { display: grid; grid-template-columns: 230px 1fr; gap: 6px 12px; margin-top: 12px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.95rem; }
+    .verdict { font-size: 1.5rem; font-weight: 800; font-family: ui-monospace, monospace; margin-top: 10px; }
+    .verdict.ok { color: var(--ok, #4ade80); }
+    .verdict.warn { color: var(--accent, #6ea8ff); }
+    .verdict.bad { color: var(--bad, #f87171); }
+    .big { font-size: 1.05rem; font-weight: 700; }
+    h3.sec { font-size: 0.92rem; font-weight: 600; margin: 14px 0 2px; color: var(--text-dim); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Candy &amp; Sugar Stages Calculator</h1>
+      <p>Identify the candy stage of boiling sugar from a thermometer reading, or find the target temperature for a stage you want — both adjusted for altitude. Sugar syrup passes through seven named stages as its temperature (and concentration) climb: thread, soft ball, firm ball, hard ball, soft crack, hard crack, and caramel. Because the boiling point of water falls with altitude, the whole scale shifts down by the same amount, so a high-altitude recipe reaches hard crack at a lower temperature than a sea-level one. Enter your thermometer reading to name the stage, or pick a stage to get its altitude-corrected target range. Useful for fudge, caramels, nougat, toffee, brittle, lollipops and spun sugar. Pure arithmetic — the stage boundaries are long-standing culinary conventions and the altitude rule is the usual 1 °F per 500 ft (1 °C per 285 m); a candy thermometer and a cold-water test beat the number, so use this as a guide. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row2">
+        <div class="field">
+          <label>Temperature</label>
+          <div class="seg" id="tseg">
+            <button data-t="f" class="active">°F</button>
+            <button data-t="c">°C</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Solve for</label>
+          <div class="seg" id="mseg">
+            <button data-m="identify" class="active">Identify stage (from temp)</button>
+            <button data-m="target">Target temp (from stage)</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="row2">
+        <div class="field" id="tempField">
+          <label for="temp" id="tempLabel">Thermometer reading</label>
+          <input id="temp" type="number" step="any" value="300">
+          <span class="muted" id="tempUnit">°F</span>
+        </div>
+        <div class="field" id="stageField" style="display:none;">
+          <label for="stage">Target stage</label>
+          <select id="stage"></select>
+        </div>
+        <div class="field">
+          <label for="alt">Altitude</label>
+          <input id="alt" type="number" min="0" step="any" value="0">
+          <select id="altu" style="min-width:70px;">
+            <option value="ft" selected>ft</option>
+            <option value="m">m</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <dl class="kv" id="kv"></dl>
+      <p class="note" id="err"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var tseg = $("tseg"), mseg = $("mseg");
+    var tempEl = $("temp"), tempUnit = $("tempUnit"), tempLabel = $("tempLabel"), tempField = $("tempField");
+    var stageEl = $("stage"), stageField = $("stageField");
+    var altEl = $("alt"), altuEl = $("altu");
+    var verdictEl = $("verdict"), kvEl = $("kv"), errEl = $("err");
+    var tu = "f", mode = "identify";
+
+    // [value, label, Fmin, Fmax, Cmin, Cmax, desc]
+    var STAGES = [
+      ["thread", "Thread", 230, 233, 110, 111, "Forms 2-inch fine threads that drift and break — used for syrups, glazes and poured icing."],
+      ["soft", "Soft ball", 234, 240, 112, 116, "Forms a soft, pliable ball that flattens when lifted — fudge, fondant, penuche, buttercream."],
+      ["firm", "Firm ball", 244, 248, 118, 120, "Forms a firm but still squeezable ball — soft caramels, marshmallow, divinity."],
+      ["hard", "Hard ball", 250, 266, 121, 130, "Forms a hard but still pliable ball — nougat, rock candy, gummies."],
+      ["softcrack", "Soft crack", 270, 290, 132, 143, "Separates into hard but pliable threads that bend — taffy, butterscotch."],
+      ["hardcrack", "Hard crack", 300, 310, 149, 154, "Snaps into brittle, clean threads — toffee, lollipops, nut brittle, pulled sugar."],
+      ["caramel", "Caramel", 320, 350, 160, 177, "Sugar browns and develops flavour — caramel, spun sugar, pralines. Above 350 °F (177 °C) it burns quickly."]
+    ];
+
+    function num(el) { var n = parseFloat(el.value); return isNaN(n) ? NaN : n; }
+    function fmt(n, d) { return Number(n).toFixed(d); }
+    function bad(msg) { verdictEl.textContent = "✗ " + msg; verdictEl.className = "verdict bad"; kvEl.innerHTML = ""; errEl.textContent = ""; }
+
+    // boiling-point depression at altitude, in the active temp unit
+    function bpDrop() {
+      var alt = num(altEl);
+      if (isNaN(alt) || alt < 0) return 0;
+      var m = altuEl.value === "m" ? alt : alt * 0.3048; // feet->m
+      var dropC = m / 285;                                  // °C
+      return tu === "f" ? dropC * 1.8 : dropC;
+    }
+
+    function fillStages() {
+      stageEl.innerHTML = "";
+      STAGES.forEach(function (s) {
+        var o = document.createElement("option"); o.value = s[0]; o.textContent = s[1]; stageEl.appendChild(o);
+      });
+    }
+
+    tseg.querySelectorAll("button").forEach(function (b) {
+      b.addEventListener("click", function () {
+        tseg.querySelectorAll("button").forEach(function (x) { x.classList.remove("active"); });
+        b.classList.add("active"); tu = b.getAttribute("data-t"); tempUnit.textContent = "°" + tu.toUpperCase(); render();
+      });
+    });
+    mseg.querySelectorAll("button").forEach(function (b) {
+      b.addEventListener("click", function () {
+        mseg.querySelectorAll("button").forEach(function (x) { x.classList.remove("active"); });
+        b.classList.add("active"); mode = b.getAttribute("data-m");
+        tempField.style.display = mode === "identify" ? "" : "none";
+        stageField.style.display = mode === "target" ? "" : "none";
+        tempLabel.textContent = mode === "identify" ? "Thermometer reading" : "";
+        render();
+      });
+    });
+    stageEl.addEventListener("change", render); altuEl.addEventListener("change", render);
+    [tempEl, altEl].forEach(function (el) { el.addEventListener("input", render); el.addEventListener("change", render); });
+
+    function render() {
+      errEl.className = "note"; errEl.textContent = ""; verdictEl.textContent = ""; verdictEl.className = "verdict"; kvEl.innerHTML = "";
+      var drop = bpDrop();
+      var unitSym = "°" + tu.toUpperCase();
+      var idxLo = tu === "f" ? 2 : 4, idxHi = tu === "f" ? 3 : 5;
+
+      if (mode === "identify") {
+        var T = num(tempEl);
+        if (isNaN(T)) { bad("Enter a thermometer reading."); return; }
+        if (isNaN(num(altEl)) || num(altEl) < 0) { bad("Enter a non-negative altitude."); return; }
+        var found = null;
+        for (var i = 0; i < STAGES.length; i++) {
+          var lo = STAGES[i][idxLo] - drop, hi = STAGES[i][idxHi] - drop;
+          if (T >= lo - 0.5 && T <= hi + 0.5) { found = { s: STAGES[i], lo: lo, hi: hi, i: i }; break; }
+        }
+        if (!found) {
+          var firstLo = STAGES[0][idxLo] - drop, lastHi = STAGES[STAGES.length - 1][idxHi] - drop;
+          if (T < firstLo) {
+            verdictEl.textContent = "Below thread (" + fmt(firstLo, 0) + unitSym + ")  ·  not yet a candy stage";
+            verdictEl.className = "verdict warn";
+            kvEl.innerHTML = "<dt>Reading</dt><dd>" + fmt(T, 1) + unitSym + "  <span class='muted'>(thread begins at " + fmt(firstLo, 0) + unitSym + ")</span></dd>" +
+              "<dt>Boiling-point drop</dt><dd>" + fmt(drop, 2) + unitSym + "  <span class='muted'>at " + fmt(num(altEl), 0) + " " + altuEl.value + "</span></dd>";
+            errEl.textContent = "The first candy stage (thread) begins around " + fmt(firstLo, 0) + unitSym + " at your altitude. Below that the syrup is still thin — keep cooking. Sugar syrup boils because water evaporates and the sugar concentration rises; the temperature climbs as the water leaves, and each stage is a band of concentration. The whole scale sits relative to water's boiling point, so at altitude (where water boils cooler) every stage is reached at a correspondingly lower temperature.";
+          } else {
+            verdictEl.textContent = fmt(T, 1) + unitSym + "  ·  past caramel — sugar is burning";
+            verdictEl.className = "verdict bad";
+            kvEl.innerHTML = "<dt>Reading</dt><dd class='big'>" + fmt(T, 1) + unitSym + "</dd>" +
+              "<dt>Caramel range</dt><dd>" + fmt(STAGES[6][idxLo] - drop, 0) + "–" + fmt(STAGES[6][idxHi] - drop, 0) + unitSym + "</dd>" +
+              "<dt>Boiling-point drop</dt><dd>" + fmt(drop, 2) + unitSym + "</dd>";
+            errEl.textContent = "Above " + fmt(STAGES[6][idxHi] - drop, 0) + unitSym + " the sugar has passed the caramel stage and is actively burning — it goes from golden to bitter very fast. Pull it off the heat immediately or drop the pan into a water bath to stop the cooking.";
+          }
+          errEl.className = "note";
+          return;
+        }
+        var s = found.s;
+        verdictEl.textContent = s[1] + " stage  ·  " + fmt(found.lo, 0) + "–" + fmt(found.hi, 0) + unitSym;
+        verdictEl.className = "verdict ok";
+        var next = found.i < STAGES.length - 1 ? STAGES[found.i + 1][1] + " (from " + fmt(STAGES[found.i + 1][idxLo] - drop, 0) + unitSym + ")" : "— top stage";
+        kvEl.innerHTML =
+          "<dt>Stage</dt><dd class='big'>" + s[1] + "</dd>" +
+          "<dt>Reading</dt><dd>" + fmt(T, 1) + unitSym + "</dd>" +
+          "<dt>Range at your altitude</dt><dd>" + fmt(found.lo, 0) + "–" + fmt(found.hi, 0) + unitSym + "</dd>" +
+          "<dt>Range at sea level</dt><dd>" + fmt(s[idxLo], 0) + "–" + fmt(s[idxHi], 0) + unitSym + "</dd>" +
+          "<dt>Boiling-point drop</dt><dd>" + fmt(drop, 2) + unitSym + "  <span class='muted'>(" + fmt(num(altEl), 0) + " " + altuEl.value + ")</span></dd>" +
+          "<dt>Next stage</dt><dd>" + next + "</dd>" +
+          "<dt>What it makes</dt><dd>" + s[6] + "</dd>";
+        errEl.textContent = s[1] + " stage: " + s[6] + " Your thermometer reads " + fmt(T, 1) + unitSym + ", which lands in the " + fmt(found.lo, 0) + "–" + fmt(found.hi, 0) + unitSym + " band once the " + fmt(drop, 1) + unitSym + " altitude correction is applied (sea-level range " + fmt(s[idxLo], 0) + "–" + fmt(s[idxHi], 0) + unitSym + "). Sugar stages are defined by what the syrup does when a drop hits cold water — the classic cold-water test — and the temperature is a reliable proxy for the sugar concentration. The boiling point of water falls about 1 °F per 500 ft (1 °C per 285 m), and since the candy scale hangs off that boiling point, every stage shifts down by the same amount at altitude. " + (drop > 0 ? "At your " + fmt(num(altEl), 0) + " " + altuEl.value + " elevation that's a " + fmt(drop, 1) + unitSym + " drop, so subtract it from any sea-level recipe. " : "") + "Calibrate your thermometer in boiling water first (it should read the local boiling point, not 212 °F / 100 °C, at altitude) and trust the cold-water test when it matters.";
+      } else {
+        var sel = stageEl.value, s = null;
+        STAGES.forEach(function (x) { if (x[0] === sel) s = x; });
+        if (!s) { bad("Pick a target stage."); return; }
+        var lo = s[idxLo] - drop, hi = s[idxHi] - drop;
+        verdictEl.textContent = s[1] + "  ·  cook to " + fmt(lo, 0) + "–" + fmt(hi, 0) + unitSym;
+        verdictEl.className = "verdict ok";
+        kvEl.innerHTML =
+          "<dt>Stage</dt><dd class='big'>" + s[1] + "</dd>" +
+          "<dt>Target range (your altitude)</dt><dd class='big'>" + fmt(lo, 0) + "–" + fmt(hi, 0) + unitSym + "</dd>" +
+          "<dt>Sea-level range</dt><dd>" + fmt(s[idxLo], 0) + "–" + fmt(s[idxHi], 0) + unitSym + "</dd>" +
+          "<dt>Boiling-point drop</dt><dd>" + fmt(drop, 2) + unitSym + "  <span class='muted'>(" + fmt(num(altEl), 0) + " " + altuEl.value + ")</span></dd>" +
+          "<dt>What it makes</dt><dd>" + s[6] + "</dd>";
+        errEl.textContent = s[1] + " stage: " + s[6] + " Cook the syrup to " + fmt(lo, 0) + "–" + fmt(hi, 0) + unitSym + " at your altitude (" + fmt(s[idxLo], 0) + "–" + fmt(s[idxHi], 0) + unitSym + " at sea level, minus the " + fmt(drop, 1) + unitSym + " altitude correction). The boiling point of water falls about 1 °F per 500 ft (1 °C per 285 m), so every candy stage shifts down by the same amount — without that correction a high-altitude batch overshoots its stage and the sugar burns or seizes. A few tips: brush the pan sides with water to stop premature crystallisation, use a heavy-bottomed pan for even heat, calibrate the thermometer against the local boiling point (which is below 212 °F / 100 °C up here), and confirm the stage with the cold-water test — drop a little syrup into cold water and check the thread or ball it forms.";
+      }
+      errEl.className = "note";
+    }
+
+    fillStages(); render();
+  })();
+  </script>
+</body>
+</html>
