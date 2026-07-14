@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Plant Spacing Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .row2 { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+    .row2 .field { margin-bottom: 0; }
+    input[type="number"] { font-family: ui-monospace, monospace; width: 95px; }
+    select { min-width: 130px; }
+    .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+    .seg button { background: var(--bg-elev-2); color: var(--text); border: none; padding: 5px 12px; cursor: pointer; font-size: 0.85rem; }
+    .seg button.active { background: var(--accent, #6ea8ff); color: #08111f; font-weight: 600; }
+    .kv { display: grid; grid-template-columns: 220px 1fr; gap: 6px 12px; margin-top: 12px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.95rem; }
+    .verdict { font-size: 1.4rem; font-weight: 800; font-family: ui-monospace, monospace; margin-top: 10px; }
+    .verdict.ok { color: var(--ok, #4ade80); }
+    .verdict.bad { color: var(--bad, #f87171); }
+    .big { font-size: 1.05rem; font-weight: 700; }
+    h3.sec { font-size: 0.92rem; font-weight: 600; margin: 14px 0 2px; color: var(--text-dim); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Plant Spacing Calculator</h1>
+      <p>Work out how many plants fit a vegetable or flower bed for a given spacing, in square-grid or staggered (triangular, hexagonal) layout, or reverse the math to find the spacing you need to fit a target number of plants. Enter the bed length and width, the spacing between plants, and the layout; the tool gives the plant count, rows and plants per row, plus the area each plant gets and the planting density. Staggered rows pack ~15% more plants than a square grid at the same spacing. Pure arithmetic — actual yields also depend on soil, light, variety and how you prune; rows are centered, so beds with plants at the very edge may hold a few more. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label>Mode</label>
+        <div class="seg" id="mseg">
+          <button data-m="count" class="active">Plants needed</button>
+          <button data-m="spacing">Find spacing</button>
+        </div>
+      </div>
+
+      <h3 class="sec">Bed</h3>
+      <div class="row2">
+        <div class="field">
+          <label for="len">Length</label>
+          <input id="len" type="number" min="0" step="any" value="8">
+          <select id="unit" style="min-width:70px;margin-left:6px;">
+            <option value="ft" selected>ft</option>
+            <option value="m">m</option>
+            <option value="cm">cm</option>
+            <option value="in">in</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="wid">Width</label>
+          <input id="wid" type="number" min="0" step="any" value="4">
+          <span class="muted" id="wsametxt"></span>
+        </div>
+      </div>
+
+      <div class="row2" id="countRow">
+        <div class="field">
+          <label for="sp">Plant spacing</label>
+          <input id="sp" type="number" min="0" step="any" value="1">
+          <span class="muted" id="spunit">ft</span>
+        </div>
+        <div class="field">
+          <label>Layout</label>
+          <div class="seg" id="lseg">
+            <button data-g="square" class="active">Square grid</button>
+            <button data-g="hex">Staggered (hex)</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="field" id="targetRow" style="display:none;">
+        <label for="target">Target number of plants</label>
+        <input id="target" type="number" min="1" step="1" value="32">
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <dl class="kv" id="kv"></dl>
+      <p class="note" id="err"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var mseg = $("mseg"), lseg = $("lseg");
+    var lenEl = $("len"), widEl = $("wid"), unitEl = $("unit"), spEl = $("sp"), targetEl = $("target");
+    var spunit = $("spunit"), countRow = $("countRow"), targetRow = $("targetRow");
+    var verdictEl = $("verdict"), kvEl = $("kv"), errEl = $("err");
+    var mode = "count", grid = "square";
+    var SQ3 = Math.sqrt(3) / 2;
+
+    function num(el) { var n = parseFloat(el.value); return isNaN(n) ? NaN : n; }
+    function fmt(n, d) { return Number(n).toFixed(d); }
+
+    mseg.querySelectorAll("button").forEach(function (b) {
+      b.addEventListener("click", function () {
+        mseg.querySelectorAll("button").forEach(function (x) { x.classList.remove("active"); });
+        b.classList.add("active");
+        mode = b.getAttribute("data-m");
+        countRow.style.display = mode === "count" ? "" : "none";
+        targetRow.style.display = mode === "spacing" ? "" : "none";
+        render();
+      });
+    });
+    lseg.querySelectorAll("button").forEach(function (b) {
+      b.addEventListener("click", function () {
+        lseg.querySelectorAll("button").forEach(function (x) { x.classList.remove("active"); });
+        b.classList.add("active");
+        grid = b.getAttribute("data-g");
+        render();
+      });
+    });
+
+    function render() {
+      errEl.textContent = ""; verdictEl.textContent = ""; verdictEl.className = "verdict"; kvEl.innerHTML = "";
+      var u = unitEl.value; spunit.textContent = u;
+      var L = num(lenEl), W = num(widEl);
+      if (isNaN(L) || isNaN(W) || L <= 0 || W <= 0) {
+        verdictEl.textContent = "✗ Enter positive bed length and width."; verdictEl.className = "verdict bad"; return;
+      }
+      var area = L * W;
+
+      if (mode === "count") {
+        var s = num(spEl);
+        if (isNaN(s) || s <= 0) { verdictEl.textContent = "✗ Enter a positive plant spacing."; verdictEl.className = "verdict bad"; return; }
+        var cols = Math.round(W / s), rows = Math.round(L / s);
+        var plants, perRow;
+        if (grid === "square") {
+          plants = cols * rows; perRow = cols;
+        } else {
+          var rowSp = s * SQ3;
+          rows = Math.round(L / rowSp);
+          var colsEven = Math.round(W / s), colsOdd = Math.round((W - s / 2) / s);
+          if (colsOdd < 1) colsOdd = colsEven;
+          plants = 0; var evenRows = 0, oddRows = 0;
+          for (var i = 0; i < rows; i++) { if (i % 2 === 0) { plants += colsEven; evenRows++; } else { plants += colsOdd; oddRows++; } }
+          perRow = (evenRows ? colsEven : 0) + " / " + (oddRows ? colsOdd : 0);
+        }
+        var areaPer = area / plants, density = plants / area;
+        verdictEl.textContent = plants + " plants  ·  " + rows + " rows  ·  " + perRow + "/row";
+        verdictEl.className = "verdict ok";
+        kvEl.innerHTML =
+          "<dt>Total plants</dt><dd class='big'>" + plants + "</dd>" +
+          "<dt>Rows</dt><dd>" + rows + (grid === "hex" ? "  (row spacing " + fmt(s * SQ3, 2) + " " + u + ")" : "") + "</dd>" +
+          "<dt>Plants per row</dt><dd>" + perRow + "</dd>" +
+          "<dt>Area per plant</dt><dd>" + fmt(areaPer, 3) + " " + u + "²</dd>" +
+          "<dt>Planting density</dt><dd>" + fmt(density, 2) + " plants/" + u + "²</dd>" +
+          "<dt>Bed area</dt><dd>" + fmt(area, 1) + " " + u + "²</dd>";
+        errEl.textContent = "Square-grid layout puts plants on a grid of side s, so plants ≈ area ÷ s² (rounded, with rows and columns centered). Staggered (triangular/hexagonal) layout offsets every other row by half a spacing and tightens row spacing to s × √3/2 ≈ 0.866 s, packing about 15% more plants per area at the same nearest-neighbor distance — better for many vegetables and bedding annuals because each plant gets more uniform elbow room. The reverse holds too: a denser hex layout gives each plant the same spacing on a smaller footprint. Rows are centered in the bed; if you plant right at the edges you can usually fit a few more. Recommended spacings vary by crop — e.g. tomatoes ~24 in, lettuce ~10–12 in, carrots ~2–3 in, bush beans ~4 in — follow the seed packet or variety guide for the species you're growing.";
+      } else {
+        var target = num(targetEl);
+        if (isNaN(target) || target < 1) { verdictEl.textContent = "✗ Enter a target plant count (≥ 1)."; verdictEl.className = "verdict bad"; return; }
+        var packFactor = grid === "square" ? 1 : SQ3;
+        var s = Math.sqrt(area * packFactor / target);
+        verdictEl.textContent = "Spacing " + fmt(s, 3) + " " + u + "  (" + grid + ")";
+        verdictEl.className = "verdict ok";
+        var areaPer = area / target;
+        kvEl.innerHTML =
+          "<dt>Required spacing</dt><dd class='big'>" + fmt(s, 3) + " " + u + "</dd>" +
+          "<dt>Equivalent diameter</dt><dd>" + fmt(s, 3) + " " + u + "  <span class='muted'>(nearest-neighbor distance)</span></dd>" +
+          "<dt>Area per plant</dt><dd>" + fmt(areaPer, 3) + " " + u + "²</dd>" +
+          "<dt>Planting density</dt><dd>" + fmt(target / area, 2) + " plants/" + u + "²</dd>" +
+          "<dt>Layout</dt><dd>" + (grid === "square" ? "Square grid" : "Staggered / hex  (row spacing " + fmt(s * SQ3, 3) + " " + u + ")") + "</dd>";
+        errEl.textContent = "To fit a target number of plants in a bed, solve the spacing: square grid uses s = √(area ÷ plants); staggered/hex uses s = √(area × 0.866 ÷ plants), giving a slightly larger nearest-neighbor distance for the same count because the hex packing is denser. The result is the center-to-center spacing you should mark out. Round it to a convenient measure for laying out, then re-run in the other mode to see how many plants that rounded spacing actually yields.";
+      }
+      errEl.className = "note";
+    }
+
+    [lenEl, widEl, unitEl, spEl, targetEl].forEach(function (el) {
+      el.addEventListener("input", render); el.addEventListener("change", render);
+    });
+    render();
+  })();
+  </script>
+</body>
+</html>

@@ -3738,4 +3738,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🧱",
     added: "2026-07-14T12:45:00Z",
   },
+  {
+    slug: "plant-spacing-calculator",
+    name: "Plant Spacing Calculator",
+    description: "Work out how many plants fit a vegetable or flower bed for a given spacing, in square-grid or staggered (triangular, hexagonal) layout, or reverse the math to find the spacing needed to fit a target number of plants. Enter bed length and width, plant spacing and layout; get the plant count, rows and plants per row, area per plant and planting density. Staggered rows pack about 15% more plants than a square grid at the same spacing. Pure arithmetic — actual yields depend on soil, light and variety; rows are centered, so edge-planted beds may hold a few more. Everything runs locally in your browser.",
+    category: "Environment",
+    icon: "🌱",
+    added: "2026-07-14T13:15:00Z",
+  },
 ];
