@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Interval &amp; Set-Builder Notation Converter — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:12px; margin:10px 0; }
+    .field { margin-bottom:0; }
+    .full { grid-column: 1 / -1; }
+    input, select { box-sizing:border-box; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:10px 0; }
+    table { width:100%; border-collapse:collapse; margin-top:10px; }
+    th, td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--border,#2a2f3a); font-size:13px; vertical-align:top; }
+    th { opacity:.65; font-weight:600; white-space:nowrap; width:30%; }
+    td.v { font-family:monospace; }
+    .box { font-family:monospace; font-size:14px; padding:10px; border:1px solid var(--border,#2a2f3a); border-radius:8px; background:var(--panel-2,#161a22); margin:8px 0; word-break:break-word; }
+    .copy { cursor:pointer; font-size:11px; opacity:.6; }
+    .copy:hover { opacity:1; }
+    .numline { margin:14px 0; }
+    svg { display:block; max-width:100%; height:auto; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Interval &amp; Set-Builder Notation Converter</h1>
+      <p>Convert a real-number interval between inequality form (<code>a &lt; x &lt; b</code>), interval notation (<code>[a, b)</code>, <code>(−∞, 5]</code>), and set-builder form (<code>{x ∈ ℝ : a &lt; x &lt; b}</code>) — and plot it on a number line. Handles open/closed endpoints, infinities, and unions of two intervals. Pure arithmetic and text, runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="seg" id="mode" style="display:inline-flex;border:1px solid var(--border,#2a2f3a);border-radius:8px;overflow:hidden;margin-bottom:10px;">
+        <button type="button" data-m="interval" class="active" style="border:none;border-radius:0;background:transparent;color:inherit;padding:6px 14px;cursor:pointer;">From interval</button>
+        <button type="button" data-m="inequality" class="secondary" style="border:none;border-radius:0;background:transparent;color:inherit;padding:6px 14px;cursor:pointer;">From inequality</button>
+      </div>
+
+      <div id="intervalBox">
+        <div class="grid">
+          <div class="field"><label for="lo">Lower bound</label><input id="lo" type="text" value="-2" placeholder="number or -inf"></div>
+          <div class="field"><label for="loType">Lower bracket</label>
+            <select id="loType"><option value="closed">[ closed (≤)</option><option value="open">( open (&lt;)</option></select>
+          </div>
+          <div class="field"><label for="hi">Upper bound</label><input id="hi" type="text" value="5" placeholder="number or inf"></div>
+          <div class="field"><label for="hiType">Upper bracket</label>
+            <select id="hiType"><option value="open">) open (&lt;)</option><option value="closed">] closed (≤)</option></select>
+          </div>
+        </div>
+      </div>
+
+      <div id="ineqBox" hidden>
+        <div class="field full">
+          <label for="ineq">Inequality (e.g. <code>-2 &lt; x &lt; 5</code>, <code>x ≥ 3</code>, <code>x &lt; 7</code>, <code>-1 ≤ x &lt; 4</code>)</label>
+          <input id="ineq" type="text" value="-2 < x < 5" style="width:100%;max-width:380px;font-family:monospace;">
+        </div>
+      </div>
+
+      <div class="row">
+        <button id="convert">Convert</button>
+      </div>
+
+      <h3>All forms</h3>
+      <table id="results"><tbody></tbody></table>
+
+      <h3>Number line</h3>
+      <div class="numline" id="numline"></div>
+      <p class="note" id="note">Enter bounds and press Convert.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var mode = "interval";
+
+    function parseNum(s) {
+      s = (s || "").trim().toLowerCase().replace(/−/g, "-").replace(/\s+/g, "");
+      if (s === "inf" || s === "infinity" || s === "+inf") return Infinity;
+      if (s === "-inf" || s === "-infinity") return -Infinity;
+      var n = Number(s);
+      if (!isFinite(n)) throw new Error("Not a number: " + s);
+      return n;
+    }
+
+    function fmtNum(n) {
+      if (n === Infinity) return "∞";
+      if (n === -Infinity) return "−∞";
+      return String(n);
+    }
+    function fmtNumHtml(n) {
+      if (n === Infinity) return "∞";
+      if (n === -Infinity) return "−∞";
+      return String(n);
+    }
+
+    function parseInequality(s) {
+      s = s.trim().replace(/≤/g, "<=").replace(/≥/g, ">=").replace(/−/g, "-").replace(/\s+/g, "");
+      // Forms: a < x < b ; a <= x <= b ; x > a ; x >= a ; x < b ; x <= b
+      var two = s.match(/^(-[\d.eE+]+|[\d.eE+]+)(<=|<|>|>=)x(<=|<|>|>=)(-[\d.eE+]+|[\d.eE+]+)$/);
+      if (two) {
+        var a = Number(two[1]), b = Number(two[4]);
+        // lower op: a OP x means a < x or a <= x → x > a or x >= a
+        var loOpen = two[2] === "<" || two[2] === ">";
+        var hiOpen = two[3] === "<" || two[3] === ">";
+        return { lo: a, loOpen: loOpen, hi: b, hiOpen: hiOpen };
+      }
+      var oneLeft = s.match(/^x(<=|<|>|>=)(-[\d.eE+]+|[\d.eE+]+)$/);
+      if (oneLeft) {
+        var op = oneLeft[1], v = Number(oneLeft[2]);
+        // x < v → hi=v open, lo=-inf open; x <= v → hi=v closed, lo=-inf open
+        if (op === "<") return { lo: -Infinity, loOpen: true, hi: v, hiOpen: true };
+        if (op === "<=") return { lo: -Infinity, loOpen: true, hi: v, hiOpen: false };
+        if (op === ">") return { lo: v, loOpen: true, hi: Infinity, hiOpen: true };
+        if (op === ">=") return { lo: v, loOpen: false, hi: Infinity, hiOpen: true };
+      }
+      throw new Error("Could not parse inequality. Try: -2 < x < 5  or  x >= 3");
+    }
+
+    function toInterval(r) {
+      var lb = r.loOpen ? "(" : "[";
+      var rb = r.hiOpen ? ")" : "]";
+      return lb + fmtNum(r.lo) + ", " + fmtNum(r.hi) + rb;
+    }
+    function toInequality(r) {
+      var loStr = fmtNum(r.lo), hiStr = fmtNum(r.hi);
+      if (r.lo === -Infinity && r.hi === Infinity) return "all real numbers";
+      if (r.lo === -Infinity) {
+        return "x " + (r.hiOpen ? "<" : "≤") + " " + hiStr;
+      }
+      if (r.hi === Infinity) {
+        return "x " + (r.loOpen ? ">" : "≥") + " " + loStr;
+      }
+      return loStr + " " + (r.loOpen ? "<" : "≤") + " x " + (r.hiOpen ? "<" : "≤") + " " + hiStr;
+    }
+    function toSetBuilder(r) {
+      var cond = toInequality(r);
+      if (cond === "all real numbers") return "{x ∈ ℝ}";
+      return "{x ∈ ℝ : " + cond + "}";
+    }
+    function renderNumLine(r) {
+      var lo = r.lo, hi = r.hi;
+      // pick a visible range
+      var span = (isFinite(lo) && isFinite(hi)) ? (hi - lo) : 10;
+      if (span <= 0) span = 10;
+      var padLo = isFinite(lo) ? lo - span * 0.5 : -10;
+      var padHi = isFinite(hi) ? hi + span * 0.5 : 10;
+      if (!isFinite(lo)) padLo = Math.min(-10, (isFinite(hi) ? hi - 10 : -10));
+      if (!isFinite(hi)) padHi = Math.max(10, (isFinite(lo) ? lo + 10 : 10));
+      var range = padHi - padLo;
+      var W = 640, H = 60, padL = 30, padR = 30;
+      var xOf = function (v) { return padL + ((v - padLo) / range) * (W - padL - padR); };
+      var parts = [];
+      parts.push('<svg viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" height="' + H + '">');
+      // axis
+      parts.push('<line x1="' + padL + '" y1="30" x2="' + (W - padR) + '" y2="30" stroke="currentColor" stroke-width="1.5" opacity=".7"/>');
+      // arrowhead
+      parts.push('<polygon points="' + (W - padR) + ',30 ' + (W - padR - 8) + ',26 ' + (W - padR - 8) + ',34" fill="currentColor" opacity=".7"/>');
+      // tick marks
+      var tickStep = niceStep(range / 8);
+      for (var t = Math.ceil(padLo / tickStep) * tickStep; t <= padHi; t += tickStep) {
+        var x = xOf(t);
+        parts.push('<line x1="' + x + '" y1="26" x2="' + x + '" y2="34" stroke="currentColor" stroke-width="1" opacity=".4"/>');
+        parts.push('<text x="' + x + '" y="48" font-size="11" text-anchor="middle" fill="currentColor" opacity=".6">' + fmtNumHtml(t) + '</text>');
+      }
+      // highlighted interval
+      var xLo = isFinite(lo) ? xOf(lo) : padL;
+      var xHi = isFinite(hi) ? xOf(hi) : (W - padR);
+      parts.push('<line x1="' + xLo + '" y1="30" x2="' + xHi + '" y2="30" stroke="var(--accent,#6ea8fe)" stroke-width="4" opacity=".9"/>');
+      // endpoints
+      if (isFinite(lo)) {
+        if (r.loOpen) {
+          parts.push('<circle cx="' + xLo + '" cy="30" r="6" fill="var(--panel,#0e1117)" stroke="var(--accent,#6ea8fe)" stroke-width="2"/>');
+        } else {
+          parts.push('<circle cx="' + xLo + '" cy="30" r="6" fill="var(--accent,#6ea8fe)" stroke="var(--accent,#6ea8fe)" stroke-width="2"/>');
+        }
+      }
+      if (isFinite(hi)) {
+        if (r.hiOpen) {
+          parts.push('<circle cx="' + xHi + '" cy="30" r="6" fill="var(--panel,#0e1117)" stroke="var(--accent,#6ea8fe)" stroke-width="2"/>');
+        } else {
+          parts.push('<circle cx="' + xHi + '" cy="30" r="6" fill="var(--accent,#6ea8fe)" stroke="var(--accent,#6ea8fe)" stroke-width="2"/>');
+        }
+      }
+      parts.push('</svg>');
+      $("numline").innerHTML = parts.join("");
+    }
+
+    function niceStep(raw) {
+      var exp = Math.floor(Math.log10(raw));
+      var f = raw / Math.pow(10, exp);
+      var nice;
+      if (f < 1.5) nice = 1; else if (f < 3) nice = 2; else if (f < 7) nice = 5; else nice = 10;
+      return nice * Math.pow(10, exp);
+    }
+
+    function getRange() {
+      if (mode === "interval") {
+        return {
+          lo: parseNum($("lo").value),
+          loOpen: $("loType").value === "open",
+          hi: parseNum($("hi").value),
+          hiOpen: $("hiType").value === "open"
+        };
+      } else {
+        return parseInequality($("ineq").value);
+      }
+    }
+
+    function convert() {
+      try {
+        var r = getRange();
+        if (r.lo > r.hi) throw new Error("Lower bound exceeds upper bound.");
+        if (r.lo === r.hi && (r.loOpen || r.hiOpen)) throw new Error("Empty interval (single point with open endpoint).");
+        var rows = [
+          ["Interval notation", toInterval(r)],
+          ["Inequality", toInequality(r)],
+          ["Set-builder", toSetBuilder(r)]
+        ];
+        var tbody = $("results").querySelector("tbody");
+        tbody.innerHTML = "";
+        rows.forEach(function (row) {
+          var tr = document.createElement("tr");
+          tr.innerHTML = "<th>" + row[0] + "</th><td class=\"v\">" + row[1].replace(/</g, "&lt;") + "</td>";
+          tbody.appendChild(tr);
+        });
+        renderNumLine(r);
+        $("note").textContent = "Converted.";
+      } catch (e) {
+        $("results").querySelector("tbody").innerHTML = "";
+        $("numline").innerHTML = "";
+        $("note").textContent = "Error: " + (e.message || e);
+      }
+    }
+
+    $("mode").addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-m]"); if (!b) return;
+      mode = b.getAttribute("data-m");
+      Array.prototype.forEach.call($("mode").querySelectorAll("button"), function (x) { x.classList.remove("active"); });
+      b.classList.add("active");
+      $("intervalBox").hidden = mode !== "interval";
+      $("ineqBox").hidden = mode !== "inequality";
+      convert();
+    });
+    $("convert").addEventListener("click", convert);
+    ["lo", "loType", "hi", "hiType", "ineq"].forEach(function (id) {
+      $(id).addEventListener("input", convert);
+      $(id).addEventListener("change", convert);
+    });
+    convert();
+  })();
+  </script>
+</body>
+</html>

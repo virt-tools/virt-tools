@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "interval-notation",
+    name: "Interval & Set-Builder Notation Converter",
+    description: "Convert a real-number interval between inequality form (a < x < b), interval notation ([a, b), (−∞, 5]), and set-builder form ({x ∈ ℝ : …}) — and plot it on a number line. Handles open/closed endpoints, infinities, and one-sided inequalities. Pure arithmetic and text, runs locally in your browser.",
+    category: "Math",
+    icon: "📏",
+    added: "2026-07-14T18:30:00Z",
+  },
+  {
     slug: "shamir-secret-sharing",
     name: "Shamir's Secret Sharing",
     description: "Split a secret into n shares so any k of them reconstruct it, but fewer reveal nothing — the threshold scheme from Adi Shamir (1979). Random polynomial over GF(257) with the secret as the constant term; Lagrange interpolation at x = 0 to combine. UTF-8 secrets, Web Crypto randomness. Everything runs locally — your secret and shares never leave the page.",
