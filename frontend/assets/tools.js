@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "csv-filter",
+    name: "CSV Filter & Query",
+    description: "Filter the rows of a CSV by one or more conditions on its columns — equals, not equals, contains, starts/ends with, is empty, numeric < > ≤ ≥ between, or regex match. Chain rules with AND or OR. Auto-sniffs the delimiter; handles quoted fields and embedded newlines. Everything runs locally in your browser.",
+    category: "Data",
+    icon: "🔍",
+    added: "2026-07-14T23:00:00Z",
+  },
+  {
     slug: "csv-join",
     name: "CSV Join & Merge",
     description: "Join two CSV tables on a common key column — inner, left, right, or full outer join — like SQL JOIN for CSV files. Pick the key column from each side, choose the join type, and copy or download the merged result. Right-side columns are suffixed to avoid collisions. Handles quoted fields, embedded commas and newlines, and auto-sniffs the delimiter. Everything runs locally in your browser.",

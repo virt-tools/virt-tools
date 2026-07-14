@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>CSV Filter &amp; Query — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    textarea { width:100%; font-family:monospace; font-size:12px; min-height:140px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; margin:10px 0; }
+    .field { margin-bottom:0; }
+    .full { grid-column: 1 / -1; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:10px 0; }
+    .wrap { overflow:auto; max-height:55vh; border:1px solid var(--border,#2a2f3a); border-radius:8px; margin-top:10px; }
+    table.result { border-collapse:collapse; font-size:12px; }
+    table.result th, table.result td { padding:4px 8px; border-bottom:1px solid var(--border,#2a2f3a); border-right:1px solid var(--border,#2a2f3a); white-space:nowrap; }
+    table.result th { background:var(--panel-2,#161a22); position:sticky; top:0; font-weight:600; }
+    .rules { display:flex; flex-direction:column; gap:6px; margin:8px 0; }
+    .rule-row { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+    .rule-row select, .rule-row input { font-size:12px; }
+    .rule-row .rm { background:var(--bg-elev-2,#1e222b); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:6px 10px; cursor:pointer; font-weight:700; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>CSV Filter &amp; Query</h1>
+      <p>Filter the rows of a CSV by one or more conditions on its columns — equals, not equals, contains, starts/ends with, is empty, numeric <code>&lt;</code> / <code>&gt;</code> / between, or regex match. Chain rules with AND or OR. Handles quoted fields, embedded commas and newlines; auto-sniffs the delimiter. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="csv">CSV input</label>
+        <textarea id="csv" spellcheck="false" autocomplete="off" placeholder="name,city,amount&#10;Ada,London,120&#10;Lin,New York,90&#10;Jay,Tokyo,300"></textarea>
+      </div>
+      <div class="grid">
+        <div class="field"><label>Output delimiter: <select id="outDelim"><option value=",">comma</option><option value=";">semicolon</option><option value="\t">tab</option><option value="|">pipe</option></select></label></div>
+        <div class="field"><label><input type="checkbox" id="hasHeader" checked> First row is header</label></div>
+        <div class="field"><label>Combine rules with: <select id="combiner"><option value="and">AND (all)</option><option value="or">OR (any)</option></select></label></div>
+      </div>
+
+      <div class="rules" id="rules"></div>
+      <div class="row">
+        <button id="addRule" class="secondary">+ Add rule</button>
+        <button id="run">Filter</button>
+        <button id="copy" class="secondary">Copy result</button>
+        <button id="download" class="secondary">Download .csv</button>
+      </div>
+
+      <p class="err" id="err"></p>
+      <p class="note" id="note">Paste CSV and add filter rules above.</p>
+      <div class="wrap"><table class="result" id="out"><tbody></tbody></table></div>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var OPS = [
+      ["eq", "equals"],
+      ["neq", "not equals"],
+      ["contains", "contains"],
+      ["notcontains", "not contains"],
+      ["startswith", "starts with"],
+      ["endswith", "ends with"],
+      ["empty", "is empty"],
+      ["notempty", "is not empty"],
+      ["lt", "numeric <"],
+      ["lte", "numeric ≤"],
+      ["gt", "numeric >"],
+      ["gte", "numeric ≥"],
+      ["between", "numeric between (a|b)"],
+      ["regex", "regex match"]
+    ];
+
+    function actualOutDelim() { var d = $("outDelim").value; return d === "\\t" ? "\t" : d; }
+    function sniffDelim(text) {
+      var cands = [",", "\t", ";", "|"], best = ",", bestScore = -1;
+      cands.forEach(function (d) {
+        var r = parseCSV(text, d);
+        if (r.length < 2) return;
+        var w0 = r[0].length;
+        var consistent = r.every(function (row) { return row.length === w0; });
+        var score = consistent ? w0 * r.length : -1;
+        if (score > bestScore) { bestScore = score; best = d; }
+      });
+      return best;
+    }
+    function parseCSV(text, delim) {
+      var rows = [];
+      var i = 0, n = text.length, field = "", row = [], inQ = false;
+      while (i < n) {
+        var c = text[i];
+        if (inQ) {
+          if (c === '"') {
+            if (text[i + 1] === '"') { field += '"'; i += 2; }
+            else { inQ = false; i++; }
+          } else { field += c; i++; }
+        } else {
+          if (c === '"') { inQ = true; i++; }
+          else if (c === delim) { row.push(field); field = ""; i++; }
+          else if (c === "\r") { i++; }
+          else if (c === "\n") { row.push(field); rows.push(row); row = []; field = ""; i++; }
+          else { field += c; i++; }
+        }
+      }
+      if (field !== "" || row.length) { row.push(field); rows.push(row); }
+      while (rows.length && rows[rows.length - 1].length === 1 && rows[rows.length - 1][0] === "") rows.pop();
+      var w = rows.reduce(function (m, r) { return Math.max(m, r.length); }, 0);
+      rows.forEach(function (r) { while (r.length < w) r.push(""); });
+      return rows;
+    }
+    function csvField(s, delim) {
+      s = String(s);
+      if (s === "") return "";
+      if (new RegExp('["' + delim + '\\n]').test(s)) return '"' + s.replace(/"/g, '""') + '"';
+      return s;
+    }
+    function buildCSV(rows, delim) { return rows.map(function (r) { return r.map(function (c) { return csvField(c, delim); }).join(delim); }).join("\n") + "\n"; }
+    function toNum(s) { return Number(String(s).replace(/,/g, "")); }
+    function isNumber(s) { if (s === "" || s == null) return false; return !isNaN(Number(String(s).replace(/,/g, ""))); }
+
+    function addRule(cols) {
+      var div = document.createElement("div");
+      div.className = "rule-row";
+      var colSel = '<select class="r-col">';
+      cols.forEach(function (h, i) { colSel += '<option value="' + i + '">' + esc(h) + '</option>'; });
+      colSel += '</select>';
+      var opSel = '<select class="r-op">';
+      OPS.forEach(function (o) { opSel += '<option value="' + o[0] + '">' + o[1] + '</option>'; });
+      opSel += '</select>';
+      div.innerHTML = colSel + opSel + '<input class="r-val" type="text" placeholder="value" style="flex:1;min-width:140px;font-family:monospace;">';
+      var rm = document.createElement("button");
+      rm.className = "rm"; rm.textContent = "✕"; rm.title = "Remove rule";
+      rm.addEventListener("click", function () { div.remove(); run(); });
+      div.appendChild(rm);
+      $("rules").appendChild(div);
+      div.querySelector(".r-op").addEventListener("change", function () { run(); });
+      div.querySelector(".r-col").addEventListener("change", function () { run(); });
+      div.querySelector(".r-val").addEventListener("input", run);
+    }
+
+    function esc(s) { return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+    function getCols() {
+      var text = $("csv").value.trim();
+      if (!text) return [];
+      var rows = parseCSV(text, sniffDelim(text));
+      if (!rows.length) return [];
+      var header = $("hasHeader").checked ? rows[0] : rows[0].map(function (_, i) { return "col" + (i + 1); });
+      return header;
+    }
+
+    function evalRule(row, rule) {
+      var col = parseInt(rule.col, 10);
+      var v = row[col] === undefined ? "" : row[col];
+      var val = rule.val;
+      switch (rule.op) {
+        case "eq": return v === val;
+        case "neq": return v !== val;
+        case "contains": return v.indexOf(val) >= 0;
+        case "notcontains": return v.indexOf(val) < 0;
+        case "startswith": return v.indexOf(val) === 0;
+        case "endswith": return v.length >= val.length && v.substr(v.length - val.length) === val;
+        case "empty": return v === "";
+        case "notempty": return v !== "";
+        case "lt": return isNumber(v) && isNumber(val) && toNum(v) < toNum(val);
+        case "lte": return isNumber(v) && isNumber(val) && toNum(v) <= toNum(val);
+        case "gt": return isNumber(v) && isNumber(val) && toNum(v) > toNum(val);
+        case "gte": return isNumber(v) && isNumber(val) && toNum(v) >= toNum(val);
+        case "between":
+          var parts = val.split("|");
+          if (parts.length !== 2) return false;
+          return isNumber(v) && isNumber(parts[0].trim()) && isNumber(parts[1].trim()) && toNum(v) >= toNum(parts[0].trim()) && toNum(v) <= toNum(parts[1].trim());
+        case "regex":
+          try { var re = new RegExp(val); return re.test(v); } catch (e) { return false; }
+      }
+      return false;
+    }
+
+    function run() {
+      var errEl = $("err"); errEl.textContent = "";
+      var text = $("csv").value.trim();
+      if (!text) { $("note").textContent = "Paste CSV first."; $("out").querySelector("tbody").innerHTML = ""; return; }
+      try {
+        var delim = sniffDelim(text);
+        var rows = parseCSV(text, delim);
+        if (!rows.length) { errEl.textContent = "No rows found."; return; }
+        var hasHeader = $("hasHeader").checked;
+        var header = hasHeader ? rows.shift() : rows[0].map(function (_, i) { return "col" + (i + 1); });
+        // collect rules
+        var rules = [];
+        Array.prototype.forEach.call($("rules").children, function (div) {
+          rules.push({
+            col: div.querySelector(".r-col").value,
+            op: div.querySelector(".r-op").value,
+            val: div.querySelector(".r-val").value
+          });
+        });
+        var combiner = $("combiner").value;
+        var outRows = [header];
+        rows.forEach(function (r) {
+          var results = rules.map(function (rule) { return evalRule(r, rule); });
+          var pass = combiner === "and" ? results.every(Boolean) : results.some(Boolean);
+          if (pass) outRows.push(r);
+        });
+        // render
+        var tbody = $("out").querySelector("tbody");
+        tbody.innerHTML = "";
+        outRows.slice(0, 300).forEach(function (r, ri) {
+          var tr = document.createElement("tr");
+          r.forEach(function (c, ci) {
+            var cell = document.createElement(ri === 0 ? "th" : "td");
+            cell.textContent = c;
+            tr.appendChild(cell);
+          });
+          tbody.appendChild(tr);
+        });
+        var data = outRows.length - 1;
+        $("note").textContent = rules.length + " rule(s), " + combiner.toUpperCase() + " → " + data + " matching row(s) of " + rows.length + "." + (outRows.length > 301 ? " (Preview shows first 300.)" : "");
+        window._csv = buildCSV(outRows, actualOutDelim());
+      } catch (e) {
+        errEl.textContent = e.message || String(e);
+      }
+    }
+
+    function refreshCols() {
+      var cols = getCols();
+      // update existing rules' column dropdowns
+      Array.prototype.forEach.call($("rules").children, function (div) {
+        var sel = div.querySelector(".r-col");
+        var cur = sel.value;
+        sel.innerHTML = "";
+        cols.forEach(function (h, i) {
+          var o = document.createElement("option");
+          o.value = i; o.textContent = h || ("col" + (i + 1));
+          sel.appendChild(o);
+        });
+        sel.value = cur;
+      });
+    }
+
+    $("csv").addEventListener("input", refreshCols);
+    $("hasHeader").addEventListener("change", function () { refreshCols(); run(); });
+    $("addRule").addEventListener("click", function () { addRule(getCols()); run(); });
+    $("run").addEventListener("click", run);
+    $("outDelim").addEventListener("change", run);
+    $("combiner").addEventListener("change", run);
+    $("copy").addEventListener("click", function () {
+      if (!window._csv) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(window._csv).then(function () { $("note").textContent = "Copied."; }, function () { $("note").textContent = "Copy failed."; });
+      } else $("note").textContent = "Clipboard unavailable.";
+    });
+    $("download").addEventListener("click", function () {
+      if (!window._csv) return;
+      var blob = new Blob([window._csv], { type: "text/csv" });
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "filtered.csv";
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+
+    // seed with one rule
+    addRule(getCols());
+    run();
+  })();
+  </script>
+</body>
+</html>
