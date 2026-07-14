@@ -3706,4 +3706,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🚗",
     added: "2026-07-14T10:45:00Z",
   },
+  {
+    slug: "knitting-gauge-calculator",
+    name: "Knitting Gauge & Yarn Calculator",
+    description: "Work out how many stitches to cast on and how many rows to knit from a gauge swatch and the finished project size, and estimate the yarn needed using the swatch method. Enter gauge (stitches and rows per 10 cm or per 4 inches), the project width and length, and the swatch weight and size; get cast-on count, total rows, stitch/row density, project area, and an estimated yarn weight with a safety margin. Pure arithmetic — a real blocked swatch is the only reliable basis. Everything runs locally in your browser.",
+    category: "Design",
+    icon: "🧶",
+    added: "2026-07-14T11:15:00Z",
+  },
 ];

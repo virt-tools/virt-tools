@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Knitting Gauge &amp; Yarn Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .row2 { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+    .row2 .field { margin-bottom: 0; }
+    input[type="number"] { font-family: ui-monospace, monospace; width: 90px; }
+    select { min-width: 110px; }
+    .kv { display: grid; grid-template-columns: 230px 1fr; gap: 6px 12px; margin-top: 12px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.95rem; }
+    .verdict { font-size: 1.4rem; font-weight: 800; font-family: ui-monospace, monospace; margin-top: 8px; }
+    .verdict.ok { color: var(--ok, #4ade80); }
+    .verdict.bad { color: var(--bad, #f87171); }
+    .big { font-size: 1.05rem; font-weight: 700; }
+    h3.sec { font-size: 0.92rem; font-weight: 600; margin: 14px 0 4px; color: var(--text-dim); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Knitting Gauge &amp; Yarn Calculator</h1>
+      <p>Work out how many stitches to cast on and how many rows to knit from your gauge swatch and the finished project size, and estimate the yarn you'll need using the swatch method. Enter the gauge (stitches and rows per 10 cm or per 4 inches), the project width and length, and the weight and size of your swatch, and the tool gives the cast-on count, total rows, stitch/row density, and an estimated yarn weight with a safety margin. Pure arithmetic — gauge from a real blocked swatch is the only reliable basis. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <h3 class="sec">Gauge (from a blocked swatch)</h3>
+      <div class="row2">
+        <div class="field">
+          <label for="st">Stitches</label>
+          <input id="st" type="number" min="0" step="any" value="20">
+          <select id="gunit" style="min-width:90px;margin-left:6px;">
+            <option value="10cm" selected>per 10 cm</option>
+            <option value="4in">per 4 in</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="rws">Rows</label>
+          <input id="rws" type="number" min="0" step="any" value="28">
+          <span class="muted">same window</span>
+        </div>
+      </div>
+
+      <h3 class="sec">Project</h3>
+      <div class="row2">
+        <div class="field">
+          <label for="pw">Width</label>
+          <input id="pw" type="number" min="0" step="any" value="50">
+          <select id="punit" style="min-width:70px;margin-left:6px;">
+            <option value="cm" selected>cm</option>
+            <option value="in">in</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="pl">Length</label>
+          <input id="pl" type="number" min="0" step="any" value="70">
+        </div>
+      </div>
+
+      <h3 class="sec">Yarn estimate (swatch method)</h3>
+      <div class="row2">
+        <div class="field">
+          <label for="swg">Swatch weight</label>
+          <input id="swg" type="number" min="0" step="any" value="8"> <span class="muted">g</span>
+        </div>
+        <div class="field">
+          <label for="sww">Swatch size</label>
+          <input id="sww" type="number" min="0" step="any" value="10" style="width:60px;"> ×
+          <input id="swh" type="number" min="0" step="any" value="10" style="width:60px;">
+          <span class="muted" id="swunit">cm</span>
+        </div>
+        <div class="field">
+          <label for="margin">Safety margin</label>
+          <input id="margin" type="number" min="0" step="any" value="10"> <span class="muted">%</span>
+        </div>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <dl class="kv" id="kv"></dl>
+      <p class="note" id="err"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var stEl = $("st"), rwsEl = $("rws"), gunitEl = $("gunit");
+    var pwEl = $("pw"), plEl = $("pl"), punitEl = $("punit");
+    var swgEl = $("swg"), swwEl = $("sww"), swhEl = $("swh"), marginEl = $("margin"), swUnit = $("swunit");
+    var verdictEl = $("verdict"), kvEl = $("kv"), errEl = $("err");
+
+    function num(el) { var n = parseFloat(el.value); return isNaN(n) ? NaN : n; }
+    function fmt(n, d) { return Number(n).toFixed(d); }
+
+    // Convert a dimension to cm.
+    function toCm(v, u) { return u === "in" ? v * 2.54 : v; }
+    // Gauge window length in cm.
+    function windowCm() { return gunitEl.value === "4in" ? 4 * 2.54 : 10; }
+
+    function render() {
+      errEl.textContent = ""; verdictEl.textContent = ""; verdictEl.className = "verdict"; kvEl.innerHTML = "";
+      // Swatch size unit follows the gauge window if per-10cm => cm, else inches.
+      swUnit.textContent = (punitEl.value === "in") ? "in" : "cm";
+
+      var st = num(stEl), rws = num(rwsEl);
+      var pw = num(pwEl), pl = num(plEl);
+      var swg = num(swgEl), sww = num(swwEl), swh = num(swhEl), margin = num(marginEl);
+
+      if ([st, rws, pw, pl].some(isNaN) || st <= 0 || rws <= 0 || pw <= 0 || pl <= 0) {
+        verdictEl.textContent = "✗ Enter positive gauge and project values."; verdictEl.className = "verdict bad"; return;
+      }
+
+      var wCm = windowCm();
+      var stPerCm = st / wCm, rPerCm = rws / wCm;
+      var pwCm = toCm(pw, punitEl.value), plCm = toCm(pl, punitEl.value);
+
+      var castOn = Math.round(stPerCm * pwCm);
+      var rows = Math.round(rPerCm * plCm);
+      var projArea = pwCm * plCm;
+
+      verdictEl.textContent = "Cast on " + castOn + "  ·  knit " + rows + " rows";
+      verdictEl.className = "verdict ok";
+
+      var yarnPart = "";
+      if (!isNaN(swg) && swg > 0 && !isNaN(sww) && sww > 0 && !isNaN(swh) && swh > 0 && !isNaN(margin) && margin >= 0) {
+        var swArea = toCm(sww, punitEl.value) * toCm(swh, punitEl.value);
+        var yarn = projArea / swArea * swg * (1 + margin / 100);
+        yarnPart =
+          "<dt>Estimated yarn</dt><dd class='big'>" + fmt(yarn, 0) + " g  <span class='muted'>(swatch method, +" + fmt(margin, 0) + "% margin)</span></dd>" +
+          "<dt>Swatch area</dt><dd>" + fmt(swArea, 0) + " cm² at " + fmt(swg, 1) + " g  →  " + fmt(swg / swArea * 10000, 1) + " g/m²</dd>" +
+          "<dt>Skeins (100 g)</dt><dd>" + fmt(yarn / 100, 1) + " skeins</dd>";
+      } else {
+        yarnPart = "<dt>Estimated yarn</dt><dd class='muted'>Enter swatch weight &amp; size to estimate.</dd>";
+      }
+
+      kvEl.innerHTML =
+        "<dt>Gauge density</dt><dd>" + fmt(stPerCm, 2) + " st/cm  ·  " + fmt(rPerCm, 2) + " rows/cm</dd>" +
+        "<dt>Cast on</dt><dd class='big'>" + castOn + " stitches  (" + fmt(pwCm, 1) + " cm / " + fmt(pwCm / 2.54, 1) + " in wide)</dd>" +
+        "<dt>Total rows</dt><dd class='big'>" + rows + " rows  (" + fmt(plCm, 1) + " cm / " + fmt(plCm / 2.54, 1) + " in long)</dd>" +
+        "<dt>Project area</dt><dd>" + fmt(projArea, 0) + " cm²</dd>" +
+        yarnPart;
+
+      errEl.textContent = "Cast-on stitches = project width × (gauge stitches ÷ gauge window); rows likewise. The swatch method for yarn multiplies the swatch weight by the ratio of project area to swatch area, then adds a safety margin — always round up and buy an extra skein, because dye lots vary and running out mid-project is the usual disaster. Measure your gauge on a swatch that's been blocked the same way the finished piece will be, since blocking changes stitch and row counts. Stitch patterns with cables, lace or colorwork consume more yarn than stockinette, so the flat-stockinette swatch estimate runs low for those — weigh a larger swatch worked in the actual pattern for the best estimate.";
+      errEl.className = "note";
+    }
+
+    [stEl, rwsEl, gunitEl, pwEl, plEl, punitEl, swgEl, swwEl, swhEl, marginEl].forEach(function (el) {
+      el.addEventListener("input", render); el.addEventListener("change", render);
+    });
+    render();
+  })();
+  </script>
+</body>
+</html>
