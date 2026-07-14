@@ -3746,4 +3746,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌱",
     added: "2026-07-14T13:15:00Z",
   },
+  {
+    slug: "feeds-and-speeds-calculator",
+    name: "Feeds & Speeds Calculator (Milling)",
+    description: "Estimate spindle RPM, feed rate and material removal rate for an end mill from the cutter diameter, number of flutes, the workpiece material's cutting speed and a per-tooth chip load. Pick a material preset to load a recommended surface speed and chip load (conservative HSS starting points) in inch (SFM) or metric (m/min) units, then adjust to suit your setup, coating and rigidity. RPM comes from surface speed divided by circumference; feed from RPM × chip load × flutes; MRR from width × depth × feed. Pure arithmetic — starting points, not a substitute for toolmaker data. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🛠️",
+    added: "2026-07-14T13:45:00Z",
+  },
 ];

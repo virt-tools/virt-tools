@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Feeds &amp; Speeds Calculator (Milling) — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .row2 { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+    .row2 .field { margin-bottom: 0; }
+    input[type="number"] { font-family: ui-monospace, monospace; width: 95px; }
+    select { min-width: 160px; }
+    .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+    .seg button { background: var(--bg-elev-2); color: var(--text); border: none; padding: 5px 12px; cursor: pointer; font-size: 0.85rem; }
+    .seg button.active { background: var(--accent, #6ea8ff); color: #08111f; font-weight: 600; }
+    .kv { display: grid; grid-template-columns: 220px 1fr; gap: 6px 12px; margin-top: 12px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.95rem; }
+    .verdict { font-size: 1.4rem; font-weight: 800; font-family: ui-monospace, monospace; margin-top: 10px; }
+    .verdict.ok { color: var(--ok, #4ade80); }
+    .verdict.bad { color: var(--bad, #f87171); }
+    .big { font-size: 1.05rem; font-weight: 700; }
+    h3.sec { font-size: 0.92rem; font-weight: 600; margin: 14px 0 2px; color: var(--text-dim); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Feeds &amp; Speeds Calculator (Milling)</h1>
+      <p>Estimate the spindle RPM, feed rate and material removal rate for an end mill from the cutter diameter, number of flutes, the workpiece material's cutting speed and a per-tooth chip load. Pick a material preset to load a recommended surface speed and chip load (HSS end-mill starting points), then adjust to suit your setup, tool coating and rigidity. Useful for desktop CNC, manual milling and hobby machining. RPM comes from surface speed ÷ circumference; feed rate from RPM × chip load × flutes; MRR from width × depth × feed. Pure arithmetic — these are starting points, not a substitute for toolmaker data, and real feeds depend on rigidity, coolant, tool wear and engagement. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label>Units</label>
+        <div class="seg" id="useg">
+          <button data-u="in" class="active">Inch (SFM)</button>
+          <button data-u="mm">Metric (m/min)</button>
+        </div>
+      </div>
+
+      <div class="row2">
+        <div class="field">
+          <label for="dia">Cutter diameter</label>
+          <input id="dia" type="number" min="0" step="any" value="0.25">
+          <span class="muted" id="diaunit">in</span>
+        </div>
+        <div class="field">
+          <label for="fl">Flutes</label>
+          <input id="fl" type="number" min="1" step="1" value="2">
+        </div>
+        <div class="field">
+          <label for="mat">Material (HSS)</label>
+          <select id="mat"></select>
+        </div>
+      </div>
+
+      <div class="row2">
+        <div class="field">
+          <label for="vc">Surface speed</label>
+          <input id="vc" type="number" min="0" step="any" value="300">
+          <span class="muted" id="vcunit">SFM</span>
+        </div>
+        <div class="field">
+          <label for="chip">Chip load / tooth</label>
+          <input id="chip" type="number" min="0" step="any" value="0.002">
+          <span class="muted" id="chipunit">in</span>
+        </div>
+      </div>
+
+      <h3 class="sec">Cut (for MRR)</h3>
+      <div class="row2">
+        <div class="field">
+          <label for="woc">Width of cut (stepover)</label>
+          <input id="woc" type="number" min="0" step="any" value="0.25">
+          <span class="muted" id="wocunit">in</span>
+        </div>
+        <div class="field">
+          <label for="doc">Depth of cut (axial)</label>
+          <input id="doc" type="number" min="0" step="any" value="0.1">
+          <span class="muted" id="docunit">in</span>
+        </div>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <dl class="kv" id="kv"></dl>
+      <p class="note" id="err"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var useg = $("useg"), diaEl = $("dia"), flEl = $("fl"), matEl = $("mat");
+    var vcEl = $("vc"), chipEl = $("chip"), wocEl = $("woc"), docEl = $("doc");
+    var diaunit = $("diaunit"), vcunit = $("vcunit"), chipunit = $("chipunit"), wocunit = $("wocunit"), docunit = $("docunit");
+    var verdictEl = $("verdict"), kvEl = $("kv"), errEl = $("err");
+    var u = "in";
+
+    // Material: [name, surfaceSpeed_ip(SFM), surfaceSpeed_m(m/min), chipLoad_ip(in), chipLoad_m(mm)]
+    var MAT = [
+      ["aluminum", "Aluminum (6061)", 300, 90, 0.0020, 0.05],
+      ["brass", "Brass", 250, 75, 0.0015, 0.04],
+      ["copper", "Copper", 250, 75, 0.0015, 0.04],
+      ["mildsteel", "Mild steel", 100, 30, 0.0010, 0.025],
+      ["stainless", "Stainless steel", 60, 18, 0.0008, 0.020],
+      ["castiron", "Cast iron", 100, 30, 0.0012, 0.030],
+      ["toolsteel", "Tool steel", 50, 15, 0.0006, 0.015],
+      ["plastic", "Plastic (acrylic)", 400, 120, 0.0030, 0.08],
+      ["wood", "Wood (hardwood)", 600, 180, 0.0040, 0.10],
+      ["mdf", "MDF / plywood", 800, 240, 0.0050, 0.13],
+      ["custom", "Custom…", 300, 90, 0.0020, 0.05]
+    ];
+    MAT.forEach(function (m, i) {
+      var o = document.createElement("option");
+      o.value = m[0]; o.textContent = m[1]; o.dataset.ip = m[2]; o.dataset.mp = m[3];
+      o.dataset.cip = m[4]; o.dataset.cmp = m[5];
+      matEl.appendChild(o);
+    });
+    matEl.value = "aluminum";
+
+    function num(el) { var n = parseFloat(el.value); return isNaN(n) ? NaN : n; }
+    function fmt(n, d) { return Number(n).toFixed(d); }
+
+    function setUnits() {
+      var ip = u === "in";
+      diaunit.textContent = ip ? "in" : "mm";
+      vcunit.textContent = ip ? "SFM" : "m/min";
+      chipunit.textContent = ip ? "in" : "mm";
+      wocunit.textContent = ip ? "in" : "mm";
+      docunit.textContent = ip ? "in" : "mm";
+    }
+    function applyMaterial() {
+      var o = matEl.options[matEl.selectedIndex];
+      if (o.value === "custom") return;
+      vcEl.value = u === "in" ? o.dataset.ip : o.dataset.mp;
+      chipEl.value = u === "in" ? o.dataset.cip : o.dataset.cmp;
+    }
+
+    useg.querySelectorAll("button").forEach(function (b) {
+      b.addEventListener("click", function () {
+        useg.querySelectorAll("button").forEach(function (x) { x.classList.remove("active"); });
+        b.classList.add("active");
+        u = b.getAttribute("data-u");
+        setUnits(); applyMaterial(); render();
+      });
+    });
+    matEl.addEventListener("change", function () { applyMaterial(); render(); });
+
+    function render() {
+      errEl.textContent = ""; verdictEl.textContent = ""; verdictEl.className = "verdict"; kvEl.innerHTML = "";
+      var dia = num(diaEl), fl = num(flEl), vc = num(vcEl), chip = num(chipEl), woc = num(wocEl), doc = num(docEl);
+      if ([dia, fl, vc, chip].some(isNaN) || dia <= 0 || fl < 1 || vc < 0 || chip <= 0) {
+        verdictEl.textContent = "✗ Enter positive diameter, flutes and chip load (speed ≥ 0)."; verdictEl.className = "verdict bad"; return;
+      }
+      fl = Math.round(fl);
+
+      var rpm, feed, feedUnit, mrr, mrrUnit, mrrBig, mrrBigUnit, diaMm, chipMm;
+      if (u === "in") {
+        rpm = vc * 12 / (Math.PI * dia);
+        feed = rpm * chip * fl;                       // in/min
+        feedUnit = "in/min";
+        mrr = (isNaN(woc) || isNaN(doc) || woc <= 0 || doc <= 0) ? NaN : woc * doc * feed; // in3/min
+        mrrUnit = "in³/min";
+        mrrBig = mrr / 16387; mrrBigUnit = "cm³/min";   // 1 in3 = 16.387 cm3
+        diaMm = dia * 25.4; chipMm = chip * 25.4;
+      } else {
+        rpm = vc * 1000 / (Math.PI * dia);
+        feed = rpm * chip * fl;                       // mm/min
+        feedUnit = "mm/min";
+        mrr = (isNaN(woc) || isNaN(doc) || woc <= 0 || doc <= 0) ? NaN : woc * doc * feed; // mm3/min
+        mrrUnit = "mm³/min";
+        mrrBig = mrr / 1000; mrrBigUnit = "cm³/min";
+        diaMm = dia; chipMm = chip;
+      }
+
+      verdictEl.textContent = fmt(rpm, 0) + " RPM  ·  " + fmt(feed, u === "in" ? 1 : 0) + " " + feedUnit;
+      verdictEl.className = "verdict ok";
+      kvEl.innerHTML =
+        "<dt>Spindle speed</dt><dd class='big'>" + fmt(rpm, 0) + " RPM</dd>" +
+        "<dt>Feed rate</dt><dd class='big'>" + fmt(feed, u === "in" ? 1 : 0) + " " + feedUnit + "  <span class='muted'>(" + fmt(u === "in" ? feed * 25.4 : feed / 25.4, 0) + " " + (u === "in" ? "mm" : "in") + "/min)</span></dd>" +
+        "<dt>Chip load</dt><dd>" + fmt(chip, 4) + " " + chipunit.textContent + "/tooth  (" + fmt(chipMm, 3) + " mm)</dd>" +
+        "<dt>Feed per rev</dt><dd>" + fmt(chip * fl, 4) + " " + chipunit.textContent + "/rev</dd>" +
+        (isNaN(mrr) ? "<dt>Material removal rate</dt><dd class='muted'>Enter width &amp; depth of cut.</dd>" :
+          "<dt>Material removal rate</dt><dd class='big'>" + fmt(mrr, 1) + " " + mrrUnit + "  (" + fmt(mrrBig, 2) + " " + mrrBigUnit + ")</dd>" +
+          "<dt>Cutter engagement</dt><dd>" + fmt(woc, 3) + " × " + fmt(doc, 3) + " " + wocunit.textContent + "  (WOC × DOC)</dd>");
+
+      errEl.textContent = "Spindle RPM = surface speed ÷ circumference: in inch units RPM = SFM × 12 ÷ (π × diameter in inches); in metric RPM = m/min × 1000 ÷ (π × diameter in mm). Feed rate = RPM × chip load per tooth × number of flutes. Material removal rate (MRR) = width of cut × depth of cut × feed rate — a rough proxy for how fast you're removing metal and the power you'll need. The preset surface speeds are conservative HSS end-mill starting points; carbide and coated tools run 2–5× faster, and rigid machines can push chip load up while flimsy ones should back off to avoid chatter. A chip load that's too low rubs instead of cutting (heat, poor finish, tool wear); too high breaks teeth. Dial in by sound and chip color, and always climb-conventional and rigidity-appropriate for your machine.";
+      errEl.className = "note";
+    }
+
+    setUnits(); applyMaterial();
+    [diaEl, flEl, vcEl, chipEl, wocEl, docEl].forEach(function (el) {
+      el.addEventListener("input", render); el.addEventListener("change", render);
+    });
+    render();
+  })();
+  </script>
+</body>
+</html>
