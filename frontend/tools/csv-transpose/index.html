@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>CSV Transpose — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    textarea { width:100%; font-family:monospace; font-size:13px; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:10px 0; }
+    .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    @media (max-width:780px){ .grid2 { grid-template-columns:1fr; } }
+    .wrap { overflow:auto; max-height:50vh; border:1px solid var(--border,#2a2f3a); border-radius:8px; margin-top:8px; }
+    table.result { border-collapse:collapse; font-size:12px; }
+    table.result th, table.result td { padding:4px 8px; border:1px solid var(--border,#2a2f3a); white-space:nowrap; }
+    table.result th { background:var(--panel-2,#161a22); }
+    .stats { font-size:13px; opacity:.7; margin-top:8px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>CSV Transpose</h1>
+      <p>Flip a CSV table — rows become columns and columns become rows. Paste CSV, choose a delimiter and output format, optionally keep the first column as the new header row, and copy the transposed result. Handles quoted fields, embedded commas, and newlines. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="grid2">
+        <div>
+          <label for="csv">CSV input</label>
+          <textarea id="csv" rows="8" spellcheck="false" autocomplete="off" placeholder="name,age,city&#10;Ada,36,London&#10;Lin,29,New York"></textarea>
+        </div>
+        <div>
+          <label for="out">Transposed output</label>
+          <textarea id="out" rows="8" readonly spellcheck="false"></textarea>
+        </div>
+      </div>
+
+      <div class="row">
+        <label>Input delimiter:
+          <select id="delim"><option value=",">comma</option><option value=";">semicolon</option><option value="\t">tab</option><option value="|">pipe</option></select>
+        </label>
+        <label>Output delimiter:
+          <select id="outDelim"><option value=",">comma</option><option value=";">semicolon</option><option value="\t">tab</option><option value="|">pipe</option></select>
+        </label>
+        <label><input type="checkbox" id="hasHeader" checked> Input first row is header</label>
+        <label><input type="checkbox" id="firstColHeader"> Use first column as new header</label>
+      </div>
+
+      <div class="row">
+        <button id="run">Transpose</button>
+        <button id="copy" class="secondary">Copy output</button>
+        <button id="download" class="secondary">Download .csv</button>
+      </div>
+
+      <p class="note" id="note">Paste CSV above.</p>
+      <div class="stats" id="stats"></div>
+      <div class="wrap" id="previewWrap" hidden><table class="result" id="preview"><tbody></tbody></table></div>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+
+    function actualDelim(id) {
+      var d = $(id).value;
+      return d === "\\t" ? "\t" : d;
+    }
+    function parseCSV(text, delim) {
+      var rows = [];
+      var i = 0, n = text.length, field = "", row = [], inQ = false;
+      while (i < n) {
+        var c = text[i];
+        if (inQ) {
+          if (c === '"') {
+            if (text[i + 1] === '"') { field += '"'; i += 2; }
+            else { inQ = false; i++; }
+          } else { field += c; i++; }
+        } else {
+          if (c === '"') { inQ = true; i++; }
+          else if (c === delim) { row.push(field); field = ""; i++; }
+          else if (c === "\r") { i++; }
+          else if (c === "\n") { row.push(field); rows.push(row); row = []; field = ""; i++; }
+          else { field += c; i++; }
+        }
+      }
+      if (field !== "" || row.length) { row.push(field); rows.push(row); }
+      while (rows.length && rows[rows.length - 1].length === 1 && rows[rows.length - 1][0] === "") rows.pop();
+      var w = rows.reduce(function (m, r) { return Math.max(m, r.length); }, 0);
+      rows.forEach(function (r) { while (r.length < w) r.push(""); });
+      return rows;
+    }
+    function csvField(s, delim) {
+      s = String(s);
+      if (s === "") return "";
+      if (new RegExp('["' + delim + '\\n]').test(s)) {
+        return '"' + s.replace(/"/g, '""') + '"';
+      }
+      return s;
+    }
+    function buildCSV(rows, delim) {
+      return rows.map(function (r) {
+        return r.map(function (c) { return csvField(c, delim); }).join(delim);
+      }).join("\n") + "\n";
+    }
+
+    function transpose(rows) {
+      if (!rows.length) return [];
+      var w = rows.reduce(function (m, r) { return Math.max(m, r.length); }, 0);
+      var out = [];
+      for (var c = 0; c < w; c++) {
+        var newRow = [];
+        for (var r = 0; r < rows.length; r++) {
+          newRow.push(rows[r][c] === undefined ? "" : rows[r][c]);
+        }
+        out.push(newRow);
+      }
+      return out;
+    }
+
+    function run() {
+      var text = $("csv").value;
+      if (!text.trim()) { $("out").value = ""; $("note").textContent = "Paste CSV above."; $("stats").textContent = ""; $("previewWrap").hidden = true; return; }
+      try {
+        var delim = actualDelim("delim");
+        var rows = parseCSV(text, delim);
+        if (!rows.length) { $("note").textContent = "No rows found."; return; }
+        var inCols = rows[0].length;
+        var inRows = rows.length;
+
+        // strip header from data; we transpose data only and prepend header back as needed
+        var header = null;
+        if ($("hasHeader").checked) header = rows.shift();
+
+        var data = rows;
+        var transposed;
+        if ($("firstColHeader").checked) {
+          // the first column of the (header-stripped) data becomes the new header
+          var newHeader = data.map(function (r) { return r[0]; });
+          var body = data.map(function (r) { return r.slice(1); });
+          var tBody = transpose(body);
+          // prepend a leading blank so the new header row aligns
+          // output: [newHeader-row with leading empty, ...tBody]
+          transposed = [[""].concat(newHeader)].concat(
+            tBody.map(function (r, idx) { return ["col" + (idx + 1)].concat(r); })
+          );
+        } else if (header) {
+          // include header row in the transpose
+          transposed = transpose([header].concat(data));
+        } else {
+          transposed = transpose(data);
+        }
+        var outDelim = actualDelim("outDelim");
+        $("out").value = buildCSV(transposed, outDelim);
+        $("note").textContent = "Transposed.";
+        $("stats").textContent = "Input: " + inRows + " rows × " + inCols + " cols  →  Output: " + transposed.length + " rows × " + (transposed[0] ? transposed[0].length : 0) + " cols.";
+
+        // preview (first ~8 rows/cols)
+        var pre = $("preview").querySelector("tbody");
+        pre.innerHTML = "";
+        var lim = Math.min(transposed.length, 12);
+        for (var i = 0; i < lim; i++) {
+          var tr = document.createElement("tr");
+          var wlim = Math.min(transposed[i].length, 10);
+          for (var j = 0; j < wlim; j++) {
+            var td = document.createElement(i === 0 ? "th" : "td");
+            td.textContent = transposed[i][j];
+            tr.appendChild(td);
+          }
+          if (transposed[i].length > 10) {
+            var td = document.createElement(i === 0 ? "th" : "td");
+            td.textContent = "…";
+            tr.appendChild(td);
+          }
+          pre.appendChild(tr);
+        }
+        $("previewWrap").hidden = false;
+      } catch (e) {
+        $("note").textContent = "Error: " + (e.message || e);
+        $("out").value = "";
+        $("stats").textContent = "";
+        $("previewWrap").hidden = true;
+      }
+    }
+
+    $("run").addEventListener("click", run);
+    $("csv").addEventListener("input", run);
+    ["delim", "outDelim", "hasHeader", "firstColHeader"].forEach(function (id) {
+      $(id).addEventListener("change", run);
+    });
+    $("copy").addEventListener("click", function () {
+      var s = $("out").value;
+      if (!s) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(s).then(function () { $("note").textContent = "Copied."; }, function () { $("note").textContent = "Copy failed."; });
+      } else $("note").textContent = "Clipboard unavailable.";
+    });
+    $("download").addEventListener("click", function () {
+      var s = $("out").value;
+      if (!s) return;
+      var blob = new Blob([s], { type: "text/csv" });
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "transposed.csv";
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+    run();
+  })();
+  </script>
+</body>
+</html>

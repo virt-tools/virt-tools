@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "csv-transpose",
+    name: "CSV Transpose",
+    description: "Flip a CSV table — rows become columns and columns become rows. Paste CSV, pick input/output delimiter, optionally keep the header or use the first column as the new header, and copy or download the transposed result. Handles quoted fields, embedded commas and newlines. Runs locally in your browser.",
+    category: "Data",
+    icon: "🔄",
+    added: "2026-07-14T17:30:00Z",
+  },
+  {
     slug: "csv-aggregator",
     name: "CSV Pivot & Group-By Aggregator",
     description: "Summarise a CSV by a group-by column and a value column — count, sum, mean, median, min, max, unique-value count, or sample std. deviation. The classic spreadsheet pivot table, computed locally in your browser. Handles quoted fields, embedded commas and newlines. Copy the result as CSV.",
