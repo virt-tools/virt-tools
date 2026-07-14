@@ -3890,4 +3890,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔩",
     added: "2026-07-14T22:15:00Z",
   },
+  {
+    slug: "room-ventilation-co2-calculator",
+    name: "Room Ventilation & CO2 Calculator",
+    description: "Work out the air changes per hour (ACH) a room gets from its fresh-air supply and the steady-state CO2 level from its occupants. Enter the room dimensions and outdoor-air flow to get the volume, ACH and the time per air change; then add the number of occupants and their activity to estimate the CO2 concentration the room settles at — the balance between what people exhale and what ventilation removes — with a verdict against the 1000 ppm comfort line and the time to clear after people leave. Useful for sizing fans and exhausts for offices, classrooms, workshops and home rooms, and for checking whether a space is under-ventilated. Pure arithmetic — a single-zone well-mixed model with fixed CO2 generation rates; real rooms have imperfect mixing, varying flow and activity swings. Everything runs locally in your browser.",
+    category: "Environment",
+    icon: "🌬️",
+    added: "2026-07-14T22:45:00Z",
+  },
 ];

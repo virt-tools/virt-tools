@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Room Ventilation &amp; CO2 Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .row2 { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+    .row2 .field { margin-bottom: 0; }
+    input[type="number"] { font-family: ui-monospace, monospace; width: 95px; }
+    select { min-width: 110px; }
+    .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+    .seg button { background: var(--bg-elev-2); color: var(--text); border: none; padding: 5px 12px; cursor: pointer; font-size: 0.85rem; }
+    .seg button.active { background: var(--accent, #6ea8ff); color: #08111f; font-weight: 600; }
+    .kv { display: grid; grid-template-columns: 230px 1fr; gap: 6px 12px; margin-top: 12px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.95rem; }
+    .verdict { font-size: 1.5rem; font-weight: 800; font-family: ui-monospace, monospace; margin-top: 10px; }
+    .verdict.ok { color: var(--ok, #4ade80); }
+    .verdict.warn { color: var(--accent, #6ea8ff); }
+    .verdict.bad { color: var(--bad, #f87171); }
+    .big { font-size: 1.05rem; font-weight: 700; }
+    h3.sec { font-size: 0.92rem; font-weight: 600; margin: 14px 0 2px; color: var(--text-dim); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Room Ventilation &amp; CO2 Calculator</h1>
+      <p>Work out the air changes per hour (ACH) a room gets from its fresh-air supply and the steady-state CO2 level from its occupants. Enter the room dimensions and the outdoor-air flow rate to get the volume, ACH and the time per air change; then add the number of occupants and their activity to estimate the CO2 concentration the room settles at — the balance between what people exhale and what the ventilation removes — with a verdict against the 1000 ppm comfort line and the time to clear after people leave. Useful for sizing fans and exhausts for offices, classrooms, workshops and home rooms, and for checking whether a space is under-ventilated. Pure arithmetic — a single-zone well-mixed model with fixed CO2 generation rates; real rooms have imperfect mixing, varying outdoor air, doors opening, and activity swings, so treat it as a planning estimate. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label>Units</label>
+        <div class="seg" id="useg">
+          <button data-u="ip" class="active">Imperial (ft, CFM)</button>
+          <button data-u="si">Metric (m, m³/h)</button>
+        </div>
+      </div>
+
+      <h3 class="sec">Room</h3>
+      <div class="row2">
+        <div class="field">
+          <label for="l">Length</label>
+          <input id="l" type="number" min="0" step="any" value="20">
+          <span class="muted" id="lu">ft</span>
+        </div>
+        <div class="field">
+          <label for="w">Width</label>
+          <input id="w" type="number" min="0" step="any" value="20">
+          <span class="muted" id="wu">ft</span>
+        </div>
+        <div class="field">
+          <label for="hh">Height</label>
+          <input id="hh" type="number" min="0" step="any" value="9">
+          <span class="muted" id="hu2">ft</span>
+        </div>
+      </div>
+
+      <h3 class="sec">Fresh-air supply</h3>
+      <div class="row2">
+        <div class="field">
+          <label for="q">Outdoor airflow Q</label>
+          <input id="q" type="number" min="0" step="any" value="100">
+          <span class="muted" id="qu">CFM</span>
+        </div>
+        <div class="field">
+          <label for="n">Occupants (optional)</label>
+          <input id="n" type="number" min="0" step="1" value="20">
+        </div>
+        <div class="field">
+          <label for="act">Activity</label>
+          <select id="act">
+            <option value="0.005" selected>Sedentary (office)</option>
+            <option value="0.007">Light (walking)</option>
+            <option value="0.010">Moderate (lab/shop)</option>
+            <option value="0.014">Heavy (gym/work)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="cout">Outdoor CO2</label>
+          <input id="cout" type="number" min="300" max="600" step="1" value="420">
+          <span class="muted">ppm</span>
+        </div>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <dl class="kv" id="kv"></dl>
+      <p class="note" id="err"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var useg = $("useg");
+    var lEl = $("l"), wEl = $("w"), hhEl = $("hh"), qEl = $("q"), nEl = $("n"), actEl = $("act"), coutEl = $("cout");
+    var lu = $("lu"), wu = $("wu"), hu2 = $("hu2"), qu = $("qu");
+    var verdictEl = $("verdict"), kvEl = $("kv"), errEl = $("err");
+    var u = "ip";
+
+    function num(el) { var n = parseFloat(el.value); return isNaN(n) ? NaN : n; }
+    function fmt(n, d) { return Number(n).toFixed(d); }
+    function bad(msg) { verdictEl.textContent = "✗ " + msg; verdictEl.className = "verdict bad"; kvEl.innerHTML = ""; errEl.textContent = ""; }
+
+    function setUnits() {
+      var si = u === "si";
+      [lu, wu, hu2].forEach(function (s) { s.textContent = si ? "m" : "ft"; });
+      qu.textContent = si ? "m³/h" : "CFM";
+    }
+    useg.querySelectorAll("button").forEach(function (b) {
+      b.addEventListener("click", function () {
+        useg.querySelectorAll("button").forEach(function (x) { x.classList.remove("active"); });
+        b.classList.add("active"); u = b.getAttribute("data-u"); setUnits(); render();
+      });
+    });
+
+    function render() {
+      errEl.className = "note"; errEl.textContent = ""; verdictEl.textContent = ""; verdictEl.className = "verdict"; kvEl.innerHTML = "";
+      var L = num(lEl), W = num(wEl), H = num(hhEl), Q = num(qEl);
+      if (isNaN(L) || L <= 0 || isNaN(W) || W <= 0 || isNaN(H) || H <= 0) { bad("Enter positive room dimensions."); return; }
+      if (isNaN(Q) || Q < 0) { bad("Enter a non-negative outdoor airflow."); return; }
+      var si = u === "si";
+      var V = L * W * H;                 // ft3 or m3
+      var ACH = si ? Q / V : Q * 60 / V;
+      var minPerChange = ACH > 0 ? 60 / ACH : Infinity;
+      var Vdisp = V, Vunit = si ? "m³" : "ft³";
+      var Valt = si ? (V * 35.3147) : (V / 35.3147);
+      var ValtUnit = si ? "ft³" : "m³";
+
+      var N = num(nEl), Gls = parseFloat(actEl.value), Cout = num(coutEl);
+      if (isNaN(Cout) || Cout < 0) Cout = 420;
+      var haveN = !isNaN(N) && N > 0;
+      var Qcfm, Gcfm, Gm3h, dC = 0, Css = Cout, perPerson, t95, clearH;
+
+      if (haveN) {
+        // CO2 gen per person (L/s) -> volumetric flow
+        Gcfm = Gls * 2.119;     // CFM
+        Gm3h = Gls * 3.6;       // m3/h
+        var Qsame = si ? Q : Q; // use the active unit's Q
+        // delta ppm = N*G/Q *1e6  (G and Q same vol/time)
+        dC = si ? (N * Gm3h / Q) * 1e6 : (N * Gcfm / Q) * 1e6;
+        Css = Cout + dC;
+        perPerson = Q / N;       // cfm or m3/h per person
+        t95 = ACH > 0 ? 3 / ACH : Infinity;           // hours to 95% of steady state
+        clearH = (ACH > 0 && dC > 100) ? Math.log(dC / 100) / ACH : 0; // hours to within 100ppm of outdoor
+      }
+
+      // verdict
+      if (ACH < 0.35) { verdictEl.textContent = fmt(ACH, 2) + " ACH  ·  very low ventilation"; verdictEl.className = "verdict bad"; }
+      else if (ACH < 2) { verdictEl.textContent = fmt(ACH, 2) + " ACH"; verdictEl.className = "verdict warn"; }
+      else { verdictEl.textContent = fmt(ACH, 2) + " ACH"; verdictEl.className = "verdict ok"; }
+      if (haveN) {
+        var co2cls = Css < 800 ? "ok" : Css <= 1000 ? "ok" : Css <= 1500 ? "warn" : "bad";
+        verdictEl.textContent += "  ·  " + fmt(Css, 0) + " ppm CO2";
+        verdictEl.className = "verdict " + co2cls;
+      }
+
+      var rows =
+        "<dt>Room volume</dt><dd class='big'>" + fmt(V, 1) + " " + Vunit + "  <span class='muted'>(" + fmt(Valt, 1) + " " + ValtUnit + ")</span></dd>" +
+        "<dt>Air changes / hour</dt><dd class='big'>" + fmt(ACH, 2) + " ACH</dd>" +
+        "<dt>Time per air change</dt><dd>" + (isFinite(minPerChange) ? fmt(minPerChange, 1) + " min  <span class='muted'>(" + fmt(minPerChange / 60, 2) + " h)</span>" : "— no airflow") + "</dd>" +
+        "<dt>Fresh-air flow</dt><dd>" + fmt(Q, 1) + " " + (si ? "m³/h" : "CFM") + "</dd>";
+      if (haveN) {
+        rows += "<dt>Steady-state CO2</dt><dd class='big'>" + fmt(Css, 0) + " ppm  <span class='muted'>(" + (Css < 800 ? "good" : Css <= 1000 ? "acceptable" : Css <= 1500 ? "stuffy" : "poor") + ")</span></dd>" +
+          "<dt>CO2 rise above outdoor</dt><dd>" + fmt(dC, 0) + " ppm  <span class='muted'>(Δ = N·G ÷ Q)</span></dd>" +
+          "<dt>Outdoor air per person</dt><dd>" + fmt(perPerson, 1) + " " + (si ? "m³/h" : "CFM") + "</dd>" +
+          "<dt>Time to settle at steady state</dt><dd>" + (isFinite(t95) ? fmt(t95, 2) + " h  <span class='muted'>(95% of the way, 3/ACH)</span>" : "—") + "</dd>" +
+          "<dt>Time to clear after people leave</dt><dd>" + (clearH > 0 ? fmt(clearH, 2) + " h  <span class='muted'>to within 100 ppm of outdoor</span>" : "already near outdoor") + "</dd>";
+      }
+      kvEl.innerHTML = rows;
+
+      var note = "Air changes per hour is the fresh-air flow divided by the room volume, with a factor of 60 when the flow is in CFM (cubic feet per minute) and volume in cubic feet: ACH = Q×60 ÷ V. Here " + fmt(Q, 0) + " " + (si ? "m³/h" : "CFM") + " into a " + fmt(L, 0) + "×" + fmt(W, 0) + "×" + fmt(H, 0) + " " + (si ? "m" : "ft") + " room (" + fmt(V, 0) + " " + Vunit + ") gives " + fmt(ACH, 2) + " ACH, so the air is fully replaced about every " + (isFinite(minPerChange) ? fmt(minPerChange, 0) + " minutes" : "never — no airflow") + ". ";
+      if (haveN) {
+        note += "With " + N + " occupant" + (N === 1 ? "" : "s") + " exhaling CO2 at about " + fmt(Gls, 3) + " L/s each (the selected activity level), the steady-state concentration is C = C_out + N·G ÷ Q. The room settles at " + fmt(Css, 0) + " ppm — " + (Css < 800 ? "comfortable, well under the 1000 ppm line" : Css <= 1000 ? "around the 1000 ppm comfort ceiling" : Css <= 1500 ? "above the comfort line — air is stuffy and cognition drops" : "well into the range where drowsiness, headache and reduced performance are reported") + ", on a " + fmt(Q / N, 1) + " " + (si ? "m³/h" : "CFM") + " per-person outdoor-air budget. ";
+        note += "It takes about 3/ACH = " + fmt(t95, 2) + " h for the concentration to climb to 95% of that steady value, and " + (clearH > 0 ? fmt(clearH, 2) + " h to fall back within 100 ppm of outdoor after everyone leaves (C decays as e^(−ACH·t)). " : "the room is already near outdoor once ventilation runs. ");
+        note += "Rough CO2 generation per person: sedentary ≈0.005 L/s, light activity ≈0.007, moderate ≈0.010, heavy exercise ≈0.014. ASHRAE 62.1 and most schools target outdoor CO2 plus no more than ~700 ppm rise (≈1000–1100 ppm total); many real offices sit at 1200–1800 ppm because the 5 CFM/person minimum was set for odour control, not CO2.";
+      } else {
+        note += "Add the number of occupants to estimate the steady-state CO2 from their exhalation. ASHRAE 62.1 recommends roughly 2–3 ACH for offices and 4–6 ACH for classrooms, with healthcare and lab spaces higher (6–12); residential rooms are typically 0.35 ACH or more. The model assumes perfect mixing and a constant flow, so real decay is slower near dead spots and faster near the supply — use a CO2 sensor to confirm.";
+      }
+      errEl.textContent = note;
+      errEl.className = "note";
+    }
+
+    setUnits();
+    [lEl, wEl, hhEl, qEl, nEl, actEl, coutEl].forEach(function (el) {
+      el.addEventListener("input", render); el.addEventListener("change", render);
+    });
+    render();
+  })();
+  </script>
+</body>
+</html>
