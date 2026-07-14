@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>SRI Hash Generator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px; margin:10px 0; }
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    .field { margin-bottom:0; }
+    #drop { display:block; border:2px dashed var(--border,#2a2f3a); border-radius:8px; padding:24px; text-align:center; cursor:pointer; opacity:.8; }
+    #drop.drag { border-color: var(--accent,#6ea8fe); opacity:1; }
+    #drop p { margin:4px 0; }
+    .results { margin-top:14px; }
+    .result { border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:12px; margin-bottom:10px; background:var(--panel-2,#161a22); }
+    .result h4 { margin:0 0 6px; font-size:14px; }
+    .result .meta { font-size:12px; opacity:.7; margin-bottom:8px; }
+    pre { white-space:pre-wrap; word-break:break-all; font-size:12px; margin:6px 0; padding:8px; background:var(--panel,#0e1117); border:1px solid var(--border,#2a2f3a); border-radius:6px; }
+    .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:6px 0; }
+    .seg { display:inline-flex; border:1px solid var(--border,#2a2f3a); border-radius:8px; overflow:hidden; margin-bottom:10px; }
+    .seg button { border:none; border-radius:0; background:transparent; color:inherit; padding:6px 14px; cursor:pointer; }
+    .seg button.active { background: var(--accent,#6ea8fe); color:#08101f; }
+    textarea { width:100%; font-family:monospace; font-size:12px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>SRI Hash Generator</h1>
+      <p>Generate <a href="https://developer.mozilla.org/docs/Web/Security/Subresource_Integrity" target="_blank" rel="noopener">Subresource Integrity</a> (SRI) hashes for <code>&lt;script&gt;</code> and <code>&lt;link&gt;</code> tags so browsers refuse to run a script or stylesheet whose hash doesn't match. Drop one or more files (or paste the URL of a cross-origin asset you've already mirrored locally) and copy the ready-to-paste tag with its <code>integrity</code> attribute. Hashes are computed with the Web Crypto API; your files never leave the browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="seg" id="algo">
+        <button type="button" data-a="SHA-256" class="active">sha256</button>
+        <button type="button" data-a="SHA-384" class="secondary">sha384</button>
+        <button type="button" data-a="SHA-512" class="secondary">sha512</button>
+      </div>
+      <div class="row">
+        <label><input type="checkbox" id="crossorigin" checked> Add <code>crossorigin="anonymous"</code></label>
+        <label><input type="checkbox" id="linkTag"> Output as <code>&lt;link&gt;</code> (stylesheet)</label>
+      </div>
+
+      <div class="field">
+        <label for="file">Files</label>
+        <div id="drop" class="dropzone">
+          <input type="file" id="file" multiple hidden>
+          <p class="dropzone-hint">Click to choose, or drag &amp; drop files here</p>
+          <p style="font-size:12px;opacity:.6;">Files are read locally with FileReader — nothing uploaded.</p>
+        </div>
+      </div>
+
+      <div class="results" id="results"></div>
+      <p class="note" id="note">No files yet.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var algo = "SHA-256";
+    var $ = function (id) { return document.getElementById(id); };
+    var dropEl = $("drop"), fileEl = $("file"), resultsEl = $("results"), noteEl = $("note");
+
+    function base64(bytes) {
+      var b = "";
+      for (var i = 0; i < bytes.length; i++) b += String.fromCharCode(bytes[i]);
+      return btoa(b);
+    }
+    function humanSize(n) {
+      if (n < 1024) return n + " B";
+      if (n < 1048576) return (n / 1024).toFixed(1) + " KB";
+      return (n / 1048576).toFixed(2) + " MB";
+    }
+
+    async function hashFile(file) {
+      var buf = await file.arrayBuffer();
+      var digest = await crypto.subtle.digest(algo, buf);
+      var bytes = Array.from(new Uint8Array(digest));
+      return base64(bytes);
+    }
+
+    function algoShort() {
+      return algo.replace("SHA-", "sha").toLowerCase();
+    }
+    function tagName() {
+      return $("linkTag").checked ? "link" : "script";
+    }
+    function buildTag(name, integrity) {
+      var co = $("crossorigin").checked ? ' crossorigin="anonymous"' : "";
+      var a = algoShort();
+      var tag;
+      if (tagName() === "link") {
+        tag = '<link rel="stylesheet" href="' + name + '" integrity="' + a + '-' + integrity + '"' + co + '>';
+      } else {
+        tag = '<script src="' + name + '" integrity="' + a + '-' + integrity + '"' + co + '><\/script>';
+      }
+      return tag;
+    }
+
+    async function handleFiles(files) {
+      if (!files.length) return;
+      noteEl.textContent = "Hashing " + files.length + " file(s)…";
+      resultsEl.innerHTML = "";
+      for (var i = 0; i < files.length; i++) {
+        try {
+          var integrity = await hashFile(files[i]);
+          var tag = buildTag(files[i].name, integrity);
+          var div = document.createElement("div");
+          div.className = "result";
+          div.innerHTML =
+            '<h4>' + (files[i].name).replace(/</g, "&lt;") + '</h4>' +
+            '<div class="meta">' + humanSize(files[i].size) + ' · ' + algo + '</div>' +
+            '<label>integrity attribute</label>' +
+            '<pre>' + algoShort() + '-' + integrity + '</pre>' +
+            '<label>HTML tag</label>' +
+            '<pre>' + tag.replace(/</g, "&lt;").replace(/>/g, "&gt;") + '</pre>' +
+            '<div class="row"><button data-copy="' + encodeURIComponent(algoShort() + "-" + integrity) + '">Copy integrity</button>' +
+            '<button class="secondary" data-copytag="' + encodeURIComponent(tag) + '">Copy tag</button></div>';
+          resultsEl.appendChild(div);
+        } catch (e) {
+          var d = document.createElement("div");
+          d.className = "result";
+          d.innerHTML = '<h4>' + files[i].name + '</h4><div class="meta">Error: ' + (e.message || e) + '</div>';
+          resultsEl.appendChild(d);
+        }
+      }
+      noteEl.textContent = "Done. " + files.length + " file(s) hashed.";
+    }
+
+    $("algo").addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-a]"); if (!b) return;
+      algo = b.getAttribute("data-a");
+      Array.prototype.forEach.call($("algo").querySelectorAll("button"), function (x) { x.classList.remove("active"); });
+      b.classList.add("active");
+    });
+    $("crossorigin").addEventListener("change", function () {});
+    $("linkTag").addEventListener("change", function () {});
+
+    dropEl.addEventListener("click", function () { fileEl.click(); });
+    fileEl.addEventListener("change", function () { handleFiles(fileEl.files); });
+    ["dragenter", "dragover"].forEach(function (ev) {
+      dropEl.addEventListener(ev, function (e) { e.preventDefault(); dropEl.classList.add("drag"); });
+    });
+    ["dragleave", "drop"].forEach(function (ev) {
+      dropEl.addEventListener(ev, function (e) { e.preventDefault(); dropEl.classList.remove("drag"); });
+    });
+    dropEl.addEventListener("drop", function (e) {
+      var files = e.dataTransfer && e.dataTransfer.files;
+      if (files && files.length) handleFiles(files);
+    });
+
+    resultsEl.addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-copy],button[data-copytag]"); if (!b) return;
+      var text = b.getAttribute("data-copy") ? decodeURIComponent(b.getAttribute("data-copy")) : decodeURIComponent(b.getAttribute("data-copytag"));
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () { noteEl.textContent = "Copied."; }, function () { noteEl.textContent = "Copy failed."; });
+      } else noteEl.textContent = "Clipboard unavailable.";
+    });
+  })();
+  </script>
+</body>
+</html>

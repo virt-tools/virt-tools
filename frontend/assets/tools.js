@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "sri-generator",
+    name: "SRI Hash Generator",
+    description: "Generate Subresource Integrity (SRI) hashes for <script> and <link> tags so browsers refuse to run a script or stylesheet whose hash doesn't match. sha256 / sha384 / sha512 via Web Crypto; files never leave your browser.",
+    category: "Security",
+    icon: "🛡️",
+    added: "2026-07-14T15:00:00Z",
+  },
+  {
     slug: "email-signature-generator",
     name: "Email Signature Generator",
     description: "Build a clean HTML email signature for Outlook, Gmail, Apple Mail and other clients — fill in your details, pick a stacked / inline / card layout, upload a logo, set colors, and copy the ready-to-paste HTML or plain text. Runs locally in your browser; nothing uploaded.",
