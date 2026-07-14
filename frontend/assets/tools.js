@@ -3730,4 +3730,12 @@ window.VIRTUAL_TOOLS = [
     icon: "💡",
     added: "2026-07-14T12:15:00Z",
   },
+  {
+    slug: "insulation-r-value-calculator",
+    name: "Insulation R-Value & Heat Loss Calculator",
+    description: "Build up a wall, roof or floor assembly layer by layer and get its total R-value and U-factor, then estimate the conduction heat loss through a given area at a given indoor-outdoor temperature difference. Each layer's R-value is its per-inch R-value times its thickness, with inside and outside air-film resistances added on top. Useful for comparing insulation upgrades, sizing supplemental heat, and checking code R-values. Steady-state conduction only — real building heat loss also includes air infiltration, thermal bridging at studs, and solar or internal gains. Pure arithmetic, in your browser.",
+    category: "Environment",
+    icon: "🧱",
+    added: "2026-07-14T12:45:00Z",
+  },
 ];

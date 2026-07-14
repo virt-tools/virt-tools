@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Insulation R-Value &amp; Heat Loss Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .row2 { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+    .row2 .field { margin-bottom: 0; }
+    input[type="number"] { font-family: ui-monospace, monospace; width: 90px; }
+    select { min-width: 170px; }
+    .layers { display: grid; grid-template-columns: 1fr 70px 90px; gap: 8px; align-items: center; margin-top: 6px; }
+    .layers select { min-width: 0; }
+    .layers .th { font-size: 0.8rem; color: var(--text-dim); }
+    .layers .layer-row { display: contents; }
+    .layers input { width: 70px; }
+    .air { display: flex; gap: 14px; flex-wrap: wrap; font-size: 0.85rem; color: var(--text-dim); margin-top: 8px; }
+    .air label { display: flex; gap: 4px; align-items: center; }
+    .kv { display: grid; grid-template-columns: 230px 1fr; gap: 6px 12px; margin-top: 12px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.95rem; }
+    .verdict { font-size: 1.4rem; font-weight: 800; font-family: ui-monospace, monospace; margin-top: 10px; }
+    .verdict.ok { color: var(--ok, #4ade80); }
+    .verdict.bad { color: var(--bad, #f87171); }
+    .big { font-size: 1.05rem; font-weight: 700; }
+    h3.sec { font-size: 0.92rem; font-weight: 600; margin: 14px 0 2px; color: var(--text-dim); }
+    .unit { font-family: ui-monospace, monospace; font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Insulation R-Value &amp; Heat Loss Calculator</h1>
+      <p>Build up a wall, roof or floor assembly layer by layer and get its total R-value and U-factor, then estimate the conduction heat loss through a given area at a given indoor-outdoor temperature difference. Each layer's R-value is its per-inch R-value times its thickness; inside and outside air-film resistances are added on top. Useful for comparing insulation upgrades, sizing supplemental heat, and checking whether an assembly meets code R-values. Steady-state conduction only — real building heat loss also includes air infiltration, thermal bridging at studs, and solar/internal gains. Pure arithmetic, in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <h3 class="sec">Assembly layers (top — outside — to inside)</h3>
+      <div class="layers" id="layers">
+        <div class="th">Material</div><div class="th">Thickness</div><div class="th">R (in·ft²·°F/BTU)</div>
+      </div>
+      <div class="air">
+        <label><input type="checkbox" id="airout" checked> Outside air film +0.17</label>
+        <label><input type="checkbox" id="airin" checked> Inside air film +0.68</label>
+      </div>
+
+      <h3 class="sec">Conditions</h3>
+      <div class="row2">
+        <div class="field">
+          <label for="area">Area</label>
+          <input id="area" type="number" min="0" step="any" value="200">
+          <select id="aunit" style="min-width:70px;margin-left:6px;">
+            <option value="sqft" selected>ft²</option>
+            <option value="sqm">m²</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="dt">ΔT (indoor − outdoor)</label>
+          <input id="dt" type="number" step="any" value="40">
+          <select id="tunit" style="min-width:70px;margin-left:6px;">
+            <option value="F" selected>°F</option>
+            <option value="C">°C</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <dl class="kv" id="kv"></dl>
+      <p class="note" id="err"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var layersEl = $("layers"), airoutEl = $("airout"), airinEl = $("airin");
+    var areaEl = $("area"), aunitEl = $("aunit"), dtEl = $("dt"), tunitEl = $("tunit");
+    var verdictEl = $("verdict"), kvEl = $("kv"), errEl = $("err");
+
+    // R-value per inch of thickness (IP units: h·ft²·°F/BTU per inch).
+    var MAT = [
+      ["airgap", "Still air space (1 in)", 1.0],
+      ["fiberglass", "Fiberglass batt", 3.2],
+      ["cellulose", "Cellulose (blown)", 3.7],
+      ["ocfoam", "Spray foam — open cell", 3.7],
+      ["ccfoam", "Spray foam — closed cell", 6.5],
+      ["eps", "Rigid EPS", 4.0],
+      ["xps", "Rigid XPS", 5.0],
+      ["polyiso", "Rigid polyiso", 6.0],
+      ["softwood", "Softwood framing", 1.25],
+      ["osb", "Plywood / OSB", 1.25],
+      ["gypsum", "Gypsum board", 0.45],
+      ["concrete", "Concrete", 0.08],
+      ["brick", "Brick", 0.20],
+      ["stucco", "Stucco", 0.20],
+      ["sheathing", "Wood sheathing", 1.25]
+    ];
+
+    function num(el) { var n = parseFloat(el.value); return isNaN(n) ? NaN : n; }
+    function fmt(n, d) { return Number(n).toFixed(d); }
+
+    var LAYERS = 6;
+    function buildLayers() {
+      var frag = document.createDocumentFragment();
+      for (var i = 0; i < LAYERS; i++) {
+        var sel = document.createElement("select");
+        sel.className = "lmat";
+        MAT.forEach(function (m) {
+          var o = document.createElement("option");
+          o.value = m[0]; o.textContent = m[1]; o.dataset.r = m[2];
+          sel.appendChild(o);
+        });
+        // Default first three rows to a 2x4 wall: siding/sheathing, fiberglass, gypsum.
+        if (i === 0) sel.value = "osb";
+        if (i === 1) sel.value = "fiberglass";
+        if (i === 2) sel.value = "gypsum";
+        if (i === 3) sel.options[0].selected = true; // airgap (unused by default)
+        var th = document.createElement("input");
+        th.type = "number"; th.min = "0"; th.step = "any"; th.className = "lth unit";
+        if (i === 0) th.value = 0.5;
+        if (i === 1) th.value = 3.5;
+        if (i === 2) th.value = 0.5;
+        var rv = document.createElement("span"); rv.className = "lrv unit muted";
+        rv.textContent = "—";
+        var wrap = document.createElement("div"); wrap.style.display = "contents";
+        wrap.appendChild(sel); wrap.appendChild(th); wrap.appendChild(rv);
+        frag.appendChild(wrap);
+
+        (function (s, t, r) {
+          function upd() {
+            var tk = parseFloat(t.value);
+            var rpi = parseFloat(s.options[s.selectedIndex].dataset.r);
+            r.textContent = (!isNaN(tk) && tk >= 0) ? fmt(rpi * tk, 2) : "—";
+            render();
+          }
+          s.addEventListener("change", upd); t.addEventListener("input", upd);
+        })(sel, th, rv);
+      }
+      layersEl.appendChild(frag);
+    }
+
+    function render() {
+      errEl.textContent = ""; verdictEl.textContent = ""; verdictEl.className = "verdict"; kvEl.innerHTML = "";
+      var area = num(areaEl), dt = num(dtEl);
+      if (isNaN(area) || area <= 0 || isNaN(dt)) {
+        verdictEl.textContent = "✗ Enter a positive area and a temperature difference."; verdictEl.className = "verdict bad"; return;
+      }
+
+      var R = 0, used = 0;
+      var sels = layersEl.querySelectorAll(".lmat"), ths = layersEl.querySelectorAll(".lth");
+      for (var i = 0; i < sels.length; i++) {
+        var tk = parseFloat(ths[i].value);
+        if (isNaN(tk) || tk <= 0) continue;
+        var rpi = parseFloat(sels[i].options[sels[i].selectedIndex].dataset.r);
+        R += rpi * tk; used++;
+      }
+      if (airoutEl.checked) R += 0.17;
+      if (airinEl.checked) R += 0.68;
+      if (R <= 0 || used === 0) {
+        verdictEl.textContent = "✗ Add at least one layer with a thickness."; verdictEl.className = "verdict bad"; return;
+      }
+
+      var U = 1 / R;
+      // IP heat loss: Q (BTU/h) = U * A(ft²) * ΔT(°F)
+      var areaSqft = aunitEl.value === "sqm" ? area * 10.7639 : area;
+      var dTf = tunitEl.value === "C" ? dt * 9 / 5 : dt;
+      var qBTU = U * areaSqft * dTf;
+      // SI conversions: R_SI = R_ip * 0.176110 ; U_SI (W/m²K) = 5.678263 * U_ip
+      var Rsi = R * 0.176110;
+      var Usi = U * 5.678263;
+      var areaM2 = areaSqft / 10.7639;
+      var dTK = tunitEl.value === "C" ? dt : dt * 5 / 9;
+      var qW = Usi * areaM2 * dTK;
+
+      verdictEl.textContent = "R-" + fmt(R, 1) + "  ·  U " + fmt(U, 4) + "  ·  " + fmt(qBTU, 0) + " BTU/h (" + fmt(qW, 0) + " W)";
+      verdictEl.className = "verdict ok";
+      kvEl.innerHTML =
+        "<dt>Total R-value (IP)</dt><dd class='big'>R-" + fmt(R, 2) + "  h·ft²·°F/BTU</dd>" +
+        "<dt>U-factor (IP)</dt><dd>" + fmt(U, 4) + " BTU/(h·ft²·°F)</dd>" +
+        "<dt>R-value (SI)</dt><dd>" + fmt(Rsi, 2) + " m²·K/W</dd>" +
+        "<dt>U-factor (SI)</dt><dd>" + fmt(Usi, 3) + " W/(m²·K)</dd>" +
+        "<dt>Heat loss</dt><dd class='big'>" + fmt(qBTU, 0) + " BTU/h  (" + fmt(qW, 0) + " W)</dd>" +
+        "<dt>Per unit area</dt><dd>" + fmt(U * dTf, 1) + " BTU/h·ft²  (" + fmt(Usi * dTK, 1) + " W/m²)</dd>" +
+        "<dt>Layers counted</dt><dd>" + used + " material layer" + (used === 1 ? "" : "s") + (airoutEl.checked || airinEl.checked ? " + " + ((airoutEl.checked ? 1 : 0) + (airinEl.checked ? 1 : 0)) + " air film" : "") + "</dd>";
+
+      errEl.textContent = "R-value is resistance to heat flow: higher R means less loss. A layer's R is its per-inch R-value × thickness in inches, and an assembly's R is the sum of its layers plus thin inside (~0.68) and outside (~0.17) air-film resistances. The U-factor is 1/R. Steady conduction heat loss is Q = U·A·ΔT — for a wall in BTU/h use U (h·ft²·°F/BTU)⁻¹ × area in ft² × ΔT in °F; in SI use U in W/m²·K × area in m² × ΔT in K (or °C). A 2×4 wall with R-13 batt plus gypsum and air films comes out around R-12 to R-13, and a well-insulated 2×6 wall around R-19 to R-20. This is conduction only: air leakage and thermal bridging at studs and studs often add real losses the simple R-sum misses, so for whole-building loads use the ACCA Manual J or similar that accounts for infiltration, glazing and internal gains.";
+      errEl.className = "note";
+    }
+
+    [areaEl, aunitEl, dtEl, tunitEl, airoutEl, airinEl].forEach(function (el) {
+      el.addEventListener("input", render); el.addEventListener("change", render);
+    });
+    buildLayers();
+    render();
+  })();
+  </script>
+</body>
+</html>
