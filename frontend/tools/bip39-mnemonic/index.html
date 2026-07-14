@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>BIP39 Mnemonic Generator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .seg { display:inline-flex; border:1px solid var(--border,#2a2f3a); border-radius:8px; overflow:hidden; margin-bottom:10px; }
+    .seg button { border:none; border-radius:0; background:transparent; color:inherit; padding:6px 14px; cursor:pointer; }
+    .seg button.active { background: var(--accent,#6ea8fe); color:#08101f; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; margin:10px 0; }
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    .mnemonic { font-size:18px; font-weight:600; line-height:1.9; font-family:monospace; word-spacing:6px; min-height:60px; padding:12px; border:1px solid var(--border,#2a2f3a); border-radius:8px; background:var(--panel-2,#161a22); margin:10px 0; white-space:pre-wrap; word-break:break-word; }
+    .numlist { counter-reset:mnem; }
+    .numlist span { counter-increment:mnem; display:inline-block; margin:2px 6px; }
+    .numlist span::before { content:counter(mnem); display:inline-block; width:1.6em; margin-right:4px; opacity:.45; font-size:.8em; }
+    #ent { font-family:monospace; word-break:break-all; }
+    .mono { font-family:monospace; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>BIP39 Mnemonic Generator</h1>
+      <p>Generate and validate BIP-0039 mnemonic seed phrases. Entropy comes from Web Crypto (crypto.getRandomValues), the checksum is SHA-256, and the seed is derived with PBKDF2-SHA512 (2048 iterations). Everything runs locally — your entropy and mnemonic never leave your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="seg" id="mode">
+        <button type="button" data-m="generate" class="active">Generate</button>
+        <button type="button" data-m="validate" class="secondary">Validate</button>
+      </div>
+
+      <div id="genBox">
+        <div class="grid">
+          <div><label for="strength">Entropy strength</label>
+            <select id="strength">
+              <option value="128">128 bits (12 words)</option>
+              <option value="160">160 bits (15 words)</option>
+              <option value="192">192 bits (18 words)</option>
+              <option value="224">224 bits (21 words)</option>
+              <option value="256">256 bits (24 words)</option>
+            </select>
+          </div>
+          <div><label for="passphrase">Passphrase (optional)</label><input type="text" id="passphrase" spellcheck="false" autocomplete="off" placeholder="BIP39 passphrase"></div>
+        </div>
+        <div class="row">
+          <button id="regen">Generate new mnemonic</button>
+          <button id="copy" class="secondary">Copy mnemonic</button>
+        </div>
+        <label><input type="checkbox" id="numbers"> Number the words</label>
+        <div class="mnemonic" id="mnemonic">—</div>
+        <p class="note"><strong>Entropy (hex):</strong> <span class="mono" id="ent">—</span></p>
+        <p class="note"><strong>Seed (hex):</strong> <span class="mono" id="seed">—</span></p>
+      </div>
+
+      <div id="valBox" hidden>
+        <div class="field">
+          <label for="mnemonicInput">Mnemonic to validate</label>
+          <textarea id="mnemonicInput" rows="3" spellcheck="false" autocomplete="off" placeholder="paste a 12/15/18/21/24-word mnemonic" style="font-family:monospace;"></textarea>
+        </div>
+        <div class="field">
+          <label for="passphraseInput">Passphrase (optional)</label>
+          <input type="text" id="passphraseInput" spellcheck="false" autocomplete="off">
+        </div>
+        <div class="row">
+          <button id="validate">Validate &amp; derive seed</button>
+        </div>
+        <p class="note" id="valResult">Enter a mnemonic.</p>
+        <p class="note" id="valSeed" hidden><strong>Seed (hex):</strong> <span class="mono"></span></p>
+      </div>
+
+      <p class="note">BIP-0039: entropy bits → append first ENT/32 bits of SHA-256(entropy) as checksum → split into 11-bit groups → map each to a word. The seed is PBKDF2-SHA512 with 2048 iterations over the mnemonic and "mnemonic"+passphrase as salt. The wordlist is the official English list (2048 words). Runs entirely in your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script src="/vendor/bip39-wordlist.js"></script>
+  <script>
+  (function () {
+    var WL = window.BIP39_WORDLIST;
+    var wordMap = {};
+    for (var i = 0; i < WL.length; i++) wordMap[WL[i]] = i;
+
+    function bytesToHex(bytes) {
+      var s = "";
+      for (var i = 0; i < bytes.length; i++) s += (bytes[i] < 16 ? "0" : "") + bytes[i].toString(16);
+      return s;
+    }
+    function hexToBytes(hex) {
+      hex = hex.replace(/\s+/g, "");
+      if (hex.length % 2) throw new Error("Odd-length hex");
+      var out = [];
+      for (var i = 0; i < hex.length; i += 2) out.push(parseInt(hex.substr(i, 2), 16));
+      return out;
+    }
+    function bytesToBinary(bytes) {
+      var bits = "";
+      for (var i = 0; i < bytes.length; i++) bits += (bytes[i] < 16 ? "0000000" : bytes[i] < 32 ? "000000" : bytes[i] < 64 ? "00000" : bytes[i] < 128 ? "0000" : bytes[i] < 256 ? "000" : "") + bytes[i].toString(2).padStart(8, "0");
+      return bits;
+    }
+
+    async function sha256(bytes) {
+      var buf = await crypto.subtle.digest("SHA-256", new Uint8Array(bytes));
+      return Array.from(new Uint8Array(buf));
+    }
+
+    function mnemonicToEntropy(mnemonic) {
+      var words = mnemonic.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      if (!words.length) throw new Error("Empty mnemonic");
+      if (words.length % 3 !== 0) throw new Error("Word count must be a multiple of 3 (12, 15, 18, 21, or 24)");
+      if (words.length < 12 || words.length > 24) throw new Error("Word count must be 12–24");
+      for (var i = 0; i < words.length; i++) {
+        if (!(words[i] in wordMap)) throw new Error("Unknown word at position " + (i + 1) + ": " + words[i]);
+      }
+      var bits = "";
+      for (var i = 0; i < words.length; i++) bits += wordMap[words[i]].toString(2).padStart(11, "0");
+      var entBits = words.length * 11 / 33 * 32;
+      var csBits = entBits / 32;
+      var entropyBits = bits.substr(0, entBits);
+      var cs = bits.substr(entBits, csBits);
+      var entropyBytes = [];
+      for (var i = 0; i < entropyBits.length; i += 8) entropyBytes.push(parseInt(entropyBits.substr(i, 8), 2));
+      return { entropy: entropyBytes, checksumBits: cs, words: words };
+    }
+
+    async function mnemonicToSeed(mnemonic, passphrase) {
+      var enc = new TextEncoder();
+      var mnemonicBytes = enc.encode(mnemonic);
+      var salt = enc.encode("mnemonic" + (passphrase || ""));
+      var key = await crypto.subtle.importKey("raw", mnemonicBytes, { name: "PBKDF2" }, false, ["deriveBits"]);
+      var bits = await crypto.subtle.deriveBits(
+        { name: "PBKDF2", salt: salt, iterations: 2048, hash: "SHA-512" },
+        key, 512
+      );
+      return Array.from(new Uint8Array(bits));
+    }
+
+    var modeEl = document.getElementById("mode");
+    var genBox = document.getElementById("genBox");
+    var valBox = document.getElementById("valBox");
+    var mnemonicEl = document.getElementById("mnemonic");
+    var entEl = document.getElementById("ent");
+    var seedEl = document.getElementById("seed");
+    var numbersEl = document.getElementById("numbers");
+    var strengthEl = document.getElementById("strength");
+    var passphraseEl = document.getElementById("passphrase");
+    var mnemonicInputEl = document.getElementById("mnemonicInput");
+    var passphraseInputEl = document.getElementById("passphraseInput");
+    var valResultEl = document.getElementById("valResult");
+    var valSeedEl = document.getElementById("valSeed");
+    var mode = "generate";
+    var lastMnemonic = "";
+    var lastSeed = "";
+
+    async function generate() {
+      var strength = parseInt(strengthEl.value, 10);
+      var entropy = new Uint8Array(strength / 8);
+      crypto.getRandomValues(entropy);
+      var entropyArr = Array.from(entropy);
+      var hash = await sha256(entropyArr);
+      var csBits = strength / 32;
+      var bits = bytesToBinary(entropyArr) + bytesToBinary(hash).substr(0, csBits);
+      var words = [];
+      for (var i = 0; i < bits.length; i += 11) words.push(WL[parseInt(bits.substr(i, 11), 2)]);
+      lastMnemonic = words.join(" ");
+      renderMnemonic();
+      entEl.textContent = bytesToHex(entropyArr);
+      var seed = await mnemonicToSeed(lastMnemonic, passphraseEl.value);
+      lastSeed = bytesToHex(seed);
+      seedEl.textContent = lastSeed;
+    }
+
+    function renderMnemonic() {
+      if (!lastMnemonic) { mnemonicEl.textContent = "—"; return; }
+      if (numbersEl.checked) {
+        var words = lastMnemonic.split(" ");
+        mnemonicEl.innerHTML = "";
+        mnemonicEl.className = "mnemonic numlist";
+        words.forEach(function (w) {
+          var s = document.createElement("span");
+          s.textContent = w;
+          mnemonicEl.appendChild(s);
+          mnemonicEl.appendChild(document.createTextNode(" "));
+        });
+      } else {
+        mnemonicEl.className = "mnemonic";
+        mnemonicEl.textContent = lastMnemonic;
+      }
+    }
+
+    modeEl.addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-m]"); if (!b) return;
+      mode = b.getAttribute("data-m");
+      Array.prototype.forEach.call(modeEl.querySelectorAll("button"), function (x) { x.classList.remove("active"); });
+      b.classList.add("active");
+      genBox.hidden = mode !== "generate";
+      valBox.hidden = mode !== "validate";
+    });
+
+    document.getElementById("regen").addEventListener("click", generate);
+    numbersEl.addEventListener("change", renderMnemonic);
+    passphraseEl.addEventListener("input", async function () {
+      if (!lastMnemonic) return;
+      var seed = await mnemonicToSeed(lastMnemonic, passphraseEl.value);
+      lastSeed = bytesToHex(seed);
+      seedEl.textContent = lastSeed;
+    });
+
+    document.getElementById("copy").addEventListener("click", function () {
+      if (!lastMnemonic) return;
+      navigator.clipboard && navigator.clipboard.writeText
+        ? navigator.clipboard.writeText(lastMnemonic).then(function () { }, function () { })
+        : null;
+    });
+
+    document.getElementById("validate").addEventListener("click", async function () {
+      var mn = mnemonicInputEl.value.trim().toLowerCase().replace(/\s+/g, " ");
+      if (!mn) { valResultEl.textContent = "Enter a mnemonic."; valSeedEl.hidden = true; return; }
+      try {
+        var info = mnemonicToEntropy(mn);
+        var hash = await sha256(info.entropy);
+        var entBits = info.entropy.length * 8;
+        var csBits = entBits / 32;
+        var expectedCs = bytesToBinary(hash).substr(0, csBits);
+        if (info.checksumBits !== expectedCs) {
+          valResultEl.textContent = "✗ Invalid checksum (word order or typo). Word count OK (" + info.words.length + ").";
+          valSeedEl.hidden = true;
+          return;
+        }
+        valResultEl.textContent = "✓ Valid — " + info.words.length + " words, " + entBits + " bits of entropy.";
+        var seed = await mnemonicToSeed(mn, passphraseInputEl.value);
+        valSeedEl.hidden = false;
+        valSeedEl.querySelector("span.mono").textContent = bytesToHex(seed);
+      } catch (e) {
+        valResultEl.textContent = "✗ " + (e.message || String(e));
+        valSeedEl.hidden = true;
+      }
+    });
+
+    generate();
+  })();
+  </script>
+</body>
+</html>

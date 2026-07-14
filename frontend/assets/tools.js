@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "bip39-mnemonic",
+    name: "BIP39 Mnemonic Generator",
+    description: "Generate and validate BIP-0039 mnemonic seed phrases (12–24 words) from Web Crypto entropy, with SHA-256 checksum verification and PBKDF2-SHA512 seed derivation. Runs locally — your entropy and mnemonic never leave your browser.",
+    category: "Security",
+    icon: "🌱",
+    added: "2026-07-14T13:45:00Z",
+  },
+  {
     slug: "totp-authenticator",
     name: "TOTP / HOTP Authenticator",
     description: "Generate time-based (RFC 6238) or counter-based (RFC 4226) one-time passwords from a Base32 secret using HMAC-SHA1 and dynamic truncation, with an optional otpauth provisioning QR. The secret stays in your browser. Runs locally.",
