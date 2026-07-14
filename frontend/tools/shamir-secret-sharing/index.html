@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Shamir's Secret Sharing — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .seg { display:inline-flex; border:1px solid var(--border,#2a2f3a); border-radius:8px; overflow:hidden; margin-bottom:10px; }
+    .seg button { border:none; border-radius:0; background:transparent; color:inherit; padding:6px 14px; cursor:pointer; }
+    .seg button.active { background: var(--accent,#6ea8fe); color:#08101f; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px; margin:10px 0; }
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    .field { margin-bottom:0; }
+    .full { grid-column: 1 / -1; }
+    textarea { width:100%; font-family:monospace; font-size:13px; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:10px 0; }
+    pre.shares { white-space:pre-wrap; word-break:break-all; font-family:monospace; font-size:12px; padding:10px; border:1px solid var(--border,#2a2f3a); border-radius:8px; background:var(--panel-2,#161a22); margin:8px 0; min-height:60px; }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Shamir's Secret Sharing</h1>
+      <p>Split a secret into <em>n</em> shares so that any <em>k</em> of them reconstruct it, but fewer reveal nothing — the threshold scheme from Adi Shamir (1979). A random polynomial of degree <em>k−1</em> is built over the prime field GF(257), with the secret as the constant term; each share is a point on the curve. Reconstruction uses Lagrange interpolation at x = 0. The secret is UTF-8 encoded byte-by-byte. Everything runs locally in your browser — your secret and shares never leave the page.</p>
+    </div>
+
+    <div class="panel">
+      <div class="seg" id="mode">
+        <button type="button" data-m="split" class="active">Split a secret</button>
+        <button type="button" data-m="combine" class="secondary">Combine shares</button>
+      </div>
+
+      <div id="splitBox">
+        <div class="field full">
+          <label for="secret">Secret (UTF-8 text)</label>
+          <textarea id="secret" rows="2" spellcheck="false" autocomplete="off" placeholder="the treasure is buried under the oak tree"></textarea>
+        </div>
+        <div class="grid">
+          <div class="field"><label for="n">Shares to generate (n)</label><input id="n" type="number" min="2" max="255" value="5" style="width:100px;"></div>
+          <div class="field"><label for="k">Threshold to reconstruct (k)</label><input id="k" type="number" min="2" max="255" value="3" style="width:100px;"></div>
+        </div>
+        <div class="row">
+          <button id="split">Split</button>
+          <button id="copyShares" class="secondary">Copy shares</button>
+        </div>
+        <pre class="shares" id="sharesOut">—</pre>
+        <p class="note" id="splitNote">Each share is <code>x:hex</code>; the x is the point's index and the hex is the per-byte y-values (each 0–256, encoded as two hex digits). Distribute one share to each holder; any <em>k</em> of them can reconstruct, fewer cannot.</p>
+      </div>
+
+      <div id="combineBox" hidden>
+        <div class="field full">
+          <label for="sharesIn">Shares (one per line, any <em>k</em> of the <em>n</em> generated)</label>
+          <textarea id="sharesIn" rows="5" spellcheck="false" autocomplete="off" placeholder="1:0a1f…&#10;3:5b2c…&#10;4:8e09…"></textarea>
+        </div>
+        <div class="row">
+          <button id="combine">Combine</button>
+        </div>
+        <pre class="shares" id="secretOut">—</pre>
+        <p class="note" id="combineNote">Paste at least <em>k</em> shares (the threshold) — one per line. The secret is reconstructed by Lagrange interpolation at x = 0.</p>
+      </div>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var PRIME = 257;
+    var $ = function (id) { return document.getElementById(id); };
+    var mode = "split";
+
+    function utf8ToBytes(s) { return Array.from(new TextEncoder().encode(s)); }
+    function bytesToUtf8(bytes) {
+      try { return new TextDecoder().decode(new Uint8Array(bytes)); }
+      catch (e) { return bytes.map(function (b) { return String.fromCharCode(b); }).join(""); }
+    }
+    function hexToBytes(hex) {
+      hex = hex.replace(/\s+/g, "");
+      var out = [];
+      for (var i = 0; i < hex.length; i += 2) out.push(parseInt(hex.substr(i, 2), 16));
+      return out;
+    }
+    function bytesToHex(bytes) {
+      return bytes.map(function (b) { return (b < 16 ? "0" : "") + b.toString(16); }).join("");
+    }
+
+    function randBelow(n) {
+      var arr = new Uint16Array(1);
+      var limit = Math.floor(0x10000 / n) * n;
+      var v;
+      do { crypto.getRandomValues(arr); v = arr[0]; } while (v >= limit);
+      return v % n;
+    }
+
+    function modAdd(a, b) { return (a + b) % PRIME; }
+    function modSub(a, b) { return ((a - b) % PRIME + PRIME) % PRIME; }
+    function modMul(a, b) { return (a * b) % PRIME; }
+    function modPow(base, exp) {
+      var r = 1, b = base % PRIME;
+      while (exp > 0) {
+        if (exp & 1) r = modMul(r, b);
+        b = modMul(b, b);
+        exp = Math.floor(exp / 2);
+      }
+      return r;
+    }
+    function modInv(a) {
+      a = ((a % PRIME) + PRIME) % PRIME;
+      return modPow(a, PRIME - 2);
+    }
+
+    function evalPoly(coeffs, x) {
+      var y = 0;
+      for (var i = coeffs.length - 1; i >= 0; i--) y = modAdd(modMul(y, x), coeffs[i]);
+      return y;
+    }
+
+    function splitByte(secretByte, n, k) {
+      var coeffs = [secretByte];
+      for (var i = 1; i < k; i++) coeffs.push(randBelow(PRIME));
+      var ys = [];
+      for (var x = 1; x <= n; x++) ys.push(evalPoly(coeffs, x));
+      return ys;
+    }
+
+    function split() {
+      var secret = $("secret").value;
+      if (!secret) { $("sharesOut").textContent = "—"; $("splitNote").textContent = "Enter a secret first."; return; }
+      var n = parseInt($("n").value, 10);
+      var k = parseInt($("k").value, 10);
+      if (!n || n < 2 || n > 255) { $("splitNote").textContent = "n must be 2–255."; return; }
+      if (!k || k < 2 || k > 255) { $("splitNote").textContent = "k must be 2–255."; return; }
+      if (k > n) { $("splitNote").textContent = "k must be ≤ n."; return; }
+      var bytes = utf8ToBytes(secret);
+      var perByteYs = bytes.map(function (b) { return splitByte(b, n, k); });
+      var lines = [];
+      for (var i = 0; i < n; i++) {
+        var ys = [];
+        for (var b = 0; b < bytes.length; b++) ys.push(perByteYs[b][i]);
+        lines.push((i + 1) + ":" + bytesToHex(ys));
+      }
+      var out = lines.join("\n");
+      $("sharesOut").textContent = out;
+      $("splitNote").textContent = "Generated " + n + " shares; threshold " + k + ". Secret length: " + bytes.length + " byte(s).";
+      window._shares = out;
+    }
+
+    function combine() {
+      var raw = $("sharesIn").value.trim();
+      if (!raw) { $("secretOut").textContent = "—"; $("combineNote").textContent = "Paste shares first."; return; }
+      var lines = raw.split(/\n+/).map(function (l) { return l.trim(); }).filter(Boolean);
+      if (lines.length < 2) { $("combineNote").textContent = "Need at least 2 shares."; return; }
+      var shares = [];
+      for (var i = 0; i < lines.length; i++) {
+        var m = lines[i].match(/^(\d+):([0-9a-fA-F]+)$/);
+        if (!m) { $("combineNote").textContent = "Bad share format on line " + (i + 1) + " (expected x:hex)."; return; }
+        shares.push({ x: parseInt(m[1], 10), ys: hexToBytes(m[2]) });
+      }
+      var len = shares[0].ys.length;
+      for (var i = 1; i < shares.length; i++) {
+        if (shares[i].ys.length !== len) { $("combineNote").textContent = "Share lengths differ."; return; }
+      }
+      var xs = shares.map(function (s) { return s.x; });
+      var uniq = {}; xs.forEach(function (x) { uniq[x] = true; });
+      if (Object.keys(uniq).length !== xs.length) { $("combineNote").textContent = "Duplicate x values."; return; }
+      var secretBytes = [];
+      for (var b = 0; b < len; b++) {
+        var pts = shares.map(function (s) { return { x: s.x, y: s.ys[b] }; });
+        secretBytes.push(lagrange0(pts));
+      }
+      var secret = bytesToUtf8(secretBytes);
+      $("secretOut").textContent = secret;
+      $("combineNote").textContent = "Reconstructed from " + shares.length + " share(s); " + len + " byte(s).";
+    }
+
+    function lagrange0(pts) {
+      var k = pts.length;
+      var sum = 0;
+      for (var i = 0; i < k; i++) {
+        var num = 1, den = 1;
+        for (var j = 0; j < k; j++) {
+          if (i === j) continue;
+          num = modMul(num, modSub(0, pts[j].x));
+          den = modMul(den, modSub(pts[i].x, pts[j].x));
+        }
+        var term = modMul(pts[i].y, modMul(num, modInv(den)));
+        sum = modAdd(sum, term);
+      }
+      return sum % 257;
+    }
+
+    $("mode").addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-m]"); if (!b) return;
+      mode = b.getAttribute("data-m");
+      Array.prototype.forEach.call($("mode").querySelectorAll("button"), function (x) { x.classList.remove("active"); });
+      b.classList.add("active");
+      $("splitBox").hidden = mode !== "split";
+      $("combineBox").hidden = mode !== "combine";
+    });
+    $("split").addEventListener("click", split);
+    $("combine").addEventListener("click", combine);
+    $("copyShares").addEventListener("click", function () {
+      if (!window._shares) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(window._shares).then(function () { $("splitNote").textContent = "Shares copied."; }, function () { $("splitNote").textContent = "Copy failed."; });
+      } else $("splitNote").textContent = "Clipboard unavailable.";
+    });
+  })();
+  </script>
+</body>
+</html>

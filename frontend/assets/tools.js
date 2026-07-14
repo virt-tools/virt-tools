@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "shamir-secret-sharing",
+    name: "Shamir's Secret Sharing",
+    description: "Split a secret into n shares so any k of them reconstruct it, but fewer reveal nothing — the threshold scheme from Adi Shamir (1979). Random polynomial over GF(257) with the secret as the constant term; Lagrange interpolation at x = 0 to combine. UTF-8 secrets, Web Crypto randomness. Everything runs locally — your secret and shares never leave the page.",
+    category: "Security",
+    icon: "🧩",
+    added: "2026-07-14T18:00:00Z",
+  },
+  {
     slug: "csv-transpose",
     name: "CSV Transpose",
     description: "Flip a CSV table — rows become columns and columns become rows. Paste CSV, pick input/output delimiter, optionally keep the header or use the first column as the new header, and copy or download the transposed result. Handles quoted fields, embedded commas and newlines. Runs locally in your browser.",
