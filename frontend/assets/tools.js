@@ -3770,4 +3770,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔧",
     added: "2026-07-14T14:45:00Z",
   },
+  {
+    slug: "lumber-board-foot-calculator",
+    name: "Lumber & Board Foot Calculator",
+    description: "Convert lumber dimensions into board feet, total volume and cost for a list of pieces. Pick a common nominal size (1×4 to 4×6) to auto-fill the dimensions, then enter length, quantity and price per board foot to get board feet per piece and total, volume in cubic feet and metres, and total cost. A toggle switches between nominal and actual dressed dimensions — board-foot pricing traditionally uses nominal size, while actual volume uses the smaller milled dimensions. Useful for estimating deck framing, shelving, fencing and rough carpentry. Pure arithmetic, in your browser.",
+    category: "Math",
+    icon: "🪵",
+    added: "2026-07-14T15:15:00Z",
+  },
 ];
