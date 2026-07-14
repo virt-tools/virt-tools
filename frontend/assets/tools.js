@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "scientific-notation",
+    name: "Scientific Notation Converter",
+    description: "Convert a number between decimal, scientific notation (a×10ⁿ), engineering notation (exponent a multiple of 3), E-notation, and an SI-prefixed form — enter a value in any form and see all the others. Runs locally in your browser.",
+    category: "Math",
+    icon: "🔬",
+    added: "2026-07-14T15:30:00Z",
+  },
+  {
     slug: "sri-generator",
     name: "SRI Hash Generator",
     description: "Generate Subresource Integrity (SRI) hashes for <script> and <link> tags so browsers refuse to run a script or stylesheet whose hash doesn't match. sha256 / sha384 / sha512 via Web Crypto; files never leave your browser.",
