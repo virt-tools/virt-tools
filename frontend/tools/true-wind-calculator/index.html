@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>True Wind Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .row2 { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+    .row2 .field { margin-bottom: 0; }
+    input[type="number"] { font-family: ui-monospace, monospace; width: 90px; }
+    select { min-width: 110px; }
+    .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+    .seg button { background: var(--bg-elev-2); color: var(--text); border: none; padding: 5px 12px; cursor: pointer; font-size: 0.85rem; }
+    .seg button.active { background: var(--accent, #6ea8ff); color: #08111f; font-weight: 600; }
+    .kv { display: grid; grid-template-columns: 230px 1fr; gap: 6px 12px; margin-top: 12px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.95rem; }
+    .verdict { font-size: 1.5rem; font-weight: 800; font-family: ui-monospace, monospace; margin-top: 10px; }
+    .verdict.ok { color: var(--ok, #4ade80); }
+    .verdict.bad { color: var(--bad, #f87171); }
+    .big { font-size: 1.05rem; font-weight: 700; }
+    h3.sec { font-size: 0.92rem; font-weight: 600; margin: 14px 0 2px; color: var(--text-dim); }
+    .compass { font-family: ui-monospace, monospace; font-size: 0.85rem; color: var(--text-dim); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>True Wind Calculator</h1>
+      <p>Resolve the wind triangle between a sailing boat's motion and the wind. Convert apparent wind (what the boat's instruments feel) into true wind over the water, or predict the apparent wind from a true-wind forecast and your course. Enter boat speed, the known wind speed and its angle off the bow (0° = headwind, 180° = dead downwind), and the tool returns the other pair. Upwind the boat's motion inflates the apparent wind and pulls it toward the bow; downwind the boat runs away from the wind, so the apparent is lighter and further aft than true. Pure arithmetic — a velocity-triangle solution with no leeway, current, gusts or instrument calibration. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label>Solve for</label>
+        <div class="seg" id="mseg">
+          <button data-m="true" class="active">Apparent → True</button>
+          <button data-m="apparent">True → Apparent</button>
+        </div>
+      </div>
+
+      <div class="row2">
+        <div class="field">
+          <label for="vb">Boat speed</label>
+          <input id="vb" type="number" min="0" step="any" value="6">
+          <select id="sunit" style="min-width:70px;margin-left:6px;">
+            <option value="kn" selected>kn</option>
+            <option value="kmh">km/h</option>
+            <option value="mph">mph</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="row2">
+        <div class="field">
+          <label for="wv">Wind speed</label>
+          <input id="wv" type="number" min="0" step="any" value="15">
+          <span class="muted" id="wvlabel">apparent kn</span>
+        </div>
+        <div class="field">
+          <label for="wa">Wind angle off bow</label>
+          <input id="wa" type="number" min="0" max="180" step="any" value="35"> <span class="muted">°</span>
+          <div class="compass" id="walabel">apparent wind angle</div>
+        </div>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <dl class="kv" id="kv"></dl>
+      <p class="note" id="err"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var mseg = $("mseg"), vbEl = $("vb"), sunitEl = $("sunit"), wvEl = $("wv"), waEl = $("wa");
+    var wvlabel = $("wvlabel"), walabel = $("walabel");
+    var verdictEl = $("verdict"), kvEl = $("kv"), errEl = $("err");
+    var mode = "true";
+
+    function num(el) { var n = parseFloat(el.value); return isNaN(n) ? NaN : n; }
+    function fmt(n, d) { return Number(n).toFixed(d); }
+
+    mseg.querySelectorAll("button").forEach(function (b) {
+      b.addEventListener("click", function () {
+        mseg.querySelectorAll("button").forEach(function (x) { x.classList.remove("active"); });
+        b.classList.add("active");
+        mode = b.getAttribute("data-m");
+        updateLabels(); render();
+      });
+    });
+    sunitEl.addEventListener("change", updateLabels);
+    function unitLabel() { return sunitEl.options[sunitEl.selectedIndex].textContent; }
+    function updateLabels() {
+      if (mode === "true") { wvlabel.textContent = "apparent " + unitLabel(); walabel.textContent = "apparent wind angle (AWA)"; }
+      else { wvlabel.textContent = "true " + unitLabel(); walabel.textContent = "true wind angle (TWA)"; }
+    }
+
+    function point(angle) {
+      var a = Math.abs(angle);
+      if (a < 15) return "close-hauled / in irons";
+      if (a < 60) return "close reach";
+      if (a < 100) return "beam reach";
+      if (a < 150) return "broad reach";
+      return "running (dead downwind)";
+    }
+
+    function render() {
+      errEl.textContent = ""; verdictEl.textContent = ""; verdictEl.className = "verdict"; kvEl.innerHTML = "";
+      var Vb = num(vbEl), wv = num(wvEl), wa = num(waEl);
+      if ([Vb, wv, wa].some(isNaN) || Vb < 0 || wv < 0 || wa < 0 || wa > 180) {
+        verdictEl.textContent = "✗ Enter speeds ≥ 0 and an angle 0–180°."; verdictEl.className = "verdict bad"; return;
+      }
+
+      var a = wa * Math.PI / 180;
+      var outSpeed, outAngle, label;
+      if (mode === "true") {
+        // Apparent -> True: Vt cosθ = Va cosφ − Vb ; Vt sinθ = Va sinφ
+        var c = wv * Math.cos(a) - Vb, s = wv * Math.sin(a);
+        outSpeed = Math.hypot(c, s);
+        outAngle = Math.atan2(s, c) * 180 / Math.PI;
+        label = "true";
+      } else {
+        // True -> Apparent: Va = sqrt((Vt cosθ + Vb)^2 + (Vt sinθ)^2); φ = atan2(Vt sinθ, Vt cosθ+Vb)
+        var c2 = wv * Math.cos(a) + Vb, s2 = wv * Math.sin(a);
+        outSpeed = Math.hypot(c2, s2);
+        outAngle = Math.atan2(s2, c2) * 180 / Math.PI;
+        label = "apparent";
+      }
+      outAngle = Math.max(0, Math.min(180, Math.abs(outAngle)));
+
+      var dead = outSpeed < 1e-6;
+      verdictEl.textContent = dead ? "Apparent wind ≈ 0 (sailing at true wind speed, dead downwind)"
+        : fmt(outSpeed, 1) + " " + unitLabel() + "  " + label + "  ·  " + fmt(outAngle, 1) + "° " + label + " angle";
+      verdictEl.className = "verdict ok";
+
+      kvEl.innerHTML =
+        "<dt>" + (label === "true" ? "True wind speed (TWS)" : "Apparent wind speed (AWS)") + "</dt><dd class='big'>" + (dead ? "≈ 0" : fmt(outSpeed, 2) + " " + unitLabel()) + "</dd>" +
+        "<dt>" + (label === "true" ? "True wind angle (TWA)" : "Apparent wind angle (AWA)") + "</dt><dd class='big'>" + fmt(outAngle, 1) + "° off the bow</dd>" +
+        "<dt>Point of sail</dt><dd>" + point(outAngle) + "</dd>" +
+        "<dt>Inputs</dt><dd>boat " + fmt(Vb, 1) + " " + unitLabel() + " · " + (mode === "true" ? "apparent" : "true") + " " + fmt(wv, 1) + " " + unitLabel() + " @ " + fmt(wa, 1) + "°</dd>";
+
+      errEl.textContent = "The wind triangle combines the boat's velocity with the true wind to get the apparent wind (what you feel and what the instruments read), and inverts to recover the true wind from apparent. With angles measured from the bow — 0° headwind, 180° dead downwind — apparent-to-true solves Vt cosθ = Va cosφ − Vb and Vt sinθ = Va sinφ; true-to-apparent uses Va = √((Vt cosθ + Vb)² + (Vt sinθ)²) and φ = atan2(Vt sinθ, Vt cosθ + Vb). Upwind the boat's motion adds a headwind component, so the apparent wind is stronger than true and pulled toward the bow (smaller angle); downwind the boat runs away from the wind, so the apparent is lighter and further aft — and if you sail dead downwind at the true wind speed the apparent drops to zero. This is wind over the water, ignoring leeway, current, heel, gusts and instrument error; for polar-based performance and layline planning combine the result with your boat's polar diagram.";
+      errEl.className = "note";
+    }
+
+    [vbEl, wvEl, waEl].forEach(function (el) {
+      el.addEventListener("input", render); el.addEventListener("change", render);
+    });
+    sunitEl.addEventListener("change", render);
+    updateLabels(); render();
+  })();
+  </script>
+</body>
+</html>

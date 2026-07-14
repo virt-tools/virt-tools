@@ -3778,4 +3778,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🪵",
     added: "2026-07-14T15:15:00Z",
   },
+  {
+    slug: "true-wind-calculator",
+    name: "True Wind Calculator",
+    description: "Resolve the wind triangle for a sailing boat. Convert apparent wind (what the boat's instruments feel) into true wind over the water, or predict the apparent wind from a true-wind forecast and your course. Enter boat speed, the known wind speed and its angle off the bow (0° = headwind, 180° = dead downwind), and get the other pair with a point-of-sail label. Upwind the boat's motion inflates the apparent wind and pulls it toward the bow; downwind the boat runs away from the wind, so the apparent is lighter and further aft than true. Pure arithmetic — a velocity-triangle solution with no leeway, current, gusts or instrument calibration. Everything runs locally in your browser.",
+    category: "Geography",
+    icon: "⛵",
+    added: "2026-07-14T15:45:00Z",
+  },
 ];
