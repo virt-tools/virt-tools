@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Op-Amp Gain Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .row2 { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+    .row2 .field { margin-bottom: 0; }
+    input[type="number"] { font-family: ui-monospace, monospace; width: 110px; }
+    select { min-width: 100px; }
+    .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+    .seg button { background: var(--bg-elev-2); color: var(--text); border: none; padding: 5px 12px; cursor: pointer; font-size: 0.85rem; }
+    .seg button.active { background: var(--accent, #6ea8ff); color: #08111f; font-weight: 600; }
+    .kv { display: grid; grid-template-columns: 230px 1fr; gap: 6px 12px; margin-top: 12px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.95rem; }
+    .verdict { font-size: 1.5rem; font-weight: 800; font-family: ui-monospace, monospace; margin-top: 10px; }
+    .verdict.ok { color: var(--ok, #4ade80); }
+    .verdict.warn { color: var(--accent, #6ea8ff); }
+    .verdict.bad { color: var(--bad, #f87171); }
+    .big { font-size: 1.05rem; font-weight: 700; }
+    h3.sec { font-size: 0.92rem; font-weight: 600; margin: 14px 0 2px; color: var(--text-dim); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Op-Amp Gain Calculator</h1>
+      <p>Analyze the three classic op-amp feedback circuits — inverting, non-inverting, and difference (differential) amplifiers. Enter the feedback and input resistors to get the closed-loop voltage gain (as a ratio and in dB), and optionally add the input voltage(s) to get the output voltage and an optional gain-bandwidth product to find the small-signal bandwidth. Inverting gain is −Rf/Rin, non-inverting is 1 + Rf/Rg, and the difference amplifier subtracts its two inputs. Useful for sensor signal conditioning, audio preamps, instrumentation and active filter stages. Pure arithmetic — ideal op-amp equations that assume infinite open-loop gain and input impedance; real op-amps add input bias current, offset voltage, slew-rate limits and a roll-off that pushes the bandwidth below the GBW estimate, so check the datasheet and leave headroom for the rails. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label>Circuit</label>
+        <div class="seg" id="cseg">
+          <button data-c="inv" class="active">Inverting</button>
+          <button data-c="noninv">Non-inverting</button>
+          <button data-c="diff">Difference</button>
+        </div>
+      </div>
+
+      <h3 class="sec">Resistors (kΩ)</h3>
+      <div class="row2">
+        <div class="field" id="r1f">
+          <label for="r1" id="r1l">Rin</label>
+          <input id="r1" type="number" min="0" step="any" value="10">
+          <span class="muted">kΩ</span>
+        </div>
+        <div class="field" id="r2f">
+          <label for="r2" id="r2l">Rf</label>
+          <input id="r2" type="number" min="0" step="any" value="100">
+          <span class="muted">kΩ (feedback)</span>
+        </div>
+        <div class="field" id="r3f" style="display:none;">
+          <label for="r3" id="r3l">Rg</label>
+          <input id="r3" type="number" min="0" step="any" value="10">
+          <span class="muted">kΩ</span>
+        </div>
+      </div>
+
+      <h3 class="sec">Inputs (optional — for output voltage)</h3>
+      <div class="row2">
+        <div class="field" id="v1f">
+          <label for="v1" id="v1l">Vin (V+)</label>
+          <input id="v1" type="number" step="any" value="1.5">
+          <span class="muted">V</span>
+        </div>
+        <div class="field" id="v2f" style="display:none;">
+          <label for="v2">V2 (V+)</label>
+          <input id="v2" type="number" step="any" value="3.0">
+          <span class="muted">V</span>
+        </div>
+        <div class="field">
+          <label for="vref">Vref / rail</label>
+          <input id="vref" type="number" step="any" value="15">
+          <span class="muted">V (clip check)</span>
+        </div>
+        <div class="field">
+          <label for="gbw">GBW (optional)</label>
+          <input id="gbw" type="number" min="0" step="any" value="1">
+          <span class="muted">MHz</span>
+        </div>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <dl class="kv" id="kv"></dl>
+      <p class="note" id="err"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var cseg = $("cseg");
+    var r1El = $("r1"), r2El = $("r2"), r3El = $("r3"), r3f = $("r3f"), r1l = $("r1l"), r2l = $("r2l"), r3l = $("r3l");
+    var v1El = $("v1"), v2El = $("v2"), v2f = $("v2f"), v1l = $("v1l"), vrefEl = $("vref"), gbwEl = $("gbw");
+    var verdictEl = $("verdict"), kvEl = $("kv"), errEl = $("err");
+    var circuit = "inv";
+
+    function num(el) { var n = parseFloat(el.value); return isNaN(n) ? NaN : n; }
+    function fmt(n, d) { return Number(n).toFixed(d); }
+    function db(av) { return 20 * Math.log10(Math.abs(av)); }
+    function bad(msg) { verdictEl.textContent = "✗ " + msg; verdictEl.className = "verdict bad"; kvEl.innerHTML = ""; errEl.textContent = ""; }
+
+    cseg.querySelectorAll("button").forEach(function (b) {
+      b.addEventListener("click", function () {
+        cseg.querySelectorAll("button").forEach(function (x) { x.classList.remove("active"); });
+        b.classList.add("active"); circuit = b.getAttribute("data-c"); updateUI(); render();
+      });
+    });
+
+    function updateUI() {
+      // inv: Rin, Rf ; noninv: Rg(bottom of divider), Rf ; diff: R1, Rg, R2=Rf
+      if (circuit === "inv") { r1l.textContent = "Rin"; r2l.textContent = "Rf"; r3f.style.display = "none"; v1l.textContent = "Vin"; v2f.style.display = "none"; }
+      else if (circuit === "noninv") { r1l.textContent = "Rg"; r2l.textContent = "Rf"; r3f.style.display = "none"; v1l.textContent = "Vin (V+)"; v2f.style.display = "none"; }
+      else { r1l.textContent = "R1"; r2l.textContent = "R2 = Rf"; r3l.textContent = "Rg = R3"; r3f.style.display = ""; v1l.textContent = "V1 (V−)"; v2f.style.display = ""; }
+    }
+
+    function render() {
+      verdictEl.textContent = ""; verdictEl.className = "verdict"; kvEl.innerHTML = ""; errEl.textContent = ""; errEl.className = "note";
+      var r1 = num(r1El), r2 = num(r2El);
+      if (isNaN(r1) || r1 <= 0 || isNaN(r2) || r2 <= 0) { bad("Enter positive resistor values (kΩ)."); return; }
+
+      var Av, Vout, v1 = num(v1El), vref = num(vrefEl), gbw = num(gbwEl);
+      var formula, inputs = "";
+      if (circuit === "inv") {
+        Av = -r2 / r1;
+        if (!isNaN(v1)) Vout = Av * v1;
+        formula = "Av = −Rf/Rin = −" + fmt(r2, 2) + "/" + fmt(r1, 2);
+      } else if (circuit === "noninv") {
+        Av = 1 + r2 / r1;
+        if (!isNaN(v1)) Vout = Av * v1;
+        formula = "Av = 1 + Rf/Rg = 1 + " + fmt(r2, 2) + "/" + fmt(r1, 2);
+      } else {
+        var r3 = num(r3El);
+        if (isNaN(r3) || r3 <= 0) { bad("Enter positive R1, R2(=Rf) and Rg(=R3)."); return; }
+        var v2 = num(v2El);
+        if (isNaN(v1) || isNaN(v2)) { bad("Enter V1 and V2 for the difference amplifier."); return; }
+        // general diff: Vo = (R2/(R1+R2))(1+Rf/Rg)V2 − (Rf/Rg)V1 ; here Rf=R2(top), Rg=R3
+        Av = r2 / r1;
+        Vout = (r2 / (r1 + r2)) * (1 + r2 / r3) * v2 - (r2 / r3) * v1;
+        formula = "Av = R2/R1 = " + fmt(r2, 2) + "/" + fmt(r1, 2) + "  (matched: Vo = Av·(V2 − V1))";
+        if (r1 === r3 && r1 === r2) {} // matched case already noted
+      }
+
+      var gainDb = db(Av);
+      var clipped = !isNaN(Vout) && !isNaN(vref) && vref > 0 && Math.abs(Vout) > vref;
+
+      var head = "Av = " + fmt(Av, 3) + "  (" + (gainDb >= 0 ? "+" : "") + fmt(gainDb, 1) + " dB)";
+      if (!isNaN(Vout)) head += "  ·  Vout = " + fmt(Vout, 3) + " V";
+      verdictEl.textContent = (clipped ? "⚠ clipped at rails — " : "") + head;
+      verdictEl.className = "verdict " + (clipped ? "bad" : "ok");
+
+      var rows = "<dt>Voltage gain</dt><dd class='big'>" + fmt(Av, 3) + " V/V  ·  " + (gainDb >= 0 ? "+" : "") + fmt(gainDb, 1) + " dB</dd>";
+      if (!isNaN(Vout)) rows += "<dt>Output voltage</dt><dd class='big'>" + fmt(Vout, 3) + " V</dd>";
+      if (!isNaN(gbw) && gbw > 0) {
+        var bw = gbw * 1e6 / Math.max(Math.abs(Av), 1e-9);
+        rows += "<dt>Bandwidth (GBW/|Av|)</dt><dd>" + fmtBW(bw) + "</dd>";
+      }
+      rows += "<dt>Formula</dt><dd>" + formula + "</dd>";
+      rows += "<dt>Resistors</dt><dd>" + (circuit === "inv" ? "Rin=" + fmt(r1, 2) + "k, Rf=" + fmt(r2, 2) + "k"
+        : circuit === "noninv" ? "Rg=" + fmt(r1, 2) + "k, Rf=" + fmt(r2, 2) + "k"
+        : "R1=" + fmt(r1, 2) + "k, R2=Rf=" + fmt(r2, 2) + "k, Rg=" + fmt(num(r3El), 2) + "k") + "</dd>";
+      kvEl.innerHTML = rows;
+
+      var note;
+      if (circuit === "inv") {
+        note = "The inverting amplifier feeds the input through Rin to the − input and returns feedback through Rf, with the + input grounded. The virtual short at the − node keeps it at 0 V, so Av = −Rf/Rin and Vout = Av·Vin. Input impedance equals Rin (not the op-amp's own) — keep Rin low if the source is high-impedance, or use a buffer ahead of it. With Rf=" + fmt(r2, 1) + " kΩ and Rin=" + fmt(r1, 1) + " kΩ the gain is " + fmt(Av, 2) + " (" + (gainDb >= 0 ? "+" : "") + fmt(gainDb, 1) + " dB)";
+      } else if (circuit === "noninv") {
+        note = "The non-inverting amplifier applies the input directly to the + input and divides the output through Rf and Rg. Av = 1 + Rf/Rg and Vout = Av·Vin — always positive and ≥ 1 in this configuration. Input impedance is the op-amp's own (very high), so it buffers the source. With Rf=" + fmt(r2, 1) + " kΩ and Rg=" + fmt(r1, 1) + " kΩ the gain is " + fmt(Av, 2) + " (" + (gainDb >= 0 ? "+" : "") + fmt(gainDb, 1) + " dB)";
+      } else {
+        note = "The difference (differential) amplifier subtracts two inputs: Vo = (R2/(R1+R2))(1+Rf/Rg)V2 − (Rf/Rg)V1, with Rf=R2 and Rg=R3. When the ratios match (R1=Rg, R2=Rf, as here) it simplifies to Vo = (R2/R1)(V2−V1) = " + fmt(Av, 2) + " × " + fmt(v2 - v1, 2) + " = " + fmt(Vout, 3) + " V. Resistor matching sets the common-mode rejection — use 0.1% or better, or an instrumentation amp for real precision";
+      }
+      if (!isNaN(gbw) && gbw > 0) {
+        var bw = gbw * 1e6 / Math.max(Math.abs(Av), 1e-9);
+        note += ". With a gain-bandwidth product of " + fmt(gbw, 1) + " MHz, the closed-loop bandwidth is roughly GBW/|Av| = " + fmtBW(bw) + "; the op-amp must also slew fast enough for the signal, so check the slew rate";
+      }
+      if (clipped) note += ". The output (" + fmt(Vout, 2) + " V) exceeds the Vref rail (" + fmt(vref, 2) + " V) you set, so in practice it saturates — reduce the gain, the input, or raise the supply rails.";
+      note += ". These are ideal equations; real parts add input bias current, offset voltage (× the closed-loop gain at DC), finite open-loop gain that rolls the actual gain below the calculated value near the bandwidth edge, and a slew-rate limit on large signals.";
+      errEl.textContent = note;
+      errEl.className = "note";
+    }
+    function fmtBW(hz) {
+      if (hz >= 1e6) return fmt(hz / 1e6, 2) + " MHz";
+      if (hz >= 1e3) return fmt(hz / 1e3, 2) + " kHz";
+      return fmt(hz, 0) + " Hz";
+    }
+
+    [r1El, r2El, r3El, v1El, v2El, vrefEl, gbwEl].forEach(function (el) {
+      el.addEventListener("input", render); el.addEventListener("change", render);
+    });
+    updateUI(); render();
+  })();
+  </script>
+</body>
+</html>

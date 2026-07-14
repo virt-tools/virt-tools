@@ -3834,4 +3834,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔩",
     added: "2026-07-14T18:45:00Z",
   },
+  {
+    slug: "op-amp-gain-calculator",
+    name: "Op-Amp Gain Calculator",
+    description: "Analyze the three classic op-amp feedback circuits — inverting, non-inverting, and difference (differential) amplifiers. Enter the feedback and input resistors to get the closed-loop voltage gain as a ratio and in dB, and optionally add the input voltage(s) to get the output voltage, plus a gain-bandwidth product to find the small-signal bandwidth. Inverting gain is −Rf/Rin, non-inverting is 1 + Rf/Rg, and the difference amplifier subtracts its two inputs. Useful for sensor signal conditioning, audio preamps, instrumentation and active-filter stages. Pure arithmetic — ideal equations assuming infinite open-loop gain; real op-amps add bias current, offset, slew-rate and rail limits, so check the datasheet. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "📶",
+    added: "2026-07-14T19:15:00Z",
+  },
 ];
