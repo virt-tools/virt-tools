@@ -3874,4 +3874,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🍬",
     added: "2026-07-14T21:15:00Z",
   },
+  {
+    slug: "transformer-turns-ratio-calculator",
+    name: "Transformer Turns Ratio Calculator",
+    description: "Solve the ideal-transformer ratios between primary and secondary voltage, current, turns and impedance. In a perfect transformer the turns ratio a = Np/Ns equals Vp/Vs and Is/Ip, and the impedance seen at the primary is a² times the load: Vp·Ip = Vs·Is and Zp = a²·Zs. Enter the primary and secondary voltage to get the turns ratio and current ratio, and optionally the load current or load impedance for the primary current, reflected impedance and apparent power. Or switch to impedance-matching mode and enter a source and load impedance to find the matching turns ratio. Useful for power-supply and mains transformer design, audio output and interstage transformers, and RF/antenna matching. Pure arithmetic — ideal lossless equations; real transformers add winding resistance, leakage inductance, core loss and frequency-dependent coupling. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🔌",
+    added: "2026-07-14T21:45:00Z",
+  },
 ];

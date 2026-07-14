@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Transformer Turns Ratio Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .row2 { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+    .row2 .field { margin-bottom: 0; }
+    input[type="number"] { font-family: ui-monospace, monospace; width: 110px; }
+    select { min-width: 90px; }
+    .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+    .seg button { background: var(--bg-elev-2); color: var(--text); border: none; padding: 5px 12px; cursor: pointer; font-size: 0.85rem; }
+    .seg button.active { background: var(--accent, #6ea8ff); color: #08111f; font-weight: 600; }
+    .kv { display: grid; grid-template-columns: 230px 1fr; gap: 6px 12px; margin-top: 12px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.95rem; }
+    .verdict { font-size: 1.5rem; font-weight: 800; font-family: ui-monospace, monospace; margin-top: 10px; }
+    .verdict.ok { color: var(--ok, #4ade80); }
+    .verdict.warn { color: var(--accent, #6ea8ff); }
+    .verdict.bad { color: var(--bad, #f87171); }
+    .big { font-size: 1.05rem; font-weight: 700; }
+    h3.sec { font-size: 0.92rem; font-weight: 600; margin: 14px 0 2px; color: var(--text-dim); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Transformer Turns Ratio Calculator</h1>
+      <p>Solve the ideal-transformer ratios between primary and secondary voltage, current, turns and impedance. In a perfect transformer the turns ratio a = Np/Ns equals Vp/Vs and Is/Ip, and the impedance seen at the primary is a² times the load: Vp·Ip = Vs·Is and Zp = a²·Zs. Enter the primary and secondary voltage to get the turns ratio and the current ratio, and optionally the load current or load impedance to get the primary current, reflected impedance and apparent power. Or switch to impedance-matching mode and enter a source and load impedance to find the turns ratio that matches them. Useful for power-supply and mains transformer design, audio output and interstage transformers, and RF/antenna matching. Pure arithmetic — ideal lossless equations; real transformers add winding resistance, leakage inductance, core loss, magnetising current, frequency-dependent coupling and regulation, so size the core and wire for the real losses. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label>Mode</label>
+        <div class="seg" id="mseg">
+          <button data-m="voltage" class="active">Voltage &amp; current</button>
+          <button data-m="match">Impedance match</button>
+        </div>
+      </div>
+
+      <div id="vmode">
+        <div class="row2">
+          <div class="field">
+            <label for="vp">Primary voltage Vp</label>
+            <input id="vp" type="number" min="0" step="any" value="240">
+            <span class="muted">V (RMS)</span>
+          </div>
+          <div class="field">
+            <label for="vs">Secondary voltage Vs</label>
+            <input id="vs" type="number" min="0" step="any" value="12">
+            <span class="muted">V (RMS)</span>
+          </div>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label for="is">Load current Is (optional)</label>
+            <input id="is" type="number" min="0" step="any" value="10">
+            <span class="muted">A (RMS)</span>
+          </div>
+          <div class="field">
+            <label for="zs">Load impedance Zs (optional)</label>
+            <input id="zs" type="number" min="0" step="any" value="1.2">
+            <span class="muted">Ω</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="mmode" style="display:none;">
+        <div class="row2">
+          <div class="field">
+            <label for="zpsrc">Source impedance (primary)</label>
+            <input id="zpsrc" type="number" min="0" step="any" value="480">
+            <span class="muted">Ω</span>
+          </div>
+          <div class="field">
+            <label for="zld">Load impedance (secondary)</label>
+            <input id="zld" type="number" min="0" step="any" value="1.2">
+            <span class="muted">Ω</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <dl class="kv" id="kv"></dl>
+      <p class="note" id="err"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var mseg = $("mseg"), vmode = $("vmode"), mmode = $("mmode");
+    var vpEl = $("vp"), vsEl = $("vs"), isEl = $("is"), zsEl = $("zs");
+    var zpsrcEl = $("zpsrc"), zldEl = $("zld");
+    var verdictEl = $("verdict"), kvEl = $("kv"), errEl = $("err");
+    var mode = "voltage";
+
+    function num(el) { var n = parseFloat(el.value); return isNaN(n) ? NaN : n; }
+    function fmt(n, d) { return Number(n).toFixed(d); }
+    function bad(msg) { verdictEl.textContent = "✗ " + msg; verdictEl.className = "verdict bad"; kvEl.innerHTML = ""; errEl.textContent = ""; }
+
+    mseg.querySelectorAll("button").forEach(function (b) {
+      b.addEventListener("click", function () {
+        mseg.querySelectorAll("button").forEach(function (x) { x.classList.remove("active"); });
+        b.classList.add("active"); mode = b.getAttribute("data-m");
+        vmode.style.display = mode === "voltage" ? "" : "none";
+        mmode.style.display = mode === "match" ? "" : "none";
+        render();
+      });
+    });
+
+    function render() {
+      errEl.className = "note"; errEl.textContent = ""; verdictEl.textContent = ""; verdictEl.className = "verdict"; kvEl.innerHTML = "";
+
+      if (mode === "voltage") {
+        var Vp = num(vpEl), Vs = num(vsEl);
+        if (isNaN(Vp) || Vp <= 0 || isNaN(Vs) || Vs <= 0) { bad("Enter positive primary and secondary voltages."); return; }
+        var a = Vp / Vs;                  // Np/Ns
+        var Is = num(isEl), Zs = num(zsEl);
+        var Ip = NaN, Zp = NaN, P = NaN, VpCheck;
+        var haveI = !isNaN(Is) && Is > 0, haveZ = !isNaN(Zs) && Zs > 0;
+        if (haveI) Ip = Is / a;
+        if (haveZ) Zp = a * a * Zs;
+        if (haveI && haveZ) { P = Vs * Is; VpCheck = Vp / Ip; } // apparent power, and check Zp = Vp/Ip
+        else if (haveI) P = Vs * Is;
+        else if (haveZ) { Is = Vs / Zs; Ip = Is / a; P = Vs * Is; }
+
+        var cls = a > 1.001 ? "step-down" : a < 0.999 ? "step-up" : "isolation (1:1)";
+        verdictEl.textContent = fmt(a, 3) + " : 1  ·  " + cls + "  ·  Np:Ns = " + fmt(a, 3) + ":1";
+        verdictEl.className = "verdict ok";
+
+        var rows =
+          "<dt>Turns ratio a</dt><dd class='big'>" + fmt(a, 3) + "  <span class='muted'>(Np:Ns = " + fmt(a, 3) + ":1)</span></dd>" +
+          "<dt>Type</dt><dd>" + cls + "</dd>" +
+          "<dt>Voltage ratio</dt><dd>Vp/Vs = " + fmt(Vp, 2) + "/" + fmt(Vs, 2) + " = " + fmt(a, 3) + "</dd>";
+        if (haveI) rows += "<dt>Primary current Ip</dt><dd class='big'>" + fmt(Ip, 3) + " A  <span class='muted'>(Is/a)</span></dd>";
+        if (haveZ) rows += "<dt>Reflected impedance Zp</dt><dd class='big'>" + fmt(Zp, 2) + " Ω  <span class='muted'>(a²·Zs)</span></dd>";
+        if (!isNaN(P)) rows += "<dt>Apparent power</dt><dd>" + fmt(P, 2) + " VA  <span class='muted'>(Vp·Ip = Vs·Is)</span></dd>";
+        if (haveI && haveZ) rows += "<dt>Consistency check</dt><dd>Vp/Ip = " + fmt(VpCheck, 2) + " Ω  <span class='muted'>= a²·Zs ✓</span></dd>";
+        if (!haveI && !haveZ) rows += "<dt>Currents</dt><dd>enter a load current or impedance to solve</dd>";
+        kvEl.innerHTML = rows;
+
+        errEl.textContent = "In an ideal transformer the turns ratio a = Np/Ns sets every other ratio: Vp/Vs = a (voltage scales with turns), Is/Ip = a (current scales the opposite way so power is conserved), and the impedance seen looking into the primary is Zp = a²·Zs (impedance scales with the square of the turns ratio). With Vp = " + fmt(Vp, 1) + " V and Vs = " + fmt(Vs, 1) + " V the ratio is a = " + fmt(a, 3) + ", so the winding is " + cls + ". " +
+          (haveI ? "A " + fmt(Is, 2) + " A secondary load draws " + fmt(Ip, 3) + " A on the primary (Ip = Is/a). " : "") +
+          (haveZ ? "A " + fmt(Zs, 2) + " Ω load reflects as " + fmt(Zp, 2) + " Ω at the primary (Zp = a²·Zs). " : "") +
+          (!isNaN(P) ? "The apparent power is " + fmt(P, 1) + " VA on both sides (Vp·Ip = Vs·Is). " : "") +
+          "These are the ideal, lossless relations — a real power transformer also has winding resistance (copper loss), leakage inductance (voltage that doesn't couple across), core loss (hysteresis and eddy currents), a magnetising current that flows even with no load, and regulation that drops the secondary voltage under load. Audio and RF transformers add bandwidth limits set by leakage inductance (high-frequency roll-off) and primary inductance (low-frequency roll-off), and they saturate if the voltage-time product (the core's flux swing) is exceeded. For mains work, derate the VA, mind the insulation and isolation, and respect the safety-standard creepage and clearance.";
+      } else {
+        var Zp = num(zpsrcEl), Zs = num(zldEl);
+        if (isNaN(Zp) || Zp <= 0 || isNaN(Zs) || Zs <= 0) { bad("Enter positive source and load impedances."); return; }
+        var a = Math.sqrt(Zp / Zs);
+        var cls = a > 1.001 ? "step-down (more primary turns)" : a < 0.999 ? "step-up (more secondary turns)" : "1:1";
+        verdictEl.textContent = "a = " + fmt(a, 3) + " : 1  ·  " + cls;
+        verdictEl.className = "verdict ok";
+        kvEl.innerHTML =
+          "<dt>Matching turns ratio</dt><dd class='big'>" + fmt(a, 3) + " : 1  <span class='muted'>(Np:Ns)</span></dd>" +
+          "<dt>Formula</dt><dd>a = √(Zp/Zs) = √(" + fmt(Zp, 2) + "/" + fmt(Zs, 2) + ")</dd>" +
+          "<dt>Voltage ratio</dt><dd>Vp/Vs = " + fmt(a, 3) + "</dd>" +
+          "<dt>Current ratio</dt><dd>Is/Ip = " + fmt(a, 3) + "</dd>" +
+          "<dt>Reflected load</dt><dd>Zp = a²·Zs = " + fmt(a * a * Zs, 2) + " Ω  <span class='muted'>= source ✓</span></dd>";
+        errEl.textContent = "To match a source of " + fmt(Zp, 2) + " Ω to a load of " + fmt(Zs, 2) + " Ω, a transformer needs a turns ratio a = √(Zp/Zs) = " + fmt(a, 3) + " (Np:Ns). That reflects the load as " + fmt(a * a * Zs, 2) + " Ω at the primary, equal to the source, so the maximum available power transfers and the reflection coefficient is zero (at the design frequency). The classic use is audio output transformers (matching a low-impedance speaker, e.g. 4–8 Ω, to a high-impedance tube anode, e.g. kΩ) and RF/antenna matching (e.g. matching a 50 Ω transmitter to a 300 Ω folded dipole, or a balun between balanced and unbalanced lines). The match is exact only at the design impedance and frequency; real transformers have finite bandwidth and insertion loss, and a tapped or autotransformer gives a few discrete ratios while an L-network or transmission-line transformer gives broader-band matching.";
+      }
+      errEl.className = "note";
+    }
+
+    [vpEl, vsEl, isEl, zsEl, zpsrcEl, zldEl].forEach(function (el) {
+      el.addEventListener("input", render); el.addEventListener("change", render);
+    });
+    render();
+  })();
+  </script>
+</body>
+</html>
