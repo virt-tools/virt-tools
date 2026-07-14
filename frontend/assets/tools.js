@@ -3826,4 +3826,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🏖️",
     added: "2026-07-14T18:15:00Z",
   },
+  {
+    slug: "bolt-torque-calculator",
+    name: "Bolt Torque Calculator",
+    description: "Convert between tightening torque and bolt clamping force, and check the stress against the bolt's proof load. Pick a bolt size (with its tensile stress area), a nut factor for the thread condition, and a property grade, then enter either the torque you'll apply or the clamp force you want — the tool solves for the other and reports the tensile stress as a percentage of proof. The short-form formula T = K·F·d links torque to clamp force through the nominal diameter and the nut factor (≈0.2 dry, less when lubricated). Useful for mechanical assembly, machinery setup and structural bolting where a specified clamp load matters. Pure arithmetic — the nut factor varies with surface finish, lubrication and fit, and torque control is inherently ±25% or worse, so treat the result as an estimate; for critical joints use torque-and-angle or direct-tension washers. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🔩",
+    added: "2026-07-14T18:45:00Z",
+  },
 ];

@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Bolt Torque Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .row2 { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+    .row2 .field { margin-bottom: 0; }
+    input[type="number"] { font-family: ui-monospace, monospace; width: 110px; }
+    select { min-width: 100px; }
+    .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+    .seg button { background: var(--bg-elev-2); color: var(--text); border: none; padding: 5px 12px; cursor: pointer; font-size: 0.85rem; }
+    .seg button.active { background: var(--accent, #6ea8ff); color: #08111f; font-weight: 600; }
+    .kv { display: grid; grid-template-columns: 230px 1fr; gap: 6px 12px; margin-top: 12px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.95rem; }
+    .verdict { font-size: 1.5rem; font-weight: 800; font-family: ui-monospace, monospace; margin-top: 10px; }
+    .verdict.ok { color: var(--ok, #4ade80); }
+    .verdict.warn { color: var(--accent, #6ea8ff); }
+    .verdict.bad { color: var(--bad, #f87171); }
+    .big { font-size: 1.05rem; font-weight: 700; }
+    h3.sec { font-size: 0.92rem; font-weight: 600; margin: 14px 0 2px; color: var(--text-dim); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Bolt Torque Calculator</h1>
+      <p>Convert between tightening torque and bolt clamping force, and check the stress against the bolt's proof load. Pick a bolt size (with its tensile stress area), a nut factor for the thread condition, and a property grade, then enter either the torque you'll apply or the clamp force you want — the tool solves for the other and reports the resulting tensile stress as a percentage of proof. The short-form formula T = K·F·d links torque to clamp force through the nominal diameter and the nut factor (≈0.2 for dry zinc-plated steel, less when lubricated). Useful for mechanical assembly, machinery setup and structural bolting where a specified clamp load matters. Pure arithmetic — the nut factor varies widely with surface finish, lubrication, fit and tool accuracy, and torque control is inherently ±25% or worse, so treat the result as an estimate; for critical joints use torque-and-angle or direct tension indicating washers. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row2">
+        <div class="field">
+          <label>Units</label>
+          <div class="seg" id="useg">
+            <button data-u="si" class="active">Metric (N·m, kN, MPa)</button>
+            <button data-u="ip">Imperial (lbf·ft, lbf, ksi)</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Solve for</label>
+          <div class="seg" id="mseg">
+            <button data-m="force" class="active">Torque → clamp force</button>
+            <button data-m="torque">Clamp force → torque</button>
+          </div>
+        </div>
+      </div>
+
+      <h3 class="sec">Bolt &amp; grade</h3>
+      <div class="row2">
+        <div class="field">
+          <label for="bolt">Bolt size</label>
+          <select id="bolt"></select>
+        </div>
+        <div class="field">
+          <label for="grade">Property grade</label>
+          <select id="grade"></select>
+        </div>
+        <div class="field">
+          <label for="kf">Nut factor K</label>
+          <select id="kf">
+            <option value="0.20" selected>0.20 — dry, zinc-plated</option>
+            <option value="0.15">0.15 — lubricated / oiled</option>
+            <option value="0.17">0.17 — zinc flake / dacromet</option>
+            <option value="0.13">0.13 — with thread lubricant paste</option>
+            <option value="0">custom…</option>
+          </select>
+          <input id="kc" type="number" min="0.05" max="0.4" step="0.01" value="0.20" style="display:none;width:90px;margin-left:6px;">
+        </div>
+      </div>
+
+      <h3 class="sec" id="inLabel">Apply torque</h3>
+      <div class="field">
+        <label for="vin" id="vinLabel">Torque</label>
+        <input id="vin" type="number" min="0" step="any" value="40">
+        <span class="muted" id="vinUnit">N·m</span>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <dl class="kv" id="kv"></dl>
+      <p class="note" id="err"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var useg = $("useg"), mseg = $("mseg");
+    var boltEl = $("bolt"), gradeEl = $("grade"), kfEl = $("kf"), kcEl = $("kc");
+    var vinEl = $("vin"), vinUnit = $("vinUnit"), vinLabel = $("vinLabel"), inLabel = $("inLabel");
+    var verdictEl = $("verdict"), kvEl = $("kv"), errEl = $("err");
+    var u = "si", mode = "force";
+
+    // [value, label, diameter, tensile-stress-area]  (SI: m, m² ; Imperial: in, in²)
+    var BOLTS = {
+      si: [
+        ["M6", "M6", 0.006, 20.1e-6], ["M8", "M8", 0.008, 36.6e-6], ["M10", "M10", 0.010, 58.0e-6],
+        ["M12", "M12", 0.012, 84.3e-6], ["M14", "M14", 0.014, 115e-6], ["M16", "M16", 0.016, 157e-6],
+        ["M20", "M20", 0.020, 245e-6], ["M24", "M24", 0.024, 353e-6]
+      ],
+      ip: [
+        ["q", '1/4"', 0.25, 0.0318], ["f", '5/16"', 0.3125, 0.0524], ["t", '3/8"', 0.375, 0.0775],
+        ["s", '7/16"', 0.4375, 0.1063], ["h", '1/2"', 0.5, 0.1419], ["n", '9/16"', 0.5625, 0.182],
+        ["x", '5/8"', 0.625, 0.226], ["z", '3/4"', 0.75, 0.334], ["e", '7/8"', 0.875, 0.462],
+        ["o", '1"', 1.0, 0.606]
+      ]
+    };
+    // [value, label, proof stress]  (SI: MPa ; Imperial: ksi)
+    var GRADES = {
+      si: [["4.6", "Class 4.6", 225], ["5.8", "Class 5.8", 380], ["8.8", "Class 8.8", 580],
+           ["10.9", "Class 10.9", 830], ["12.9", "Class 12.9", 970], ["a2", "A2-70 stainless", 450]],
+      ip: [["g2", "SAE Grade 2", 55], ["g5", "SAE Grade 5", 85], ["g8", "SAE Grade 8", 120], ["b7", "ASTM A325/B7", 105]]
+    };
+
+    function num(el) { var n = parseFloat(el.value); return isNaN(n) ? NaN : n; }
+    function fmt(n, d) { return Number(n).toFixed(d); }
+    function bad(msg) { verdictEl.textContent = "✗ " + msg; verdictEl.className = "verdict bad"; kvEl.innerHTML = ""; }
+
+    function fillSelects() {
+      boltEl.innerHTML = ""; gradeEl.innerHTML = "";
+      BOLTS[u].forEach(function (b) {
+        var o = document.createElement("option"); o.value = b[0]; o.textContent = b[1];
+        o.dataset.d = b[2]; o.dataset.a = b[3]; boltEl.appendChild(o);
+      });
+      GRADES[u].forEach(function (g) {
+        var o = document.createElement("option"); o.value = g[0]; o.textContent = g[1];
+        o.dataset.p = g[2]; gradeEl.appendChild(o);
+      });
+    }
+
+    function setLabels() {
+      var si = u === "si";
+      if (mode === "force") { vinLabel.textContent = "Torque"; inLabel.textContent = "Apply torque"; vinUnit.textContent = si ? "N·m" : "lbf·ft"; }
+      else { vinLabel.textContent = "Clamp force"; inLabel.textContent = "Target clamp force"; vinUnit.textContent = si ? "kN" : "lbf"; }
+      kcEl.style.display = kfEl.value === "0" ? "" : "none";
+      if (kfEl.value !== "0") kcEl.value = kfEl.value;
+    }
+
+    useg.querySelectorAll("button").forEach(function (b) {
+      b.addEventListener("click", function () {
+        useg.querySelectorAll("button").forEach(function (x) { x.classList.remove("active"); });
+        b.classList.add("active"); u = b.getAttribute("data-u"); fillSelects(); setLabels(); render();
+      });
+    });
+    mseg.querySelectorAll("button").forEach(function (b) {
+      b.addEventListener("click", function () {
+        mseg.querySelectorAll("button").forEach(function (x) { x.classList.remove("active"); });
+        b.classList.add("active"); mode = b.getAttribute("data-m"); setLabels(); render();
+      });
+    });
+    boltEl.addEventListener("change", render);
+    gradeEl.addEventListener("change", render);
+    kfEl.addEventListener("change", function () { setLabels(); render(); });
+    kcEl.addEventListener("input", render); kcEl.addEventListener("change", render);
+
+    function render() {
+      errEl.className = "note"; errEl.textContent = ""; verdictEl.textContent = ""; verdictEl.className = "verdict"; kvEl.innerHTML = "";
+      var si = u === "si";
+      var bo = boltEl.options[boltEl.selectedIndex];
+      var d = parseFloat(bo.dataset.d), A = parseFloat(bo.dataset.a);
+      var go = gradeEl.options[gradeEl.selectedIndex];
+      var proof = parseFloat(go.dataset.p);
+      var K = kfEl.value === "0" ? num(kcEl) : parseFloat(kfEl.value);
+      if (isNaN(K) || K <= 0) { bad("Enter a nut factor K (typically 0.12–0.20)."); return; }
+
+      var vin = num(vinEl);
+      if (isNaN(vin) || vin < 0) { bad("Enter a non-negative value."); return; }
+
+      var F, T, stress, pct;
+      if (mode === "force") {
+        // input is torque -> solve force
+        T = vin;                                   // SI N·m ; Imp lbf·ft
+        if (si) F = T / (K * d);                    // N
+        else F = T * 12 / (K * d);                  // lbf  (d in inches)
+      } else {
+        // input is clamp force -> solve torque
+        F = si ? vin * 1000 : vin;                  // N or lbf
+        if (si) T = K * F * d;                      // N·m
+        else T = K * F * d / 12;                    // lbf·ft
+      }
+      stress = si ? (F / A) / 1e6 : (F / A) / 1000; // MPa or ksi
+      pct = proof > 0 ? stress / proof * 100 : 0;
+
+      var Fdisp = si ? (F / 1000) : F;
+      var Funit = si ? "kN" : "lbf";
+      var Tunit = si ? "N·m" : "lbf·ft";
+      var Sunit = si ? "MPa" : "ksi";
+
+      var verdict, vcls;
+      if (pct > 100) { verdict = "✗ overstressed — exceeds proof load"; vcls = "bad"; }
+      else if (pct > 90) { verdict = "⚠ near proof — " + fmt(pct, 0) + "% of proof"; vcls = "warn"; }
+      else { verdict = "✓ " + fmt(pct, 0) + "% of proof load"; vcls = pct < 40 ? "warn" : "ok"; }
+      // headline = the solved quantity
+      var head = (mode === "force") ? (Fdisp < 1000 ? fmt(Fdisp, 2) : fmt(Fdisp, 0)) + " " + Funit + " clamp" :
+                 fmt(T, T < 10 ? 2 : 1) + " " + Tunit + " torque";
+      verdictEl.textContent = head + "  ·  " + verdict;
+      verdictEl.className = "verdict " + vcls;
+
+      kvEl.innerHTML =
+        (mode === "force" ?
+          "<dt>Clamp force</dt><dd class='big'>" + fmt(Fdisp, 2) + " " + Funit + "</dd>" +
+          "<dt>Applied torque</dt><dd>" + fmt(T, T < 10 ? 2 : 1) + " " + Tunit + "</dd>" :
+          "<dt>Torque</dt><dd class='big'>" + fmt(T, T < 10 ? 2 : 1) + " " + Tunit + "</dd>" +
+          "<dt>Clamp force</dt><dd>" + fmt(Fdisp, 2) + " " + Funit + "</dd>") +
+        "<dt>Tensile stress</dt><dd class='big'>" + fmt(stress, 1) + " " + Sunit + "</dd>" +
+        "<dt>Proof load</dt><dd>" + proof + " " + Sunit + "  (" + go.textContent + ")  → " + fmt(pct, 0) + "% used</dd>" +
+        "<dt>Bolt</dt><dd>" + bo.textContent + "  ·  d=" + (si ? (d * 1000) + " mm" : d + ' in') + "  ·  A=" + (si ? (A * 1e6) + " mm²" : A + " in²") + "</dd>" +
+        "<dt>Nut factor</dt><dd>K = " + fmt(K, 2) + "</dd>";
+
+      errEl.textContent = "The short-form torque–tension relation is T = K·F·d: torque equals the nut factor times clamp force times the nominal bolt diameter (with a /12 in imperial because the diameter is in inches but torque is in pound-feet). So a " + bo.textContent + " bolt (d = " + (si ? (d * 1000) + " mm" : d + ' in') + ") at K = " + fmt(K, 2) + " turns " + fmt(T, 1) + " " + Tunit + " into " + fmt(Fdisp, 1) + " " + Funit + " of clamp. The tensile stress is the clamp force divided by the tensile stress area A = " + (si ? (A * 1e6) + " mm²" : A + " in²") + " — " + fmt(stress, 0) + " " + Sunit + ", which is " + fmt(pct, 0) + "% of the " + proof + " " + Sunit + " proof stress for " + go.textContent + ". Most design guidance targets 60–75% of proof at full torque so the joint stays clamped through service loads and thermal cycling without yielding; over 100% the bolt yields and loses clamp. The nut factor K is the wild card — it swings from ~0.05 with pure molybdenum-disulfide paste to ~0.2 dry, so torque alone controls clamp to only about ±25% even with a calibrated wrench. For a reliable clamp load in critical joints, use torque-and-angle (turn-of-nut) or direct-tension measurement instead of torque alone.";
+      errEl.className = "note";
+    }
+
+    fillSelects(); setLabels();
+    vinEl.addEventListener("input", render); vinEl.addEventListener("change", render);
+    render();
+  })();
+  </script>
+</body>
+</html>
