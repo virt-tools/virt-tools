@@ -3842,4 +3842,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📶",
     added: "2026-07-14T19:15:00Z",
   },
+  {
+    slug: "beam-deflection-calculator",
+    name: "Beam Deflection Calculator",
+    description: "Work out the maximum deflection of a straight beam under a point load or a uniformly distributed load, for a cantilever or a simply-supported (pin-roller) span. Pick the support, the load, the material (for Young's modulus) and the cross-section, and the tool gives the area moment of inertia, the maximum deflection, and the deflection-to-span ratio compared with the common L/360 live-load and L/240 total-load limits. Standard Euler-Bernoulli formulas: cantilever end point load PL³/3EI, cantilever UDL WL³/8EI, simply-supported centre point load PL³/48EI, and simply-supported UDL 5WL³/384EI. Useful for sizing floor joists, shelves, brackets and machine frames. Pure arithmetic — small-deflection theory assuming linear-elastic material and a prismatic section; ignores shear and self-weight. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "📏",
+    added: "2026-07-14T19:45:00Z",
+  },
 ];
