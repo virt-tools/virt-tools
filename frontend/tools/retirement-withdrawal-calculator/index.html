@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Retirement Withdrawal Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .row2 { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+    .row2 .field { margin-bottom: 0; }
+    input[type="number"] { font-family: ui-monospace, monospace; width: 110px; }
+    select { min-width: 90px; }
+    .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+    .seg button { background: var(--bg-elev-2); color: var(--text); border: none; padding: 5px 12px; cursor: pointer; font-size: 0.85rem; }
+    .seg button.active { background: var(--accent, #6ea8ff); color: #08111f; font-weight: 600; }
+    .kv { display: grid; grid-template-columns: 230px 1fr; gap: 6px 12px; margin-top: 12px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.95rem; }
+    .verdict { font-size: 1.5rem; font-weight: 800; font-family: ui-monospace, monospace; margin-top: 10px; }
+    .verdict.ok { color: var(--ok, #4ade80); }
+    .verdict.warn { color: var(--accent, #6ea8ff); }
+    .verdict.bad { color: var(--bad, #f87171); }
+    .big { font-size: 1.05rem; font-weight: 700; }
+    .traj { margin-top: 12px; font-family: ui-monospace, monospace; font-size: 0.82rem; line-height: 1.5; color: var(--text-dim); }
+    .traj b { color: var(--text); }
+    .bar { display: inline-block; height: 9px; background: var(--accent, #6ea8ff); border-radius: 3px; vertical-align: middle; margin-left: 6px; }
+    h3.sec { font-size: 0.92rem; font-weight: 600; margin: 14px 0 2px; color: var(--text-dim); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Retirement Withdrawal Calculator</h1>
+      <p>See how long a portfolio lasts under annual withdrawals, or find the safe withdrawal rate for a target horizon. Enter the starting balance, the yearly withdrawal, and an expected real annual return (net of inflation), and the tool steps the balance forward year by year — growing by the return, then subtracting the withdrawal — until it runs out. Flip to safe-withdrawal mode to solve for the largest yearly amount that lasts a chosen number of years. The classic 4% rule and the perpetual (never-deplete) rate are shown for context. Pure arithmetic — markets aren't smooth, returns aren't constant, withdrawals shift with spending and taxes, and sequence-of-returns risk can empty a portfolio years early, so treat the result as a planning baseline, not a guarantee. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label>Solve for</label>
+        <div class="seg" id="mseg">
+          <button data-m="long" class="active">How long it lasts</button>
+          <button data-m="safe">Safe withdrawal rate</button>
+        </div>
+      </div>
+
+      <div class="row2">
+        <div class="field">
+          <label for="p">Starting portfolio</label>
+          <input id="p" type="number" min="0" step="any" value="1000000">
+          <span class="muted">in your currency</span>
+        </div>
+        <div class="field" id="wField">
+          <label for="w">Annual withdrawal</label>
+          <input id="w" type="number" min="0" step="any" value="40000">
+          <span class="muted">/ yr (inflation-adjusted)</span>
+        </div>
+        <div class="field" id="nField" style="display:none;">
+          <label for="n">Target horizon</label>
+          <input id="n" type="number" min="1" step="1" value="30">
+          <span class="muted">years</span>
+        </div>
+        <div class="field">
+          <label for="r">Expected real return</label>
+          <input id="r" type="number" min="-20" max="30" step="0.1" value="5">
+          <span class="muted">% / yr (after inflation)</span>
+        </div>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <dl class="kv" id="kv"></dl>
+      <div class="traj" id="traj"></div>
+      <p class="note" id="err"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var mseg = $("mseg");
+    var pEl = $("p"), wEl = $("w"), wField = $("wField"), nEl = $("n"), nField = $("nField"), rEl = $("r");
+    var verdictEl = $("verdict"), kvEl = $("kv"), trajEl = $("traj"), errEl = $("err");
+    var mode = "long";
+
+    function num(el) { var n = parseFloat(el.value); return isNaN(n) ? NaN : n; }
+    function fmt(n, d) { return Number(n).toFixed(d); }
+    function money(n) {
+      var neg = n < 0; n = Math.abs(n);
+      var s = Math.round(n).toLocaleString("en-US");
+      return (neg ? "-" : "") + s;
+    }
+    function bad(msg) { verdictEl.textContent = "✗ " + msg; verdictEl.className = "verdict bad"; kvEl.innerHTML = ""; trajEl.innerHTML = ""; }
+
+    mseg.querySelectorAll("button").forEach(function (b) {
+      b.addEventListener("click", function () {
+        mseg.querySelectorAll("button").forEach(function (x) { x.classList.remove("active"); });
+        b.classList.add("active"); mode = b.getAttribute("data-m");
+        wField.style.display = mode === "long" ? "" : "none";
+        nField.style.display = mode === "safe" ? "" : "none";
+        render();
+      });
+    });
+
+    function simulate(P, W, r, cap) {
+      var b = P, out = [{ y: 0, b: P }], y = 0;
+      while (b > 0 && y < (cap || 2000)) { b = b * (1 + r) - W; y++; out.push({ y: y, b: b }); }
+      return { last: y, final: b, series: out };
+    }
+
+    function render() {
+      errEl.className = "note"; errEl.textContent = ""; verdictEl.textContent = ""; verdictEl.className = "verdict"; kvEl.innerHTML = ""; trajEl.innerHTML = "";
+      var P = num(pEl), r = num(rEl) / 100;
+      if (isNaN(P) || P < 0) { bad("Enter a starting portfolio amount."); return; }
+      if (isNaN(r) || r < -0.99) { bad("Enter an expected real return (above -99%)."); return; }
+
+      var perp = P * r;          // perpetual withdrawal rate (balance grows if W < this)
+      var perpPct = r * 100;
+
+      if (mode === "long") {
+        var W = num(wEl);
+        if (isNaN(W) || W < 0) { bad("Enter an annual withdrawal amount."); return; }
+        if (W === 0) { bad("Enter a withdrawal greater than zero."); return; }
+        var sim = simulate(P, W, r);
+        var perpetual = W <= perp && r > 0;
+        var wPct = P > 0 ? W / P * 100 : 0;
+
+        if (perpetual) {
+          verdictEl.textContent = "∞  Never depletes  ·  balance grows";
+          verdictEl.className = "verdict ok";
+        } else {
+          verdictEl.textContent = "Lasts " + sim.last + " year" + (sim.last === 1 ? "" : "s");
+          verdictEl.className = "verdict " + (sim.last >= 30 ? "ok" : "warn");
+        }
+        kvEl.innerHTML =
+          "<dt>Portfolio</dt><dd class='big'>" + money(P) + "</dd>" +
+          "<dt>Annual withdrawal</dt><dd class='big'>" + money(W) + "  <span class='muted'>(" + fmt(wPct, 2) + "% of start)</span></dd>" +
+          "<dt>Real return</dt><dd>" + fmt(r * 100, 2) + "% / yr</dd>" +
+          (perpetual ?
+            "<dt>Outcome</dt><dd class='big'>Perpetual — withdrawal ≤ growth</dd>" :
+            "<dt>Depleted in</dt><dd class='big'>" + sim.last + " years</dd>") +
+          "<dt>Perpetual rate</dt><dd>" + money(perp) + "/yr  <span class='muted'>(" + fmt(perpPct, 2) + "% — withdraw ≤ this and it never runs out)</span></dd>" +
+          "<dt>4% rule</dt><dd>" + money(P * 0.04) + "/yr  <span class='muted'>(" + (wPct > 4.001 ? "you're above 4%" : wPct < 3.999 ? "below 4%" : "at 4%") + ")</span></dd>";
+
+        // trajectory
+        var marks = [1, 5, 10, 15, 20, 25, 30, 40, 50].filter(function (m) { return m <= sim.series.length + 1; });
+        var lines = marks.map(function (m) {
+          var row = sim.series[m]; if (!row) return "";
+          var bb = row.b;
+          var w = Math.max(0, Math.min(1, bb / P)) * 40;
+          return "yr " + String(m).padStart(2, " ") + "  <b>" + (bb > 0 ? money(bb) : "depleted") + "</b><span class='bar' style='width:" + fmt(w, 0) + "px'></span>";
+        });
+        if (!perpetual && sim.last <= 2000) lines.push("yr " + String(sim.last).padStart(2, " ") + "  <b>depleted</b>");
+        trajEl.innerHTML = lines.filter(Boolean).join("<br>");
+
+        errEl.textContent = "Each year the balance grows by the real return then the withdrawal is subtracted: B(t+1) = B(t)×(1+r) − W. With r = " + fmt(r * 100, 1) + "%, the portfolio grows " + money(perp) + "/yr on the starting balance, so any withdrawal up to that is perpetual — it never depletes and the balance drifts up. Withdraw more and the balance declines year by year until it hits zero, here at year " + sim.last + ". The " + fmt(wPct, 2) + "% withdrawal rate is " + (wPct > 4.001 ? "above" : wPct < 3.999 ? "below" : "at") + " the classic 4% rule, a rule of thumb from the Trinity study that held a 50/50 portfolio for 30 years across most historical periods. Real returns aren't constant — a bad decade early in retirement (sequence-of-returns risk) can exhaust a portfolio years before this smooth model predicts, so many planners keep withdrawals under 4% and stay flexible. This uses a single real return; for variable returns, run a Monte-Carlo simulation.";
+      } else {
+        var N = num(nEl);
+        if (isNaN(N) || N < 1) { bad("Enter a target horizon of at least 1 year."); return; }
+        N = Math.round(N);
+        var W;
+        if (r === 0) W = P / N;
+        else { var g = Math.pow(1 + r, N); W = P * r * g / (g - 1); }
+        var sim = simulate(P, W, r, N + 1);
+        var wPct = P > 0 ? W / P * 100 : 0;
+        verdictEl.textContent = money(W) + "/yr  ·  lasts " + N + " yr";
+        verdictEl.className = "verdict ok";
+        kvEl.innerHTML =
+          "<dt>Safe annual withdrawal</dt><dd class='big'>" + money(W) + "/yr  <span class='muted'>(" + money(W / 12) + "/mo)</span></dd>" +
+          "<dt>As % of portfolio</dt><dd class='big'>" + fmt(wPct, 2) + "%</dd>" +
+          "<dt>Horizon</dt><dd>" + N + " years  <span class='muted'>(balance → 0 at year " + N + ")</span></dd>" +
+          "<dt>Real return</dt><dd>" + fmt(r * 100, 2) + "% / yr</dd>" +
+          "<dt>Perpetual rate</dt><dd>" + money(perp) + "/yr  <span class='muted'>(" + fmt(perpPct, 2) + "% — never depletes)</span></dd>" +
+          "<dt>4% rule</dt><dd>" + money(P * 0.04) + "/yr  <span class='muted'>(" + (wPct > 4.001 ? "your rate is above 4%" : wPct < 3.999 ? "below 4%" : "matches 4%") + ")</span></dd>";
+
+        var marks = [1, 5, 10, 15, 20, 25, 30, 40, 50].filter(function (m) { return m <= N; });
+        var lines = marks.map(function (m) {
+          var b = P * Math.pow(1 + r, m) - W * ((Math.pow(1 + r, m) - 1) / (r === 0 ? 1 : r));
+          var w = Math.max(0, Math.min(1, b / P)) * 40;
+          return "yr " + String(m).padStart(2, " ") + "  <b>" + money(b) + "</b><span class='bar' style='width:" + fmt(w, 0) + "px'></span>";
+        });
+        lines.push("yr " + String(N).padStart(2, " ") + "  <b>" + money(0) + "  (depleted)</b>");
+        trajEl.innerHTML = lines.join("<br>");
+
+        errEl.textContent = "Safe withdrawal is the constant yearly amount (inflation-adjusted) that draws a " + money(P) + " portfolio down to exactly zero after " + N + " years at a " + fmt(r * 100, 1) + "% real return. The closed form solves B(N) = P(1+r)^N − W·[((1+r)^N − 1)/r] = 0 for W, giving W = P·r·(1+r)^N / ((1+r)^N − 1) — " + money(W) + "/yr here, or " + fmt(wPct, 2) + "% of the starting balance. Withdraw less and the portfolio outlives the horizon (with a residual); withdraw the perpetual rate (" + fmt(perpPct, 2) + "%, " + money(perp) + "/yr) and it never depletes at all. The 4% rule targets a 30-year horizon; over longer horizons the safe rate falls toward the perpetual rate. Variable returns and sequence risk mean the smooth number is optimistic — keep a buffer and stay flexible.";
+      }
+      errEl.className = "note";
+    }
+
+    [pEl, wEl, nEl, rEl].forEach(function (el) {
+      el.addEventListener("input", render); el.addEventListener("change", render);
+    });
+    render();
+  })();
+  </script>
+</body>
+</html>

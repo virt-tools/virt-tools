@@ -3818,4 +3818,12 @@ window.VIRTUAL_TOOLS = [
     icon: "💧",
     added: "2026-07-14T17:45:00Z",
   },
+  {
+    slug: "retirement-withdrawal-calculator",
+    name: "Retirement Withdrawal Calculator",
+    description: "See how long a portfolio lasts under annual withdrawals, or find the safe withdrawal rate for a target horizon. Enter the starting balance, the yearly withdrawal, and an expected real annual return (net of inflation), and the tool steps the balance forward year by year — growing by the return, then subtracting the withdrawal — until it runs out. Flip to safe-withdrawal mode to solve for the largest yearly amount that lasts a chosen number of years. The classic 4% rule and the perpetual (never-deplete) rate are shown for context. Pure arithmetic — markets aren't smooth, returns aren't constant, withdrawals shift with spending and taxes, and sequence-of-returns risk can empty a portfolio years early, so treat the result as a planning baseline. Everything runs locally in your browser.",
+    category: "Finance",
+    icon: "🏖️",
+    added: "2026-07-14T18:15:00Z",
+  },
 ];
