@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Sun Position &amp; Shadow Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .row2 { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+    .row2 .field { margin-bottom: 0; }
+    input[type="number"], input[type="date"], input[type="time"] { font-family: ui-monospace, monospace; width: 130px; }
+    select { min-width: 90px; }
+    .kv { display: grid; grid-template-columns: 230px 1fr; gap: 6px 12px; margin-top: 12px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.95rem; }
+    .verdict { font-size: 1.5rem; font-weight: 800; font-family: ui-monospace, monospace; margin-top: 10px; }
+    .verdict.ok { color: var(--ok, #4ade80); }
+    .verdict.warn { color: var(--accent, #6ea8ff); }
+    .verdict.bad { color: var(--bad, #f87171); }
+    .big { font-size: 1.05rem; font-weight: 700; }
+    h3.sec { font-size: 0.92rem; font-weight: 600; margin: 14px 0 2px; color: var(--text-dim); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Sun Position &amp; Shadow Calculator</h1>
+      <p>Find the sun's elevation and azimuth at a place and time, the sunrise and sunset, the day length, and the shadow a pole casts. Enter a latitude and longitude (with the timezone offset of the clock time you'll enter), a date, and a clock time; the tool applies the equation of time and longitude correction to convert clock time to local solar time, works out the solar declination for the day, and returns the elevation and compass azimuth of the sun plus the cardinal direction. Add a pole height to see the shadow length and the direction it points. Useful for siting solar panels, photography, gardening, architecture and archaeology. Pure arithmetic — a NOAA-style simplified algorithm; real values shift a few tenths of a degree with atmospheric refraction (raise the observed elevation near the horizon) and the year (leap years nudge the declination), so treat the result as good to about ±0.5°. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <h3 class="sec">Location &amp; clock</h3>
+      <div class="row2">
+        <div class="field">
+          <label for="lat">Latitude</label>
+          <input id="lat" type="number" step="any" value="40.7">
+          <span class="muted">° (+N)</span>
+        </div>
+        <div class="field">
+          <label for="lon">Longitude</label>
+          <input id="lon" type="number" step="any" value="-73.9">
+          <span class="muted">° (+E)</span>
+        </div>
+        <div class="field">
+          <label for="tz">Timezone offset</label>
+          <input id="tz" type="number" step="any" value="-5">
+          <span class="muted">h (UTC±)</span>
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label for="date">Date</label>
+          <input id="date" type="date" value="2026-06-21">
+        </div>
+        <div class="field">
+          <label for="time">Clock time</label>
+          <input id="time" type="time" value="12:00">
+        </div>
+        <div class="field">
+          <label for="pole">Pole height (optional)</label>
+          <input id="pole" type="number" min="0" step="any" value="2">
+          <span class="muted">m</span>
+        </div>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <dl class="kv" id="kv"></dl>
+      <p class="note" id="err"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var latEl = $("lat"), lonEl = $("lon"), tzEl = $("tz"), dateEl = $("date"), timeEl = $("time"), poleEl = $("pole");
+    var verdictEl = $("verdict"), kvEl = $("kv"), errEl = $("err");
+    var D2R = Math.PI / 180, R2D = 180 / Math.PI;
+    var CARD = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
+
+    function num(el) { var n = parseFloat(el.value); return isNaN(n) ? NaN : n; }
+    function fmt(n, d) { return Number(n).toFixed(d); }
+    function bad(msg) { verdictEl.textContent = "✗ " + msg; verdictEl.className = "verdict bad"; kvEl.innerHTML = ""; errEl.textContent = ""; }
+    function cardinal(az) { return CARD[Math.round(az / 22.5) % 16]; }
+    function fmtTime(h) { // h decimal hours
+      if (!isFinite(h)) return "—";
+      var H = Math.floor((h % 24 + 24) % 24), M = Math.round(((h % 24 + 24) % 24 - H) * 60);
+      if (M === 60) { H = (H + 1) % 24; M = 0; }
+      return (H < 10 ? "0" : "") + H + ":" + (M < 10 ? "0" : "") + M;
+    }
+    function dayOfYear(y, m, d) {
+      var days = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+      var leap = (m > 2 && ((y % 4 === 0 && y % 100 !== 0) || y % 400 === 0)) ? 1 : 0;
+      return days[m - 1] + d + leap;
+    }
+
+    function render() {
+      errEl.className = "note"; errEl.textContent = ""; verdictEl.textContent = ""; verdictEl.className = "verdict"; kvEl.innerHTML = "";
+      var lat = num(latEl), lon = num(lonEl), tz = num(tzEl), pole = num(poleEl);
+      if (isNaN(lat) || Math.abs(lat) > 90) { bad("Enter a latitude in ±90°."); return; }
+      if (isNaN(lon) || Math.abs(lon) > 180) { bad("Enter a longitude in ±180°."); return; }
+      if (isNaN(tz) || Math.abs(tz) > 14) { bad("Enter a timezone offset (UTC±, hours)."); return; }
+      if (!dateEl.value) { bad("Enter a date."); return; }
+      if (!timeEl.value) { bad("Enter a clock time."); return; }
+      var parts = dateEl.value.split("-").map(Number);
+      var y = parts[0], m = parts[1], d = parts[2];
+      var tp = timeEl.value.split(":").map(Number);
+      var hh = tp[0], mm = tp[1];
+
+      var N = dayOfYear(y, m, d);
+      var B = 360 / 365 * (N - 81);
+      var EoT = 9.87 * Math.sin(D2R * 2 * B) - 7.53 * Math.cos(D2R * B) - 1.5 * Math.sin(D2R * B);
+      var LSTM = 15 * tz;
+      var TC = 4 * (lon - LSTM) + EoT;            // minutes
+      var LST = (hh * 60 + mm + TC) / 60;          // local solar time, hours
+      var H = 15 * (LST - 12);                    // hour angle, degrees
+      var dec = 23.44 * Math.sin(D2R * 360 * (284 + N) / 365);
+
+      var sinEl = Math.sin(D2R * lat) * Math.sin(D2R * dec) + Math.cos(D2R * lat) * Math.cos(D2R * dec) * Math.cos(D2R * H);
+      var el = R2D * Math.asin(Math.max(-1, Math.min(1, sinEl)));
+      var azs = R2D * Math.atan2(Math.sin(D2R * H), Math.cos(D2R * H) * Math.sin(D2R * lat) - Math.tan(D2R * dec) * Math.cos(D2R * lat));
+      var az = (azs + 180 + 360) % 360;
+
+      // solar noon (clock time): LST=12 -> clock = 12 - TC/60
+      var solarNoon = 12 - TC / 60;
+      // sunrise/sunset: cos H0 = -tan(lat) tan(dec)
+      var cosH0 = -Math.tan(D2R * lat) * Math.tan(D2R * dec);
+      var sunrise, sunset, daylen;
+      if (cosH0 > 1) { sunrise = NaN; sunset = NaN; daylen = 0; }
+      else if (cosH0 < -1) { sunrise = NaN; sunset = NaN; daylen = 24; }
+      else {
+        var H0 = R2D * Math.acos(cosH0);
+        sunrise = 12 - H0 / 15 - TC / 60;
+        sunset = 12 + H0 / 15 - TC / 60;
+        daylen = 2 * H0 / 15;
+      }
+
+      var up = el > 0;
+      var shLen = NaN, shAz = NaN;
+      if (pole > 0 && up) { shLen = pole / Math.tan(D2R * el); shAz = (az + 180) % 360; }
+
+      verdictEl.textContent = fmt(el, 2) + "° elevation  ·  " + fmt(az, 1) + "° (" + cardinal(az) + ")" + (up ? "" : "  ·  below horizon");
+      verdictEl.className = "verdict " + (up ? "ok" : "bad");
+
+      var rows =
+        "<dt>Sun elevation</dt><dd class='big'>" + fmt(el, 2) + "°</dd>" +
+        "<dt>Sun azimuth</dt><dd class='big'>" + fmt(az, 1) + "°  <span class='muted'>(" + cardinal(az) + ", from N clockwise)</span></dd>" +
+        "<dt>Solar noon</dt><dd>" + fmtTime(solarNoon) + "  <span class='muted'>(local clock)</span></dd>" +
+        "<dt>Sunrise</dt><dd>" + (isFinite(sunrise) ? fmtTime(sunrise) : (daylen === 24 ? "no sunset — polar day" : "no sunrise — polar night")) + "</dd>" +
+        "<dt>Sunset</dt><dd>" + (isFinite(sunset) ? fmtTime(sunset) : (daylen === 24 ? "— polar day" : "— polar night")) + "</dd>" +
+        "<dt>Day length</dt><dd>" + (daylen === 0 || daylen === 24 ? daylen + " h" : fmt(daylen, 2) + " h  (" + fmt(Math.floor(daylen), 0) + "h " + fmt((daylen % 1) * 60, 0) + "m)") + "</dd>" +
+        "<dt>Solar declination</dt><dd>" + fmt(dec, 2) + "°</dd>" +
+        "<dt>Equation of time</dt><dd>" + fmt(EoT, 1) + " min</dd>" +
+        "<dt>Time correction</dt><dd>" + fmt(TC, 1) + " min  <span class='muted'>(lon " + fmt(lon, 1) + "° vs meridian " + fmt(LSTM, 1) + "°)</span></dd>" +
+        "<dt>Local solar time</dt><dd>" + fmt(LST, 3) + " h</dd>";
+      if (pole > 0) {
+        rows += up ?
+          "<dt>Shadow length</dt><dd class='big'>" + fmt(shLen, 2) + " m  <span class='muted'>(a " + fmt(pole, 2) + " m pole)</span></dd>" +
+          "<dt>Shadow points</dt><dd>" + fmt(shAz, 1) + "°  (" + cardinal(shAz) + ")</dd>" :
+          "<dt>Shadow</dt><dd>none — sun below horizon</dd>";
+      }
+      kvEl.innerHTML = rows;
+
+      errEl.textContent =
+        "Clock time is converted to local solar time with the equation of time and a longitude correction: TC (minutes) = 4×(longitude − 15×tz) + EoT, where EoT (the equation of time) corrects for the elliptical orbit and axial tilt and the 4×(lon−meridian) term accounts for how far east or west of the standard meridian the site sits. The hour angle H = 15°×(solar time − 12) measures how far the sun is from the local meridian. Solar declination δ = 23.44°·sin(360°×(284+N)/365) tracks the sun's seasonal north–south position. Elevation is arcsin(sin φ sin δ + cos φ cos δ cos H); azimuth is measured clockwise from north, with the sun due south at solar noon in the northern hemisphere (and due north in the southern). Sunrise and sunset come from cos H₀ = −tan φ tan δ — when |tan φ tan δ| > 1 there's no sunrise or sunset (polar day or night). On this date (day " + N + " of the year) the declination is " + fmt(dec, 2) + "°, so at latitude " + fmt(lat, 2) + "° the sun reaches " + fmt(el, 2) + "° at the chosen time and the day is " + (daylen === 24 ? "a full 24 h" : daylen === 0 ? "sunless" : fmt(daylen, 2) + " h") + " long, with solar noon at " + fmtTime(solarNoon) + ". " +
+        (pole > 0 && up ? "A " + fmt(pole, 2) + " m vertical pole casts a " + fmt(shLen, 2) + " m shadow pointing " + cardinal(shAz) + " (" + fmt(shAz, 0) + "°, away from the sun). " : "") +
+        "This is the NOAA simplified model; atmospheric refraction lifts the observed sun by about 0.5° at the horizon (so the sun is visible when the geometric elevation is slightly negative), and leap-year day counts shift the declination by a fraction of a degree — expect roughly ±0.5°. Daylight saving, if in effect, adds 1 h to the clock time, so set the timezone offset accordingly (e.g. EDT is UTC−4, not −5).";
+      errEl.className = "note";
+    }
+
+    [latEl, lonEl, tzEl, dateEl, timeEl, poleEl].forEach(function (el) {
+      el.addEventListener("input", render); el.addEventListener("change", render);
+    });
+    render();
+  })();
+  </script>
+</body>
+</html>

@@ -3850,4 +3850,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📏",
     added: "2026-07-14T19:45:00Z",
   },
+  {
+    slug: "sun-position-calculator",
+    name: "Sun Position & Shadow Calculator",
+    description: "Find the sun's elevation and azimuth at a place and time, the sunrise and sunset, the day length, and the shadow a pole casts. Enter latitude, longitude and the timezone offset of the clock time, a date and a clock time; the tool applies the equation of time and longitude correction to convert clock time to local solar time, works out the solar declination for the day, and returns the elevation and compass azimuth of the sun plus the cardinal direction. Add a pole height to see the shadow length and the direction it points. Useful for siting solar panels, photography, gardening, architecture and archaeology. Pure arithmetic — a NOAA-style simplified algorithm good to about ±0.5°; atmospheric refraction and leap years shift values slightly. Everything runs locally in your browser.",
+    category: "Geography",
+    icon: "☀️",
+    added: "2026-07-14T20:15:00Z",
+  },
 ];
