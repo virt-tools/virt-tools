@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Compost C:N Ratio Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .row2 { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+    .row2 .field { margin-bottom: 0; }
+    input[type="number"] { font-family: ui-monospace, monospace; width: 80px; }
+    select { min-width: 200px; }
+    .layers { display: grid; grid-template-columns: 1fr 90px 80px; gap: 8px; align-items: center; margin-top: 6px; }
+    .layers select { min-width: 0; }
+    .layers .th { font-size: 0.8rem; color: var(--text-dim); }
+    .layers input { width: 80px; }
+    .kv { display: grid; grid-template-columns: 220px 1fr; gap: 6px 12px; margin-top: 12px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.95rem; }
+    .verdict { font-size: 1.5rem; font-weight: 800; font-family: ui-monospace, monospace; margin-top: 10px; }
+    .verdict.ok { color: var(--ok, #4ade80); }
+    .verdict.warn { color: var(--accent, #6ea8ff); }
+    .verdict.bad { color: var(--bad, #f87171); }
+    .big { font-size: 1.05rem; font-weight: 700; }
+    h3.sec { font-size: 0.92rem; font-weight: 600; margin: 14px 0 2px; color: var(--text-dim); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Compost C:N Ratio Calculator</h1>
+      <p>Blend a pile of greens and browns and find the overall carbon-to-nitrogen ratio, the key to hot, odor-free composting. Add each ingredient with its weight and the tool sums the carbon and nitrogen by mass (using each material's C:N ratio) to give the pile's blended ratio, classifies it as too green, balanced or too brown, and suggests how much of an adjuster to add to reach the ideal ~30:1. Microbes thrive around 30:1 — too much nitrogen (green) makes a smelly, slimy pile; too much carbon (brown) stalls decomposition. Pure arithmetic — real composting also depends on moisture, aeration, particle size and temperature, so the ratio is a starting guide. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <h3 class="sec">Ingredients (weight in any unit — only the proportions matter)</h3>
+      <div class="layers" id="layers">
+        <div class="th">Material</div><div class="th">Weight</div><div class="th">C:N</div>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <dl class="kv" id="kv"></dl>
+      <p class="note" id="err"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var layersEl = $("layers"), verdictEl = $("verdict"), kvEl = $("kv"), errEl = $("err");
+
+    // [value, label, C:N]
+    var MAT = [
+      ["grass", "Grass clippings (green)", 20], ["food", "Food / veg scraps (green)", 15],
+      ["coffee", "Coffee grounds (green)", 20], ["cowman", "Cow manure (green)", 20],
+      ["pooultry", "Poultry manure (green)", 10], ["gardenwaste", "Garden waste (green)", 20],
+      ["seaweed", "Seaweed / kelp (green)", 19], ["leaves", "Dry leaves (brown)", 60],
+      ["straw", "Straw (brown)", 75], ["pine", "Pine needles (brown)", 80],
+      ["twigs", "Twigs / branches (brown)", 100], ["cornstalks", "Corn stalks (brown)", 60],
+      ["newspaper", "Newspaper / paper (brown)", 175], ["cardboard", "Cardboard (brown)", 350],
+      ["woodchips", "Wood chips (brown)", 400], ["sawdust", "Sawdust (brown)", 500]
+    ];
+    var TARGET = 30;
+    var ROWS = 6;
+
+    function num(el) { var n = parseFloat(el.value); return isNaN(n) ? NaN : n; }
+    function fmt(n, d) { return Number(n).toFixed(d); }
+
+    function buildRows() {
+      var defaults = ["grass", "leaves", "food", "sawdust", "", ""];
+      for (var i = 0; i < ROWS; i++) {
+        var sel = document.createElement("select"); sel.className = "lmat";
+        var empty = document.createElement("option"); empty.value = ""; empty.textContent = "— none —"; sel.appendChild(empty);
+        MAT.forEach(function (m) {
+          var o = document.createElement("option"); o.value = m[0]; o.textContent = m[1]; o.dataset.r = m[2]; sel.appendChild(o);
+        });
+        sel.value = defaults[i] || "";
+        var w = document.createElement("input"); w.type = "number"; w.min = "0"; w.step = "any"; w.className = "lwt";
+        w.value = ["10", "10", "", "", "", ""][i] || "";
+        var rv = document.createElement("span"); rv.className = "lrv unit muted"; rv.textContent = "";
+        var wrap = document.createElement("div"); wrap.style.display = "contents";
+        wrap.appendChild(sel); wrap.appendChild(w); wrap.appendChild(rv);
+        layersEl.appendChild(wrap);
+        (function (s, ww, r) {
+          function upd() {
+            var rpi = s.selectedIndex > 0 ? parseFloat(s.options[s.selectedIndex].dataset.r) : 0;
+            r.textContent = rpi ? rpi + " : 1" : "";
+            render();
+          }
+          s.addEventListener("change", upd); ww.addEventListener("input", upd);
+        })(sel, w, rv);
+      }
+    }
+
+    function render() {
+      errEl.textContent = ""; verdictEl.textContent = ""; verdictEl.className = "verdict"; kvEl.innerHTML = "";
+      var sels = layersEl.querySelectorAll(".lmat"), wts = layersEl.querySelectorAll(".lwt");
+      var C = 0, N = 0, totalW = 0, used = 0, items = [];
+      for (var i = 0; i < sels.length; i++) {
+        var wv = parseFloat(wts[i].value);
+        if (!sels[i].value || isNaN(wv) || wv <= 0) continue;
+        var R = parseFloat(sels[i].options[sels[i].selectedIndex].dataset.r);
+        var m = wv;
+        C += m * R / (R + 1); N += m / (R + 1); totalW += m; used++;
+        items.push({ name: sels[i].options[sels[i].selectedIndex].textContent, w: wv, R: R });
+      }
+      if (used === 0 || N <= 0) {
+        verdictEl.textContent = "✗ Add at least one ingredient with a weight."; verdictEl.className = "verdict bad"; return;
+      }
+      var blend = C / N;
+
+      var cls, label, advice;
+      if (blend < 25) { cls = "warn"; label = "too green"; advice = "add browns"; }
+      else if (blend <= 35) { cls = "ok"; label = "balanced"; advice = ""; }
+      else { cls = "warn"; label = "too brown"; advice = "add greens"; }
+
+      verdictEl.textContent = "C:N " + fmt(blend, 1) + " : 1  ·  " + label;
+      verdictEl.className = "verdict " + cls;
+
+      // Adjustment: how much of an adjuster to reach TARGET.
+      var adjuster = blend < TARGET ? { name: "sawdust (brown, 500:1)", R: 500 } : { name: "grass clippings (green, 20:1)", R: 20 };
+      var Ra = adjuster.R;
+      var ma = (TARGET * N - C) * (Ra + 1) / (Ra - TARGET);
+      var adjustLine = (Math.abs(blend - TARGET) < 0.5) ?
+        "<dt>Status</dt><dd class='big'>Already near the ideal 30:1 — no adjustment needed.</dd>" :
+        "<dt>To reach 30:1</dt><dd class='big'>Add ~" + fmt(ma, 1) + " of " + adjuster.name + "</dd>";
+
+      kvEl.innerHTML =
+        "<dt>Blended C:N</dt><dd class='big'>" + fmt(blend, 1) + " : 1</dd>" +
+        "<dt>Classification</dt><dd>" + label + (advice ? " — " + advice : "") + "</dd>" +
+        "<dt>Total weight</dt><dd>" + fmt(totalW, 1) + "  <span class='muted'>(" + used + " ingredient" + (used === 1 ? "" : "s") + ")</span></dd>" +
+        "<dt>Carbon mass</dt><dd>" + fmt(C, 2) + "</dd>" +
+        "<dt>Nitrogen mass</dt><dd>" + fmt(N, 3) + "</dd>" +
+        adjustLine +
+        "<dt>Ingredients</dt><dd>" + items.map(function (it) { return it.w + " " + it.name.replace(/ \(.*\)/, ""); }).join("  +  ") + "</dd>";
+
+      errEl.textContent = "Each ingredient's carbon and nitrogen are worked out from its mass and C:N ratio: C = m × R/(R+1), N = m × R/(R+1)... N = m/(R+1), and the pile's blended C:N is the total carbon ÷ total nitrogen (not a simple weighted average of the ratios, which over-counts high-carbon browns). The sweet spot for hot composting is around 25–35:1 — at 30:1 the microbes that drive decomposition have enough carbon for energy and structure and enough nitrogen to build protein. Too low (under 20:1) and the pile goes anaerobic, smelly and slimy; too high (over 40:1) and it composts slowly and coolly because nitrogen-limited. The adjuster suggestion solves for the mass of a single brown (sawdust ~500:1) or green (grass ~20:1) that brings the pile to 30:1. Moisture should be like a wrung-out sponge (50–60%), and turning adds oxygen — both matter as much as the ratio.";
+      errEl.className = "note";
+    }
+
+    buildRows(); render();
+  })();
+  </script>
+</body>
+</html>

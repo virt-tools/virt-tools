@@ -3802,4 +3802,12 @@ window.VIRTUAL_TOOLS = [
     icon: "⏱️",
     added: "2026-07-14T16:45:00Z",
   },
+  {
+    slug: "compost-cn-ratio-calculator",
+    name: "Compost C:N Ratio Calculator",
+    description: "Blend a pile of greens and browns and find the overall carbon-to-nitrogen ratio, the key to hot, odor-free composting. Add each ingredient with its weight and the tool sums the carbon and nitrogen by mass (from each material's C:N ratio) to give the pile's blended ratio, classifies it as too green, balanced or too brown, and suggests how much of an adjuster to add to reach the ideal ~30:1. Microbes thrive around 30:1 — too much nitrogen makes a smelly slimy pile, too much carbon stalls decomposition. Pure arithmetic — real composting also depends on moisture, aeration, particle size and temperature, so the ratio is a starting guide. Everything runs locally in your browser.",
+    category: "Environment",
+    icon: "🍂",
+    added: "2026-07-14T17:15:00Z",
+  },
 ];
