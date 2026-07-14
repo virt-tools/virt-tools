@@ -3898,4 +3898,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌬️",
     added: "2026-07-14T22:45:00Z",
   },
+  {
+    slug: "regex-explainer",
+    name: "Regex Explainer",
+    description: "Paste a JavaScript regular expression and get a plain-English, token-by-token breakdown of what it matches — escapes, anchors, quantifiers, groups, lookarounds, character classes, backreferences and flags all named. Validates the pattern as you type, indents to show grouping, and ships a few example patterns to learn from. Pairs with the Regex Tester for trying the same pattern against real text. Everything runs locally in your browser.",
+    category: "Text",
+    icon: "🔤",
+    added: "2026-07-14T23:00:00Z",
+  },
 ];

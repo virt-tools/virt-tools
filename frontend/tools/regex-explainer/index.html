@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Regex Explainer — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Regex Explainer</h1>
+      <p>Paste a JavaScript regular expression and get a plain-English, token-by-token breakdown of what it matches — parsed locally in your browser, no network requests.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="pattern">Pattern</label>
+        <div class="row" style="align-items:center;">
+          <span class="regex-delim">/</span>
+          <input type="text" id="pattern" placeholder="e.g. \b(\w+)@(\w+)\.(\w{2,})\b" style="flex:1 1 auto;">
+          <span class="regex-delim">/</span>
+          <input type="text" id="flags-text" value="g" maxlength="6" style="flex:0 0 70px;" aria-label="flags">
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:6px;">
+        <label class="check"><input type="checkbox" data-flag="g" checked> g · global</label>
+        <label class="check"><input type="checkbox" data-flag="i"> i · case-insensitive</label>
+        <label class="check"><input type="checkbox" data-flag="m"> m · multiline</label>
+        <label class="check"><input type="checkbox" data-flag="s"> s · dotAll</label>
+        <label class="check"><input type="checkbox" data-flag="u"> u · unicode</label>
+        <label class="check"><input type="checkbox" data-flag="y"> y · sticky</label>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="row">
+        <button id="examples" class="secondary">Load example</button>
+        <span class="note" id="status" style="margin:0;"></span>
+      </div>
+
+      <div class="spacer"></div>
+      <div id="err" class="note" style="color:var(--bad);"></div>
+
+      <label>Explanation</label>
+      <div class="output" id="explanation" style="white-space:pre-wrap; word-break:break-word;"></div>
+
+      <div class="spacer"></div>
+      <label>Flags summary</label>
+      <div class="output" id="flags-out" style="white-space:pre-wrap; word-break:break-word;"></div>
+
+      <p class="note">Parsed locally with the browser's native RegExp engine — no network requests.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var pattern = document.getElementById("pattern");
+    var flagsText = document.getElementById("flags-text");
+    var checkboxes = document.querySelectorAll("input[data-flag]");
+    var err = document.getElementById("err");
+    var status = document.getElementById("status");
+    var explanationOut = document.getElementById("explanation");
+    var flagsOut = document.getElementById("flags-out");
+
+    var examples = [
+      "\\b(\\w+)@(\\w+)\\.(\\w{2,})\\b",
+      "^https?://([^/\\s]+)(/[^\\s]*)?$",
+      "(\\d{4})-(\\d{2})-(\\d{2})",
+      "(?:(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)\\.){3}(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)",
+      "[A-Za-z]+\\s+\\d{1,2},\\s*\\d{4}"
+    ];
+    var exIdx = 0;
+
+    function activeFlags() {
+      var f = "";
+      checkboxes.forEach(function (cb) { if (cb.checked) f += cb.getAttribute("data-flag"); });
+      return f;
+    }
+    function syncFlagsText() { flagsText.value = activeFlags(); }
+    function syncCheckboxes() {
+      var set = {};
+      flagsText.value.split("").forEach(function (c) { set[c] = true; });
+      checkboxes.forEach(function (cb) { cb.checked = !!set[cb.getAttribute("data-flag")]; });
+    }
+
+    function escapeHtml(s) {
+      return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    var FLAG_DESC = {
+      g: "global — find all matches, not just the first",
+      i: "case-insensitive — A and a are treated the same",
+      m: "multiline — ^ and $ match at line breaks, not just the string ends",
+      s: "dotAll — . also matches newline characters",
+      u: "unicode — treat the pattern as a sequence of Unicode code points",
+      y: "sticky — match only at lastIndex (no skipping ahead)"
+    };
+
+    // --- Tokenizer / explainer -------------------------------------------------
+    // Produces an array of {token, desc, depth} entries describing the pattern.
+    function explain(src) {
+      var out = [];
+      var i = 0, n = src.length;
+      var groupDepth = 0;
+      var groupNames = [];
+
+      function peek(off) { off = off || 0; return i + off < n ? src[i + off] : ""; }
+      function isDigit(c) { return c >= "0" && c <= "9"; }
+      function readHex(max) {
+        var s = "";
+        while (max-- > 0 && i < n && /[0-9a-fA-F]/.test(src[i])) { s += src[i++]; }
+        return s;
+      }
+
+      while (i < n) {
+        var start = i;
+        var c = src[i++];
+
+        if (c === "\\") {
+          if (i >= n) { out.push({token: "\\", desc: "trailing backslash (incomplete escape)", depth: groupDepth}); continue; }
+          var e = src[i++];
+
+          if (e === "b") out.push({token: "\\b", desc: "word boundary (between a word char and a non-word char)", depth: groupDepth});
+          else if (e === "B") out.push({token: "\\B", desc: "non-word boundary", depth: groupDepth});
+          else if (e === "d") out.push({token: "\\d", desc: "any digit [0-9]", depth: groupDepth});
+          else if (e === "D") out.push({token: "\\D", desc: "any non-digit", depth: groupDepth});
+          else if (e === "w") out.push({token: "\\w", desc: "any word character [A-Za-z0-9_]", depth: groupDepth});
+          else if (e === "W") out.push({token: "\\W", desc: "any non-word character", depth: groupDepth});
+          else if (e === "s") out.push({token: "\\s", desc: "any whitespace (space, tab, newline, …)", depth: groupDepth});
+          else if (e === "S") out.push({token: "\\S", desc: "any non-whitespace character", depth: groupDepth});
+          else if (e === "n") out.push({token: "\\n", desc: "newline (line feed)", depth: groupDepth});
+          else if (e === "r") out.push({token: "\\r", desc: "carriage return", depth: groupDepth});
+          else if (e === "t") out.push({token: "\\t", desc: "tab", depth: groupDepth});
+          else if (e === "v") out.push({token: "\\v", desc: "vertical tab", depth: groupDepth});
+          else if (e === "f") out.push({token: "\\f", desc: "form feed", depth: groupDepth});
+          else if (e === "0") out.push({token: "\\0", desc: "NUL character", depth: groupDepth});
+          else if (e === "c") {
+            var ctrl = i < n ? src[i++] : "";
+            out.push({token: "\\c" + ctrl, desc: "control character (Ctrl+" + ctrl + ")", depth: groupDepth});
+          }
+          else if (e === "x") {
+            var hx = readHex(2);
+            out.push({token: "\\x" + hx, desc: "hex character 0x" + hx + " = " + JSON.stringify(String.fromCharCode(parseInt(hx || "0", 16))), depth: groupDepth});
+          }
+          else if (e === "u") {
+            var ux = readHex(4);
+            out.push({token: "\\u" + ux, desc: "Unicode code point U+" + (ux || "0000"), depth: groupDepth});
+          }
+          else if (e === "p" || e === "P") {
+            var brace = peek() === "{";
+            var prop = "";
+            if (brace) { i++; prop = "{"; while (i < n && src[i] !== "}") prop += src[i++]; if (src[i] === "}") { prop += "}"; i++; } }
+            out.push({token: "\\" + e + prop, desc: (e === "p" ? "Unicode" : "negated Unicode") + " property " + prop + " (requires the u flag)", depth: groupDepth});
+          }
+          else if (isDigit(e)) {
+            var num = e;
+            while (i < n && isDigit(src[i])) num += src[i++];
+            out.push({token: "\\" + num, desc: "backreference to group #" + parseInt(num, 10), depth: groupDepth});
+          }
+          else if (e === "k") {
+            var nm = "";
+            if (peek() === "<" || peek() === "'") { var cl = peek() === "<" ? ">" : "'"; i++; while (i < n && src[i] !== cl) nm += src[i++]; if (src[i] === cl) i++; }
+            out.push({token: "\\k<" + nm + ">", desc: "backreference to named group " + nm, depth: groupDepth});
+          }
+          else out.push({token: "\\" + e, desc: "escaped literal " + JSON.stringify(e), depth: groupDepth});
+          continue;
+        }
+
+        if (c === "(") {
+          var tok = "(";
+          var isNonCap = false;
+          var isNamed = false;
+          var isLook = "";
+          if (peek() === "?") {
+            tok += "?"; i++;
+            var nx = peek();
+            if (nx === ":") { i++; tok += ":"; isNonCap = true; out.push({token: tok, desc: "non-capturing group (groups without remembering)", depth: groupDepth}); }
+            else if (nx === "=" || nx === "!") { i++; isLook = nx; tok += nx; out.push({token: tok, desc: "lookahead assertion" + (nx === "!" ? " (negative)" : " (positive)") + " — asserts what follows without consuming", depth: groupDepth}); }
+            else if (nx === "<") {
+              tok += "<"; i++;
+              var nn = peek();
+              if (nn === "=" || nn === "!") { i++; tok += nn; out.push({token: tok, desc: "lookbehind assertion" + (nn === "!" ? " (negative)" : " (positive)") + " — asserts what precedes without consuming", depth: groupDepth}); }
+              else { isNamed = true; var name = ""; while (i < n && src[i] !== ">") name += src[i++]; if (src[i] === ">") { i++; tok += name + ">"; } groupNames.push(name); out.push({token: tok, desc: "named capturing group " + JSON.stringify(name), depth: groupDepth}); groupDepth++; }
+            }
+            else {
+              var flagsRaw = "";
+              while (i < n && src[i] !== ")" && src[i] !== ":") flagsRaw += src[i++];
+              if (src[i] === ":") { i++; tok += flagsRaw + ":"; out.push({token: tok, desc: "group with flags " + JSON.stringify(flagsRaw) + " applied inside", depth: groupDepth}); }
+              else { i++; tok += flagsRaw + ")"; out.push({token: tok, desc: "inline flags " + JSON.stringify(flagsRaw), depth: groupDepth}); }
+            }
+          } else {
+            out.push({token: tok, desc: "capturing group (group #" + (groupNames.length + 1) + ")", depth: groupDepth});
+            groupDepth++;
+          }
+          continue;
+        }
+
+        if (c === ")") { if (groupDepth > 0) groupDepth--; out.push({token: ")", desc: "end of group", depth: groupDepth}); continue; }
+
+        if (c === "[") {
+          var cls = "[";
+          var neg = peek() === "^";
+          if (neg) { cls += "^"; i++; }
+          if (peek() === "]") { cls += "]"; i++; }
+          var first = true;
+          while (i < n && (src[i] !== "]" || first)) {
+            first = false;
+            var ch = src[i++];
+            cls += ch;
+            if (ch === "\\") {
+              if (i < n) { cls += src[i]; i++; }
+            } else if (ch === "-" && peek() !== "]" && peek() !== "" && !first) {
+              cls += src[i]; i++;
+            }
+          }
+          if (src[i] === "]") { cls += "]"; i++; }
+          var desc = "character class" + (neg ? " (negated — match any char NOT listed)" : "");
+          if (cls.length > 4 || neg) {
+            out.push({token: cls, desc: desc + " — matches " + (neg ? "anything except " : "one of ") + JSON.stringify(cls.slice(neg ? 2 : 1, -1)), depth: groupDepth});
+          } else {
+            out.push({token: cls, desc: desc, depth: groupDepth});
+          }
+          continue;
+        }
+
+        if (c === "." ) { out.push({token: ".", desc: "any character except line terminators (with s flag: any character at all)", depth: groupDepth}); continue; }
+        if (c === "^") { out.push({token: "^", desc: "assert position at start of string (with m flag: start of a line)", depth: groupDepth}); continue; }
+        if (c === "$") { out.push({token: "$", desc: "assert position at end of string (with m flag: end of a line)", depth: groupDepth}); continue; }
+        if (c === "*") { out.push({token: "*", desc: "quantifier — 0 or more of the preceding", depth: groupDepth}); continue; }
+        if (c === "+") { out.push({token: "+", desc: "quantifier — 1 or more of the preceding", depth: groupDepth}); continue; }
+        if (c === "?") { out.push({token: "?", desc: "quantifier — 0 or 1 of the preceding (optional)", depth: groupDepth}); continue; }
+        if (c === "{") {
+          var qty = "{";
+          while (i < n && src[i] !== "}" && qty.length < 12) qty += src[i++];
+          if (src[i] === "}") { qty += "}"; i++; out.push({token: qty, desc: "quantifier — repeat the preceding " + qty, depth: groupDepth}); }
+          else out.push({token: qty, desc: "literal " + JSON.stringify(qty), depth: groupDepth});
+          continue;
+        }
+        if (c === "|") { out.push({token: "|", desc: "alternation — match either the left or the right branch", depth: groupDepth}); continue; }
+
+        out.push({token: c, desc: "literal " + JSON.stringify(c), depth: groupDepth});
+      }
+      return out;
+    }
+
+    function render(expls, flags) {
+      if (!expls.length) { explanationOut.textContent = ""; return; }
+      var lines = expls.map(function (e) {
+        var pad = "";
+        for (var k = 0; k < e.depth; k++) pad += "  ";
+        return pad + e.token.padEnd(14, " ") + "  " + e.desc;
+      });
+      explanationOut.textContent = lines.join("\n");
+
+      if (!flags) { flagsOut.textContent = "No flags set."; return; }
+      var flines = flags.split("").map(function (f) {
+        return f + " — " + (FLAG_DESC[f] || "unknown flag");
+      });
+      flagsOut.textContent = flines.join("\n");
+    }
+
+    function run() {
+      err.textContent = "";
+      var src = pattern.value;
+      var flags = activeFlags();
+
+      if (!src) {
+        explanationOut.textContent = "";
+        flagsOut.textContent = "";
+        status.textContent = "";
+        return;
+      }
+
+      try { new RegExp(src, flags); }
+      catch (e) {
+        err.textContent = "Invalid pattern: " + e.message;
+        explanationOut.textContent = "";
+        flagsOut.textContent = "";
+        status.textContent = "";
+        return;
+      }
+
+      var expls = explain(src);
+      render(expls, flags);
+      status.textContent = expls.length + " token" + (expls.length === 1 ? "" : "s");
+    }
+
+    pattern.addEventListener("input", run);
+    flagsText.addEventListener("input", function () { syncCheckboxes(); run(); });
+    checkboxes.forEach(function (cb) {
+      cb.addEventListener("change", function () { syncFlagsText(); run(); });
+    });
+
+    document.getElementById("examples").addEventListener("click", function () {
+      pattern.value = examples[exIdx % examples.length];
+      exIdx++;
+      run();
+    });
+
+    run();
+  })();
+  </script>
+</body>
+</html>
