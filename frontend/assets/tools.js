@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "csv-formula",
+    name: "CSV Column Formula",
+    description: "Add a derived column to a CSV by applying a JavaScript math expression that references other columns by name — price * quantity, subtotal * (1 + tax_rate), Math.round(amount / 100). Column names become variables (spaces/dashes → underscores); non-numeric cells stay blank; optional decimal rounding. Handles quoted fields and embedded newlines. Everything runs locally in your browser.",
+    category: "Data",
+    icon: "🧮",
+    added: "2026-07-14T22:00:00Z",
+  },
+  {
     slug: "rate-limit-calculator",
     name: "Rate Limit Calculator",
     description: "Work out the per-key behaviour of common API rate-limiting algorithms — token bucket, fixed window, sliding window, and leaky bucket — from a target request rate and burst capacity. See the refill rate, sustained requests-per-second, burst handling, and a timeline showing the bucket over 10 s. Pure arithmetic, runs locally in your browser.",

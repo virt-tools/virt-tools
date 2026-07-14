@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>CSV Column Formula — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    textarea { width:100%; font-family:monospace; font-size:12px; min-height:140px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px; margin:10px 0; }
+    .field { margin-bottom:0; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:10px 0; }
+    .wrap { overflow:auto; max-height:55vh; border:1px solid var(--border,#2a2f3a); border-radius:8px; margin-top:10px; }
+    table.result { border-collapse:collapse; font-size:12px; }
+    table.result th, table.result td { padding:4px 8px; border-bottom:1px solid var(--border,#2a2f3a); border-right:1px solid var(--border,#2a2f3a); white-space:nowrap; }
+    table.result th { background:var(--panel-2,#161a22); position:sticky; top:0; font-weight:600; }
+    table.result td.n { font-family:monospace; text-align:right; }
+    table.result td.newcol { background:rgba(110,168,254,.07); font-family:monospace; text-align:right; }
+    .cols-list { font-size:12px; opacity:.7; margin:6px 0; }
+    .cols-list code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; margin-right:4px; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>CSV Column Formula</h1>
+      <p>Add a derived column to a CSV by applying a JavaScript math expression that references other columns by name. Type the new column's name and a formula like <code>price * quantity</code>, <code>subtotal * (1 + tax_rate)</code>, or <code>Math.round(amount / 100) / 100</code> — column names become variables (spaces and dashes become underscores). Numeric strings are coerced; non-numeric cells stay blank. Handles quoted fields and embedded newlines. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="csv">CSV input</label>
+        <textarea id="csv" spellcheck="false" autocomplete="off" placeholder="product,price,qty&#10;A,12.50,3&#10;B,4.00,10"></textarea>
+      </div>
+      <div class="grid">
+        <div class="field"><label for="delim">Delimiter</label>
+          <select id="delim"><option value=",">comma</option><option value=";">semicolon</option><option value="\t">tab</option><option value="|">pipe</option></select>
+        </div>
+        <div class="field"><label for="newName">New column name</label><input id="newName" type="text" value="total" spellcheck="false"></div>
+        <div class="field"><label for="formula">Formula (use column names)</label><input id="formula" type="text" value="price * qty" spellcheck="false" autocomplete="off" style="font-family:monospace; width:100%;"></div>
+      </div>
+      <div class="row">
+        <label><input type="checkbox" id="hasHeader" checked> First row is header</label>
+        <label>Rounding: <select id="rounding"><option value="">none</option><option value="0">0 dp</option><option value="2">2 dp</option><option value="4">4 dp</option></select></label>
+        <button id="run">Apply</button>
+        <button id="copy" class="secondary">Copy result CSV</button>
+        <button id="download" class="secondary">Download .csv</button>
+      </div>
+      <div class="cols-list" id="colsList"></div>
+      <p class="err" id="err"></p>
+      <p class="note" id="note">Paste CSV and a formula above.</p>
+      <div class="wrap"><table class="result" id="out"><tbody></tbody></table></div>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+
+    function actualDelim() { var d = $("delim").value; return d === "\\t" ? "\t" : d; }
+    function parseCSV(text, delim) {
+      var rows = [];
+      var i = 0, n = text.length, field = "", row = [], inQ = false;
+      while (i < n) {
+        var c = text[i];
+        if (inQ) {
+          if (c === '"') {
+            if (text[i + 1] === '"') { field += '"'; i += 2; }
+            else { inQ = false; i++; }
+          } else { field += c; i++; }
+        } else {
+          if (c === '"') { inQ = true; i++; }
+          else if (c === delim) { row.push(field); field = ""; i++; }
+          else if (c === "\r") { i++; }
+          else if (c === "\n") { row.push(field); rows.push(row); row = []; field = ""; i++; }
+          else { field += c; i++; }
+        }
+      }
+      if (field !== "" || row.length) { row.push(field); rows.push(row); }
+      while (rows.length && rows[rows.length - 1].length === 1 && rows[rows.length - 1][0] === "") rows.pop();
+      var w = rows.reduce(function (m, r) { return Math.max(m, r.length); }, 0);
+      rows.forEach(function (r) { while (r.length < w) r.push(""); });
+      return rows;
+    }
+    function csvField(s, delim) {
+      s = String(s);
+      if (s === "") return "";
+      if (new RegExp('["' + delim + '\\n]').test(s)) return '"' + s.replace(/"/g, '""') + '"';
+      return s;
+    }
+    function buildCSV(rows, delim) {
+      return rows.map(function (r) { return r.map(function (c) { return csvField(c, delim); }).join(delim); }).join("\n") + "\n";
+    }
+    function varName(name) {
+      return name.replace(/[^A-Za-z0-9_]/g, "_").replace(/^(\d)/, "_$1");
+    }
+    function isNumber(s) {
+      if (s === "" || s == null) return false;
+      return !isNaN(Number(s.replace(/,/g, "")));
+    }
+    function toNum(s) { return Number(String(s).replace(/,/g, "")); }
+
+    function allowedIdentifiers(src) {
+      var ok = /^[A-Za-z_$][A-Za-z0-9_$\s\.\+\-\*\/\(\)%^<>=!&|~?:,\d]*$/;
+      return ok.test(src);
+    }
+    function buildEvaluator(formula, headers) {
+      // Map original names → varName; reject identifiers not in the header allowlist
+      var allow = {};
+      headers.forEach(function (h) { allow[varName(h)] = true; });
+      // tokenize identifiers
+      var idents = formula.match(/[A-Za-z_$][A-Za-z0-9_$]*/g) || [];
+      for (var i = 0; i < idents.length; i++) {
+        var id = idents[i];
+        // Math.* is allowed
+        if (id === "Math" || id === "PI" || id === "E") continue;
+        if (!(id in allow) && !(id in Math)) {
+          throw new Error("Unknown identifier in formula: '" + id + "'. Use a column name or a Math.* function.");
+        }
+      }
+      // Build function body
+      var params = headers.map(varName);
+      var body = "return (" + formula + ");";
+      try {
+        return new Function(params.join(","), "Math", body);
+      } catch (e) {
+        throw new Error("Could not compile formula: " + (e.message || e));
+      }
+    }
+
+    function run() {
+      var errEl = $("err"); errEl.textContent = "";
+      var text = $("csv").value.trim();
+      if (!text) { $("note").textContent = "Paste CSV first."; $("out").querySelector("tbody").innerHTML = ""; $("colsList").innerHTML = ""; return; }
+      try {
+        var delim = actualDelim();
+        var rows = parseCSV(text, delim);
+        if (!rows.length) { errEl.textContent = "No rows found."; return; }
+        var hasHeader = $("hasHeader").checked;
+        var header = hasHeader ? rows.shift() : rows[0].map(function (_, i) { return "col" + (i + 1); });
+        var newName = $("newName").value.trim() || "new_col";
+        var formula = $("formula").value.trim();
+        if (!formula) { errEl.textContent = "Enter a formula."; return; }
+
+        // show column reference list
+        var list = header.map(function (h) { return "<code>" + esc(h) + " → " + esc(varName(h)) + "</code>"; }).join(" ");
+        $("colsList").innerHTML = "Columns: " + list;
+
+        var evaluator = buildEvaluator(formula, header);
+        var round = $("rounding").value;
+        var outRows = [];
+        var newColIdx = header.length;
+        var outHeader = header.concat([newName]);
+        outRows.push(outHeader);
+
+        var errors = 0;
+        rows.forEach(function (r) {
+          var args = header.map(function (_, i) {
+            var v = r[i] === undefined ? "" : r[i];
+            return isNumber(v) ? toNum(v) : NaN;
+          });
+          var result;
+          try {
+            result = evaluator.apply(null, args.concat([Math]));
+            if (typeof result !== "number" || !isFinite(result)) result = "";
+            else if (round !== "") result = Number(result.toFixed(parseInt(round, 10)));
+          } catch (e) { result = ""; errors++; }
+          outRows.push(r.concat([result === "" ? "" : String(result)]));
+        });
+
+        // render table
+        var tbody = $("out").querySelector("tbody");
+        tbody.innerHTML = "";
+        outRows.slice(0, 200).forEach(function (r, ri) {
+          var tr = document.createElement("tr");
+          r.forEach(function (c, ci) {
+            var cell = document.createElement(ri === 0 ? "th" : "td");
+            if (ci === newColIdx) cell.className = "newcol";
+            else if (/^-?\d/.test(String(c))) cell.className = "n";
+            cell.textContent = c;
+            tr.appendChild(cell);
+          });
+          tbody.appendChild(tr);
+        });
+        var dataOnly = outRows.slice(1);
+        $("note").textContent = "Applied formula to " + dataOnly.length + " row(s); " + errors + " error(s)." + (outRows.length > 201 ? " (Preview shows first 200 rows.)" : "");
+        window._csv = buildCSV(outRows, delim);
+      } catch (e) {
+        errEl.textContent = e.message || String(e);
+        $("out").querySelector("tbody").innerHTML = "";
+        $("note").textContent = "";
+      }
+    }
+
+    function esc(s) { return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+    $("run").addEventListener("click", run);
+    $("csv").addEventListener("input", run);
+    $("formula").addEventListener("input", run);
+    ["delim", "hasHeader", "rounding"].forEach(function (id) { $(id).addEventListener("change", run); });
+    $("copy").addEventListener("click", function () {
+      if (!window._csv) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(window._csv).then(function () { $("note").textContent = "Copied."; }, function () { $("note").textContent = "Copy failed."; });
+      } else $("note").textContent = "Clipboard unavailable.";
+    });
+    $("download").addEventListener("click", function () {
+      if (!window._csv) return;
+      var blob = new Blob([window._csv], { type: "text/csv" });
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "csv-with-formula.csv";
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+    run();
+  })();
+  </script>
+</body>
+</html>
