@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "pem-inspector",
+    name: "PEM Inspector",
+    description: "Decode a PEM block (-----BEGIN …----- envelope for a certificate, public/private key, CSR, or any armored blob) — identify the type from the header, show the DER bytes as a hex dump, compute the SHA-256 fingerprint, and walk the top-level ASN.1 structure to label OIDs and key types. Everything runs locally; the PEM content never leaves your browser.",
+    category: "Security",
+    icon: "📜",
+    added: "2026-07-14T19:00:00Z",
+  },
+  {
     slug: "interval-notation",
     name: "Interval & Set-Builder Notation Converter",
     description: "Convert a real-number interval between inequality form (a < x < b), interval notation ([a, b), (−∞, 5]), and set-builder form ({x ∈ ℝ : …}) — and plot it on a number line. Handles open/closed endpoints, infinities, and one-sided inequalities. Pure arithmetic and text, runs locally in your browser.",

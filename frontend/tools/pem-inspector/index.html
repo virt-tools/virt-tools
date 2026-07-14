@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>PEM Inspector — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    textarea { width:100%; font-family:monospace; font-size:12px; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:10px 0; }
+    table { width:100%; border-collapse:collapse; margin-top:10px; }
+    th, td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--border,#2a2f3a); font-size:13px; vertical-align:top; }
+    th { opacity:.65; font-weight:600; white-space:nowrap; width:30%; }
+    td.v { font-family:monospace; word-break:break-all; }
+    pre.hexdump { white-space:pre; font-family:monospace; font-size:12px; padding:10px; border:1px solid var(--border,#2a2f3a); border-radius:8px; background:var(--panel-2,#161a22); margin:8px 0; max-height:420px; overflow:auto; }
+    .box { font-family:monospace; font-size:13px; padding:10px; border:1px solid var(--border,#2a2f3a); border-radius:8px; background:var(--panel-2,#161a22); margin:8px 0; word-break:break-all; }
+    .badge { display:inline-block; font-size:11px; padding:2px 8px; border-radius:10px; background:rgba(110,168,254,.15); color:var(--accent,#6ea8fe); margin-left:6px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>PEM Inspector</h1>
+      <p>Paste a PEM block (a <code>-----BEGIN …-----</code> / <code>-----END …-----</code> Base64 envelope) — a certificate, public or private key, CSR, or any other armored blob — and decode it: identify the PEM type from the header, show the raw DER bytes as a hex dump, compute its SHA-256 fingerprint, and walk the top-level ASN.1 structure to label OIDs and key types. Everything runs locally; the PEM content never leaves your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="input">PEM input (one or more blocks)</label>
+        <textarea id="input" rows="6" spellcheck="false" autocomplete="off" placeholder="-----BEGIN CERTIFICATE-----&#10;MIID...&#10;-----END CERTIFICATE-----"></textarea>
+      </div>
+      <div class="row">
+        <button id="decode">Decode</button>
+      </div>
+      <div id="results"></div>
+      <p class="note" id="note">Paste a PEM block above.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+
+    function bytesToHex(bytes) {
+      var s = "";
+      for (var i = 0; i < bytes.length; i++) s += (bytes[i] < 16 ? "0" : "") + bytes[i].toString(16);
+      return s;
+    }
+    function hexDump(bytes, max) {
+      var lines = [];
+      var lim = Math.min(bytes.length, max || 4096);
+      for (var i = 0; i < lim; i += 16) {
+        var hex = "", asc = "";
+        for (var j = 0; j < 16; j++) {
+          if (i + j < lim) {
+            hex += (bytes[i + j] < 16 ? "0" : "") + bytes[i + j].toString(16) + " ";
+            var c = bytes[i + j];
+            asc += (c >= 32 && c < 127) ? String.fromCharCode(c) : ".";
+          } else { hex += "   "; asc += " "; }
+        }
+        lines.push(i.toString(16).padStart(8, "0") + "  " + hex + " " + asc);
+      }
+      if (bytes.length > lim) lines.push("… (" + (bytes.length - lim) + " more bytes)");
+      return lines.join("\n");
+    }
+
+    async function sha256Hex(bytes) {
+      var buf = await crypto.subtle.digest("SHA-256", bytes);
+      return bytesToHex(new Uint8Array(buf));
+    }
+
+    var OID_NAMES = {
+      "1.2.840.113549.1.1.1": "rsaEncryption (RSA public key)",
+      "1.2.840.113549.1.1.5": "sha1WithRSAEncryption",
+      "1.2.840.113549.1.1.11": "sha256WithRSAEncryption",
+      "1.2.840.113549.1.1.12": "sha384WithRSAEncryption",
+      "1.2.840.113549.1.1.13": "sha512WithRSAEncryption",
+      "1.2.840.10045.2.1": "ecPublicKey (EC)",
+      "1.2.840.10045.4.3.2": "ecdsa-with-SHA256",
+      "1.2.840.10045.4.3.3": "ecdsa-with-SHA384",
+      "1.2.840.10045.4.3.4": "ecdsa-with-SHA512",
+      "1.3.101.110": "X25519",
+      "1.3.101.111": "X448",
+      "1.3.101.112": "Ed25519",
+      "1.3.101.113": "Ed448",
+      "1.2.840.10040.4.1": "dsaEncryption",
+      "1.2.840.113549.1.7.1": "pkcs7-data",
+      "1.2.840.113549.1.5.13": "PBES2",
+      "1.2.840.113549.1.9.14": "extensionRequest",
+      "2.5.29.14": "subjectKeyIdentifier",
+      "2.5.29.15": "keyUsage",
+      "2.5.29.17": "subjectAltName",
+      "2.5.29.19": "basicConstraints",
+      "2.5.29.35": "authorityKeyIdentifier",
+      "2.5.29.37": "extKeyUsage"
+    };
+
+    function Reader(bytes) {
+      this.b = bytes; this.i = 0;
+      this.byte = function () { return this.b[this.i++]; };
+      this.len = function () {
+        var n = this.byte();
+        if (n < 0x80) return n;
+        var k = n & 0x7F, v = 0;
+        for (var j = 0; j < k; j++) v = (v << 8) | this.byte();
+        return v;
+      };
+      this.tlv = function () {
+        var tag = this.byte();
+        var len = this.len();
+        var start = this.i;
+        var end = this.i + len;
+        this.i = end;
+        return { tag: tag, content: this.b.subarray(start, end) };
+      };
+      this.oid = function (bytes) {
+        var n = bytes.length, parts = [], i = 0;
+        var first = bytes[0];
+        parts.push(Math.floor(first / 40)); parts.push(first % 40);
+        var v = 0;
+        for (i = 1; i < n; i++) {
+          v = (v << 7) | (bytes[i] & 0x7F);
+          if (!(bytes[i] & 0x80)) { parts.push(v); v = 0; }
+        }
+        return parts.join(".");
+      };
+      this.remaining = function () { return this.b.length - this.i; };
+    }
+
+    function walk(bytes, depth, out) {
+      if (depth > 8) return;
+      try {
+        var r = new Reader(bytes);
+        while (r.remaining() > 0) {
+          var t = r.byte();
+          var len = r.len();
+          var start = r.i, end = r.i + len;
+          if (end > bytes.length) { r.i = bytes.length; break; }
+          var content = bytes.subarray(start, end);
+          r.i = end;
+          var name = asnName(t);
+          // OID
+          if (t === 0x06) {
+            try {
+              var oid = new Reader(content).oid(content);
+              var pretty = OID_NAMES[oid] || "";
+              out.push({ depth: depth, type: "OID", value: oid + (pretty ? " — " + pretty : "") });
+            } catch (e) {}
+          } else if ((t & 0x20) && (t !== 0x30)) {
+            // context-specific constructed
+            out.push({ depth: depth, type: name, value: "(" + len + " bytes)" });
+            walk(content, depth + 1, out);
+          } else if (t === 0x30 || t === 0x31) {
+            out.push({ depth: depth, type: name, value: "(" + len + " bytes)" });
+            walk(content, depth + 1, out);
+          } else if (t === 0x03) {
+            // BIT STRING — try to recurse into the inner SEQUENCE if it looks like one
+            out.push({ depth: depth, type: "BIT STRING", value: "(" + len + " bytes)" });
+            if (content.length > 1) {
+              var inner = content.subarray(1); // skip unused-bits octet
+              if (inner.length > 1 && (inner[0] === 0x30 || inner[0] === 0x02 || inner[0] === 0x03)) {
+                walk(inner, depth + 1, out);
+              }
+            }
+          } else if (t === 0x02) {
+            var n = 0;
+            for (var k = 0; k < Math.min(content.length, 8); k++) n = (n << 8) | content[k];
+            out.push({ depth: depth, type: "INTEGER", value: content.length <= 8 ? String(n >>> 0) : "(" + len + " bytes)" });
+          } else if (t === 0x13 || t === 0x16 || t === 0x14 || t === 0x0C || t === 0x17 || t === 0x18) {
+            var txt = "";
+            try { txt = new TextDecoder("utf-8", { fatal: false }).decode(content); } catch (e) { txt = ""; }
+            out.push({ depth: depth, type: asnName(t), value: txt ? '"' + txt + '"' : "(" + len + " bytes)" });
+          } else {
+            out.push({ depth: depth, type: name, value: "(" + len + " bytes)" });
+          }
+        }
+      } catch (e) {}
+    }
+    function asnName(t) {
+      var map = {
+        0x30: "SEQUENCE", 0x31: "SET", 0x02: "INTEGER", 0x03: "BIT STRING", 0x04: "OCTET STRING",
+        0x05: "NULL", 0x06: "OID", 0x0C: "UTF8String", 0x13: "PrintableString", 0x14: "T61String",
+        0x16: "IA5String", 0x17: "UTCTime", 0x18: "GeneralizedTime", 0x01: "BOOLEAN", 0x10: "ENUMERATED",
+        0x0A: "ENUMERATED", 0x05: "NULL"
+      };
+      if (t in map) return map[t];
+      if ((t & 0xC0) === 0x80) return "[context " + (t & 0x1F) + "]";
+      if ((t & 0xC0) === 0xA0) return "[context " + (t & 0x1F) + "] (constructed)";
+      return "tag 0x" + t.toString(16);
+    }
+
+    function parsePemBlocks(text) {
+      var re = /-----BEGIN ([A-Z0-9 ]+)-----\s*([A-Za-z0-9+/=\s]+?)-----END \1-----/g;
+      var blocks = [], m;
+      while ((m = re.exec(text)) !== null) {
+        var type = m[1].trim();
+        var b64 = m[2].replace(/\s+/g, "");
+        var bin = atob(b64);
+        var bytes = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        blocks.push({ type: type, bytes: bytes, headers: extractHeaders(m[0]) });
+      }
+      return blocks;
+    }
+    function extractHeaders(blockText) {
+      var lines = blockText.split(/\r?\n/);
+      var hdrs = [];
+      for (var i = 1; i < lines.length; i++) {
+        if (lines[i].indexOf("-----") === 0) break;
+        if (lines[i].indexOf(":") >= 0 && lines[i].indexOf(":") < 20) hdrs.push(lines[i].trim());
+      }
+      return hdrs;
+    }
+
+    async function decode() {
+      var text = $("input").value;
+      var resEl = $("results");
+      if (!text.trim()) { resEl.innerHTML = ""; $("note").textContent = "Paste a PEM block above."; return; }
+      var blocks = parsePemBlocks(text);
+      if (!blocks.length) { resEl.innerHTML = ""; $("note").textContent = "No PEM block found (need -----BEGIN …----- … -----END …-----)."; return; }
+      resEl.innerHTML = "";
+      for (var i = 0; i < blocks.length; i++) {
+        var b = blocks[i];
+        var digestHex = await sha256Hex(b.bytes);
+        var asn = [];
+        walk(b.bytes, 0, asn);
+        var div = document.createElement("div");
+        div.style.cssText = "border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:12px;margin-bottom:10px;background:var(--panel-2,#161a22);";
+        var html = '<h3 style="margin:0 0 8px;">Block ' + (i + 1) + ': ' + esc(b.type) + ' <span class="badge">' + b.bytes.length + ' bytes</span></h3>';
+        html += '<table><tbody>';
+        if (b.headers.length) {
+          html += '<tr><th>PEM headers</th><td class="v">' + b.headers.map(esc).join("<br>") + '</td></tr>';
+        }
+        html += '<tr><th>DER length</th><td class="v">' + b.bytes.length + ' bytes</td></tr>';
+        html += '<tr><th>SHA-256 fingerprint</th><td class="v">' + digestHex + '</td></tr>';
+        html += '<tr><th>DER hex</th><td class="v">' + bytesToHex(b.bytes).slice(0, 120) + (b.bytes.length > 60 ? "…" : "") + '</td></tr>';
+        if (asn.length) {
+          html += '<tr><th>ASN.1 walk</th><td class="v">';
+          asn.forEach(function (a) {
+            html += '<div style="padding-left:' + (a.depth * 14) + 'px;">' + esc(a.type) + ': ' + esc(a.value) + '</div>';
+          });
+          html += '</td></tr>';
+        }
+        html += '</tbody></table>';
+        html += '<div class="box">SHA-256: ' + digestHex + '</div>';
+        html += '<pre class="hexdump">' + esc(hexDump(b.bytes, 2048)) + '</pre>';
+        div.innerHTML = html;
+        resEl.appendChild(div);
+      }
+      $("note").textContent = "Decoded " + blocks.length + " PEM block(s).";
+    }
+
+    function esc(s) { return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+    $("decode").addEventListener("click", decode);
+    $("input").addEventListener("input", function () { /* allow paste */ });
+  })();
+  </script>
+</body>
+</html>
