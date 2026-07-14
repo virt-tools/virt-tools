@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Tap Drill Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .row2 { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+    .row2 .field { margin-bottom: 0; }
+    input[type="number"] { font-family: ui-monospace, monospace; width: 110px; }
+    select { min-width: 130px; }
+    .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+    .seg button { background: var(--bg-elev-2); color: var(--text); border: none; padding: 5px 12px; cursor: pointer; font-size: 0.85rem; }
+    .seg button.active { background: var(--accent, #6ea8ff); color: #08111f; font-weight: 600; }
+    .kv { display: grid; grid-template-columns: 230px 1fr; gap: 6px 12px; margin-top: 12px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.95rem; }
+    .verdict { font-size: 1.5rem; font-weight: 800; font-family: ui-monospace, monospace; margin-top: 10px; }
+    .verdict.ok { color: var(--ok, #4ade80); }
+    .verdict.warn { color: var(--accent, #6ea8ff); }
+    .verdict.bad { color: var(--bad, #f87171); }
+    .big { font-size: 1.05rem; font-weight: 700; }
+    h3.sec { font-size: 0.92rem; font-weight: 600; margin: 14px 0 2px; color: var(--text-dim); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Tap Drill Calculator</h1>
+      <p>Pick the drill bit for cutting an internal thread with a tap. For a metric thread the tap drill is the major diameter minus the pitch (about 75% thread engagement); for a unified inch thread it's the major diameter minus one over the threads-per-inch. The tool computes the theoretical drill and matches it to the nearest standard bit — a fractional, number or letter drill for imperial sizes, a 0.1 mm-step metric drill for metric sizes — so you can grab the right bit from the box. Useful for tapped holes in metal, 3D-printed and machined parts, and repair work. Pure arithmetic — the 75% rule is a practical compromise that gives full-strength threads without a tap that binds or breaks; harder materials sometimes use a slightly larger hole (65%) and softer a smaller one (85%), and form (roll) taps need a larger pre-drill than cut taps. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row2">
+        <div class="field">
+          <label>Thread system</label>
+          <div class="seg" id="sseg">
+            <button data-s="metric" class="active">Metric (ISO)</button>
+            <button data-s="inch">Inch (UNC/UNF)</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="thread">Thread</label>
+          <select id="thread"></select>
+        </div>
+      </div>
+
+      <div class="row2">
+        <div class="field">
+          <label for="pitch" id="pl">Pitch</label>
+          <input id="pitch" type="number" min="0" step="any" value="1.5">
+          <span class="muted" id="pu">mm</span>
+        </div>
+        <div class="field">
+          <label for="major" id="ml">Major diameter</label>
+          <input id="major" type="number" min="0" step="any" value="10">
+          <span class="muted" id="mu">mm</span>
+        </div>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <dl class="kv" id="kv"></dl>
+      <p class="note" id="err"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var sseg = $("sseg");
+    var threadEl = $("thread"), pitchEl = $("pitch"), majorEl = $("major");
+    var pl = $("pl"), pu = $("pu"), ml = $("ml"), mu = $("mu");
+    var verdictEl = $("verdict"), kvEl = $("kv"), errEl = $("err");
+    var sys = "metric";
+
+    // metric coarse threads: [label, major(mm), pitch(mm)]
+    var METRIC = [
+      ["M3 × 0.5", 3, 0.5], ["M3.5 × 0.6", 3.5, 0.6], ["M4 × 0.7", 4, 0.7], ["M5 × 0.8", 5, 0.8],
+      ["M6 × 1.0", 6, 1.0], ["M8 × 1.25", 8, 1.25], ["M10 × 1.5", 10, 1.5], ["M12 × 1.75", 12, 1.75],
+      ["M14 × 2.0", 14, 2.0], ["M16 × 2.0", 16, 2.0], ["M18 × 2.5", 18, 2.5], ["M20 × 2.5", 20, 2.5],
+      ["M22 × 2.5", 22, 2.5], ["M24 × 3.0", 24, 3.0]
+    ];
+    // inch threads: [label, major(in), TPI]
+    var INCH = [
+      ['1/4-20 UNC', 0.25, 20], ['1/4-28 UNF', 0.25, 28], ['5/16-18 UNC', 0.3125, 18], ['5/16-24 UNF', 0.3125, 24],
+      ['3/8-16 UNC', 0.375, 16], ['3/8-24 UNF', 0.375, 24], ['7/16-14 UNC', 0.4375, 14], ['7/16-20 UNF', 0.4375, 20],
+      ['1/2-13 UNC', 0.5, 13], ['1/2-20 UNF', 0.5, 20], ['9/16-12 UNC', 0.5625, 12], ['9/16-18 UNF', 0.5625, 18],
+      ['5/8-11 UNC', 0.625, 11], ['5/8-18 UNF', 0.625, 18], ['3/4-10 UNC', 0.75, 10], ['3/4-16 UNF', 0.75, 16],
+      ['7/8-9 UNC', 0.875, 9], ['1-8 UNC', 1.0, 8]
+    ];
+
+    // number drills 1-60 (inches)
+    var NUM = {1:.2280,2:.2210,3:.2130,4:.2090,5:.2055,6:.2040,7:.2010,8:.1990,9:.1960,10:.1930,11:.1910,12:.1890,13:.1850,14:.1820,15:.1800,16:.1770,17:.1730,18:.1695,19:.1660,20:.1610,21:.1590,22:.1570,23:.1540,24:.1520,25:.1495,26:.1470,27:.1440,28:.1405,29:.1360,30:.1285,31:.1200,32:.1160,33:.1130,34:.1110,35:.1100,36:.1065,37:.1040,38:.1015,39:.0995,40:.0980,41:.0960,42:.0935,43:.0890,44:.0860,45:.0820,46:.0810,47:.0785,48:.0760,49:.0730,50:.0700,51:.0670,52:.0635,53:.0595,54:.0550,55:.0520,56:.0465,57:.0430,58:.0420,59:.0410,60:.0400};
+    var LETTER = {A:.234,B:.238,C:.242,D:.246,E:.250,F:.257,G:.261,H:.266,I:.272,J:.277,K:.281,L:.290,M:.295,N:.302,O:.316,P:.323,Q:.332,R:.339,S:.348,T:.358,U:.368,V:.377,W:.386,X:.397,Y:.404,Z:.413};
+    var inchTable = null;
+    function buildInchTable() {
+      var t = [];
+      for (var n = 1; n <= 64; n++) t.push({ lbl: (n % 64 === 0 ? "1" : n + "/64"), v: n / 64 });
+      Object.keys(NUM).forEach(function (k) { t.push({ lbl: "#" + k, v: NUM[k] }); });
+      Object.keys(LETTER).forEach(function (k) { t.push({ lbl: k, v: LETTER[k] }); });
+      t.sort(function (a, b) { return a.v - b.v; });
+      inchTable = t;
+    }
+    function nearestInch(d) {
+      var best = null;
+      inchTable.forEach(function (e) {
+        var diff = Math.abs(e.v - d);
+        if (best === null || diff < best.diff - 1e-9 || (Math.abs(diff - best.diff) < 1e-9 && e.v > best.v)) best = { lbl: e.lbl, v: e.v, diff: diff };
+      });
+      return best;
+    }
+
+    function num(el) { var n = parseFloat(el.value); return isNaN(n) ? NaN : n; }
+    function fmt(n, d) { return Number(n).toFixed(d); }
+    function bad(msg) { verdictEl.textContent = "✗ " + msg; verdictEl.className = "verdict bad"; kvEl.innerHTML = ""; errEl.textContent = ""; }
+
+    function fillThreads() {
+      threadEl.innerHTML = "";
+      var arr = sys === "metric" ? METRIC : INCH;
+      arr.forEach(function (t, i) {
+        var o = document.createElement("option"); o.value = i; o.textContent = t[0]; threadEl.appendChild(o);
+      });
+      threadEl.value = sys === "metric" ? 6 : 0; // M10x1.5 / 1/4-20
+      syncFromThread();
+    }
+    function syncFromThread() {
+      var arr = sys === "metric" ? METRIC : INCH;
+      var t = arr[parseInt(threadEl.value, 10)] || arr[0];
+      if (sys === "metric") { majorEl.value = t[1]; pitchEl.value = t[2]; pl.textContent = "Pitch"; pu.textContent = "mm"; ml.textContent = "Major diameter"; mu.textContent = "mm"; }
+      else { majorEl.value = t[1]; pitchEl.value = t[2]; pl.textContent = "Threads per inch"; pu.textContent = "TPI"; ml.textContent = "Major diameter"; mu.textContent = "in"; }
+    }
+
+    sseg.querySelectorAll("button").forEach(function (b) {
+      b.addEventListener("click", function () {
+        sseg.querySelectorAll("button").forEach(function (x) { x.classList.remove("active"); });
+        b.classList.add("active"); sys = b.getAttribute("data-s"); fillThreads(); render();
+      });
+    });
+    threadEl.addEventListener("change", function () { syncFromThread(); render(); });
+    [pitchEl, majorEl].forEach(function (el) { el.addEventListener("input", render); el.addEventListener("change", render); });
+
+    function render() {
+      errEl.className = "note"; errEl.textContent = ""; verdictEl.textContent = ""; verdictEl.className = "verdict"; kvEl.innerHTML = "";
+      var major = num(majorEl), p = num(pitchEl);
+      if (isNaN(major) || major <= 0) { bad("Enter a positive major diameter."); return; }
+      if (isNaN(p) || p <= 0) { bad("Enter a positive " + (sys === "metric" ? "pitch" : "TPI") + "."); return; }
+
+      var drill, drillMM, nearest, nearMM;
+      if (sys === "metric") {
+        drill = major - p;                       // mm, 75% thread
+        drillMM = drill;
+        nearMM = Math.round(drill * 10) / 10;    // nearest 0.1 mm
+        verdictEl.textContent = fmt(drill, 2) + " mm tap drill  ·  use " + fmt(nearMM, 1) + " mm bit";
+        verdictEl.className = "verdict ok";
+        kvEl.innerHTML =
+          "<dt>Tap drill (75%)</dt><dd class='big'>" + fmt(drill, 3) + " mm</dd>" +
+          "<dt>Nearest 0.1 mm bit</dt><dd class='big'>" + fmt(nearMM, 1) + " mm</dd>" +
+          "<dt>Formula</dt><dd>major − pitch = " + fmt(major, 2) + " − " + fmt(p, 2) + " = " + fmt(drill, 2) + " mm</dd>" +
+          "<dt>Thread</dt><dd>" + threadEl.options[threadEl.selectedIndex].textContent + "</dd>" +
+          "<dt>In inches</dt><dd>" + fmt(drill / 25.4, 4) + " in</dd>";
+        errEl.textContent = "The 75% thread rule for a metric tap gives a pre-drill of major diameter minus pitch: " + fmt(major, 2) + " − " + fmt(p, 2) + " = " + fmt(drill, 2) + " mm. That leaves enough wall for the tap to cut about 75% of the thread height — the practical compromise between full thread strength and a tap that isn't fighting a too-tight hole. The nearest standard 0.1 mm drill is " + fmt(nearMM, 1) + " mm. For harder or brittle materials (stainless, cast iron) bump the drill up a notch toward 65% engagement so the tap doesn't bind and snap; for soft, gummy materials (aluminium, copper) drop a notch toward 85% for a fuller thread. Countersink or chamfer the hole mouth before tapping to start the tap straight and break the top burr, use a cutting fluid, and back the tap off a quarter-turn every half-turn to break the chip. Form (roll) taps displace metal instead of cutting it and need a larger pre-drill (closer to major − 0.5×pitch) plus a free-flowing material — don't use the cut-tap drill size for a form tap.";
+      } else {
+        var tpi = p;
+        drill = major - 1 / tpi;                  // inches, 75% thread
+        nearest = nearestInch(drill);
+        drillMM = drill * 25.4;
+        verdictEl.textContent = fmt(drill, 4) + " in tap drill  ·  use " + nearest.lbl + " (" + fmt(nearest.v, 4) + " in) bit";
+        verdictEl.className = "verdict ok";
+        kvEl.innerHTML =
+          "<dt>Tap drill (75%)</dt><dd class='big'>" + fmt(drill, 4) + " in</dd>" +
+          "<dt>Nearest bit</dt><dd class='big'>" + nearest.lbl + "  <span class='muted'>(" + fmt(nearest.v, 4) + " in)</span></dd>" +
+          "<dt>Formula</dt><dd>major − 1/TPI = " + fmt(major, 4) + " − 1/" + fmt(tpi, 0) + " = " + fmt(drill, 4) + " in</dd>" +
+          "<dt>Thread</dt><dd>" + threadEl.options[threadEl.selectedIndex].textContent + "</dd>" +
+          "<dt>In millimetres</dt><dd>" + fmt(drillMM, 2) + " mm  <span class='muted'>(nearest " + fmt(Math.round(drillMM * 10) / 10, 1) + " mm)</span></dd>";
+        errEl.textContent = "The 75% thread rule for an inch tap gives a pre-drill of major diameter minus one over the threads per inch: " + fmt(major, 4) + " − 1/" + fmt(tpi, 0) + " = " + fmt(drill, 4) + " in. The closest standard bit in the box is a " + nearest.lbl + " drill at " + fmt(nearest.v, 4) + " in (about " + fmt(nearest.v * 25.4, 2) + " mm), which gives roughly 75% thread engagement — the usual balance of thread strength against a tap that cuts cleanly without binding. For stainless or cast iron step up one drill size toward 65% engagement; for aluminium or brass step down toward 85%. Unified threads come in coarse (UNC) and fine (UNF) pitches for the same major diameter — fine gives a larger tap drill and more threads to carry load, but a shallower one. Chamfer the mouth, use cutting fluid, and peck (back off a quarter-turn) to clear chips. Form taps need a bigger hole than cut taps, so don't reuse this size for a roll tap.";
+      }
+      errEl.className = "note";
+    }
+
+    buildInchTable(); fillThreads(); render();
+  })();
+  </script>
+</body>
+</html>

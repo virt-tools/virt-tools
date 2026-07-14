@@ -3882,4 +3882,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔌",
     added: "2026-07-14T21:45:00Z",
   },
+  {
+    slug: "tap-drill-calculator",
+    name: "Tap Drill Calculator",
+    description: "Pick the drill bit for cutting an internal thread with a tap. For a metric thread the tap drill is the major diameter minus the pitch (about 75% thread engagement); for a unified inch thread it's the major diameter minus one over the threads-per-inch. The tool computes the theoretical drill and matches it to the nearest standard bit — a fractional, number or letter drill for imperial sizes, a 0.1 mm-step metric drill for metric sizes. Useful for tapped holes in metal, 3D-printed and machined parts, and repair work. Pure arithmetic — the 75% rule balances full thread strength against a tap that doesn't bind or break; harder materials use a larger hole, softer a smaller one, and form (roll) taps need a larger pre-drill. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "🔩",
+    added: "2026-07-14T22:15:00Z",
+  },
 ];
