@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "csv-aggregator",
+    name: "CSV Pivot & Group-By Aggregator",
+    description: "Summarise a CSV by a group-by column and a value column — count, sum, mean, median, min, max, unique-value count, or sample std. deviation. The classic spreadsheet pivot table, computed locally in your browser. Handles quoted fields, embedded commas and newlines. Copy the result as CSV.",
+    category: "Data",
+    icon: "📊",
+    added: "2026-07-14T17:00:00Z",
+  },
+  {
     slug: "hkdf-generator",
     name: "HKDF Key Derivation",
     description: "Derive one or more output keys from input keying material with HKDF (RFC 5869) — the Extract-then-Expand construction built on HMAC. Choose SHA-256 / SHA-384 / SHA-512, salt, info/context, and length. Inspect the intermediate PRK and final OKM. Powered by the native Web Crypto API; runs locally in your browser.",

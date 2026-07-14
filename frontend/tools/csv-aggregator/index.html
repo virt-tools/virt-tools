@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>CSV Pivot &amp; Group-By Aggregator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:12px; margin:10px 0; }
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    .field { margin-bottom:0; }
+    .full { grid-column: 1 / -1; }
+    textarea { width:100%; font-family:monospace; font-size:13px; min-height:140px; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:10px 0; }
+    .wrap { overflow:auto; max-height:60vh; border:1px solid var(--border,#2a2f3a); border-radius:8px; margin-top:10px; }
+    table.result { border-collapse:collapse; font-size:13px; }
+    table.result th, table.result td { padding:6px 10px; border-bottom:1px solid var(--border,#2a2f3a); border-right:1px solid var(--border,#2a2f3a); white-space:nowrap; }
+    table.result th { background:var(--panel-2,#161a22); font-weight:600; position:sticky; top:0; }
+    table.result td.n { font-family:monospace; text-align:right; }
+    .chip { display:inline-block; font-size:11px; padding:1px 8px; border-radius:10px; background:var(--bg-elev-2,#1e222b); color:var(--text-dim,#9aa3b2); margin-right:4px; }
+    .agg-cell { display:flex; flex-direction:column; gap:4px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>CSV Pivot &amp; Group-By Aggregator</h1>
+      <p>Summarise a CSV table by a group-by column and one or more value columns — counts, sums, averages, min, max, and the unique value count. The classic spreadsheet pivot table, computed locally in your browser. Handles quoted fields, embedded commas and newlines. Nothing is uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field full">
+        <label for="csv">CSV input</label>
+        <textarea id="csv" spellcheck="false" autocomplete="off" placeholder="region,product,sales&#10;North,A,120&#10;South,B,90&#10;North,A,80"></textarea>
+      </div>
+      <div class="row">
+        <label><input type="checkbox" id="hasHeader" checked> First row is header</label>
+        <label>Delimiter: <select id="delim"><option value=",">comma</option><option value=";">semicolon</option><option value="\t">tab</option><option value="|">pipe</option></select></label>
+      </div>
+
+      <h3>Grouping</h3>
+      <div class="grid">
+        <div class="field"><label for="groupCol">Group by column</label><select id="groupCol"><option>(parse CSV first)</option></select></div>
+        <div class="field"><label for="valueCol">Value column</label><select id="valueCol"><option>(parse CSV first)</option></select></div>
+        <div class="field"><label for="agg">Aggregation</label>
+          <select id="agg">
+            <option value="count">count</option>
+            <option value="sum">sum</option>
+            <option value="mean">mean</option>
+            <option value="min">min</option>
+            <option value="max">max</option>
+            <option value="nunique">unique values (n)</option>
+            <option value="median">median</option>
+            <option value="stdev">std. deviation (sample)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="row">
+        <button id="run">Run</button>
+        <button id="copy" class="secondary">Copy result as CSV</button>
+      </div>
+
+      <p class="note" id="note">Load a CSV above.</p>
+      <div class="wrap"><table class="result" id="out"><tbody></tbody></table></div>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+
+    function actualDelim() {
+      var d = $("delim").value;
+      return d === "\\t" ? "\t" : d;
+    }
+
+    function parseCSV(text, delim, hasHeader) {
+      var rows = [];
+      var i = 0, n = text.length, field = "", row = [], inQ = false;
+      while (i < n) {
+        var c = text[i];
+        if (inQ) {
+          if (c === '"') {
+            if (text[i + 1] === '"') { field += '"'; i += 2; }
+            else { inQ = false; i++; }
+          } else { field += c; i++; }
+        } else {
+          if (c === '"') { inQ = true; i++; }
+          else if (c === delim) { row.push(field); field = ""; i++; }
+          else if (c === "\r") { i++; }
+          else if (c === "\n") { row.push(field); rows.push(row); row = []; field = ""; i++; }
+          else { field += c; i++; }
+        }
+      }
+      if (field !== "" || row.length) { row.push(field); rows.push(row); }
+      // trim trailing fully-empty rows
+      while (rows.length && rows[rows.length - 1].length === 1 && rows[rows.length - 1][0] === "") rows.pop();
+      var header = null;
+      if (hasHeader && rows.length) { header = rows.shift(); }
+      // pad ragged rows
+      var w = rows.reduce(function (m, r) { return Math.max(m, r.length); }, header ? header.length : 0);
+      rows.forEach(function (r) { while (r.length < w) r.push(""); });
+      if (!header) header = rows.length ? Array.from({ length: w }, function (_, i) { return "col" + (i + 1); }) : [];
+      return { header: header, rows: rows };
+    }
+
+    function isNumber(s) {
+      if (s === "" || s == null) return false;
+      return !isNaN(Number(s.replace(/,/g, "")));
+    }
+    function toNum(s) { return Number(String(s).replace(/,/g, "")); }
+
+    function fillCols() {
+      var text = $("csv").value;
+      if (!text.trim()) { setColOptions([{}], []); return; }
+      try {
+        var parsed = parseCSV(text, actualDelim(), $("hasHeader").checked);
+        setColOptions(parsed.header, parsed.rows);
+      } catch (e) {
+        $("note").textContent = "Parse error: " + (e.message || e);
+      }
+    }
+    function setColOptions(header, rows) {
+      var g = $("groupCol"), v = $("valueCol");
+      g.innerHTML = ""; v.innerHTML = "";
+      header.forEach(function (h, i) {
+        var o = document.createElement("option");
+        o.value = i; o.textContent = h || ("col" + (i + 1));
+        g.appendChild(o.cloneNode(true));
+        v.appendChild(o.cloneNode(true));
+      });
+      // pick first string-ish col as group, first numeric as value
+      if (header.length) {
+        var numericIdx = -1, stringIdx = -1;
+        for (var i = 0; i < header.length; i++) {
+          var allNum = rows.length > 0 && rows.every(function (r) { return r[i] === "" || isNumber(r[i]); });
+          if (allNum && numericIdx < 0) numericIdx = i;
+          if (!allNum && stringIdx < 0) stringIdx = i;
+        }
+        g.value = stringIdx >= 0 ? stringIdx : 0;
+        v.value = numericIdx >= 0 ? numericIdx : 0;
+      }
+    }
+
+    function aggregate(values, agg) {
+      var nums = values.filter(isNumber).map(toNum);
+      switch (agg) {
+        case "count": return values.length;
+        case "sum": return nums.reduce(function (a, b) { return a + b; }, 0);
+        case "mean": return nums.length ? nums.reduce(function (a, b) { return a + b; }, 0) / nums.length : NaN;
+        case "min": return nums.length ? Math.min.apply(null, nums) : NaN;
+        case "max": return nums.length ? Math.max.apply(null, nums) : NaN;
+        case "nunique": return new Set(values.map(function (v) { return String(v); })).size;
+        case "median":
+          if (!nums.length) return NaN;
+          nums.sort(function (a, b) { return a - b; });
+          var m = Math.floor(nums.length / 2);
+          return nums.length % 2 ? nums[m] : (nums[m - 1] + nums[m]) / 2;
+        case "stdev":
+          if (nums.length < 2) return NaN;
+          var mean = nums.reduce(function (a, b) { return a + b; }, 0) / nums.length;
+          var ss = nums.reduce(function (a, b) { return a + (b - mean) * (b - mean); }, 0);
+          return Math.sqrt(ss / (nums.length - 1));
+        default: return "";
+      }
+    }
+    function fmt(x) {
+      if (typeof x === "number") {
+        if (!isFinite(x)) return "—";
+        if (Number.isInteger(x)) return String(x);
+        return x.toFixed(4).replace(/\.?0+$/, "");
+      }
+      return String(x);
+    }
+
+    function run() {
+      var text = $("csv").value;
+      if (!text.trim()) { $("note").textContent = "Paste CSV first."; return; }
+      try {
+        var parsed = parseCSV(text, actualDelim(), $("hasHeader").checked);
+        if (!parsed.rows.length) { $("note").textContent = "No data rows."; $("out").querySelector("tbody").innerHTML = ""; return; }
+        var gIdx = parseInt($("groupCol").value, 10);
+        var vIdx = parseInt($("valueCol").value, 10);
+        var agg = $("agg").value;
+        var groups = {};
+        var order = [];
+        parsed.rows.forEach(function (r) {
+          var k = r[gIdx] === undefined ? "" : String(r[gIdx]);
+          if (!(k in groups)) { groups[k] = []; order.push(k); }
+          groups[k].push(r[vIdx] === undefined ? "" : r[vIdx]);
+        });
+        // sort groups alphabetically (case-insensitive)
+        order.sort(function (a, b) { return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }); });
+        var tbody = $("out").querySelector("tbody");
+        tbody.innerHTML = "";
+        var gh = parsed.header[gIdx] || ("col" + (gIdx + 1));
+        var vh = parsed.header[vIdx] || ("col" + (vIdx + 1));
+        var trh = document.createElement("tr");
+        trh.innerHTML = "<th>" + esc(gh) + "</th><th>" + esc(agg + " of " + vh) + "</th><th>count</th>";
+        tbody.appendChild(trh);
+        var outCsv = gh + "," + agg + " of " + vh + ",count\n";
+        order.forEach(function (k) {
+          var vals = groups[k];
+          var a = aggregate(vals, agg);
+          var tr = document.createElement("tr");
+          tr.innerHTML = "<td>" + esc(k === "" ? "(empty)" : k) + "</td><td class=\"n\">" + fmt(a) + "</td><td class=\"n\">" + vals.length + "</td>";
+          tbody.appendChild(tr);
+          outCsv += csvField(k === "" ? "(empty)" : k) + "," + fmt(a) + "," + vals.length + "\n";
+        });
+        // grand total row
+        var allVals = order.reduce(function (acc, k) { return acc.concat(groups[k]); }, []);
+        if (agg !== "nunique" && agg !== "count") {
+          var tr = document.createElement("tr");
+          tr.style.fontWeight = "bold";
+          tr.innerHTML = "<td>TOTAL</td><td class=\"n\">" + fmt(aggregate(allVals, agg)) + "</td><td class=\"n\">" + allVals.length + "</td>";
+          tbody.appendChild(tr);
+          outCsv += "TOTAL," + fmt(aggregate(allVals, agg)) + "," + allVals.length + "\n";
+        }
+        $("note").textContent = order.length + " group(s), " + allVals.length + " row(s).";
+        window._csvOut = outCsv;
+      } catch (e) {
+        $("note").textContent = "Error: " + (e.message || e);
+        $("out").querySelector("tbody").innerHTML = "";
+      }
+    }
+
+    function esc(s) { return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+    function csvField(s) {
+      s = String(s);
+      return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    }
+
+    ["csv", "hasHeader", "delim"].forEach(function (id) {
+      $(id).addEventListener("input", fillCols);
+      $(id).addEventListener("change", fillCols);
+    });
+    $("run").addEventListener("click", run);
+    $("copy").addEventListener("click", function () {
+      if (!window._csvOut) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(window._csvOut).then(function () { $("note").textContent = "Copied."; }, function () { $("note").textContent = "Copy failed."; });
+      } else $("note").textContent = "Clipboard unavailable.";
+    });
+
+    fillCols();
+  })();
+  </script>
+</body>
+</html>
