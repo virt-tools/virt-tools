@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "hkdf-generator",
+    name: "HKDF Key Derivation",
+    description: "Derive one or more output keys from input keying material with HKDF (RFC 5869) — the Extract-then-Expand construction built on HMAC. Choose SHA-256 / SHA-384 / SHA-512, salt, info/context, and length. Inspect the intermediate PRK and final OKM. Powered by the native Web Crypto API; runs locally in your browser.",
+    category: "Security",
+    icon: "🔑",
+    added: "2026-07-14T16:30:00Z",
+  },
+  {
     slug: "ssh-key-inspector",
     name: "SSH Public Key Inspector",
     description: "Decode an OpenSSH public key (ssh-rsa, ssh-ed25519, ecdsa-sha2-nistp*, ssh-dss) into its type, internal components (modulus, exponent, curve, point), and SHA-256 / MD5 fingerprint. Pure base64 + struct parsing; the key never leaves your browser.",

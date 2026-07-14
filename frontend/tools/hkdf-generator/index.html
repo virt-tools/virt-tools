@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>HKDF Key Derivation — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:12px; margin:10px 0; }
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    .field { margin-bottom:0; }
+    .full { grid-column: 1 / -1; }
+    input, select { box-sizing:border-box; }
+    .hex { font-family:monospace; word-break:break-all; }
+    textarea { width:100%; font-family:monospace; font-size:13px; }
+    table { width:100%; border-collapse:collapse; margin-top:10px; }
+    th, td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--border,#2a2f3a); font-size:13px; vertical-align:top; }
+    th { opacity:.65; font-weight:600; white-space:nowrap; }
+    td.v { font-family:monospace; white-space:pre-wrap; word-break:break-all; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:10px 0; }
+    pre.out { white-space:pre-wrap; word-break:break-all; font-family:monospace; font-size:13px; padding:10px; border:1px solid var(--border,#2a2f3a); border-radius:8px; background:var(--panel-2,#161a22); margin:8px 0; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>HKDF Key Derivation</h1>
+      <p>Derive one or more output keys from an input keying material (IKM) using <a href="https://datatracker.ietf.org/doc/html/rfc5869" target="_blank" rel="noopener">HKDF</a> (HMAC-based Extract-and-Expand Key Derivation Function, RFC 5869). HKDF first extracts a fixed-size pseudorandom key (PRK) from the IKM and an optional salt, then expands it to any length using an optional info/context string. HMAC-SHA-256 / SHA-384 / SHA-512 via the Web Crypto API; everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <h3>Inputs</h3>
+      <div class="grid">
+        <div class="field full"><label for="ikm">Input keying material (IKM) — text or hex</label>
+          <textarea id="ikm" rows="2" spellcheck="false" autocomplete="off" placeholder="master secret or shared secret"></textarea>
+        </div>
+        <div class="field"><label for="ikmMode">IKM format</label>
+          <select id="ikmMode"><option value="utf8">UTF-8 text</option><option value="hex">Hex bytes</option><option value="base64">Base64</option></select>
+        </div>
+        <div class="field"><label for="salt">Salt (optional)</label>
+          <input id="salt" type="text" spellcheck="false" autocomplete="off" placeholder="HKDF salt">
+        </div>
+        <div class="field"><label for="saltMode">Salt format</label>
+          <select id="saltMode"><option value="utf8">UTF-8 text</option><option value="hex">Hex bytes</option><option value="base64">Base64</option></select>
+        </div>
+        <div class="field"><label for="info">Info / context (optional)</label>
+          <input id="info" type="text" spellcheck="false" autocomplete="off" placeholder="application-specific context">
+        </div>
+        <div class="field"><label for="infoMode">Info format</label>
+          <select id="infoMode"><option value="utf8">UTF-8 text</option><option value="hex">Hex bytes</option><option value="base64">Base64</option></select>
+        </div>
+        <div class="field"><label for="hash">HMAC hash</label>
+          <select id="hash"><option value="SHA-256" selected>SHA-256</option><option value="SHA-384">SHA-384</option><option value="SHA-512">SHA-512</option></select>
+        </div>
+        <div class="field"><label for="length">Output length (bytes)</label>
+          <input id="length" type="number" min="1" max="8192" value="32" style="width:120px;">
+        </div>
+      </div>
+
+      <div class="row">
+        <button id="derive">Derive</button>
+        <button id="copy" class="secondary">Copy output (hex)</button>
+        <label>Output display:
+          <select id="outMode"><option value="hex">Hex</option><option value="base64">Base64</option></select>
+        </label>
+      </div>
+
+      <h3>Result</h3>
+      <table id="results"><tbody></tbody></table>
+      <pre class="out" id="out">—</pre>
+      <p class="note" id="note">Enter inputs and press Derive.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+
+    function decode(s, mode) {
+      if (!s) return new Uint8Array(0);
+      if (mode === "utf8") return new TextEncoder().encode(s);
+      if (mode === "hex") {
+        var h = s.replace(/\s+/g, "").replace(/0x/gi, "");
+        if (h.length % 2) throw new Error("Hex input has odd length");
+        var out = new Uint8Array(h.length / 2);
+        for (var i = 0; i < out.length; i++) out[i] = parseInt(h.substr(i * 2, 2), 16);
+        return out;
+      }
+      if (mode === "base64") {
+        var b = s.replace(/\s+/g, "").replace(/-/g, "+").replace(/_/g, "/");
+        while (b.length % 4) b += "=";
+        var bin = atob(b);
+        var out = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+        return out;
+      }
+      throw new Error("Unknown mode");
+    }
+    function bytesToHex(bytes) {
+      var s = "";
+      for (var i = 0; i < bytes.length; i++) s += (bytes[i] < 16 ? "0" : "") + bytes[i].toString(16);
+      return s;
+    }
+    function bytesToB64(bytes) {
+      var b = "";
+      for (var i = 0; i < bytes.length; i++) b += String.fromCharCode(bytes[i]);
+      return btoa(b);
+    }
+
+    async function hkdfExtract(ikm, salt, hash) {
+      // PRK = HMAC(salt, IKM); if salt is empty, use a string of HashLen zeros
+      var hashLen = hashByteLen(hash);
+      if (salt.length === 0) salt = new Uint8Array(hashLen);
+      var key = await crypto.subtle.importKey("raw", salt, { name: "HMAC", hash: { name: hash } }, false, ["sign"]);
+      var sig = await crypto.subtle.sign("HMAC", key, ikm);
+      return new Uint8Array(sig);
+    }
+    async function hmac(keyBytes, data, hash) {
+      var key = await crypto.subtle.importKey("raw", keyBytes, { name: "HMAC", hash: { name: hash } }, false, ["sign"]);
+      var sig = await crypto.subtle.sign("HMAC", key, data);
+      return new Uint8Array(sig);
+    }
+    async function hkdfExpand(prk, info, length, hash) {
+      var hashLen = hashByteLen(hash);
+      if (length > 255 * hashLen) throw new Error("Output too long (max 255 × HashLen = " + (255 * hashLen) + ")");
+      var n = Math.ceil(length / hashLen);
+      var okm = new Uint8Array(n * hashLen);
+      var t = new Uint8Array(0);
+      var pos = 0;
+      for (var i = 1; i <= n; i++) {
+        var data = new Uint8Array(t.length + info.length + 1);
+        data.set(t, 0);
+        data.set(info, t.length);
+        data[t.length + info.length] = i;
+        t = await hmac(prk, data, hash);
+        okm.set(t, pos);
+        pos += hashLen;
+      }
+      return okm.subarray(0, length);
+    }
+    function hashByteLen(hash) {
+      return hash === "SHA-256" ? 32 : hash === "SHA-384" ? 48 : 64;
+    }
+
+    async function derive() {
+      try {
+        var ikm = decode($("ikm").value, $("ikmMode").value);
+        var salt = decode($("salt").value, $("saltMode").value);
+        var info = decode($("info").value, $("infoMode").value);
+        var hash = $("hash").value;
+        var length = parseInt($("length").value, 10);
+        if (!length || length < 1) throw new Error("Length must be ≥ 1");
+        if (length > 8192) throw new Error("Length capped at 8192 bytes");
+        var prk = await hkdfExtract(ikm, salt, hash);
+        var okm = await hkdfExpand(prk, info, length, hash);
+        var outMode = $("outMode").value;
+        var okmStr = outMode === "base64" ? bytesToB64(okm) : bytesToHex(okm);
+        var prkStr = bytesToHex(prk);
+        var rows = [
+          ["Hash", hash],
+          ["Hash length", hashByteLen(hash) + " bytes"],
+          ["IKM length", ikm.length + " bytes"],
+          ["Salt length", salt.length + " bytes"],
+          ["Info length", info.length + " bytes"],
+          ["PRK (extract)", prkStr],
+          ["OKM length", okm.length + " bytes"]
+        ];
+        var tbody = $("results").querySelector("tbody");
+        tbody.innerHTML = "";
+        rows.forEach(function (r) {
+          var tr = document.createElement("tr");
+          tr.innerHTML = "<th>" + r[0] + "</th><td class=\"v\">" + (r[1].replace(/</g, "&lt;")) + "</td>";
+          tbody.appendChild(tr);
+        });
+        $("out").textContent = okmStr;
+        $("note").textContent = "Derived OK.";
+        window._lastOut = okmStr;
+      } catch (e) {
+        $("results").querySelector("tbody").innerHTML = "";
+        $("out").textContent = "—";
+        $("note").textContent = "Error: " + (e.message || String(e));
+        window._lastOut = "";
+      }
+    }
+
+    $("derive").addEventListener("click", derive);
+    $("copy").addEventListener("click", function () {
+      if (!window._lastOut) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(window._lastOut).then(function () { $("note").textContent = "Copied."; }, function () { $("note").textContent = "Copy failed."; });
+      } else $("note").textContent = "Clipboard unavailable.";
+    });
+    $("outMode").addEventListener("change", function () { if (window._lastOut) derive(); });
+  })();
+  </script>
+</body>
+</html>
