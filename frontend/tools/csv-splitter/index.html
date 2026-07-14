@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>CSV Splitter — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    textarea { width:100%; font-family:monospace; font-size:12px; min-height:140px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px; margin:10px 0; }
+    .field { margin-bottom:0; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:10px 0; }
+    .seg { display:inline-flex; border:1px solid var(--border,#2a2f3a); border-radius:8px; overflow:hidden; margin-bottom:10px; }
+    .seg button { border:none; border-radius:0; background:transparent; color:inherit; padding:6px 14px; cursor:pointer; }
+    .seg button.active { background: var(--accent,#6ea8fe); color:#08101f; }
+    .files { margin-top:12px; }
+    .file-item { display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid var(--border,#2a2f3a); border-radius:8px; margin-bottom:6px; background:var(--panel-2,#161a22); }
+    .file-item .name { flex:1; font-family:monospace; font-size:13px; }
+    .file-item .size { opacity:.6; font-size:12px; }
+    button.download { cursor:pointer; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>CSV Splitter</h1>
+      <p>Split a CSV file or pasted CSV text into multiple chunks — by row count (every N rows, keeping the header on each part) or by the unique values in a chosen column (one file per distinct value). Handles quoted fields, embedded commas, and newlines. Each chunk is downloadable as its own .csv. Everything runs locally in your browser; nothing is uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="input">CSV input (paste, or drop a file below)</label>
+        <textarea id="input" spellcheck="false" autocomplete="off" placeholder="name,city,amount&#10;Ada,London,120&#10;Lin,New York,90"></textarea>
+      </div>
+      <div class="field">
+        <label for="file">…or load a file</label>
+        <input id="file" type="file" accept=".csv,text/csv,text/plain">
+      </div>
+
+      <div class="seg" id="mode">
+        <button type="button" data-m="rows" class="active">By row count</button>
+        <button type="button" data-m="column" class="secondary">By column value</button>
+      </div>
+
+      <div id="rowsBox" class="grid">
+        <div class="field"><label for="rowsPer">Rows per file (excl. header)</label><input id="rowsPer" type="number" min="1" value="100" style="width:120px;"></div>
+        <div class="field"><label>Delimiter: <select id="delim"><option value=",">comma</option><option value=";">semicolon</option><option value="\t">tab</option><option value="|">pipe</option></select></label></div>
+      </div>
+
+      <div id="columnBox" class="grid" hidden>
+        <div class="field"><label for="column">Column to split by</label><select id="column"><option>(parse CSV first)</option></select></div>
+        <div class="field"><label>Output delimiter: <select id="outDelimCol"><option value=",">comma</option><option value=";">semicolon</option><option value="\t">tab</option><option value="|">pipe</option></select></label></div>
+      </div>
+
+      <div class="row">
+        <label><input type="checkbox" id="hasHeader" checked> First row is header</label>
+        <button id="split">Split</button>
+        <button id="downloadAll" class="secondary" hidden>Download all (as .zip-ish separate tabs)</button>
+      </div>
+
+      <p class="err" id="err"></p>
+      <p class="note" id="note">Paste or load CSV above.</p>
+      <div class="files" id="files"></div>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var mode = "rows";
+
+    function actualDelim(selId) {
+      var d = $(selId).value;
+      return d === "\\t" ? "\t" : d;
+    }
+
+    function parseCSV(text, delim) {
+      var rows = [];
+      var i = 0, n = text.length, field = "", row = [], inQ = false;
+      while (i < n) {
+        var c = text[i];
+        if (inQ) {
+          if (c === '"') {
+            if (text[i + 1] === '"') { field += '"'; i += 2; }
+            else { inQ = false; i++; }
+          } else { field += c; i++; }
+        } else {
+          if (c === '"') { inQ = true; i++; }
+          else if (c === delim) { row.push(field); field = ""; i++; }
+          else if (c === "\r") { i++; }
+          else if (c === "\n") { row.push(field); rows.push(row); row = []; field = ""; i++; }
+          else { field += c; i++; }
+        }
+      }
+      if (field !== "" || row.length) { row.push(field); rows.push(row); }
+      while (rows.length && rows[rows.length - 1].length === 1 && rows[rows.length - 1][0] === "") rows.pop();
+      var w = rows.reduce(function (m, r) { return Math.max(m, r.length); }, 0);
+      rows.forEach(function (r) { while (r.length < w) r.push(""); });
+      return rows;
+    }
+    function csvField(s, delim) {
+      s = String(s);
+      if (s === "") return "";
+      if (new RegExp('["' + delim + '\\n]').test(s)) return '"' + s.replace(/"/g, '""') + '"';
+      return s;
+    }
+    function buildCSV(rows, delim) {
+      return rows.map(function (r) { return r.map(function (c) { return csvField(c, delim); }).join(delim); }).join("\n") + "\n";
+    }
+    function fillColumnSelect(header) {
+      var sel = $("column");
+      sel.innerHTML = "";
+      header.forEach(function (h, i) {
+        var o = document.createElement("option");
+        o.value = i; o.textContent = h || ("col" + (i + 1));
+        sel.appendChild(o);
+      });
+    }
+
+    function getText() {
+      return $("input").value;
+    }
+
+    function split() {
+      var errEl = $("err"); errEl.textContent = "";
+      var text = getText();
+      if (!text.trim()) { errEl.textContent = "Paste or load CSV first."; return; }
+      try {
+        var delim = actualDelim("delim");
+        var rows = parseCSV(text, delim);
+        if (!rows.length) { errEl.textContent = "No rows found."; return; }
+        var hasHeader = $("hasHeader").checked;
+        var header = hasHeader ? rows.shift() : null;
+        if (hasHeader && header) fillColumnSelect(header);
+        var files = [];
+        if (mode === "rows") {
+          var per = Math.max(1, parseInt($("rowsPer").value, 10) || 100);
+          for (var i = 0; i < rows.length; i += per) {
+            var chunk = rows.slice(i, i + per);
+            if (header) chunk = [header].concat(chunk);
+            files.push({ name: "part-" + (files.length + 1) + ".csv", content: buildCSV(chunk, delim) });
+          }
+        } else {
+          var colIdx = parseInt($("column").value, 10) || 0;
+          var outDelim = actualDelim("outDelimCol");
+          var buckets = {}, order = [];
+          rows.forEach(function (r) {
+            var key = r[colIdx] === undefined ? "" : String(r[colIdx]);
+            if (!(key in buckets)) { buckets[key] = []; order.push(key); }
+            buckets[key].push(r);
+          });
+          order.sort(function (a, b) { return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }); });
+          order.forEach(function (key) {
+            var safe = (key === "" ? "empty" : key).replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 40);
+            var chunk = header ? [header].concat(buckets[key]) : buckets[key];
+            files.push({ name: "split-" + safe + ".csv", content: buildCSV(chunk, outDelim) });
+          });
+        }
+        renderFiles(files);
+        $("note").textContent = "Split into " + files.length + " file(s).";
+      } catch (e) {
+        errEl.textContent = e.message || String(e);
+      }
+    }
+
+    function renderFiles(files) {
+      var wrap = $("files");
+      wrap.innerHTML = "";
+      files.forEach(function (f) {
+        var sizeKB = (new Blob([f.content]).size / 1024).toFixed(1);
+        var div = document.createElement("div");
+        div.className = "file-item";
+        div.innerHTML = '<span class="name">' + f.name.replace(/</g, "&lt;") + '</span><span class="size">' + sizeKB + ' KB</span>';
+        var btn = document.createElement("button");
+        btn.className = "download"; btn.textContent = "Download";
+        btn.addEventListener("click", function () {
+          var blob = new Blob([f.content], { type: "text/csv" });
+          var a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = f.name;
+          a.click();
+          URL.revokeObjectURL(a.href);
+        });
+        div.appendChild(btn);
+        wrap.appendChild(div);
+      });
+    }
+
+    $("mode").addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-m]"); if (!b) return;
+      mode = b.getAttribute("data-m");
+      Array.prototype.forEach.call($("mode").querySelectorAll("button"), function (x) { x.classList.remove("active"); });
+      b.classList.add("active");
+      $("rowsBox").hidden = mode !== "rows";
+      $("columnBox").hidden = mode !== "column";
+    });
+    $("split").addEventListener("click", split);
+    $("file").addEventListener("change", function (e) {
+      var f = e.target.files[0]; if (!f) return;
+      var r = new FileReader();
+      r.onload = function () { $("input").value = r.result; };
+      r.readAsText(f);
+    });
+  })();
+  </script>
+</body>
+</html>

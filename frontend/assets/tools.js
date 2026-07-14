@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "csv-splitter",
+    name: "CSV Splitter",
+    description: "Split a CSV file or pasted text into multiple chunks — by row count (every N rows, keeping the header on each part) or by the unique values in a chosen column (one file per distinct value). Handles quoted fields, embedded commas and newlines. Each chunk is downloadable as its own .csv. Everything runs locally in your browser; nothing is uploaded.",
+    category: "Data",
+    icon: "✂️",
+    added: "2026-07-14T21:00:00Z",
+  },
+  {
     slug: "type-scale",
     name: "Type Scale & Modular Scale Generator",
     description: "Generate a typographic scale from a base font size and a chosen ratio — golden ratio (1.618), perfect fourth (1.333), perfect fifth (1.5), major third (1.25), or a custom ratio. Produces semantically named steps (3xs–5xl) with px and rem values, a live preview, and ready-to-paste CSS custom properties. Pure arithmetic, runs locally in your browser.",
