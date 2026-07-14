@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>SSH Public Key Inspector — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    textarea#input { width:100%; min-height:90px; font-family:monospace; font-size:13px; }
+    .seg { display:inline-flex; border:1px solid var(--border,#2a2f3a); border-radius:8px; overflow:hidden; margin-bottom:10px; }
+    .seg button { border:none; border-radius:0; background:transparent; color:inherit; padding:6px 14px; cursor:pointer; }
+    .seg button.active { background: var(--accent,#6ea8fe); color:#08101f; }
+    table { width:100%; border-collapse:collapse; margin-top:10px; }
+    th, td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--border,#2a2f3a); font-size:13px; vertical-align:top; }
+    th { opacity:.65; font-weight:600; white-space:nowrap; }
+    td.v { font-family:monospace; white-space:pre-wrap; word-break:break-all; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:10px 0; }
+    button.copy { cursor:pointer; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>SSH Public Key Inspector</h1>
+      <p>Paste an OpenSSH public key (<code>ssh-rsa</code>, <code>ssh-ed25519</code>, <code>ecdsa-sha2-nistp256/384/521</code>, or <code>ssh-dss</code>) and decode its type, internal bit length, the raw key components, and its SHA-256 and MD5 fingerprints (the blob hash OpenSSH shows as the key's ID). Everything is parsed locally with base64 and struct decoding — your key never leaves the browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="input">OpenSSH public key (one per line — comments allowed, only the first key on each line is parsed)</label>
+        <textarea id="input" spellcheck="false" autocomplete="off" placeholder="ssh-ed25519 AAAAC3Nz…  user@host"></textarea>
+      </div>
+
+      <div class="seg" id="fpMode">
+        <button type="button" data-f="sha256" class="active">SHA256</button>
+        <button type="button" data-f="md5" class="secondary">MD5</button>
+      </div>
+
+      <div id="results"></div>
+      <p class="note" id="note">Paste an OpenSSH public key above.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var fpMode = "sha256";
+
+    function b64ToBytes(b64) {
+      b64 = b64.replace(/\s+/g, "").replace(/-/g, "+").replace(/_/g, "/");
+      while (b64.length % 4) b64 += "=";
+      var bin = atob(b64);
+      var out = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+      return out;
+    }
+    function bytesToHex(bytes) {
+      var s = "";
+      for (var i = 0; i < bytes.length; i++) s += (bytes[i] < 16 ? "0" : "") + bytes[i].toString(16);
+      return s;
+    }
+    function bytesToB64(bytes) {
+      var b = "";
+      for (var i = 0; i < bytes.length; i++) b += String.fromCharCode(bytes[i]);
+      return btoa(b);
+    }
+
+    function Reader(bytes) {
+      this.b = bytes; this.i = 0;
+      this.uint32 = function () {
+        if (this.i + 4 > this.b.length) throw new Error("Truncated key blob");
+        var v = ((this.b[this.i] << 24) >>> 0) + (this.b[this.i+1] << 16) + (this.b[this.i+2] << 8) + this.b[this.i+3];
+        this.i += 4; return v;
+      };
+      this.bytes = function () {
+        var n = this.uint32();
+        if (this.i + n > this.b.length) throw new Error("Truncated key field");
+        var s = this.b.subarray(this.i, this.i + n);
+        this.i += n; return s;
+      };
+      this.string = function () {
+        var u = this.bytes();
+        return new TextDecoder().decode(u);
+      };
+      this.mpint = function () {
+        var u = this.bytes();
+        var hex = bytesToHex(u).replace(/^0+/, "");
+        if (!hex) hex = "0";
+        return hex;
+      };
+      this.remaining = function () { return this.b.length - this.i; };
+    }
+
+    async function sha256Hex(bytes) {
+      var buf = await crypto.subtle.digest("SHA-256", bytes);
+      return bytesToHex(new Uint8Array(buf));
+    }
+    async function md5Hex(bytes) {
+      if (!crypto.subtle || !crypto.subtle.digest) throw new Error("MD5 not available via Web Crypto in this browser");
+      try {
+        var buf = await crypto.subtle.digest("MD5", bytes);
+        return bytesToHex(new Uint8Array(buf));
+      } catch (e) {
+        return md5Fallback(bytes);
+      }
+    }
+    function md5Fallback(bytes) {
+      var s = 1732584193, c = -271733879, o = -1732584194, f = 271733878;
+      function rotL(x, n) { return (x << n) | (x >>> (32 - n)); }
+      function add32(a, b) { return (a + b) & 0xFFFFFFFF; }
+      function cmn(q, a, b, x, s, t) { return add32(rotL(add32(add32(a, q), add32(x, t)), s), b); }
+      function ff(a, b, c, d, x, s, t) { return cmn((b & c) | ((~b) & d), a, b, x, s, t); }
+      function gg(a, b, c, d, x, s, t) { return cmn((b & d) | (c & (~d)), a, b, x, s, t); }
+      function hh(a, b, c, d, x, s, t) { return cmn(b ^ c ^ d, a, b, x, s, t); }
+      function ii(a, b, c, d, x, s, t) { return cmn(c ^ (b | (~d)), a, b, x, s, t); }
+      var len = bytes.length;
+      var bitLen = len * 8;
+      var padLen = ((len + 8) >> 6) + 1;
+      var padded = new Uint8Array(padLen * 64);
+      padded.set(bytes);
+      padded[len] = 0x80;
+      for (var i = len + 1; i < padded.length - 8; i++) padded[i] = 0;
+      for (var j = 0; j < 4; j++) padded[padded.length - 8 + j] = (bitLen >>> (8 * j)) & 0xFF;
+      for (var j = 4; j < 8; j++) padded[padded.length - 8 + j] = 0;
+      var X = new Array(16);
+      function md5blk(block) {
+        var blk = new Array(16);
+        for (var i = 0; i < 16; i++) {
+          blk[i] = block[i*4] + (block[i*4+1] << 8) + (block[i*4+2] << 16) + ((block[i*4+3] << 24) >>> 0);
+        }
+        return blk;
+      }
+      for (var off = 0; off < padded.length; off += 64) {
+        X = md5blk(padded.subarray(off, off + 64));
+        var a = s, b = c, cc = o, d = f;
+        a = ff(a,b,cc,d,X[0],7,-680876936); d = ff(d,a,b,cc,X[1],12,-389564586); cc = ff(cc,d,a,b,X[2],17,606105819); b = ff(b,cc,d,a,X[3],22,-1044525330);
+        a = ff(a,b,cc,d,X[4],7,-176418897); d = ff(d,a,b,cc,X[5],12,1200080426); cc = ff(cc,d,a,b,X[6],17,-1473231341); b = ff(b,cc,d,a,X[7],22,-45705983);
+        a = ff(a,b,cc,d,X[8],7,1770035416); d = ff(d,a,b,cc,X[9],12,-1958414417); cc = ff(cc,d,a,b,X[10],17,-42063); b = ff(b,cc,d,a,X[11],22,-1990404162);
+        a = ff(a,b,cc,d,X[12],7,1804603682); d = ff(d,a,b,cc,X[13],12,-40341101); cc = ff(cc,d,a,b,X[14],17,-1502002290); b = ff(b,cc,d,a,X[15],22,1236535329);
+        a = gg(a,b,cc,d,X[1],5,-165796510); d = gg(d,a,b,cc,X[6],9,-1069501632); cc = gg(cc,d,a,b,X[11],14,643717713); b = gg(b,cc,d,a,X[0],20,-373897302);
+        a = gg(a,b,cc,d,X[5],5,-701558691); d = gg(d,a,b,cc,X[10],9,38016083); cc = gg(cc,d,a,b,X[15],14,-660478335); b = gg(b,cc,d,a,X[4],20,-405537848);
+        a = gg(a,b,cc,d,X[9],5,568446438); d = gg(d,a,b,cc,X[14],9,-1019803794); cc = gg(cc,d,a,b,X[3],14,-187363961); b = gg(b,cc,d,a,X[8],20,1163531501);
+        a = gg(a,b,cc,d,X[13],5,-1444681467); d = gg(d,a,b,cc,X[2],9,-51403784); cc = gg(cc,d,a,b,X[7],14,1735328473); b = gg(b,cc,d,a,X[12],20,-1926607734);
+        a = hh(a,b,cc,d,X[5],4,-378558); d = hh(d,a,b,cc,X[8],11,-2022574463); cc = hh(cc,d,a,b,X[11],16,1839030562); b = hh(b,cc,d,a,X[14],23,-35309556);
+        a = hh(a,b,cc,d,X[1],4,-1530992060); d = hh(d,a,b,cc,X[4],11,1272893353); cc = hh(cc,d,a,b,X[7],16,-155497632); b = hh(b,cc,d,a,X[10],23,-1094730640);
+        a = hh(a,b,cc,d,X[13],4,681279174); d = hh(d,a,b,cc,X[0],11,-358537222); cc = hh(cc,d,a,b,X[3],16,-722521979); b = hh(b,cc,d,a,X[6],23,76029189);
+        a = hh(a,b,cc,d,X[9],4,-640364487); d = hh(d,a,b,cc,X[12],11,-421815835); cc = hh(cc,d,a,b,X[15],16,530742520); b = hh(b,cc,d,a,X[2],23,-995338651);
+        a = ii(a,b,cc,d,X[0],6,-198630844); d = ii(d,a,b,cc,X[7],10,1126891415); cc = ii(cc,d,a,b,X[14],15,-1416354905); b = ii(b,cc,d,a,X[5],21,-57434055);
+        a = ii(a,b,cc,d,X[12],6,1700485571); d = ii(d,a,b,cc,X[3],10,-1894986606); cc = ii(cc,d,a,b,X[10],15,-1051523); b = ii(b,cc,d,a,X[1],21,-2054922799);
+        a = ii(a,b,cc,d,X[8],6,1873313359); d = ii(d,a,b,cc,X[15],10,-30611744); cc = ii(cc,d,a,b,X[6],15,-1560198380); b = ii(b,cc,d,a,X[13],21,1309151649);
+        a = ii(a,b,cc,d,X[4],6,-145523070); d = ii(d,a,b,cc,X[11],10,-1120210379); cc = ii(cc,d,a,b,X[2],15,718787259); b = ii(b,cc,d,a,X[9],21,-343485551);
+        s = add32(s, a); c = add32(c, b); o = add32(o, cc); f = add32(f, d);
+      }
+      function toHex(n) {
+        var h = "";
+        for (var k = 0; k < 4; k++) h += ((n >>> (8 * k)) & 0xFF).toString(16).padStart(2, "0");
+        return h;
+      }
+      return toHex(s) + toHex(c) + toHex(o) + toHex(f);
+    }
+
+    function parseKey(line) {
+      var parts = line.trim().split(/\s+/);
+      if (parts.length < 2) throw new Error("Need at least '<type> <base64>'");
+      var type = parts[0], b64 = parts[1], comment = parts.slice(2).join(" ");
+      var bytes = b64ToBytes(b64);
+      var r = new Reader(bytes);
+      var keytype = r.string();
+      var fields = [];
+      if (keytype === "ssh-rsa") {
+        var e = r.mpint(), n = r.mpint();
+        fields.push(["e (exponent)", "0x" + e]);
+        fields.push(["n (modulus)", "0x" + n + "  (" + (n.length * 4) + " bits approx)"]);
+      } else if (keytype === "ssh-dss") {
+        ["p", "q", "g", "y"].forEach(function (name) { fields.push([name, "0x" + r.mpint()]); });
+      } else if (keytype === "ssh-ed25519") {
+        var pub = r.bytes();
+        fields.push(["pub (32 bytes)", bytesToB64(pub) + "  (" + (pub.length * 8) + " bits)"]);
+      } else if (keytype.indexOf("ecdsa-sha2-") === 0) {
+        var curve = r.string();
+        var point = r.bytes();
+        fields.push(["curve", curve]);
+        fields.push(["Q (point)", bytesToB64(point) + "  (" + point.length + " bytes)"]);
+      } else {
+        while (r.remaining() > 0) {
+          try { fields.push(["field " + fields.length, "0x" + r.mpint()]); } catch (e) { break; }
+        }
+      }
+      return { type: type, keytype: keytype, comment: comment, blobBytes: bytes, fields: fields };
+    }
+
+    function fpSha256(hex) { return "SHA256:" + bytesToB64(hexToBytes(hex)).replace(/=+$/, ""); }
+    function fpMd5(hex) { return "MD5:" + hex.match(/.{2}/g).join(":"); }
+    function hexToBytes(hex) {
+      var out = [];
+      for (var i = 0; i < hex.length; i += 2) out.push(parseInt(hex.substr(i, 2), 16));
+      return new Uint8Array(out);
+    }
+
+    async function render() {
+      var raw = $("input").value.trim();
+      var resEl = $("results");
+      if (!raw) { resEl.innerHTML = ""; $("note").textContent = "Paste an OpenSSH public key above."; return; }
+      var lines = raw.split(/\n+/).map(function (l) { return l.trim(); }).filter(Boolean);
+      resEl.innerHTML = "";
+      for (var i = 0; i < lines.length; i++) {
+        try {
+          var info = parseKey(lines[i]);
+          var digestHex = fpMode === "md5" ? await md5Hex(info.blobBytes) : await sha256Hex(info.blobBytes);
+          var fingerprint = fpMode === "md5" ? fpMd5(digestHex) : fpSha256(digestHex);
+          var rows = [
+            ["Type", info.type],
+            ["Key type", info.keytype],
+            ["Comment", info.comment || "—"],
+            ["Fingerprint (" + fpMode.toUpperCase() + ")", fingerprint],
+            ["Blob length", info.blobBytes.length + " bytes"]
+          ].concat(info.fields.map(function (f) { return [f[0], f[1]]; }));
+          var html = '<table><tbody>';
+          rows.forEach(function (r) {
+            html += '<tr><th>' + esc(r[0]) + '</th><td class="v">' + esc(r[1]) + '</td></tr>';
+          });
+          html += '</tbody></table>';
+          var div = document.createElement("div");
+          div.className = "result";
+          div.style.cssText = "border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:12px;margin-bottom:10px;background:var(--panel-2,#161a22);";
+          div.innerHTML = html;
+          resEl.appendChild(div);
+          $("note").textContent = "Parsed " + (i + 1) + " key(s).";
+        } catch (e) {
+          var d = document.createElement("div");
+          d.className = "result";
+          d.style.cssText = "border:1px solid var(--bad,#f87171);border-radius:8px;padding:12px;margin-bottom:10px;";
+          d.innerHTML = '<div style="color:var(--bad,#f87171);">Line ' + (i + 1) + ': ' + esc(e.message || String(e)) + '</div>';
+          resEl.appendChild(d);
+        }
+      }
+    }
+
+    function esc(s) { return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+    $("fpMode").addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-f]"); if (!b) return;
+      fpMode = b.getAttribute("data-f");
+      Array.prototype.forEach.call($("fpMode").querySelectorAll("button"), function (x) { x.classList.remove("active"); });
+      b.classList.add("active");
+      render();
+    });
+    $("input").addEventListener("input", render);
+    render();
+  })();
+  </script>
+</body>
+</html>

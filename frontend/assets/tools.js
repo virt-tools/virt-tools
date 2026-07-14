@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "ssh-key-inspector",
+    name: "SSH Public Key Inspector",
+    description: "Decode an OpenSSH public key (ssh-rsa, ssh-ed25519, ecdsa-sha2-nistp*, ssh-dss) into its type, internal components (modulus, exponent, curve, point), and SHA-256 / MD5 fingerprint. Pure base64 + struct parsing; the key never leaves your browser.",
+    category: "Security",
+    icon: "🔑",
+    added: "2026-07-14T16:00:00Z",
+  },
+  {
     slug: "scientific-notation",
     name: "Scientific Notation Converter",
     description: "Convert a number between decimal, scientific notation (a×10ⁿ), engineering notation (exponent a multiple of 3), E-notation, and an SI-prefixed form — enter a value in any form and see all the others. Runs locally in your browser.",
