@@ -3722,4 +3722,12 @@ window.VIRTUAL_TOOLS = [
     icon: "❄️",
     added: "2026-07-14T11:45:00Z",
   },
+  {
+    slug: "lighting-calculator",
+    name: "Lighting & Illuminance Calculator",
+    description: "Work out how many lumens a room needs and how many light fixtures to install from its floor area and a recommended light level. Pick a room-type preset to set the target in footcandles and lux (closet to detailed task lighting), or enter a custom value; then enter lumens per fixture and luminous efficacy to get the recommended fixture count and electrical watts. Useful for planning residential and commercial lighting and comparing LED lumen output. Pure arithmetic — the IES targets are midpoints of recommended ranges; real design also weighs fixture height, beam angle and reflectance. Everything runs locally in your browser.",
+    category: "Environment",
+    icon: "💡",
+    added: "2026-07-14T12:15:00Z",
+  },
 ];

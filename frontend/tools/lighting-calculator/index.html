@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Lighting &amp; Illuminance Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .row2 { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+    .row2 .field { margin-bottom: 0; }
+    input[type="number"] { font-family: ui-monospace, monospace; width: 100px; }
+    select { min-width: 150px; }
+    .kv { display: grid; grid-template-columns: 230px 1fr; gap: 6px 12px; margin-top: 12px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.95rem; }
+    .verdict { font-size: 1.5rem; font-weight: 800; font-family: ui-monospace, monospace; margin-top: 8px; }
+    .verdict.ok { color: var(--ok, #4ade80); }
+    .verdict.bad { color: var(--bad, #f87171); }
+    .big { font-size: 1.05rem; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Lighting &amp; Illuminance Calculator</h1>
+      <p>Work out how many lumens a room needs and how many light fixtures to install, from its floor area and a recommended light level. Pick a room-type preset to set the target in footcandles (and lux), or enter a custom value; then enter the lumens per fixture and the luminous efficacy to get the recommended fixture count and the electrical power. Useful for planning residential and commercial lighting, comparing LED lumen output, and estimating running watts. Pure arithmetic — the IES-recommended ranges are rules of thumb; real lighting design also weighs fixture height, beam angle, wall reflectance and task contrast. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row2">
+        <div class="field">
+          <label for="area">Floor area</label>
+          <input id="area" type="number" min="0" step="any" value="200">
+          <select id="aunit" style="min-width:80px;margin-left:6px;">
+            <option value="sqft" selected>ft²</option>
+            <option value="sqm">m²</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="room">Room type</label>
+          <select id="room">
+            <option value="0" data-fc="10">Closet / storage (10 fc)</option>
+            <option value="1" data-fc="7.5">Hallway (7.5 fc)</option>
+            <option value="2" data-fc="15" selected>Living room (15 fc)</option>
+            <option value="3" data-fc="10">Bedroom (10 fc)</option>
+            <option value="4" data-fc="30">Dining room (30 fc)</option>
+            <option value="5" data-fc="30">Kitchen — general (30 fc)</option>
+            <option value="6" data-fc="70">Kitchen — task (70 fc)</option>
+            <option value="7" data-fc="50">Bathroom — general (50 fc)</option>
+            <option value="8" data-fc="70">Bathroom — vanity/task (70 fc)</option>
+            <option value="9" data-fc="50">Home office (50 fc)</option>
+            <option value="10" data-fc="30">Garage — general (30 fc)</option>
+            <option value="11" data-fc="50">Garage — workshop (50 fc)</option>
+            <option value="12" data-fc="100">Detailed task / craft (100 fc)</option>
+            <option value="-1">Custom…</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="fc">Target light level</label>
+          <input id="fc" type="number" min="0" step="any" value="15"> <span class="muted">fc  (lux <span id="luxdisp">161</span>)</span>
+        </div>
+      </div>
+
+      <div class="row2">
+        <div class="field">
+          <label for="lumen">Lumens per fixture</label>
+          <input id="lumen" type="number" min="0" step="any" value="800"> <span class="muted">lm</span>
+        </div>
+        <div class="field">
+          <label for="eff">Efficacy</label>
+          <input id="eff" type="number" min="0" step="any" value="80"> <span class="muted">lm/W</span>
+        </div>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <dl class="kv" id="kv"></dl>
+      <p class="note" id="err"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var areaEl = $("area"), aunitEl = $("aunit"), roomEl = $("room"), fcEl = $("fc"), luxdisp = $("luxdisp");
+    var lumenEl = $("lumen"), effEl = $("eff");
+    var verdictEl = $("verdict"), kvEl = $("kv"), errEl = $("err");
+
+    function num(el) { var n = parseFloat(el.value); return isNaN(n) ? NaN : n; }
+    function fmt(n, d) { return Number(n).toFixed(d); }
+
+    roomEl.addEventListener("change", function () {
+      var opt = roomEl.options[roomEl.selectedIndex];
+      if (opt.value === "-1") return;
+      fcEl.value = opt.getAttribute("data-fc");
+      render();
+    });
+
+    function render() {
+      errEl.textContent = ""; verdictEl.textContent = ""; verdictEl.className = "verdict"; kvEl.innerHTML = "";
+      var area = num(areaEl), fc = num(fcEl), lm = num(lumenEl), eff = num(effEl);
+      luxdisp.textContent = (!isNaN(fc)) ? fmt(fc * 10.76391, 0) : "—";
+      if ([area, fc, lm, eff].some(isNaN) || area <= 0 || fc < 0 || lm <= 0 || eff <= 0) {
+        verdictEl.textContent = "✗ Enter positive area, lumens/fixture and efficacy (fc ≥ 0)."; verdictEl.className = "verdict bad"; return;
+      }
+
+      var areaSqft = aunitEl.value === "sqm" ? area * 10.7639 : area;
+      var areaM2 = aunitEl.value === "sqm" ? area : area / 10.7639;
+      var lux = fc * 10.76391;
+      var lumens = lux * areaM2;                 // 1 lux = 1 lm/m²  (== fc × ft²)
+      var fixtures = Math.ceil(lumens / lm);
+      var powerW = lumens / eff;                  // W electrical
+      var lmPerSqft = fc;                         // by definition
+
+      verdictEl.textContent = fmt(lumens, 0) + " lm  ·  " + fixtures + " fixtures  ·  " + fmt(powerW, 1) + " W";
+      verdictEl.className = "verdict ok";
+      kvEl.innerHTML =
+        "<dt>Target light level</dt><dd class='big'>" + fmt(fc, 1) + " fc  (" + fmt(lux, 0) + " lux)</dd>" +
+        "<dt>Total lumens needed</dt><dd class='big'>" + fmt(lumens, 0) + " lm</dd>" +
+        "<dt>Lumens per unit area</dt><dd>" + fmt(lmPerSqft, 1) + " lm/ft²  (" + fmt(lumens / areaM2, 0) + " lm/m²)</dd>" +
+        "<dt>Fixtures</dt><dd class='big'>" + fixtures + " × " + fmt(lm, 0) + " lm = " + fmt(fixtures * lm, 0) + " lm installed</dd>" +
+        "<dt>Oversizing margin</dt><dd>" + fmt((fixtures * lm / lumens - 1) * 100, 1) + "%  (installed ÷ required)</dd>" +
+        "<dt>Electrical power</dt><dd class='big'>" + fmt(powerW, 1) + " W  <span class='muted'>at " + fmt(eff, 0) + " lm/W</span></dd>" +
+        "<dt>Power density</dt><dd>" + fmt(powerW / areaSqft, 3) + " W/ft²  (" + fmt(powerW / areaM2, 2) + " W/m²)</dd>";
+
+      errEl.textContent = "Footcandles (fc) and lux are units of illuminance — how much luminous flux lands on a surface. 1 fc = 1 lumen per square foot, and 1 lux = 1 lumen per square metre, so 1 fc ≈ 10.764 lux. Required lumens = illuminance × area: with the area in ft² use lumens = fc × ft², or with m² use lumens = lux × m² — both give the same total. Fixtures are rounded up to the nearest whole fixture of the lumen output you entered (a common 60 W-equivalent LED bulb is ~800 lm; a 100 W-equivalent is ~1600 lm). Efficacy (lm/W) converts lumens to electrical watts: good LEDs run 80–110 lm/W, fluorescents 50–70, halogens only 15–20, so the watt figure depends far more on the source than on the light level. The room-type targets are midpoints of IES/ASHRAE recommendations; for task lighting add a dedicated fixture over the work surface rather than lighting the whole room to task level.";
+      errEl.className = "note";
+    }
+
+    [areaEl, aunitEl, roomEl, fcEl, lumenEl, effEl].forEach(function (el) {
+      el.addEventListener("input", render); el.addEventListener("change", render);
+    });
+    render();
+  })();
+  </script>
+</body>
+</html>
