@@ -3810,4 +3810,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🍂",
     added: "2026-07-14T17:15:00Z",
   },
+  {
+    slug: "drip-irrigation-calculator",
+    name: "Drip Irrigation Calculator",
+    description: "Size a drip-irrigation run for a garden bed. Work out the water a runtime delivers, or the runtime needed to meet a weekly water budget. Enter the number of emitters and each emitter's flow rate, the bed area, and either a runtime or a target watering depth to get total volume, the depth applied over the bed, and a weekly schedule. Useful for vegetable beds, drip lines and container gardens — drip's low flow means runs are long but water reaches the root zone with little loss. Pure arithmetic — actual demand depends on climate, crop, soil, mulch and growth stage, so treat the depth target as a starting point. Everything runs locally in your browser.",
+    category: "Environment",
+    icon: "💧",
+    added: "2026-07-14T17:45:00Z",
+  },
 ];

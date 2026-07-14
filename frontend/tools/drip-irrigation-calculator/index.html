@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Drip Irrigation Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .row2 { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+    .row2 .field { margin-bottom: 0; }
+    input[type="number"] { font-family: ui-monospace, monospace; width: 95px; }
+    select { min-width: 90px; }
+    .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+    .seg button { background: var(--bg-elev-2); color: var(--text); border: none; padding: 5px 12px; cursor: pointer; font-size: 0.85rem; }
+    .seg button.active { background: var(--accent, #6ea8ff); color: #08111f; font-weight: 600; }
+    .kv { display: grid; grid-template-columns: 230px 1fr; gap: 6px 12px; margin-top: 12px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.95rem; }
+    .verdict { font-size: 1.5rem; font-weight: 800; font-family: ui-monospace, monospace; margin-top: 10px; }
+    .verdict.ok { color: var(--ok, #4ade80); }
+    .verdict.bad { color: var(--bad, #f87171); }
+    .big { font-size: 1.05rem; font-weight: 700; }
+    h3.sec { font-size: 0.92rem; font-weight: 600; margin: 14px 0 2px; color: var(--text-dim); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Drip Irrigation Calculator</h1>
+      <p>Size a drip-irrigation run for a garden bed. Work out the water a runtime delivers, or the runtime needed to meet a weekly water budget. Enter the number of emitters and each emitter's flow rate, the bed area and either a runtime or a target watering depth, and the tool returns total volume, the depth applied over the bed, and the weekly schedule. Useful for vegetable beds, drip lines and container gardens — drip's low flow means runs are long but water reaches the root zone with little loss. Pure arithmetic — actual demand depends on climate, crop, soil, mulch and stage of growth, so treat the depth target as a starting point and adjust. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row2">
+        <div class="field">
+          <label>Units</label>
+          <div class="seg" id="useg">
+            <button data-u="ip" class="active">Imperial (gal, sqft, in, gph)</button>
+            <button data-u="si">Metric (L, m², mm, l/h)</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Solve for</label>
+          <div class="seg" id="mseg">
+            <button data-m="water" class="active">Runtime → water</button>
+            <button data-m="time">Water need → runtime</button>
+          </div>
+        </div>
+      </div>
+
+      <h3 class="sec">Emitters</h3>
+      <div class="row2">
+        <div class="field">
+          <label for="n">Number of emitters</label>
+          <input id="n" type="number" min="1" step="1" value="10">
+        </div>
+        <div class="field">
+          <label for="flow">Flow per emitter</label>
+          <input id="flow" type="number" min="0" step="any" value="1">
+          <span class="muted" id="flowunit">gph</span>
+        </div>
+      </div>
+
+      <h3 class="sec">Bed</h3>
+      <div class="row2">
+        <div class="field">
+          <label for="area">Bed area</label>
+          <input id="area" type="number" min="0" step="any" value="100">
+          <span class="muted" id="areaunit">sqft</span>
+        </div>
+        <div class="field" id="depthField">
+          <label for="depth">Watering depth</label>
+          <input id="depth" type="number" min="0" step="any" value="1">
+          <span class="muted" id="depthunit">in / week</span>
+        </div>
+        <div class="field" id="timeField">
+          <label for="time">Runtime</label>
+          <input id="time" type="number" min="0" step="any" value="30">
+          <span class="muted">min</span>
+        </div>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <dl class="kv" id="kv"></dl>
+      <p class="note" id="err"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var useg = $("useg"), mseg = $("mseg");
+    var nEl = $("n"), flowEl = $("flow"), flowunit = $("flowunit"), areaEl = $("area"), areaunit = $("areaunit");
+    var depthEl = $("depth"), depthunit = $("depthunit"), depthField = $("depthField"), timeField = $("timeField"), timeEl = $("time");
+    var verdictEl = $("verdict"), kvEl = $("kv"), errEl = $("err");
+    var u = "ip", mode = "water";
+
+    function num(el) { var n = parseFloat(el.value); return isNaN(n) ? NaN : n; }
+    function fmt(n, d) { return Number(n).toFixed(d); }
+
+    function setUnits() {
+      var ip = u === "ip";
+      flowunit.textContent = ip ? "gph" : "l/h";
+      areaunit.textContent = ip ? "sqft" : "m²";
+      depthunit.textContent = ip ? "in / week" : "mm / week";
+    }
+    useg.querySelectorAll("button").forEach(function (b) {
+      b.addEventListener("click", function () {
+        useg.querySelectorAll("button").forEach(function (x) { x.classList.remove("active"); });
+        b.classList.add("active"); u = b.getAttribute("data-u"); setUnits(); render();
+      });
+    });
+    mseg.querySelectorAll("button").forEach(function (b) {
+      b.addEventListener("click", function () {
+        mseg.querySelectorAll("button").forEach(function (x) { x.classList.remove("active"); });
+        b.classList.add("active"); mode = b.getAttribute("data-m"); updateUI(); render();
+      });
+    });
+    function updateUI() {
+      // "water" mode: runtime input shown, depth hidden (depth becomes output)
+      // "time" mode: depth input shown, runtime hidden
+      depthField.style.display = mode === "time" ? "" : "none";
+      timeField.style.display = mode === "water" ? "" : "none";
+    }
+
+    function render() {
+      errEl.textContent = ""; verdictEl.textContent = ""; verdictEl.className = "verdict"; kvEl.innerHTML = "";
+      var n = num(nEl), flow = num(flowEl), area = num(areaEl);
+      if (isNaN(n) || n < 1 || isNaN(flow) || flow <= 0 || isNaN(area) || area <= 0) {
+        verdictEl.textContent = "✗ Enter ≥1 emitter, a positive flow rate and a positive bed area."; verdictEl.className = "verdict bad"; return;
+      }
+      var ip = u === "ip";
+      // flow rate in volume/hour, system flow total
+      var sysFlowVolPerHr = n * flow;     // gal/h or L/h
+
+      if (mode === "water") {
+        var min = num(timeEl);
+        if (isNaN(min) || min < 0) { verdictEl.textContent = "✗ Enter a runtime in minutes."; verdictEl.className = "verdict bad"; return; }
+        var hours = min / 60;
+        var vol = sysFlowVolPerHr * hours;     // gal or L
+        // depth over area: IP 1 in over 1 sqft = 0.6234 gal; depth(in) = vol(gal) * 231 / (144 * area)
+        // SI: depth(mm) = vol(L) / (area(m2)*1000) *1000 = vol(L)/area ... 1L over 1m2 = 1mm
+        var depth;
+        if (ip) depth = vol * 231 / (144 * area);
+        else depth = vol / (area * 0.001) / 1000; // L over m2 -> mm: depth_mm = vol_L / area_m2 (since 1L=0.001m3, /m2 = mm)
+        // simpler SI: depth_mm = vol_L / area_m2  (1 L/m2 = 1 mm)
+        depth = ip ? vol * 231 / (144 * area) : vol / area;
+        verdictEl.textContent = fmt(vol, 1) + (ip ? " gal" : " L") + "  ·  " + fmt(depth, 3) + (ip ? " in" : " mm") + " over bed";
+        verdictEl.className = "verdict ok";
+        kvEl.innerHTML =
+          "<dt>Water delivered</dt><dd class='big'>" + fmt(vol, 2) + (ip ? " gal" : " L") + "</dd>" +
+          "<dt>Depth over bed</dt><dd class='big'>" + fmt(depth, 3) + (ip ? " in" : " mm") + "</dd>" +
+          "<dt>System flow</dt><dd>" + fmt(sysFlowVolPerHr, 2) + (ip ? " gal/h" : " L/h") + "  (" + fmt(n, 0) + " × " + fmt(flow, 2) + ")</dd>" +
+          "<dt>Runtime</dt><dd>" + fmt(min, 1) + " min  (" + fmt(hours, 2) + " h)</dd>" +
+          "<dt>Per unit area</dt><dd>" + fmt(vol / area, 3) + (ip ? " gal/sqft" : " L/m²") + "</dd>";
+        errEl.textContent = "Water delivered = emitters × flow per emitter × runtime, so " + n + " emitters at " + flow + (ip ? " gph" : " l/h") + " for " + fmt(min, 0) + " min put out " + fmt(vol, 1) + (ip ? " gal" : " L") + " total. Spread over a " + fmt(area, 0) + (ip ? " sqft" : " m²") + " bed that's " + fmt(depth, 3) + (ip ? " inches" : " mm") + " of water. Conversions: 1 inch over 1 square foot ≈ 0.6234 gallons, and 1 litre over 1 m² = 1 mm. Most vegetables want roughly 1–1.5 in (25–40 mm) per week in the growing season; double that in peak heat. Drip runs are long because each emitter is low-flow — that's the point, water goes to the root zone with little evaporation or runoff. Split the weekly total across two or three days for sandy soil that can't hold a long soak.";
+      } else {
+        var depthT = num(depthEl);
+        if (isNaN(depthT) || depthT <= 0) { verdictEl.textContent = "✗ Enter a positive watering depth."; verdictEl.className = "verdict bad"; return; }
+        // volume needed for the bed at this depth
+        var volNeed;
+        if (ip) volNeed = area * depthT * 0.623377; // gal  (area sqft * in * gal per sqft-in)
+        else volNeed = area * depthT;               // L (m2 * mm = L)
+        var h = volNeed / sysFlowVolPerHr;
+        var min2 = h * 60;
+        verdictEl.textContent = fmt(min2, 0) + " min / week  (" + fmt(h, 2) + " h)  ·  " + fmt(volNeed, 1) + (ip ? " gal" : " L");
+        verdictEl.className = "verdict ok";
+        kvEl.innerHTML =
+          "<dt>Weekly water need</dt><dd class='big'>" + fmt(volNeed, 1) + (ip ? " gal" : " L") + "</dd>" +
+          "<dt>Runtime per week</dt><dd class='big'>" + fmt(h, 2) + " h  (" + fmt(min2, 0) + " min)</dd>" +
+          "<dt>System flow</dt><dd>" + fmt(sysFlowVolPerHr, 2) + (ip ? " gal/h" : " L/h") + "</dd>" +
+          "<dt>Depth target</dt><dd>" + fmt(depthT, 2) + (ip ? " in" : " mm") + "/week  over " + fmt(area, 0) + (ip ? " sqft" : " m²") + "</dd>" +
+          "<dt>Suggested split</dt><dd>" + (h > 2 ? "2–3× per week, " + fmt(h / 2, 1) + " h each" : "1× per week, " + fmt(h, 1) + " h") + "</dd>";
+        errEl.textContent = "Weekly volume needed = bed area × watering depth. " + fmt(area, 0) + (ip ? " sqft" : " m²") + " at " + fmt(depthT, 1) + (ip ? " in" : " mm") + " is " + fmt(volNeed, 1) + (ip ? " gal" : " L") + "; dividing by the system flow of " + fmt(sysFlowVolPerHr, 2) + (ip ? " gal/h" : " L/h") + " gives " + fmt(h, 2) + " hours of drip runtime per week. Conversions: 1 in over 1 sqft ≈ 0.6234 gal; 1 mm over 1 m² = 1 L. Rule-of-thumb weekly depths: vegetables 1–1.5 in (25–40 mm), lawns 1 in (25 mm), trees and shrubs 1–2 in (25–50 mm) but infrequently, containers often daily. Sandy soil drains fast — split into shorter, more frequent runs; clay holds water — fewer, longer runs. Reduce in cool or rainy weather and ramp up in peak heat.";
+      }
+      errEl.className = "note";
+    }
+
+    setUnits(); updateUI();
+    [nEl, flowEl, areaEl, depthEl, timeEl].forEach(function (el) {
+      el.addEventListener("input", render); el.addEventListener("change", render);
+    });
+    render();
+  })();
+  </script>
+</body>
+</html>
