@@ -3762,4 +3762,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🛑",
     added: "2026-07-14T14:15:00Z",
   },
+  {
+    slug: "mechanical-advantage-calculator",
+    name: "Mechanical Advantage Calculator",
+    description: "Compute the ideal mechanical advantage of the basic simple machines — a lever, a pulley system, an inclined plane, a hydraulic press and a screw — and see how the input force is amplified to move a load. Pick a machine, enter its geometry (arms, rope segments, ramp, piston radii or thread pitch) and a load, and get the mechanical advantage plus the ideal and friction-adjusted effort. Useful for physics homework, shop rigging and estimating before you build. Ideal values ignore friction, which is large for screws and real pulleys; the actual advantage is lower. Pure arithmetic, in your browser.",
+    category: "Math",
+    icon: "🔧",
+    added: "2026-07-14T14:45:00Z",
+  },
 ];

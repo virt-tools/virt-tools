@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Mechanical Advantage Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .row2 { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+    .row2 .field { margin-bottom: 0; }
+    input[type="number"] { font-family: ui-monospace, monospace; width: 95px; }
+    select { min-width: 150px; }
+    .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; flex-wrap: wrap; }
+    .seg button { background: var(--bg-elev-2); color: var(--text); border: none; padding: 5px 11px; cursor: pointer; font-size: 0.85rem; }
+    .seg button.active { background: var(--accent, #6ea8ff); color: #08111f; font-weight: 600; }
+    .kv { display: grid; grid-template-columns: 230px 1fr; gap: 6px 12px; margin-top: 12px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.95rem; }
+    .verdict { font-size: 1.5rem; font-weight: 800; font-family: ui-monospace, monospace; margin-top: 10px; }
+    .verdict.ok { color: var(--ok, #4ade80); }
+    .verdict.bad { color: var(--bad, #f87171); }
+    .big { font-size: 1.05rem; font-weight: 700; }
+    h3.sec { font-size: 0.92rem; font-weight: 600; margin: 14px 0 2px; color: var(--text-dim); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Mechanical Advantage Calculator</h1>
+      <p>Compute the ideal mechanical advantage of the basic simple machines — a lever, a pulley system, an inclined plane, a hydraulic press and a screw — and see how the input force is amplified to lift or move a load. Pick a machine, enter its geometry (arms, rope segments, ramp, piston radii or thread pitch), and the tool gives the mechanical advantage and the ideal effort needed for a given load. Useful for physics homework, shop rigging, and estimating before you build. Ideal values ignore friction, which is large for screws and real pulleys; the actual advantage is lower. Pure arithmetic, in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label>Simple machine</label>
+        <div class="seg" id="mseg">
+          <button data-m="lever" class="active">Lever</button>
+          <button data-m="pulley">Pulley</button>
+          <button data-m="incline">Inclined plane</button>
+          <button data-m="hydraulic">Hydraulic</button>
+          <button data-m="screw">Screw</button>
+        </div>
+      </div>
+
+      <div id="inputs"></div>
+
+      <div class="row2">
+        <div class="field">
+          <label for="load">Load to move</label>
+          <input id="load" type="number" min="0" step="any" value="200">
+          <select id="lunit" style="min-width:70px;margin-left:6px;">
+            <option value="N" selected>N</option>
+            <option value="kgf">kgf</option>
+            <option value="lbf">lbf</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="eff">Efficiency</label>
+          <input id="eff" type="number" min="0" max="100" step="1" value="100"> <span class="muted">%</span>
+        </div>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <dl class="kv" id="kv"></dl>
+      <p class="note" id="err"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var mseg = $("mseg"), inputsEl = $("inputs"), loadEl = $("load"), lunitEl = $("lunit"), effEl = $("eff");
+    var verdictEl = $("verdict"), kvEl = $("kv"), errEl = $("err");
+    var machine = "lever";
+    var dyn = {};
+
+    function num(el) { var n = parseFloat(el.value); return isNaN(n) ? NaN : n; }
+    function fmt(n, d) { return Number(n).toFixed(d); }
+
+    var FIELDS = {
+      lever: [
+        ["ae", "Effort arm length", "2", "m"], ["al", "Load arm length", "0.5", "m"]
+      ],
+      pulley: [
+        ["n", "Supporting rope segments", "3", "—"]
+      ],
+      incline: [
+        ["L", "Ramp length (slope)", "5", "m"], ["h", "Ramp rise (height)", "1", "m"]
+      ],
+      hydraulic: [
+        ["r1", "Input piston radius", "1", "cm"], ["r2", "Output piston radius", "3", "cm"]
+      ],
+      screw: [
+        ["r", "Handle radius (lever arm)", "0.2", "m"], ["p", "Thread pitch (per turn)", "0.002", "m"]
+      ]
+    };
+
+    function buildInputs() {
+      inputsEl.innerHTML = "";
+      dyn = {};
+      FIELDS[machine].forEach(function (f) {
+        var div = document.createElement("div");
+        div.className = "field";
+        div.innerHTML = '<label for="' + f[0] + '">' + f[1] + '</label>' +
+          '<input id="' + f[0] + '" type="number" min="0" step="any" value="' + f[2] + '">' +
+          '<span class="muted" style="margin-left:6px">' + f[3] + '</span>';
+        inputsEl.appendChild(div);
+        dyn[f[0]] = $(f[0]);
+        dyn[f[0]].addEventListener("input", render);
+        dyn[f[0]].addEventListener("change", render);
+      });
+    }
+
+    mseg.querySelectorAll("button").forEach(function (b) {
+      b.addEventListener("click", function () {
+        mseg.querySelectorAll("button").forEach(function (x) { x.classList.remove("active"); });
+        b.classList.add("active");
+        machine = b.getAttribute("data-m");
+        buildInputs(); render();
+      });
+    });
+
+    function loadN() {
+      var v = num(loadEl);
+      if (lunitEl.value === "kgf") v = v * 9.80665;
+      else if (lunitEl.value === "lbf") v = v * 4.44822;
+      return v;
+    }
+    function fmtForce(n) {
+      return fmt(n, 1) + " N";
+    }
+
+    function render() {
+      errEl.textContent = ""; verdictEl.textContent = ""; verdictEl.className = "verdict"; kvEl.innerHTML = "";
+      var eff = num(effEl), load = num(loadEl);
+      if (isNaN(load) || load < 0 || isNaN(eff) || eff <= 0 || eff > 100) {
+        verdictEl.textContent = "✗ Enter a valid load and an efficiency in 1–100%."; verdictEl.className = "verdict bad"; return;
+      }
+
+      var ma, formula, extra = "";
+      if (machine === "lever") {
+        var ae = num(dyn.ae), al = num(dyn.al);
+        if (isNaN(ae) || isNaN(al) || ae <= 0 || al <= 0) { bad("Enter positive arm lengths."); return; }
+        ma = ae / al; formula = "MA = effort arm ÷ load arm = " + fmt(ae, 2) + " ÷ " + fmt(al, 2);
+      } else if (machine === "pulley") {
+        var n = num(dyn.n);
+        if (isNaN(n) || n < 1 || Math.floor(n) !== n) { bad("Enter a positive whole number of rope segments."); return; }
+        ma = n; formula = "MA = number of rope segments supporting the load = " + n;
+        extra = "<dt>Rope pulled</dt><dd>" + fmt(n, 0) + "× the load distance pulled at the effort end</dd>";
+      } else if (machine === "incline") {
+        var L = num(dyn.L), h = num(dyn.h);
+        if (isNaN(L) || isNaN(h) || L <= 0 || h <= 0 || h > L) { bad("Enter a positive ramp length ≥ rise."); return; }
+        ma = L / h; formula = "MA = slope length ÷ rise height = " + fmt(L, 2) + " ÷ " + fmt(h, 2);
+        extra = "<dt>Angle</dt><dd>" + fmt(Math.asin(h / L) * 180 / Math.PI, 1) + "°</dd>";
+      } else if (machine === "hydraulic") {
+        var r1 = num(dyn.r1), r2 = num(dyn.r2);
+        if (isNaN(r1) || isNaN(r2) || r1 <= 0 || r2 <= 0) { bad("Enter positive piston radii."); return; }
+        ma = (r2 / r1) * (r2 / r1); formula = "MA = (A₂ ÷ A₁) = (r₂ ÷ r₁)² = (" + fmt(r2, 2) + " ÷ " + fmt(r1, 2) + ")²";
+        extra = "<dt>Area ratio</dt><dd>A₂/A₁ = " + fmt(ma, 2) + "  (π cancels)</dd>";
+      } else if (machine === "screw") {
+        var r = num(dyn.r), p = num(dyn.p);
+        if (isNaN(r) || isNaN(p) || r <= 0 || p <= 0) { bad("Enter positive handle radius and pitch."); return; }
+        ma = 2 * Math.PI * r / p; formula = "MA = 2π × handle radius ÷ thread pitch = 2π × " + fmt(r, 3) + " ÷ " + fmt(p, 4);
+      }
+
+      var loadNval = loadN();
+      var idealEffort = loadNval / ma;
+      var realEffort = loadNval / (ma * eff / 100);
+
+      verdictEl.textContent = "MA = " + fmt(ma, 2) + "×  ·  " + fmtForce(realEffort) + " effort";
+      verdictEl.className = "verdict ok";
+      kvEl.innerHTML =
+        "<dt>Ideal mechanical advantage</dt><dd class='big'>" + fmt(ma, 2) + "×</dd>" +
+        "<dt>Formula</dt><dd>" + formula + "</dd>" +
+        "<dt>Load</dt><dd>" + fmt(load, 1) + " " + lunitEl.value + "  (" + fmt(loadNval, 1) + " N)</dd>" +
+        "<dt>Ideal effort (no friction)</dt><dd class='big'>" + fmtForce(idealEffort) + "</dd>" +
+        "<dt>Actual effort (" + fmt(eff, 0) + "% eff.)</dt><dd class='big'>" + fmtForce(realEffort) + "</dd>" +
+        "<dt>Force amplification</dt><dd>" + fmt(ma * eff / 100, 2) + "× (real), " + fmt(ma, 2) + "× (ideal)</dd>" +
+        extra;
+
+      var notes = {
+        lever: "A lever's ideal MA is the ratio of the effort arm to the load arm: a longer effort arm means you push less to lift more, but the effort end travels farther than the load. First-class (fulcrum between), second-class (load between) and third-class (effort between) levers all follow MA = arm ratio; third-class levers have MA < 1, trading force for speed and range of motion.",
+        pulley: "A block-and-tackle's ideal MA equals the number of rope segments that support the moving load (not the segment you pull, unless it's also moving). Each supporting strand shares the load, so the more strands the less pull you need — but you pull that many times more rope. Friction in real pulleys cuts the actual advantage, often to 80–95% per sheave.",
+        incline: "An inclined plane's ideal MA is the slope length divided by the vertical rise: a longer, shallower ramp needs less force to push the same load up. The trade-off is distance — you push along the whole slope to gain the rise. Real ramps add rolling or sliding friction (μ·cosθ), which lowers the net advantage, especially on steep slopes.",
+        hydraulic: "A hydraulic press uses Pascal's principle: pressure is equal throughout the fluid, so F₁/A₁ = F₂/A₂, and MA = A₂/A₁ = (r₂/r₁)² since area is πr². A small force on a small piston lifts a large load on a large piston — but the small piston must travel farther (by the area ratio) to move the large piston a little. Energy is conserved: work in = work out.",
+        screw: "A screw is an inclined plane wrapped around a cylinder. Its ideal MA is 2πr ÷ pitch — the circumference traced by the handle divided by the distance the screw advances per turn. Screws have huge ideal MA but large real friction (the threads slide under heavy load), so the actual advantage is far lower; that same friction is why screws stay put instead of back-driving under load."
+      };
+      errEl.textContent = notes[machine] + " Mechanical advantage trades force for distance: the work (force × distance) you save in force you pay in how far the effort end must move. The efficiency field accounts for friction and losses, scaling the real effort up from the ideal force-in ÷ MA.";
+      errEl.className = "note";
+    }
+
+    function bad(msg) { verdictEl.textContent = "✗ " + msg; verdictEl.className = "verdict bad"; }
+
+    buildInputs();
+    [loadEl, lunitEl, effEl].forEach(function (el) {
+      el.addEventListener("input", render); el.addEventListener("change", render);
+    });
+    render();
+  })();
+  </script>
+</body>
+</html>
