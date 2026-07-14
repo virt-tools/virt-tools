@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "css-named-colors",
+    name: "CSS Named Color Explorer",
+    description: "Browse all 148 standard CSS named colors (CSS Level 1–4) — search by name or hex, filter by hue family, sort by hue, and click any swatch for its RGB, HSL, hue family, and ready-to-paste CSS values. Pure static reference, runs locally in your browser.",
+    category: "Design",
+    icon: "🌈",
+    added: "2026-07-14T19:30:00Z",
+  },
+  {
     slug: "pem-inspector",
     name: "PEM Inspector",
     description: "Decode a PEM block (-----BEGIN …----- envelope for a certificate, public/private key, CSR, or any armored blob) — identify the type from the header, show the DER bytes as a hex dump, compute the SHA-256 fingerprint, and walk the top-level ASN.1 structure to label OIDs and key types. Everything runs locally; the PEM content never leaves your browser.",
