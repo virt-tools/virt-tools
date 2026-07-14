@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "email-signature-generator",
+    name: "Email Signature Generator",
+    description: "Build a clean HTML email signature for Outlook, Gmail, Apple Mail and other clients — fill in your details, pick a stacked / inline / card layout, upload a logo, set colors, and copy the ready-to-paste HTML or plain text. Runs locally in your browser; nothing uploaded.",
+    category: "Text",
+    icon: "✉️",
+    added: "2026-07-14T14:05:00Z",
+  },
+  {
     slug: "bip39-mnemonic",
     name: "BIP39 Mnemonic Generator",
     description: "Generate and validate BIP-0039 mnemonic seed phrases (12–24 words) from Web Crypto entropy, with SHA-256 checksum verification and PBKDF2-SHA512 seed derivation. Runs locally — your entropy and mnemonic never leave your browser.",
