@@ -3786,4 +3786,12 @@ window.VIRTUAL_TOOLS = [
     icon: "⛵",
     added: "2026-07-14T15:45:00Z",
   },
+  {
+    slug: "fabric-yardage-calculator",
+    name: "Fabric & Sewing Yardage Calculator",
+    description: "Estimate how much fabric a sewing project needs. Enter the finished piece dimensions and quantity, the fabric's width (selvedge to selvedge), the seam allowance and an optional pattern repeat, and the tool lays the cut pieces out across the bolt to give the length needed in inches/centimetres and yards/metres. Seam allowance is added to each side of every piece; the layout packs as many pieces as fit across the fabric width, then stacks the rows along the length, and flags when a piece is wider than the fabric (needing pieced panels). Useful for placemats, napkins, curtains, cushion covers and quilt blocks. Pure arithmetic — a grid layout that ignores directional prints, nap and bias; for those, add margin and round up. Everything runs locally in your browser.",
+    category: "Design",
+    icon: "✂️",
+    added: "2026-07-14T16:15:00Z",
+  },
 ];
