@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Pump Hydraulic Power Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .field { margin-bottom: 14px; }
+    .row2 { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+    .row2 .field { margin-bottom: 0; }
+    input[type="number"] { font-family: ui-monospace, monospace; width: 110px; }
+    select { min-width: 90px; }
+    .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+    .seg button { background: var(--bg-elev-2); color: var(--text); border: none; padding: 5px 12px; cursor: pointer; font-size: 0.85rem; }
+    .seg button.active { background: var(--accent, #6ea8ff); color: #08111f; font-weight: 600; }
+    .kv { display: grid; grid-template-columns: 230px 1fr; gap: 6px 12px; margin-top: 12px; }
+    .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
+    .kv dd { margin: 0; font-family: ui-monospace, monospace; font-size: 0.95rem; }
+    .verdict { font-size: 1.5rem; font-weight: 800; font-family: ui-monospace, monospace; margin-top: 10px; }
+    .verdict.ok { color: var(--ok, #4ade80); }
+    .verdict.warn { color: var(--accent, #6ea8ff); }
+    .verdict.bad { color: var(--bad, #f87171); }
+    .big { font-size: 1.05rem; font-weight: 700; }
+    h3.sec { font-size: 0.92rem; font-weight: 600; margin: 14px 0 2px; color: var(--text-dim); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Pump Hydraulic Power Calculator</h1>
+      <p>Size the power a pump needs from its flow rate, head and efficiency. Enter the flow, the total head (pressure rise expressed as a column of fluid), the pipe diameter to get the flow velocity, the fluid's specific gravity, and the pump efficiency, and the tool returns the hydraulic (water) power delivered to the fluid and the brake (shaft) power the motor must supply. The core relation is power = ρ·g·Q·H, divided by efficiency for the input shaft power (imperial uses the equivalent HP = Q·H·SG ÷ 3960). Useful for selecting pump motors, sizing drives, and checking line velocity. Pure arithmetic — a steady-state ideal-fluid relation; real systems add friction losses, viscosity, NPSH and cavitation limits, motor service factor, and a duty-point that shifts with the system curve, so size the motor with margin and consult the pump curve. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label>Units</label>
+        <div class="seg" id="useg">
+          <button data-u="si" class="active">Metric (L/s, m, kW)</button>
+          <button data-u="ip">Imperial (gpm, ft, HP)</button>
+        </div>
+      </div>
+
+      <div class="row2">
+        <div class="field">
+          <label for="q">Flow rate</label>
+          <input id="q" type="number" min="0" step="any" value="31.5">
+          <select id="qu">
+            <option value="ls" selected>L/s</option>
+            <option value="mh">m³/h</option>
+            <option value="ms">m³/s</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="h">Total head</label>
+          <input id="h" type="number" min="0" step="any" value="30">
+          <span class="muted" id="hu">m</span>
+        </div>
+        <div class="field">
+          <label for="d">Pipe diameter (optional)</label>
+          <input id="d" type="number" min="0" step="any" value="100">
+          <span class="muted" id="du">mm</span>
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label for="sg">Specific gravity</label>
+          <input id="sg" type="number" min="0.1" step="0.01" value="1">
+          <span class="muted">(water = 1)</span>
+        </div>
+        <div class="field">
+          <label for="eta">Pump efficiency</label>
+          <input id="eta" type="number" min="0.01" max="1" step="0.01" value="0.7">
+          <span class="muted">(0–1)</span>
+        </div>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <dl class="kv" id="kv"></dl>
+      <p class="note" id="err"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var useg = $("useg");
+    var qEl = $("q"), quEl = $("qu"), hEl = $("h"), hu = $("hu"), dEl = $("d"), du = $("du"), sgEl = $("sg"), etaEl = $("eta");
+    var verdictEl = $("verdict"), kvEl = $("kv"), errEl = $("err");
+    var u = "si";
+    var G = 9.81;
+
+    function num(el) { var n = parseFloat(el.value); return isNaN(n) ? NaN : n; }
+    function fmt(n, d) { return Number(n).toFixed(d); }
+    function bad(msg) { verdictEl.textContent = "✗ " + msg; verdictEl.className = "verdict bad"; kvEl.innerHTML = ""; errEl.textContent = ""; }
+
+    function setUnits() {
+      var si = u === "si";
+      hu.textContent = si ? "m" : "ft";
+      du.textContent = si ? "mm" : "in";
+      // flow unit select
+      quEl.innerHTML = si ?
+        '<option value="ls" selected>L/s</option><option value="mh">m³/h</option><option value="ms">m³/s</option>' :
+        '<option value="gpm" selected>gpm</option><option value="cfs">ft³/s</option>';
+    }
+    useg.querySelectorAll("button").forEach(function (b) {
+      b.addEventListener("click", function () {
+        useg.querySelectorAll("button").forEach(function (x) { x.classList.remove("active"); });
+        b.classList.add("active"); u = b.getAttribute("data-u"); setUnits(); render();
+      });
+    });
+
+    function render() {
+      errEl.className = "note"; errEl.textContent = ""; verdictEl.textContent = ""; verdictEl.className = "verdict"; kvEl.innerHTML = "";
+      var Qraw = num(qEl), H = num(hEl), D = num(dEl), SG = num(sgEl), eta = num(etaEl);
+      if (isNaN(Qraw) || Qraw < 0) { bad("Enter a non-negative flow rate."); return; }
+      if (isNaN(H) || H < 0) { bad("Enter a non-negative head."); return; }
+      if (isNaN(SG) || SG <= 0) { bad("Enter a positive specific gravity."); return; }
+      if (isNaN(eta) || eta <= 0 || eta > 1) { bad("Enter an efficiency between 0 and 1 (e.g. 0.7)."); return; }
+      var si = u === "si";
+      var rho = 1000 * SG; // kg/m3
+
+      var PhydW, Qms, v, dUnit, qUnitLabel;
+      if (si) {
+        var qconv = { ls: 1 / 1000, mh: 1 / 3600, ms: 1 }[quEl.value];
+        Qms = Qraw * qconv;                 // m3/s
+        PhydW = rho * G * Qms * H;          // W
+        if (D > 0) { var dm = D / 1000; v = Qms / (Math.PI * dm * dm / 4); }
+        dUnit = "mm"; qUnitLabel = quEl.value === "ls" ? "L/s" : quEl.value === "mh" ? "m³/h" : "m³/s";
+      } else {
+        // imperial: keep Qgpm for HP formula, cfs for velocity
+        var Qgpm = quEl.value === "gpm" ? Qraw : Qraw * 448.831; // cfs->gpm
+        var Qcfs = quEl.value === "gpm" ? Qraw / 448.831 : Qraw;
+        var Php = Qgpm * H * SG / 3960;     // hydraulic HP
+        PhydW = Php * 745.7;                // W
+        Qms = Qcfs * 0.0283168;             // for display only
+        if (D > 0) { var dft = D / 12; v = Qcfs / (Math.PI * dft * dft / 4); }
+        dUnit = "in"; qUnitLabel = quEl.value === "gpm" ? "gpm" : "ft³/s";
+      }
+      var Pshaft = PhydW / eta;
+
+      // display: SI kW, imperial HP
+      var Pdisp = si ? PhydW / 1000 : PhydW / 745.7;
+      var Punit = si ? "kW" : "HP";
+      var Sdisp = si ? Pshaft / 1000 : Pshaft / 745.7;
+      var Sunit = si ? "kW" : "HP";
+
+      // velocity verdict (suction-side guideline)
+      var vcls = "ok", vmsg = "", vdisp, vunit;
+      if (v !== undefined) {
+        if (si) {
+          vdisp = v; vunit = "m/s";
+          if (v > 3) { vcls = "bad"; vmsg = "high — friction & erosion risk"; }
+          else if (v > 2) { vcls = "warn"; vmsg = "moderate"; }
+          else if (v < 0.5) { vcls = "warn"; vmsg = "low — solids may settle"; }
+          else vmsg = "typical";
+        } else {
+          vdisp = v; vunit = "ft/s";
+          if (v > 10) { vcls = "bad"; vmsg = "high — friction & erosion risk"; }
+          else if (v > 6) { vcls = "warn"; vmsg = "moderate"; }
+          else if (v < 1.5) { vcls = "warn"; vmsg = "low — solids may settle"; }
+          else vmsg = "typical";
+        }
+      }
+
+      verdictEl.textContent = fmt(Pdisp, Pdisp < 10 ? 2 : 1) + " " + Punit + " hydraulic  ·  " + fmt(Sdisp, Sdisp < 10 ? 2 : 1) + " " + Sunit + " brake";
+      verdictEl.className = "verdict ok";
+
+      var rows =
+        "<dt>Hydraulic power</dt><dd class='big'>" + fmt(Pdisp, 2) + " " + Punit + "  <span class='muted'>(" + fmt(PhydW, 0) + " W)</span></dd>" +
+        "<dt>Brake / shaft power</dt><dd class='big'>" + fmt(Sdisp, 2) + " " + Sunit + "  <span class='muted'>(" + fmt(Pshaft, 0) + " W)</span></dd>" +
+        "<dt>Efficiency</dt><dd>" + fmt(eta * 100, 0) + "%  →  ÷η from " + fmt(Pdisp, 2) + " to " + fmt(Sdisp, 2) + " " + Sunit + "</dd>" +
+        "<dt>Flow / head</dt><dd>" + fmt(Qraw, 1) + " " + qUnitLabel + "  ·  " + fmt(H, 1) + (si ? " m" : " ft") + "  ·  SG " + fmt(SG, 2) + "</dd>";
+      if (v !== undefined) {
+        rows += "<dt>Flow velocity</dt><dd class='big'>" + fmt(vdisp, 2) + " " + vunit + "  <span class='muted'>(in " + fmt(D, 0) + dUnit + " pipe · " + vmsg + ")</span></dd>";
+      } else {
+        rows += "<dt>Flow velocity</dt><dd>enter a pipe diameter</dd>";
+      }
+      if (!si) {
+        rows += "<dt>Equivalent</dt><dd>" + fmt(PhydW / 1000, 2) + " kW hydraulic  ·  " + fmt(Pshaft / 1000, 2) + " kW brake</dd>";
+      } else {
+        rows += "<dt>Equivalent</dt><dd>" + fmt(PhydW / 745.7, 2) + " HP hydraulic  ·  " + fmt(Pshaft / 745.7, 2) + " HP brake</dd>";
+      }
+      kvEl.innerHTML = rows;
+
+      var note = "Hydraulic power is the rate of energy given to the fluid: P = ρ·g·Q·H, with ρ the fluid density (" + fmt(rho, 0) + " kg/m³ for SG " + fmt(SG, 2) + "), g = 9.81 m/s², Q the volumetric flow and H the head. The brake (shaft) power the motor must supply is that divided by the pump efficiency η, since the pump's losses (recirculation, friction, disc drag) mean the shaft delivers more than reaches the fluid. With " + fmt(Qraw, 1) + " " + qUnitLabel + " at " + fmt(H, 1) + (si ? " m" : " ft") + " head and η = " + fmt(eta, 2) + ", the fluid receives " + fmt(Pdisp, 2) + " " + Punit + " and the motor must deliver " + fmt(Sdisp, 2) + " " + Sunit + " — so pick a motor at the next standard size up (×1.15–1.25 service factor) and let the pump run near its best-efficiency point. ";
+      if (v !== undefined) {
+        note += "In a " + fmt(D, 0) + dUnit + " pipe that flow runs at " + fmt(vdisp, 2) + " " + vunit + " — " + vmsg + "; keep suction velocity modest (≈1–2 m/s / 3–6 ft/s) to limit friction and avoid cavitation, and discharge velocity can run higher. ";
+      }
+      note += "This is the steady ideal-fluid relation; real systems add pipe friction (the Darcy–Weisbach loss adds to H), minor losses from valves and fittings, viscosity for non-water fluids, and an NPSH-available check to avoid cavitation. The pump's actual operating point is where its curve meets the system curve, not a single number, so confirm against the manufacturer's curve.";
+      errEl.textContent = note;
+      errEl.className = "note";
+    }
+
+    setUnits();
+    [qEl, quEl, hEl, dEl, sgEl, etaEl].forEach(function (el) {
+      el.addEventListener("input", render); el.addEventListener("change", render);
+    });
+    render();
+  })();
+  </script>
+</body>
+</html>

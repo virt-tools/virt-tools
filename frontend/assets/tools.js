@@ -3858,4 +3858,12 @@ window.VIRTUAL_TOOLS = [
     icon: "☀️",
     added: "2026-07-14T20:15:00Z",
   },
+  {
+    slug: "pump-hydraulic-power-calculator",
+    name: "Pump Hydraulic Power Calculator",
+    description: "Size the power a pump needs from its flow rate, head and efficiency. Enter the flow, the total head, an optional pipe diameter for the flow velocity, the fluid's specific gravity, and the pump efficiency, and the tool returns the hydraulic (water) power delivered to the fluid and the brake (shaft) power the motor must supply. The core relation is power = ρ·g·Q·H divided by efficiency for input shaft power (imperial uses the equivalent HP = Q·H·SG ÷ 3960). Useful for selecting pump motors, sizing drives and checking line velocity. Pure arithmetic — a steady-state ideal-fluid relation; real systems add friction, viscosity, NPSH and cavitation limits, so size the motor with margin and consult the pump curve. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "⛲",
+    added: "2026-07-14T20:45:00Z",
+  },
 ];
