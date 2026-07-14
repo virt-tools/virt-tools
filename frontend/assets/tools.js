@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "type-scale",
+    name: "Type Scale & Modular Scale Generator",
+    description: "Generate a typographic scale from a base font size and a chosen ratio — golden ratio (1.618), perfect fourth (1.333), perfect fifth (1.5), major third (1.25), or a custom ratio. Produces semantically named steps (3xs–5xl) with px and rem values, a live preview, and ready-to-paste CSS custom properties. Pure arithmetic, runs locally in your browser.",
+    category: "Design",
+    icon: "🔤",
+    added: "2026-07-14T20:30:00Z",
+  },
+  {
     slug: "json-flatten",
     name: "JSON Flatten & Unflatten",
     description: "Collapse a nested JSON object into dot-path key/value pairs ({a:{b:1}} → {\"a.b\":1}), or expand a flat dot-path object back into its nested form. Handles arrays with numeric indices, escapes literal dots/slashes/underscores in keys, and preserves JSON value types. Choose dot, slash, or underscore separators. The reverse of the JSON Pointer addressing scheme — useful for spreadsheets, env-file generation, and diffing nested structures. Runs locally in your browser.",
