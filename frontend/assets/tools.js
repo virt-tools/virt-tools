@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "sparkline-generator",
+    name: "Sparkline & Unicode Chart Generator",
+    description: "Turn a list of numbers into an inline sparkline using Unicode block characters (▁▂▃▄▅▆▇█), Braille (⠀⠄⠆⠇⠏⠛⠟⠿), or a taller bar chart — perfect for embedding tiny visualizations in Markdown, emails, or terminal output. Also outputs an SVG sparkline with optional area fill, plus an optional min/max value axis. Pure arithmetic, runs locally in your browser.",
+    category: "Data",
+    icon: "📊",
+    added: "2026-07-14T23:30:00Z",
+  },
+  {
     slug: "csv-filter",
     name: "CSV Filter & Query",
     description: "Filter the rows of a CSV by one or more conditions on its columns — equals, not equals, contains, starts/ends with, is empty, numeric < > ≤ ≥ between, or regex match. Chain rules with AND or OR. Auto-sniffs the delimiter; handles quoted fields and embedded newlines. Everything runs locally in your browser.",
