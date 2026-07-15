@@ -4338,4 +4338,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔲",
     added: "2026-07-15T19:20:00Z",
   },
+  {
+    slug: "css-animation-generator",
+    name: "CSS Animation Generator",
+    description: "Build CSS @keyframes animations with a live preview — pick a preset (bounce, pulse, shake, fade, slide, rotate, flip, heartbeat, rubber-band, swing, wobble, tada) or compose your own from translate, rotate, scale, skew, opacity, and blur at each keyframe stop. Set duration, delay, easing, iteration count, direction, fill mode, and play state. Copy the ready-to-paste @keyframes rule and animation shorthand. Pairs with the Cubic-Bezier Easing editor and the CSS Loader Generator. Everything runs locally in your browser.",
+    category: "Design",
+    icon: "🎬",
+    added: "2026-07-15T19:50:00Z",
+  },
 ];
