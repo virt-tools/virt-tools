@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "json-sort",
+    name: "JSON Sort & Order By",
+    description: "Sort a JSON array of objects by one or more keys — ascending or descending, numeric or string comparison (auto-detect by default), case-sensitive or not, with control over where null and missing values land (first or last). Nested keys use dot-path notation (user.age). The comparator is stable, so equal elements keep their original order. Everything runs locally in your browser.",
+    category: "Data",
+    icon: "↕️",
+    added: "2026-07-15T04:30:00Z",
+  },
+  {
     slug: "color-blender",
     name: "Color Blender & Gradient Mixer",
     description: "Blend two colors at any ratio using a chosen interpolation — linear RGB (gamma-correct), sRGB (gamma-space), HSL short arc, HSL long arc, or OKLab (perceptual). Set the number of intermediate stops and inspect each one as a hex / RGB / HSL swatch with its blend ratio. A live gradient bar shows the full sweep. Pure arithmetic, runs locally in your browser.",

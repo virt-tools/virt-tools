@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>JSON Sort &amp; Order By — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    @media (max-width:780px){ .grid2 { grid-template-columns:1fr; } }
+    textarea { width:100%; font-family:monospace; font-size:12px; min-height:220px; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:10px 0; }
+    .rules { display:flex; flex-direction:column; gap:6px; margin:8px 0; }
+    .rule-row { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+    .rule-row select, .rule-row input { font-size:12px; }
+    .rule-row .rm { background:var(--bg-elev-2,#1e222b); color:var(--text,#e6e6e6); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:6px 10px; cursor:pointer; font-weight:700; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>JSON Sort &amp; Order By</h1>
+      <p>Sort a JSON array of objects by one or more keys — ascending or descending, numeric or string comparison, case-sensitive or not, with control over where <code>null</code> and missing values land (first or last). Nested keys use dot-path notation (e.g. <code>user.age</code>). The comparator is stable, so equal elements keep their original order. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="grid2">
+        <div>
+          <label for="input">Input JSON (an array of objects)</label>
+          <textarea id="input" spellcheck="false" autocomplete="off" placeholder='[{"name":"Ada","age":36},{"name":"Lin","age":29}]'></textarea>
+        </div>
+        <div>
+          <label for="output">Sorted output</label>
+          <textarea id="output" readonly spellcheck="false"></textarea>
+        </div>
+      </div>
+
+      <div class="rules" id="rules"></div>
+      <div class="row">
+        <button id="addRule" class="secondary">+ Add sort key</button>
+        <button id="run">Sort</button>
+        <button id="copy" class="secondary">Copy output</button>
+      </div>
+
+      <div class="row">
+        <label>Indent: <select id="indent"><option value="2" selected>2</option><option value="4">4</option><option value="0">min</option></select></label>
+        <label><input type="checkbox" id="caseSensitive" checked> Case-sensitive string compare</label>
+      </div>
+
+      <p class="err" id="err"></p>
+      <p class="note" id="note">Paste a JSON array and add sort keys.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+
+    function getAtPath(obj, path) {
+      var parts = path.split(".");
+      var cur = obj;
+      for (var i = 0; i < parts.length; i++) {
+        if (cur === null || cur === undefined) return undefined;
+        cur = cur[parts[i]];
+      }
+      return cur;
+    }
+
+    function addRule() {
+      var div = document.createElement("div");
+      div.className = "rule-row";
+      div.innerHTML =
+        '<input class="r-path" type="text" placeholder="key or a.b.path" spellcheck="false" style="flex:1;min-width:160px;font-family:monospace;">' +
+        '<select class="r-dir"><option value="asc">ascending</option><option value="desc">descending</option></select>' +
+        '<select class="r-type"><option value="auto" selected>auto (number if both numeric)</option><option value="number">numeric</option><option value="string">string</option></select>' +
+        '<select class="r-nulls"><option value="last" selected>nulls last</option><option value="first">nulls first</option></select>';
+      var rm = document.createElement("button");
+      rm.className = "rm"; rm.textContent = "✕"; rm.title = "Remove";
+      rm.addEventListener("click", function () { div.remove(); run(); });
+      div.appendChild(rm);
+      $("rules").appendChild(div);
+      div.querySelector(".r-path").addEventListener("input", run);
+      ["r-dir", "r-type", "r-nulls"].forEach(function (cls) {
+        div.querySelector("." + cls).addEventListener("change", run);
+      });
+    }
+
+    function compare(a, b, rule, caseSensitive) {
+      var va = getAtPath(a, rule.path);
+      var vb = getAtPath(b, rule.path);
+      // null / undefined handling
+      var aMissing = va === null || va === undefined;
+      var bMissing = vb === null || vb === undefined;
+      if (aMissing && bMissing) return 0;
+      if (aMissing) return rule.nulls === "first" ? -1 : 1;
+      if (bMissing) return rule.nulls === "first" ? 1 : -1;
+
+      var type = rule.type;
+      if (type === "auto") {
+        if (typeof va === "number" && typeof vb === "number") type = "number";
+        else type = "string";
+      }
+      var cmp;
+      if (type === "number") {
+        cmp = Number(va) - Number(vb);
+      } else {
+        var sa = String(va), sb = String(vb);
+        if (!caseSensitive) { sa = sa.toLowerCase(); sb = sb.toLowerCase(); }
+        cmp = sa < sb ? -1 : sa > sb ? 1 : 0;
+      }
+      return rule.dir === "desc" ? -cmp : cmp;
+    }
+
+    function run() {
+      var errEl = $("err"); errEl.textContent = "";
+      var raw = $("input").value.trim();
+      if (!raw) { $("output").value = ""; $("note").textContent = "Paste JSON above."; return; }
+      try {
+        var arr = JSON.parse(raw);
+        if (!Array.isArray(arr)) { errEl.textContent = "Input must be a JSON array."; return; }
+        // collect rules
+        var rules = [];
+        Array.prototype.forEach.call($("rules").children, function (div) {
+          var path = div.querySelector(".r-path").value.trim();
+          if (!path) return;
+          rules.push({
+            path: path,
+            dir: div.querySelector(".r-dir").value,
+            type: div.querySelector(".r-type").value,
+            nulls: div.querySelector(".r-nulls").value
+          });
+        });
+        var caseSensitive = $("caseSensitive").checked;
+        if (!rules.length) {
+          $("output").value = JSON.stringify(arr, null, parseInt($("indent").value, 10) || 2);
+          $("note").textContent = "No sort keys — output unchanged (" + arr.length + " items).";
+          return;
+        }
+        // stable multi-key sort: chain comparators
+        var sorted = arr.slice().sort(function (a, b) {
+          for (var i = 0; i < rules.length; i++) {
+            var c = compare(a, b, rules[i], caseSensitive);
+            if (c !== 0) return c;
+          }
+          return 0;
+        });
+        var ind = parseInt($("indent").value, 10);
+        $("output").value = JSON.stringify(sorted, null, ind || undefined);
+        $("note").textContent = "Sorted " + arr.length + " item(s) by " + rules.length + " key(s).";
+      } catch (e) {
+        errEl.textContent = e.message || String(e);
+        $("output").value = "";
+      }
+    }
+
+    $("run").addEventListener("click", run);
+    $("input").addEventListener("input", run);
+    $("caseSensitive").addEventListener("change", run);
+    $("indent").addEventListener("change", run);
+    $("addRule").addEventListener("click", function () { addRule(); });
+    $("copy").addEventListener("click", function () {
+      var s = $("output").value;
+      if (!s) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(s).then(function () { $("note").textContent = "Copied."; }, function () { $("note").textContent = "Copy failed."; });
+      } else $("note").textContent = "Clipboard unavailable.";
+    });
+
+    // seed with one rule
+    addRule();
+    run();
+  })();
+  </script>
+</body>
+</html>
