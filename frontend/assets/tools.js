@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "badge-generator",
+    name: "SVG Badge Generator",
+    description: "Generate shields.io-style SVG badges with a custom label, message, colors, and style (flat, flat-square, plastic, for-the-badge). Optional emoji logo, per-side colors, and a link URL wrapping the badge. Preview the badge live, then copy or download the SVG, or copy as a data URI for embedding. Pure SVG generation, runs locally in your browser.",
+    category: "Design",
+    icon: "🏷️",
+    added: "2026-07-15T11:30:00Z",
+  },
+  {
     slug: "readme-generator",
     name: "README.md Generator",
     description: "Generate a project README.md from a form — title, tagline, description, features list, install and usage instructions (Markdown / shell), optional badges, table of contents, contributing section, license section, and contact. Live preview, copy or download. Pairs with the .gitignore generator, license generator, and security.txt generator. Pure text templates, runs locally in your browser.",
