@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "ini-parser",
+    name: "INI File Parser & Editor",
+    description: "Parse an INI configuration file into a structured key/value view grouped by section, and convert between INI text and JSON. Handles [section] headers, key=value pairs, line comments (# and ;), blank lines, inline comments, and quoted values. Round-trips back to INI text preserving sections and keys. Pairs with the dotenv converter and YAML/JSON converters. Everything runs locally in your browser.",
+    category: "Encoding",
+    icon: "⚙️",
+    added: "2026-07-15T08:30:00Z",
+  },
+  {
     slug: "csv-dedup",
     name: "CSV Deduplicator & Unique Rows",
     description: "Remove duplicate rows from a CSV by full-row comparison or by a subset of key columns — choose which columns form the dedup key (or use the whole row), with optional case-insensitive matching and whitespace trimming. Reports how many duplicates were removed. Auto-sniffs the delimiter (comma, semicolon, tab, pipe), handles quoted fields, and outputs to the delimiter of your choice. Everything runs locally in your browser.",

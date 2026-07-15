@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>INI File Parser &amp; Editor — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    @media (max-width:780px){ .grid2 { grid-template-columns:1fr; } }
+    textarea { width:100%; font-family:monospace; font-size:12px; min-height:220px; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:10px 0; }
+    .seg { display:inline-flex; border:1px solid var(--border,#2a2f3a); border-radius:8px; overflow:hidden; margin-bottom:10px; }
+    .seg button { border:none; border-radius:0; background:transparent; color:inherit; padding:6px 14px; cursor:pointer; }
+    .seg button.active { background: var(--accent,#6ea8fe); color:#08101f; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    table { width:100%; border-collapse:collapse; margin-top:8px; }
+    th, td { text-align:left; padding:4px 10px; border-bottom:1px solid var(--border,#2a2f3a); font-size:12px; vertical-align:top; }
+    th { opacity:.65; }
+    td.v { font-family:monospace; word-break:break-all; }
+    .section { font-weight:600; color: var(--accent,#6ea8fe); }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>INI File Parser &amp; Editor</h1>
+      <p>Parse an INI configuration file into a structured key/value view grouped by section — and convert between INI text and JSON. Handles <code>[section]</code> headers, <code>key=value</code> pairs, line comments (<code>#</code> and <code>;</code>), blank lines, and quoted values. Round-trips back to INI text preserving sections and keys. Pairs with the dotenv converter and YAML/JSON converters. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="seg" id="mode">
+        <button type="button" data-m="ini2json" class="active">INI → JSON</button>
+        <button type="button" data-m="json2ini" class="secondary">JSON → INI</button>
+      </div>
+
+      <div class="grid2">
+        <div>
+          <label for="input" id="inLabel">INI input</label>
+          <textarea id="input" spellcheck="false" autocomplete="off" placeholder="[server]&#10;host = localhost&#10;port = 8080&#10;&#10;[database]&#10;url = postgres://localhost/db">[server]
+host = localhost
+port = 8080
+
+[database]
+url = postgres://localhost/db
+# this is a comment
+pool_size = 10</textarea>
+        </div>
+        <div>
+          <label for="output" id="outLabel">JSON output</label>
+          <textarea id="output" readonly spellcheck="false"></textarea>
+        </div>
+      </div>
+
+      <div class="row">
+        <label>Indent: <select id="indent"><option value="2" selected>2</option><option value="4">4</option><option value="0">min</option></select></label>
+        <button id="convert">Convert</button>
+        <button id="copy" class="secondary">Copy output</button>
+        <label><input type="checkbox" id="preserveComments" checked> Preserve comments (in JSON as __comments)</label>
+      </div>
+
+      <p class="err" id="err"></p>
+      <p class="note" id="note">Paste INI above.</p>
+
+      <h3>Structured view</h3>
+      <table id="struct"><thead><tr><th>section</th><th>key</th><th>value</th></tr></thead><tbody></tbody></table>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var mode = "ini2json";
+
+    function parseIni(text, keepComments) {
+      var lines = text.replace(/\r\n/g, "\n").split("\n");
+      var result = {};
+      var section = "";
+      if (keepComments) result.__comments = [];
+      lines.forEach(function (raw, i) {
+        var line = raw.trim();
+        if (!line) return;
+        if (line[0] === "#" || line[0] === ";") {
+          if (keepComments) result.__comments.push(line);
+          return;
+        }
+        var mSec = line.match(/^\[(.+)\]$/);
+        if (mSec) {
+          section = mSec[1].trim();
+          if (!(section in result)) result[section] = {};
+          return;
+        }
+        var eq = line.indexOf("=");
+        if (eq < 0) return;
+        var key = line.slice(0, eq).trim();
+        var val = line.slice(eq + 1).trim();
+        // strip inline comments not inside quotes
+        if (val[0] !== '"' && val[0] !== "'") {
+          var hashIdx = val.search(/\s[#;]/);
+          if (hashIdx > 0) val = val.slice(0, hashIdx).trim();
+        }
+        // unquote
+        if ((val[0] === '"' && val[val.length - 1] === '"') || (val[0] === "'" && val[val.length - 1] === "'")) {
+          val = val.slice(1, -1);
+        }
+        var target = section ? result[section] : result;
+        target[key] = val;
+      });
+      return result;
+    }
+
+    function iniValueStr(v) {
+      // quote if value contains whitespace or special chars
+      if (v === "") return '""';
+      if (/[\s#;=]/.test(v) && !/^["'].*["']$/.test(v)) {
+        return '"' + v.replace(/"/g, '\\"') + '"';
+      }
+      return v;
+    }
+
+    function buildIni(obj) {
+      var lines = [];
+      var topKeys = [];
+      var sections = [];
+      Object.keys(obj).forEach(function (k) {
+        if (k === "__comments") return;
+        if (obj[k] !== null && typeof obj[k] === "object" && !Array.isArray(obj[k])) sections.push(k);
+        else topKeys.push(k);
+      });
+      if (obj.__comments && Array.isArray(obj.__comments)) obj.__comments.forEach(function (c) { lines.push(c); });
+      topKeys.forEach(function (k) { lines.push(k + " = " + iniValueStr(String(obj[k]))); });
+      if (topKeys.length && sections.length) lines.push("");
+      sections.forEach(function (s, si) {
+        lines.push("[" + s + "]");
+        Object.keys(obj[s]).forEach(function (k) {
+          lines.push(k + " = " + iniValueStr(String(obj[s][k])));
+        });
+        if (si < sections.length - 1) lines.push("");
+      });
+      return lines.join("\n") + "\n";
+    }
+
+    function renderStruct(obj) {
+      var tbody = $("struct").querySelector("tbody");
+      tbody.innerHTML = "";
+      Object.keys(obj).forEach(function (section) {
+        if (section === "__comments") return;
+        if (obj[section] !== null && typeof obj[section] === "object" && !Array.isArray(obj[section])) {
+          Object.keys(obj[section]).forEach(function (k) {
+            var tr = document.createElement("tr");
+            tr.innerHTML = '<td><span class="section">' + esc(section) + '</span></td><td class="v">' + esc(k) + '</td><td class="v">' + esc(String(obj[section][k])) + '</td>';
+            tbody.appendChild(tr);
+          });
+        } else {
+          var tr2 = document.createElement("tr");
+          tr2.innerHTML = '<td><span class="section">(top)</span></td><td class="v">' + esc(section) + '</td><td class="v">' + esc(String(obj[section])) + '</td>';
+          tbody.appendChild(tr2);
+        }
+      });
+    }
+    function esc(s) { return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+    function convert() {
+      var errEl = $("err"); errEl.textContent = "";
+      var raw = $("input").value.trim();
+      if (!raw) { $("output").value = ""; $("struct").querySelector("tbody").innerHTML = ""; $("note").textContent = "Paste input above."; return; }
+      try {
+        var ind = parseInt($("indent").value, 10);
+        var out, struct;
+        if (mode === "ini2json") {
+          var obj = parseIni(raw, $("preserveComments").checked);
+          out = JSON.stringify(obj, null, ind || undefined);
+          struct = obj;
+          $("note").textContent = "Parsed INI → " + Object.keys(obj).filter(function (k) { return k !== "__comments"; }).length + " section(s)/key(s).";
+        } else {
+          var parsed = JSON.parse(raw);
+          out = buildIni(parsed);
+          struct = parsed;
+          $("note").textContent = "Built INI from JSON.";
+        }
+        $("output").value = out;
+        renderStruct(struct);
+        window._out = out;
+      } catch (e) {
+        errEl.textContent = e.message || String(e);
+        $("output").value = "";
+        $("struct").querySelector("tbody").innerHTML = "";
+      }
+    }
+
+    $("mode").addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-m]"); if (!b) return;
+      mode = b.getAttribute("data-m");
+      Array.prototype.forEach.call($("mode").querySelectorAll("button"), function (x) { x.classList.remove("active"); });
+      b.classList.add("active");
+      var isIni = mode === "ini2json";
+      $("inLabel").textContent = isIni ? "INI input" : "JSON input";
+      $("outLabel").textContent = isIni ? "JSON output" : "INI output";
+      convert();
+    });
+    $("convert").addEventListener("click", convert);
+    $("input").addEventListener("input", convert);
+    ["indent", "preserveComments"].forEach(function (id) { $(id).addEventListener("change", convert); });
+    $("copy").addEventListener("click", function () {
+      if (!window._out) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(window._out).then(function () { $("note").textContent = "Copied."; }, function () { $("note").textContent = "Copy failed."; });
+      } else $("note").textContent = "Clipboard unavailable.";
+    });
+    convert();
+  })();
+  </script>
+</body>
+</html>
