@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "license-generator",
+    name: "Open Source License Generator",
+    description: "Generate an open source license file for your project — pick MIT, ISC, Apache 2.0, BSD 2-Clause, BSD 3-Clause, GPL 3.0, MPL 2.0, or The Unlicense, fill in the copyright holder name (and optionally project name/URL), and the year is inserted automatically. Copy or download the ready-to-use LICENSE text. Pure static templates, runs locally in your browser.",
+    category: "Text",
+    icon: "📜",
+    added: "2026-07-15T00:30:00Z",
+  },
+  {
     slug: "gitignore-generator",
     name: ".gitignore Generator",
     description: "Build a .gitignore file by ticking the languages, frameworks, editors, and OSes your project uses — Node, Python, Go, Rust, Java, Ruby, Swift, .NET, macOS, Windows, Linux, JetBrains, VS Code, Vim, Emacs, Django, Rails, React, Next.js, Vue, Angular, Svelte, Docker, Terraform, Unity, Unreal, Godot, and more. Each option contributes a curated block of ignore patterns. Combine as many as you need, then copy or download. Pure static templates, runs locally in your browser.",
