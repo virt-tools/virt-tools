@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "emoji-picker",
+    name: "Emoji Picker & Search",
+    description: "Search emojis by name or keyword across categories — smileys & people, animals & nature, food & drink, activities, travel & places, objects, symbols, and flags. Click an emoji to copy it or inspect its code points, short name, category, and HTML entity. Pure static reference data, runs locally in your browser.",
+    category: "Text",
+    icon: "😀",
+    added: "2026-07-15T10:00:00Z",
+  },
+  {
     slug: "json-minifier",
     name: "JSON Minifier",
     description: "Minify JSON to a single line by stripping whitespace, removing unnecessary separators, and optionally normalizing numbers (drop leading zeros) and dropping trailing zeros in floats. Validates on parse and reports the byte savings. The reverse of the JSON Formatter — pairs with it and with the HTML/CSS minifiers. Everything runs locally in your browser.",
