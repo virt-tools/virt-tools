@@ -4362,4 +4362,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📱",
     added: "2026-07-15T20:44:00Z",
   },
+  {
+    slug: "svg-path-visualizer",
+    name: "SVG Path Visualizer",
+    description: "Paste an SVG path d attribute and see it rendered with a breakdown of every command — M, L, H, V, C, S, Q, T, A, Z — plus the bounding box, total length, and command count. Toggle control-point handles, start/end markers, bounding box, grid, and stroke color. Normalize relative commands to absolute. Great for learning, debugging, and reverse-engineering path data. Pairs with the SVG Editor and SVG Optimizer. Everything runs locally in your browser.",
+    category: "Design",
+    icon: "🛤️",
+    added: "2026-07-15T21:14:00Z",
+  },
 ];

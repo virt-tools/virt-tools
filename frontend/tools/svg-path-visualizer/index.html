@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>SVG Path Visualizer — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .layout { display:grid; grid-template-columns: 1fr 1fr; gap:14px; align-items:start; }
+    @media (max-width: 820px) { .layout { grid-template-columns: 1fr; } }
+    label.f { font-size:13px; opacity:.85; display:block; margin-bottom:4px; }
+    textarea, input[type="text"] { width:100%; box-sizing:border-box; font-family:ui-monospace,monospace; font-size:13px; padding:6px 8px; border:1px solid var(--border,#2a2f3a); border-radius:6px; background:var(--bg,#14181f); color:inherit; }
+    textarea { resize:vertical; min-height:80px; }
+    .stage { background:
+      repeating-conic-gradient(rgba(127,127,127,0.07) 0 25%, transparent 0 50%) 0/24px 24px, var(--bg,#0f131a);
+      border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:8px; overflow:auto; min-height:340px; display:flex; align-items:center; justify-content:center; }
+    .stage svg { max-width:100%; height:auto; display:block; }
+    .opts { display:flex; flex-wrap:wrap; gap:14px; align-items:center; margin:8px 0; font-size:13px; }
+    .opts label { display:inline-flex; gap:5px; align-items:center; margin:0; opacity:1; cursor:pointer; }
+    .opts input[type="checkbox"] { margin:0; }
+    .cmds { font-family:ui-monospace,monospace; font-size:12px; line-height:1.5; background:var(--bg,#14181f); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:10px; max-height:280px; overflow:auto; }
+    .cmds .cmd { padding:2px 0; border-bottom:1px solid rgba(255,255,255,.04); display:flex; gap:8px; }
+    .cmds .cmd:last-child { border-bottom:none; }
+    .cmds .letter { font-weight:700; color:var(--accent,#6ea8fe); min-width:16px; }
+    .cmds .args { opacity:.85; }
+    .cmds .desc { opacity:.5; font-style:italic; }
+    .stats { display:flex; gap:16px; flex-wrap:wrap; margin:8px 0; font-size:13px; }
+    .stats .stat { background:var(--panel-2,#161a22); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:6px 12px; }
+    .stats .stat .n { font-weight:700; font-variant-numeric:tabular-nums; }
+    .stats .stat .l { font-size:11px; opacity:.6; }
+    .toolbar { display:flex; gap:8px; flex-wrap:wrap; margin:8px 0; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>SVG Path Visualizer</h1>
+      <p>Paste an SVG path <code>d</code> string and see it rendered with a breakdown of every command — M, L, H, V, C, S, Q, T, A, Z — plus the bounding box, total length, and command count. Toggle the control-point handles and the start/end markers. Great for learning, debugging, and reverse-engineering path data. Pairs with the SVG Editor and SVG Optimizer. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label class="f" for="pathInput">Path <code>d</code> attribute</label>
+        <textarea id="pathInput" rows="2" spellcheck="false" placeholder="M 10 80 C 40 10, 65 10, 95 80 S 150 150, 180 80">M 10 80 C 40 10, 65 10, 95 80 S 150 150, 180 80</textarea>
+      </div>
+
+      <div class="opts">
+        <label><input type="checkbox" id="showGrid" checked> grid</label>
+        <label><input type="checkbox" id="showHandles"> control handles</label>
+        <label><input type="checkbox" id="showPoints" checked> points</label>
+        <label><input type="checkbox" id="showBBox"> bounding box</label>
+        <label><input type="checkbox" id="strokeOnly" checked> stroke only (no fill)</label>
+        <label>stroke <input type="color" id="strokeColor" value="#6ea8fe" style="width:28px;height:22px;padding:0;border:1px solid var(--border,#2a2f3a);border-radius:4px;background:none;cursor:pointer;"></label>
+      </div>
+
+      <div class="layout">
+        <div class="stage" id="stageWrap">
+          <svg id="svg" viewBox="0 0 300 200" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:520px;"></svg>
+        </div>
+        <div>
+          <div class="stats" id="stats"></div>
+          <div class="toolbar">
+            <button id="copyPath" class="secondary">Copy path</button>
+            <button id="downloadSvg" class="secondary">Download SVG</button>
+            <button id="normalize" class="secondary">Normalize (absolute)</button>
+          </div>
+          <div class="cmds" id="cmds"></div>
+        </div>
+      </div>
+
+      <p class="note">The path is parsed and rendered locally; nothing is uploaded. Bounding box and length use the browser's native <code>SVGGeometryElement</code> APIs. Control-handle display works for cubic (C/S) and quadratic (Q/T) Bézier segments. Pairs with the SVG Editor and SVG Optimizer.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var NS = "http://www.w3.org/2000/svg";
+    var pathInput = document.getElementById("pathInput");
+    var svgEl = document.getElementById("svg");
+    var stageWrap = document.getElementById("stageWrap");
+    var statsEl = document.getElementById("stats");
+    var cmdsEl = document.getElementById("cmds");
+
+    function esc(s){ return String(s).replace(/[&<>]/g,function(c){return c==="&"?"&amp;":c==="<"?"&lt;":"&gt;";}); }
+
+    var cmdDesc = {
+      M: "moveTo", L: "lineTo", H: "horizontal line", V: "vertical line",
+      C: "cubic Bézier", S: "smooth cubic", Q: "quadratic Bézier", T: "smooth quadratic",
+      A: "arc", Z: "closepath"
+    };
+
+    function parseCommands(d) {
+      var tokens = d.match(/[a-zA-Z]|-?\d*\.?\d+(?:[eE][-+]?\d+)?/g);
+      if (!tokens) return [];
+      var cmds = [];
+      var i = 0;
+      var cur = null;
+      var argCounts = { M:2, L:2, H:1, V:1, C:6, S:4, Q:4, T:2, A:7, Z:0 };
+      while (i < tokens.length) {
+        var t = tokens[i];
+        if (/[a-zA-Z]/.test(t)) {
+          var upper = t.toUpperCase();
+          var count = argCounts[upper];
+          if (count === undefined) { i++; continue; }
+          // For M followed by implicit L (lineTo) pairs
+          if (upper === "M" || upper === "L" || upper === "C" || upper === "S" || upper === "Q" || upper === "T" || upper === "H" || upper === "V" || upper === "A") {
+            var args = [];
+            for (var j = 0; j < count && i+1+j < tokens.length && !/[a-zA-Z]/.test(tokens[i+1+j]); j++) {
+              args.push(parseFloat(tokens[i+1+j]));
+            }
+            cmds.push({ cmd: t, args: args });
+            i += 1 + args.length;
+            // Handle repeated coordinate pairs (implicit moveto -> lineto)
+            if (upper === "M") {
+              while (i+1 < tokens.length && !/[a-zA-Z]/.test(tokens[i]) && !/[a-zA-Z]/.test(tokens[i+1])) {
+                cmds.push({ cmd: t === "M" ? "L" : "l", args: [parseFloat(tokens[i]), parseFloat(tokens[i+1])] });
+                i += 2;
+              }
+            }
+          } else {
+            cmds.push({ cmd: t, args: [] });
+            i++;
+          }
+        } else {
+          i++;
+        }
+      }
+      return cmds;
+    }
+
+    function render() {
+      var d = pathInput.value.trim();
+      var showGrid = document.getElementById("showGrid").checked;
+      var showHandles = document.getElementById("showHandles").checked;
+      var showPoints = document.getElementById("showPoints").checked;
+      var showBBox = document.getElementById("showBBox").checked;
+      var strokeOnly = document.getElementById("strokeOnly").checked;
+      var strokeColor = document.getElementById("strokeColor").value;
+
+      // Clear
+      while (svgEl.firstChild) svgEl.removeChild(svgEl.firstChild);
+      svgEl.setAttribute("viewBox", "0 0 300 200");
+
+      // Grid
+      if (showGrid) {
+        var grid = document.createElementNS(NS, "g");
+        grid.setAttribute("opacity", "0.15");
+        for (var x = 0; x <= 300; x += 20) {
+          var line = document.createElementNS(NS, "line");
+          line.setAttribute("x1", x); line.setAttribute("y1", 0); line.setAttribute("x2", x); line.setAttribute("y2", 200);
+          line.setAttribute("stroke", "#888"); line.setAttribute("stroke-width", "0.5");
+          grid.appendChild(line);
+        }
+        for (var y = 0; y <= 200; y += 20) {
+          var line2 = document.createElementNS(NS, "line");
+          line2.setAttribute("x1", 0); line2.setAttribute("y1", y); line2.setAttribute("x2", 300); line2.setAttribute("y2", y);
+          line2.setAttribute("stroke", "#888"); line2.setAttribute("stroke-width", "0.5");
+          grid.appendChild(line2);
+        }
+        svgEl.appendChild(grid);
+      }
+
+      if (!d) { statsEl.innerHTML = ""; cmdsEl.innerHTML = '<div style="opacity:.5">Enter a path.</div>'; return; }
+
+      // Main path
+      var path = document.createElementNS(NS, "path");
+      path.setAttribute("d", d);
+      path.setAttribute("fill", strokeOnly ? "none" : strokeColor + "22");
+      path.setAttribute("stroke", strokeColor);
+      path.setAttribute("stroke-width", "2");
+      path.setAttribute("stroke-linecap", "round");
+      path.setAttribute("stroke-linejoin", "round");
+      svgEl.appendChild(path);
+
+      // Bounding box
+      if (showBBox && path.getBBox) {
+        var bb = path.getBBox();
+        if (bb.width || bb.height) {
+          var rect = document.createElementNS(NS, "rect");
+          rect.setAttribute("x", bb.x); rect.setAttribute("y", bb.y);
+          rect.setAttribute("width", bb.width); rect.setAttribute("height", bb.height);
+          rect.setAttribute("fill", "none"); rect.setAttribute("stroke", "#ff77a8");
+          rect.setAttribute("stroke-width", "1"); rect.setAttribute("stroke-dasharray", "4 3");
+          svgEl.appendChild(rect);
+        }
+      }
+
+      // Points + handles
+      var cmds = parseCommands(d);
+      var pts = [];
+      var cur = {x:0, y:0};
+      var start = {x:0, y:0};
+      cmds.forEach(function (c) {
+        var up = c.cmd.toUpperCase();
+        var rel = c.cmd !== up;
+        var a = c.args;
+        if (up === "M") { cur.x = rel ? cur.x + a[0] : a[0]; cur.y = rel ? cur.y + a[1] : a[1]; start = {x:cur.x, y:cur.y}; pts.push({x:cur.x,y:cur.y, type:"M"}); }
+        else if (up === "L") { cur.x = rel ? cur.x + a[0] : a[0]; cur.y = rel ? cur.y + a[1] : a[1]; pts.push({x:cur.x,y:cur.y, type:"L"}); }
+        else if (up === "H") { cur.x = rel ? cur.x + a[0] : a[0]; pts.push({x:cur.x,y:cur.y, type:"H"}); }
+        else if (up === "V") { cur.y = rel ? cur.y + a[0] : a[0]; pts.push({x:cur.x,y:cur.y, type:"V"}); }
+        else if (up === "C") { var ex = rel?cur.x+a[4]:a[4], ey = rel?cur.y+a[5]:a[5]; pts.push({x:ex,y:ey,type:"C",c1:{x:rel?cur.x+a[0]:a[0],y:rel?cur.y+a[1]:a[1]},c2:{x:rel?cur.x+a[2]:a[2],y:rel?cur.y+a[3]:a[3]}}); cur.x=ex; cur.y=ey; }
+        else if (up === "S") { var ex2 = rel?cur.x+a[2]:a[2], ey2 = rel?cur.y+a[3]:a[3]; pts.push({x:ex2,y:ey2,type:"S",c2:{x:rel?cur.x+a[0]:a[0],y:rel?cur.y+a[1]:a[1]}}); cur.x=ex2; cur.y=ey2; }
+        else if (up === "Q") { var ex3 = rel?cur.x+a[2]:a[2], ey3 = rel?cur.y+a[3]:a[3]; pts.push({x:ex3,y:ey3,type:"Q",cp:{x:rel?cur.x+a[0]:a[0],y:rel?cur.y+a[1]:a[1]}}); cur.x=ex3; cur.y=ey3; }
+        else if (up === "T") { var ex4 = rel?cur.x+a[0]:a[0], ey4 = rel?cur.y+a[1]:a[1]; pts.push({x:ex4,y:ey4,type:"T"}); cur.x=ex4; cur.y=ey4; }
+        else if (up === "A") { var ex5 = rel?cur.x+a[5]:a[5], ey5 = rel?cur.y+a[6]:a[6]; pts.push({x:ex5,y:ey5,type:"A"}); cur.x=ex5; cur.y=ey5; }
+        else if (up === "Z") { cur.x = start.x; cur.y = start.y; pts.push({x:cur.x,y:cur.y,type:"Z"}); }
+      });
+
+      if (showPoints) {
+        pts.forEach(function (p) {
+          var c = document.createElementNS(NS, "circle");
+          c.setAttribute("cx", p.x); c.setAttribute("cy", p.y); c.setAttribute("r", 3);
+          c.setAttribute("fill", p.type === "M" ? "#5cd690" : "#6ea8fe");
+          svgEl.appendChild(c);
+        });
+      }
+
+      if (showHandles) {
+        pts.forEach(function (p) {
+          if (p.c1 && p.c2) {
+            [[p.c1,"#ffd27a"],[p.c2,"#ffd27a"]].forEach(function (h) {
+              var l = document.createElementNS(NS, "line");
+              l.setAttribute("x1", p.type === "C" ? (pts[pts.indexOf(p)-1]||{x:p.c1.x}).x : p.x); l.setAttribute("y1", p.y);
+              l.setAttribute("x2", h[0].x); l.setAttribute("y2", h[0].y);
+              l.setAttribute("stroke", h[1]); l.setAttribute("stroke-width", "0.7"); l.setAttribute("opacity", "0.6");
+              svgEl.appendChild(l);
+              var cc = document.createElementNS(NS, "circle");
+              cc.setAttribute("cx", h[0].x); cc.setAttribute("cy", h[0].y); cc.setAttribute("r", 2);
+              cc.setAttribute("fill", h[1]); svgEl.appendChild(cc);
+            });
+          }
+          if (p.cp) {
+            var l2 = document.createElementNS(NS, "line");
+            l2.setAttribute("x1", p.x); l2.setAttribute("y1", p.y); l2.setAttribute("x2", p.cp.x); l2.setAttribute("y2", p.cp.y);
+            l2.setAttribute("stroke", "#ffd27a"); l2.setAttribute("stroke-width", "0.7"); l2.setAttribute("opacity", "0.6");
+            svgEl.appendChild(l2);
+            var cc2 = document.createElementNS(NS, "circle");
+            cc2.setAttribute("cx", p.cp.x); cc2.setAttribute("cy", p.cp.y); cc2.setAttribute("r", 2); cc2.setAttribute("fill", "#ffd27a");
+            svgEl.appendChild(cc2);
+          }
+        });
+      }
+
+      // Stats
+      var bbox = path.getBBox ? path.getBBox() : {x:0,y:0,width:0,height:0};
+      var len = 0;
+      try { if (path.getTotalLength) len = path.getTotalLength(); } catch(e){}
+      statsEl.innerHTML =
+        '<div class="stat"><span class="n">' + cmds.length + '</span> <span class="l">commands</span></div>' +
+        '<div class="stat"><span class="n">' + pts.length + '</span> <span class="l">points</span></div>' +
+        '<div class="stat"><span class="n">' + Math.round(len) + '</span> <span class="l">total length</span></div>' +
+        '<div class="stat"><span class="n">' + Math.round(bbox.x) + ',' + Math.round(bbox.y) + '</span> <span class="l">bbox origin</span></div>' +
+        '<div class="stat"><span class="n">' + Math.round(bbox.width) + '×' + Math.round(bbox.height) + '</span> <span class="l">bbox size</span></div>';
+
+      // Command list
+      cmdsEl.innerHTML = cmds.map(function (c) {
+        return '<div class="cmd"><span class="letter">' + c.cmd + '</span><span class="args">' + c.args.map(function(a){return a.toFixed(1);}).join(" ") + '</span><span class="desc">' + (cmdDesc[c.cmd.toUpperCase()]||"") + '</span></div>';
+      }).join("");
+    }
+
+    [pathInput, "showGrid","showHandles","showPoints","showBBox","strokeOnly","strokeColor"].forEach(function (id) {
+      var el = typeof id === "string" ? document.getElementById(id) : id;
+      el.addEventListener("input", render);
+      el.addEventListener("change", render);
+    });
+
+    document.getElementById("copyPath").addEventListener("click", function () {
+      var text = pathInput.value;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function(){ var b=document.getElementById("copyPath"); var t=b.textContent; b.textContent="Copied!"; setTimeout(function(){b.textContent=t;},1200); });
+      }
+    });
+
+    document.getElementById("downloadSvg").addEventListener("click", function () {
+      var d = pathInput.value.trim();
+      var bb = ""; try { var p = document.createElementNS(NS,"path"); p.setAttribute("d",d); svgEl.appendChild(p); bb = p.getBBox(); svgEl.removeChild(p); } catch(e){}
+      var pad = 10;
+      var vb = (bb.x-pad) + " " + (bb.y-pad) + " " + (bb.width+pad*2) + " " + (bb.height+pad*2);
+      var svgStr = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="' + vb + '"><path d="' + esc(d) + '" fill="none" stroke="' + document.getElementById("strokeColor").value + '" stroke-width="2"/></svg>';
+      var blob = new Blob([svgStr], {type:"image/svg+xml"});
+      var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "path.svg"; a.click(); URL.revokeObjectURL(a.href);
+    });
+
+    document.getElementById("normalize").addEventListener("click", function () {
+      var cmds = parseCommands(pathInput.value);
+      var cur = {x:0,y:0}, start = {x:0,y:0};
+      var out = cmds.map(function (c) {
+        var up = c.cmd.toUpperCase(), rel = c.cmd !== up, a = c.args;
+        var abs = a.slice();
+        if (up === "M" || up === "L") {
+          var nx = rel ? cur.x + a[0] : a[0], ny = rel ? cur.y + a[1] : a[1];
+          abs = [nx, ny]; cur.x = nx; cur.y = ny; if (up==="M") start = {x:nx,y:ny};
+        } else if (up === "H") { abs = [rel?cur.x+a[0]:a[0]]; cur.x = abs[0]; }
+        else if (up === "V") { abs = [rel?cur.y+a[0]:a[0]]; cur.y = abs[0]; }
+        else if (up === "C") { abs = [rel?cur.x+a[0]:a[0], rel?cur.y+a[1]:a[1], rel?cur.x+a[2]:a[2], rel?cur.y+a[3]:a[3], rel?cur.x+a[4]:a[4], rel?cur.y+a[5]:a[5]]; cur.x=abs[4]; cur.y=abs[5]; }
+        else if (up === "S") { abs = [rel?cur.x+a[0]:a[0], rel?cur.y+a[1]:a[1], rel?cur.x+a[2]:a[2], rel?cur.y+a[3]:a[3]]; cur.x=abs[2]; cur.y=abs[3]; }
+        else if (up === "Q") { abs = [rel?cur.x+a[0]:a[0], rel?cur.y+a[1]:a[1], rel?cur.x+a[2]:a[2], rel?cur.y+a[3]:a[3]]; cur.x=abs[2]; cur.y=abs[3]; }
+        else if (up === "T") { abs = [rel?cur.x+a[0]:a[0], rel?cur.y+a[1]:a[1]]; cur.x=abs[0]; cur.y=abs[1]; }
+        else if (up === "A") { abs = [a[0],a[1],a[2],a[3],a[4], rel?cur.x+a[5]:a[5], rel?cur.y+a[6]:a[6]]; cur.x=abs[5]; cur.y=abs[6]; }
+        else if (up === "Z") { cur.x=start.x; cur.y=start.y; return "Z"; }
+        return up + " " + abs.map(function(v){return Math.round(v*100)/100;}).join(" ");
+      });
+      pathInput.value = out.join(" ");
+      render();
+    });
+
+    render();
+  })();
+  </script>
+</body>
+</html>
