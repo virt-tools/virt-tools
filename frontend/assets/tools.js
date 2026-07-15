@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "secret-generator",
+    name: "Random Secret & API Key Generator",
+    description: "Generate cryptographically secure random secrets, API keys, tokens, and encryption keys with the Web Crypto API. Choose byte length and output encoding — hex, Base64, Base64url (URL-safe), Base58, or a custom alphabet — with presets for AES-256 keys, JWT secrets, API keys, CSRF tokens, OAuth secrets, and UUID v4. Generate many at once. Everything runs locally — your secret never leaves the browser.",
+    category: "Security",
+    icon: "🔐",
+    added: "2026-07-15T02:30:00Z",
+  },
+  {
     slug: "ascii-banner",
     name: "ASCII Banner Generator",
     description: "Turn text into big ASCII-art banners using a block, block-3D, banner (6-line), or thin font. Pick a font, type your message (A–Z, 0–9, and common punctuation), set letter and line spacing, then copy or download the result. Each character is a fixed-width grid; spaces are inserted automatically between glyphs. Pure static font data, runs locally in your browser.",
