@@ -4314,4 +4314,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🏷️",
     added: "2026-07-15T17:50:00Z",
   },
+  {
+    slug: "text-extractor",
+    name: "Text Pattern Extractor",
+    description: "Paste text and pull out everything matching a built-in pattern — emails, URLs, IPv4/IPv6, phone numbers, hex colors, hashtags, @mentions, dates, times, card-like numbers, MAC addresses, UUIDs — or use your own regex. Deduplicate, sort, count, and copy as a list or CSV. Pairs with Find & Replace and the Regex Tester. Runs locally in your browser.",
+    category: "Text",
+    icon: "🔬",
+    added: "2026-07-15T18:20:00Z",
+  },
 ];
