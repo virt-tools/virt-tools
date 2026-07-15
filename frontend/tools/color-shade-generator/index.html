@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Color Shade Scale Generator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .controls { display:flex; flex-wrap:wrap; gap:14px; align-items:flex-end; margin:10px 0 16px; }
+    .controls label { font-size:13px; opacity:.85; display:block; margin-bottom:4px; }
+    .controls input[type="color"] { width:60px; height:38px; padding:0; border:1px solid var(--border,#2a2f3a); border-radius:6px; background:none; cursor:pointer; }
+    .controls input[type="text"], .controls select { font-family:ui-monospace,monospace; font-size:13px; padding:6px 8px; border:1px solid var(--border,#2a2f3a); border-radius:6px; background:var(--bg,#14181f); color:inherit; }
+    .toolbar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+    .scale { display:flex; flex-direction:column; border:1px solid var(--border,#2a2f3a); border-radius:10px; overflow:hidden; margin-bottom:14px; }
+    .swatch { display:flex; align-items:center; gap:12px; padding:14px 16px; cursor:pointer; transition: transform .1s; }
+    .swatch:hover { transform: translateX(4px); }
+    .swatch .meta { display:flex; flex-direction:column; min-width:90px; font-size:13px; }
+    .swatch .stop { font-weight:700; }
+    .swatch .hex { font-family:ui-monospace,monospace; opacity:.85; font-size:12px; }
+    .swatch .rgb { font-family:ui-monospace,monospace; opacity:.5; font-size:11px; }
+    .swatch .copyhint { font-size:11px; opacity:.5; margin-left:auto; }
+    .preview { padding:18px; border:1px solid var(--border,#2a2f3a); border-radius:10px; margin-bottom:14px; background:var(--panel-2,#161a22); }
+    .preview .demo { padding:12px 16px; border-radius:8px; margin:4px 0; font-weight:600; }
+    .out { font-family:ui-monospace,monospace; font-size:12px; line-height:1.5; background:var(--bg,#14181f); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:10px; white-space:pre-wrap; word-break:break-word; max-height:300px; overflow:auto; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Color Shade Scale Generator</h1>
+      <p>Generate a full 50–950 shade scale from a single base color — the way Tailwind, Radix, and Material build their color systems. Lightness stops are interpolated in OKLab (a perceptual color space) so the steps look even to the eye. Pick a base color and a lightness curve, then copy the CSS custom properties, SCSS variables, Tailwind config, or JSON. Pairs with the Color Converter and Palette Generator. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="controls">
+        <div>
+          <label for="base">Base color</label>
+          <input type="color" id="base" value="#6366f1">
+        </div>
+        <div>
+          <label for="baseHex">Hex</label>
+          <input type="text" id="baseHex" value="#6366f1" style="width:110px;">
+        </div>
+        <div>
+          <label for="name">Palette name</label>
+          <input type="text" id="name" value="primary" style="width:120px;">
+        </div>
+        <div>
+          <label for="curve">Lightness curve</label>
+          <select id="curve">
+            <option value="tailwind">Tailwind-like (50–950)</option>
+            <option value="material">Material (50–900)</option>
+            <option value="radix">Radix-like (1–12)</option>
+            <option value="custom">Custom anchors</option>
+          </select>
+        </div>
+        <div>
+          <label for="baseStop">Base is stop</label>
+          <select id="baseStop">
+            <option value="500">500</option>
+            <option value="600" selected>600</option>
+            <option value="700">700</option>
+            <option value="400">400</option>
+          </select>
+        </div>
+        <button id="random" class="secondary">Random base</button>
+      </div>
+
+      <div class="toolbar">
+        <button id="copyCss" class="secondary">Copy CSS variables</button>
+        <button id="copyScss" class="secondary">Copy SCSS</button>
+        <button id="copyTailwind" class="secondary">Copy Tailwind config</button>
+        <button id="copyJson" class="secondary">Copy JSON</button>
+        <button id="downloadCss" class="secondary">Download .css</button>
+      </div>
+
+      <div class="scale" id="scale"></div>
+
+      <div class="preview" id="preview"></div>
+      <div class="out" id="out"></div>
+
+      <p class="note">Lightness anchors use the OKLab L channel. Dark stops (700–950) keep the base hue and chroma; very light stops (50–100) nudge chroma down so pastels don't look neon. The base color's hue is preserved across the scale. Runs locally.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var baseEl = document.getElementById("base");
+    var baseHexEl = document.getElementById("baseHex");
+    var nameEl = document.getElementById("name");
+    var curveEl = document.getElementById("curve");
+    var baseStopEl = document.getElementById("baseStop");
+    var scaleEl = document.getElementById("scale");
+    var previewEl = document.getElementById("preview");
+    var outEl = document.getElementById("out");
+
+    // Stop definitions per curve
+    var stopSets = {
+      tailwind: [50,100,200,300,400,500,600,700,800,900,950],
+      material: [50,100,200,300,400,500,600,700,800,900],
+      radix: [1,2,3,4,5,6,7,8,9,10,11,12],
+      custom: [50,100,200,300,400,500,600,700,800,900,950]
+    };
+
+    // Target OKLab L for each stop (approx Tailwind-like perceptual lightness)
+    var lightnessAnchors = {
+      tailwind: {50:0.985,100:0.965,200:0.92,300:0.86,400:0.78,500:0.68,600:0.58,700:0.46,800:0.36,900:0.27,950:0.18},
+      material: {50:0.985,100:0.965,200:0.92,300:0.86,400:0.78,500:0.68,600:0.58,700:0.46,800:0.36,900:0.27},
+      radix:    {1:0.99,2:0.965,3:0.93,4:0.89,5:0.84,6:0.74,7:0.64,8:0.54,9:0.44,10:0.36,11:0.30,12:0.22},
+      custom:   {50:0.985,100:0.965,200:0.92,300:0.86,400:0.78,500:0.68,600:0.58,700:0.46,800:0.36,900:0.27,950:0.18}
+    };
+
+    // ---- color conversions ----
+    function hexToRgb(hex) {
+      hex = hex.replace("#","");
+      if (hex.length === 3) hex = hex.split("").map(function(c){return c+c;}).join("");
+      var n = parseInt(hex,16);
+      return { r:(n>>16)&255, g:(n>>8)&255, b:n&255 };
+    }
+    function rgbToHex(r,g,b) {
+      function c(x){ x = Math.round(Math.max(0,Math.min(255,x))); return x.toString(16).padStart(2,"0"); }
+      return "#" + c(r) + c(g) + c(b);
+    }
+    function srgbToLin(c) { c /= 255; return c <= 0.04045 ? c/12.92 : Math.pow((c+0.055)/1.055, 2.4); }
+    function linToSrgb(c) { c = c <= 0.0031308 ? c*12.92 : 1.055*Math.pow(c,1/2.4) - 0.055; return Math.round(c*255); }
+    function rgbToOklab(r,g,b) {
+      var lr=srgbToLin(r), lg=srgbToLin(g), lb=srgbToLin(b);
+      var l=0.4122214708*lr+0.5363325363*lg+0.0514459929*lb;
+      var m=0.2119034982*lr+0.6806995451*lg+0.1073969566*lb;
+      var s=0.0883024619*lr+0.2817188376*lg+0.6299787005*lb;
+      var l_=Math.cbrt(l), m_=Math.cbrt(m), s_=Math.cbrt(s);
+      return {
+        L: 0.2104542553*l_+0.7936177850*m_-0.0040720468*s_,
+        a: 1.9779984951*l_-2.4285922050*m_+0.4505937099*s_,
+        b: 0.0259040371*l_+0.7827717662*m_-0.8086757660*s_
+      };
+    }
+    function oklabToRgb(L,a,b) {
+      var l_=L + 0.3963377774*a + 0.2158037573*b;
+      var m_=L - 0.1055613458*a - 0.0638541728*b;
+      var s_=L - 0.0894841775*a - 1.2914855480*b;
+      var l=l_*l_*l_, m=m_*m_*m_, s=s_*s_*s_;
+      var r= 4.0767416621*l - 3.3077115913*m + 0.2309699292*s;
+      var g= -1.2684380046*l + 2.6097574011*m - 0.3413193965*s;
+      var bb=-0.0041960863*l - 0.7034186147*m + 1.7076147010*s;
+      return { r:linToSrgb(r), g:linToSrgb(g), b:linToSrgb(bb) };
+    }
+
+    function generateScale(hex, curve, baseStopVal) {
+      var rgb = hexToRgb(hex);
+      var base = rgbToOklab(rgb.r, rgb.g, rgb.b);
+      var stops = stopSets[curve];
+      var anchors = lightnessAnchors[curve];
+
+      // chroma reduction for light stops to avoid neon
+      function chromaFactor(L) {
+        if (L > 0.92) return 0.55 + (1.0 - L) * 5; // very light: reduce
+        if (L > 0.85) return 0.75 + (0.92 - L) * 2.5;
+        if (L < 0.25) return 0.85 + L * 0.5; // very dark: slight reduce
+        return 1.0;
+      }
+
+      var scale = {};
+      stops.forEach(function (stop) {
+        var L = anchors[stop];
+        var cf = chromaFactor(L);
+        var a = base.a * cf;
+        var b = base.b * cf;
+        // slight chroma bump for mid stops
+        if (L > 0.55 && L < 0.8) { a *= 1.05; b *= 1.05; }
+        var out = oklabToRgb(L, a, b);
+        scale[stop] = { hex: rgbToHex(out.r,out.g,out.b), r:out.r, g:out.g, b:out.b, L:L };
+      });
+
+      // Override the base stop with the exact base color
+      var bs = parseInt(baseStopVal, 10);
+      if (scale[bs]) {
+        scale[bs].hex = hex.toLowerCase();
+        scale[bs].r = rgb.r; scale[bs].g = rgb.g; scale[bs].b = rgb.b;
+      }
+      return scale;
+    }
+
+    function esc(s){return String(s).replace(/[&<>"]/g,function(c){return c==="&"?"&amp;":c==="<"?"&lt;":c===">"?"&gt;":"&quot;";});}
+    function luminance(r,g,b){ var a=[r,g,b].map(function(v){v/=255;return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4);}); return 0.2126*a[0]+0.7152*a[1]+0.0722*a[2]; }
+    function textOn(r,g,b){ return luminance(r,g,b) > 0.4 ? "#0b0d12" : "#ffffff"; }
+
+    var lastScale = {};
+
+    function compute() {
+      var hex = baseHexEl.value.trim() || "#6366f1";
+      if (!/^#?[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(hex)) { scaleEl.innerHTML=""; outEl.textContent=""; return; }
+      if (hex[0] !== "#") hex = "#" + hex;
+      baseEl.value = hex.length === 7 ? hex : "#6366f1";
+      var curve = curveEl.value;
+      var baseStop = baseStopEl.value;
+      var scale = generateScale(hex, curve, baseStop);
+      lastScale = scale;
+      var stops = stopSets[curve];
+
+      // Render scale
+      scaleEl.innerHTML = stops.map(function (s) {
+        var c = scale[s];
+        var fg = textOn(c.r,c.g,c.b);
+        return '<div class="swatch" style="background:' + c.hex + ';color:' + fg + ';" data-hex="' + c.hex + '" data-stop="' + s + '">'
+          + '<div class="meta"><span class="stop">' + s + '</span><span class="hex">' + c.hex.toUpperCase() + '</span><span class="rgb">rgb(' + c.r + ', ' + c.g + ', ' + c.b + ')</span></div>'
+          + '<span class="copyhint">click to copy</span></div>';
+      }).join("");
+
+      // Preview
+      var name = nameEl.value.trim() || "primary";
+      var p50 = scale[stops[0]], p100 = scale[stops[1]] || scale[stops[0]], p500 = scale[500] || scale[stops[Math.floor(stops.length/2)]], p700 = scale[700] || scale[stops[stops.length-2]];
+      previewEl.innerHTML =
+        '<div class="demo" style="background:' + p50.hex + ';color:' + textOn(p50.r,p50.g,p50.b) + ';">{name}-50 surface</div>'.replace("{name}",name) +
+        '<div class="demo" style="background:' + (p500? p500.hex : hex) + ';color:' + (p500? textOn(p500.r,p500.g,p500.b):"#fff") + ';">{name}-500 button</div>'.replace("{name}",name) +
+        '<div class="demo" style="background:' + (p700? p700.hex:hex) + ';color:' + (p700? textOn(p700.r,p700.g,p700.b):"#fff") + ';">{name}-700 heading</div>'.replace("{name}",name);
+
+      // CSS output
+      var css = ":root {\n" + stops.map(function (s) { return "  --" + name + "-" + s + ": " + scale[s].hex + ";"; }).join("\n") + "\n}";
+      outEl.textContent = css;
+    }
+
+    function doCopy(text, btn) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function(){ flash(btn); });
+      } else {
+        var ta=document.createElement("textarea"); ta.value=text; document.body.appendChild(ta); ta.select();
+        try{document.execCommand("copy"); flash(btn);}catch(x){} ta.remove();
+      }
+    }
+    function flash(b){ var t=b.textContent; b.textContent="Copied!"; setTimeout(function(){b.textContent=t;},1200); }
+
+    [baseEl, baseHexEl, nameEl, curveEl, baseStopEl].forEach(function (el) {
+      el.addEventListener("input", compute);
+      el.addEventListener("change", compute);
+    });
+    baseEl.addEventListener("input", function(){ baseHexEl.value = baseEl.value; });
+
+    scaleEl.addEventListener("click", function (e) {
+      var s = e.target.closest(".swatch");
+      if (!s) return;
+      doCopy(s.getAttribute("data-hex"), null);
+    });
+
+    document.getElementById("random").addEventListener("click", function () {
+      var h = "#" + Math.floor(Math.random()*0xffffff).toString(16).padStart(6,"0");
+      baseEl.value = h; baseHexEl.value = h; compute();
+    });
+    document.getElementById("copyCss").addEventListener("click", function () {
+      var stops = stopSets[curveEl.value]; var name = nameEl.value.trim()||"primary";
+      doCopy(":root {\n" + stops.map(function(s){return "  --"+name+"-"+s+": "+lastScale[s].hex+";";}).join("\n")+"\n}", this);
+    });
+    document.getElementById("copyScss").addEventListener("click", function () {
+      var stops = stopSets[curveEl.value]; var name = nameEl.value.trim()||"primary";
+      doCopy(stops.map(function(s){return "$"+name+"-"+s+": "+lastScale[s].hex+";";}).join("\n"), this);
+    });
+    document.getElementById("copyTailwind").addEventListener("click", function () {
+      var stops = stopSets[curveEl.value]; var name = nameEl.value.trim()||"primary";
+      var obj = "{\n" + stops.map(function(s){return "    "+s+": \""+lastScale[s].hex+"\"";}).join(",\n") + "\n  }";
+      doCopy("module.exports = {\n  theme: {\n    extend: {\n      colors: {\n        " + name + ": " + obj + "\n      }\n    }\n  }\n};", this);
+    });
+    document.getElementById("copyJson").addEventListener("click", function () {
+      var stops = stopSets[curveEl.value]; var name = nameEl.value.trim()||"primary";
+      var obj = {}; stops.forEach(function(s){ obj[s] = lastScale[s].hex; });
+      doCopy(JSON.stringify({name:name, scale:obj}, null, 2), this);
+    });
+    document.getElementById("downloadCss").addEventListener("click", function () {
+      var stops = stopSets[curveEl.value]; var name = nameEl.value.trim()||"primary";
+      var css = ":root {\n" + stops.map(function(s){return "  --"+name+"-"+s+": "+lastScale[s].hex+";";}).join("\n") + "\n}\n";
+      var blob = new Blob([css], {type:"text/css"});
+      var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name + "-scale.css"; a.click();
+      URL.revokeObjectURL(a.href);
+    });
+
+    compute();
+  })();
+  </script>
+</body>
+</html>

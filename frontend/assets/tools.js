@@ -4322,4 +4322,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔬",
     added: "2026-07-15T18:20:00Z",
   },
+  {
+    slug: "color-shade-generator",
+    name: "Color Shade Scale Generator",
+    description: "Generate a full 50–950 shade scale from a single base color — the way Tailwind, Radix, and Material build their color systems. Lightness stops interpolate in OKLab (a perceptual space) so the steps look even, with chroma reduction on the lightest stops so pastels don't look neon. Pick a base color and curve, then copy CSS variables, SCSS, Tailwind config, or JSON. Pairs with the Color Converter and Palette Generator. Everything runs locally in your browser.",
+    category: "Design",
+    icon: "🎯",
+    added: "2026-07-15T18:50:00Z",
+  },
 ];
