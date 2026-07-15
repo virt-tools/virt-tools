@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Batch Image Resizer &amp; Converter — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px; margin:10px 0; }
+    .field { margin-bottom:0; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:10px 0; }
+    #drop { display:block; border:2px dashed var(--border,#2a2f3a); border-radius:8px; padding:24px; text-align:center; cursor:pointer; opacity:.8; }
+    #drop.drag { border-color: var(--accent,#6ea8fe); opacity:1; }
+    .items { margin-top:12px; display:flex; flex-direction:column; gap:8px; }
+    .item { display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid var(--border,#2a2f3a); border-radius:8px; background:var(--panel-2,#161a22); }
+    .item img { width:48px; height:48px; object-fit:cover; border-radius:4px; background:#000; }
+    .item .info { flex:1; font-size:12px; }
+    .item .name { font-family:monospace; }
+    .item .meta { opacity:.6; }
+    .item .out { font-family:monospace; opacity:.7; }
+    .item .status { font-size:11px; opacity:.7; }
+    .item .status.done { color: #4ade80; opacity:1; }
+    .item .status.err { color: var(--bad,#f87171); opacity:1; }
+    .progress { height:6px; background:var(--panel,#0e1117); border-radius:4px; overflow:hidden; margin:8px 0; }
+    .progress > div { height:100%; background: var(--accent,#6ea8fe); transition: width .2s; }
+    button.mini { padding:3px 8px; font-size:11px; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Batch Image Resizer &amp; Converter</h1>
+      <p>Resize and convert many images at once — drop a batch (or pick files), choose a resize mode (percentage, max width, max height, or exact dimensions), pick the output format (PNG, JPEG, or WebP) and quality, and download each result. Aspect ratio is preserved unless you choose exact dimensions. Each image is decoded and resampled on an in-memory canvas — nothing is uploaded. Great for preparing thumbnails, web assets, or normalizing a folder of photos.</p>
+    </div>
+
+    <div class="panel">
+      <div id="drop" class="dropzone">
+        <input type="file" id="file" multiple accept="image/*" hidden>
+        <p>Click to choose images, or drag &amp; drop them here</p>
+        <p style="font-size:12px;opacity:.6;">PNG, JPEG, WebP, GIF, BMP — processed locally, nothing uploaded.</p>
+      </div>
+
+      <div class="grid">
+        <div class="field"><label for="mode">Resize mode</label>
+          <select id="mode">
+            <option value="percent" selected>Percentage</option>
+            <option value="maxw">Max width</option>
+            <option value="maxh">Max height</option>
+            <option value="max">Max (fit within W×H)</option>
+            <option value="exact">Exact W×H</option>
+          </select>
+        </div>
+        <div class="field"><label for="percent">Percent (%)</label><input id="percent" type="number" min="1" max="400" value="50" style="width:90px;"></div>
+        <div class="field"><label for="width">Width (px)</label><input id="width" type="number" min="1" value="800" style="width:90px;"></div>
+        <div class="field"><label for="height">Height (px)</label><input id="height" type="number" min="1" value="600" style="width:90px;"></div>
+        <div class="field"><label for="format">Output format</label>
+          <select id="format"><option value="image/png">PNG</option><option value="image/jpeg" selected>JPEG</option><option value="image/webp">WebP</option></select>
+        </div>
+        <div class="field"><label for="quality">Quality (JPEG/WebP, 0–1)</label><input id="quality" type="number" min="0.1" max="1" step="0.05" value="0.85" style="width:90px;"></div>
+      </div>
+
+      <div class="row">
+        <button id="process">Process all</button>
+        <button id="downloadAll" class="secondary">Download all</button>
+        <button id="clear" class="secondary">Clear list</button>
+      </div>
+
+      <div class="progress"><div id="bar" style="width:0%"></div></div>
+      <p class="err" id="err"></p>
+      <p class="note" id="note">Drop images above to begin.</p>
+      <div class="items" id="items"></div>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var items = []; // {file, name, w, h, outName, outUrl, status, el}
+
+    function extFor(fmt) {
+      if (fmt === "image/png") return "png";
+      if (fmt === "image/jpeg") return "jpg";
+      if (fmt === "image/webp") return "webp";
+      return "png";
+    }
+    function baseName(s) {
+      var i = s.lastIndexOf(".");
+      return i > 0 ? s.slice(0, i) : s;
+    }
+
+    function computeDims(w, h) {
+      var mode = $("mode").value;
+      var pw = parseInt($("width").value, 10) || 0;
+      var ph = parseInt($("height").value, 10) || 0;
+      var pct = (parseInt($("percent").value, 10) || 100) / 100;
+      if (mode === "percent") return [Math.round(w * pct), Math.round(h * pct)];
+      if (mode === "maxw") {
+        if (w <= pw) return [w, h];
+        return [pw, Math.round(h * pw / w)];
+      }
+      if (mode === "maxh") {
+        if (h <= ph) return [w, h];
+        return [Math.round(w * ph / h), ph];
+      }
+      if (mode === "max") {
+        var rw = pw / w, rh = ph / h, r = Math.min(rw, rh);
+        if (r >= 1) return [w, h];
+        return [Math.round(w * r), Math.round(h * r)];
+      }
+      if (mode === "exact") return [pw, ph];
+      return [w, h];
+    }
+
+    function addFiles(files) {
+      for (var i = 0; i < files.length; i++) {
+        var f = files[i];
+        if (!f.type.startsWith("image/")) continue;
+        items.push({ file: f, name: f.name, w: 0, h: 0, outName: "", outUrl: "", status: "pending", el: null });
+      }
+      renderItems();
+      // pre-load dimensions
+      items.forEach(function (it) {
+        if (it.w) return;
+        var img = new Image();
+        var url = URL.createObjectURL(it.file);
+        img.onload = function () {
+          it.w = img.naturalWidth; it.h = img.naturalHeight;
+          if (it.el) it.el.querySelector(".meta").textContent = it.w + "×" + it.h + " · " + (it.file.size / 1024).toFixed(1) + " KB";
+          URL.revokeObjectURL(url);
+        };
+        img.onerror = function () { URL.revokeObjectURL(url); };
+        img.src = url;
+      });
+      $("note").textContent = items.length + " image(s) loaded.";
+    }
+
+    function renderItems() {
+      var wrap = $("items");
+      wrap.innerHTML = "";
+      items.forEach(function (it, idx) {
+        var div = document.createElement("div");
+        div.className = "item";
+        div.innerHTML =
+          '<img><div class="info"><div class="name">' + esc(it.name) + '</div>' +
+          '<div class="meta">' + (it.w ? it.w + "×" + it.h : "loading…") + '</div>' +
+          '<div class="out">' + (it.outName || "—") + '</div>' +
+          '<div class="status">' + it.status + '</div></div>';
+        var imgEl = div.querySelector("img");
+        var url = URL.createObjectURL(it.file);
+        imgEl.src = url;
+        var dl = document.createElement("button");
+        dl.className = "mini"; dl.textContent = "Download";
+        dl.disabled = !it.outUrl;
+        dl.addEventListener("click", function () { triggerDownload(it); });
+        div.appendChild(dl);
+        it.el = div;
+        wrap.appendChild(div);
+      });
+    }
+    function esc(s) { return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+    function triggerDownload(it) {
+      if (!it.outUrl) return;
+      var a = document.createElement("a");
+      a.href = it.outUrl; a.download = it.outName;
+      a.click();
+    }
+
+    async function processOne(it) {
+      return new Promise(function (resolve) {
+        var img = new Image();
+        var url = URL.createObjectURL(it.file);
+        img.onload = function () {
+          URL.revokeObjectURL(url);
+          var dims = computeDims(img.naturalWidth, img.naturalHeight);
+          var w = dims[0], h = dims[1];
+          var canvas = document.createElement("canvas");
+          canvas.width = w; canvas.height = h;
+          var ctx = canvas.getContext("2d");
+          // for JPEG, fill white background (alpha lost)
+          if ($("format").value === "image/jpeg") {
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, w, h);
+          }
+          ctx.drawImage(img, 0, 0, w, h);
+          var quality = Math.max(0.1, Math.min(1, parseFloat($("quality").value) || 0.85));
+          canvas.toBlob(function (blob) {
+            if (!blob) { it.status = "error"; it.el.querySelector(".status").textContent = "error"; it.el.querySelector(".status").className = "status err"; resolve(); return; }
+            if (it.outUrl) URL.revokeObjectURL(it.outUrl);
+            it.outUrl = URL.createObjectURL(blob);
+            var ext = extFor($("format").value);
+            it.outName = baseName(it.name) + "_" + w + "x" + h + "." + ext;
+            it.status = "done";
+            if (it.el) {
+              it.el.querySelector(".out").textContent = it.outName + " · " + (blob.size / 1024).toFixed(1) + " KB";
+              it.el.querySelector(".status").textContent = "done";
+              it.el.querySelector(".status").className = "status done";
+              var dl = it.el.querySelector("button.mini"); if (dl) dl.disabled = false;
+            }
+            resolve();
+          }, $("format").value, $("format").value === "image/png" ? undefined : quality);
+        };
+        img.onerror = function () {
+          URL.revokeObjectURL(url);
+          it.status = "error";
+          if (it.el) { it.el.querySelector(".status").textContent = "error"; it.el.querySelector(".status").className = "status err"; }
+          resolve();
+        };
+        img.src = url;
+      });
+    }
+
+    async function processAll() {
+      if (!items.length) { $("err").textContent = "Add images first."; return; }
+      $("err").textContent = "";
+      var bar = $("bar");
+      for (var i = 0; i < items.length; i++) {
+        bar.style.width = ((i / items.length) * 100).toFixed(0) + "%";
+        await processOne(items[i]);
+      }
+      bar.style.width = "100%";
+      $("note").textContent = "Processed " + items.length + " image(s).";
+    }
+
+    var dropEl = $("drop"), fileEl = $("file");
+    dropEl.addEventListener("click", function () { fileEl.click(); });
+    fileEl.addEventListener("change", function () { addFiles(fileEl.files); fileEl.value = ""; });
+    ["dragenter", "dragover"].forEach(function (ev) { dropEl.addEventListener(ev, function (e) { e.preventDefault(); dropEl.classList.add("drag"); }); });
+    ["dragleave", "drop"].forEach(function (ev) { dropEl.addEventListener(ev, function (e) { e.preventDefault(); dropEl.classList.remove("drag"); }); });
+    dropEl.addEventListener("drop", function (e) {
+      var files = e.dataTransfer && e.dataTransfer.files;
+      if (files && files.length) addFiles(files);
+    });
+    $("process").addEventListener("click", processAll);
+    $("downloadAll").addEventListener("click", function () {
+      items.forEach(function (it) { if (it.outUrl) triggerDownload(it); });
+    });
+    $("clear").addEventListener("click", function () {
+      items.forEach(function (it) { if (it.outUrl) URL.revokeObjectURL(it.outUrl); });
+      items = []; renderItems(); $("bar").style.width = "0%"; $("note").textContent = "Cleared.";
+    });
+  })();
+  </script>
+</body>
+</html>

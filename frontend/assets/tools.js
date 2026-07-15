@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "batch-image-resizer",
+    name: "Batch Image Resizer & Converter",
+    description: "Resize and convert many images at once — drop a batch, choose a resize mode (percentage, max width, max height, fit within W×H, or exact dimensions), pick PNG / JPEG / WebP output with quality control, and download each result. Aspect ratio is preserved unless you choose exact dimensions. Each image is decoded and resampled on an in-memory canvas — nothing is uploaded. Great for thumbnails, web assets, or normalizing a folder of photos.",
+    category: "Image",
+    icon: "🗜️",
+    added: "2026-07-15T05:00:00Z",
+  },
+  {
     slug: "json-sort",
     name: "JSON Sort & Order By",
     description: "Sort a JSON array of objects by one or more keys — ascending or descending, numeric or string comparison (auto-detect by default), case-sensitive or not, with control over where null and missing values land (first or last). Nested keys use dot-path notation (user.age). The comparator is stable, so equal elements keep their original order. Everything runs locally in your browser.",
