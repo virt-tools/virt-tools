@@ -4346,4 +4346,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎬",
     added: "2026-07-15T19:50:00Z",
   },
+  {
+    slug: "port-reference",
+    name: "Port Number & Service Reference",
+    description: "Look up IANA registered and common well-known TCP/UDP ports by number, service name, protocol, or description — HTTP, HTTPS, SSH, FTP, DNS, SMTP, MQTT, RDP, PostgreSQL, Redis, MongoDB, Kafka, Elasticsearch, and ~80 more. Filter by protocol and range (well-known 0–1023, registered 1024–49151). Static reference, runs locally in your browser.",
+    category: "Networking",
+    icon: "🔌",
+    added: "2026-07-15T20:20:00Z",
+  },
 ];
