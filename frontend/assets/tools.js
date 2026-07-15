@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "gitignore-generator",
+    name: ".gitignore Generator",
+    description: "Build a .gitignore file by ticking the languages, frameworks, editors, and OSes your project uses — Node, Python, Go, Rust, Java, Ruby, Swift, .NET, macOS, Windows, Linux, JetBrains, VS Code, Vim, Emacs, Django, Rails, React, Next.js, Vue, Angular, Svelte, Docker, Terraform, Unity, Unreal, Godot, and more. Each option contributes a curated block of ignore patterns. Combine as many as you need, then copy or download. Pure static templates, runs locally in your browser.",
+    category: "Text",
+    icon: "🚫",
+    added: "2026-07-15T00:00:00Z",
+  },
+  {
     slug: "sparkline-generator",
     name: "Sparkline & Unicode Chart Generator",
     description: "Turn a list of numbers into an inline sparkline using Unicode block characters (▁▂▃▄▅▆▇█), Braille (⠀⠄⠆⠇⠏⠛⠟⠿), or a taller bar chart — perfect for embedding tiny visualizations in Markdown, emails, or terminal output. Also outputs an SVG sparkline with optional area fill, plus an optional min/max value axis. Pure arithmetic, runs locally in your browser.",
