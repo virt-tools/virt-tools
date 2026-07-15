@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "json-key-case",
+    name: "JSON Key Case Converter",
+    description: "Recursively convert all object keys in a JSON document between camelCase, snake_case, kebab-case, PascalCase, CONST_CASE (SCREAMING_SNAKE), lowercase, or dot.case. Arrays and primitive values are preserved; only keys are renamed. Useful for normalizing API responses or config files. Everything runs locally in your browser.",
+    category: "Data",
+    icon: "🔠",
+    added: "2026-07-15T03:30:00Z",
+  },
+  {
     slug: "ascii-frame",
     name: "ASCII Frame & Box Drawing Generator",
     description: "Wrap text in a Unicode box-drawing frame — single line (─│┌┐└┘), double (═║╔╗╚╝), rounded (╭╮╰╯), heavy (━┃┏┓┗┛), or plain ASCII (+-|). Adjustable horizontal and vertical padding, left/center/right alignment, and optional title bar. Great for READMEs, source comments, and terminal output. Pure text manipulation, runs locally in your browser.",
