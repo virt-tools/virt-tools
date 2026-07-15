@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "word-cloud",
+    name: "Word Cloud Generator",
+    description: "Paste text and get a word cloud as an SVG — words sized by frequency, positioned with a spiral packing algorithm, coloured from a palette (blue, rainbow, warm, cool, or monochrome), with optional stopword filtering, case folding, min-frequency threshold, and configurable canvas size. Download the SVG or inspect the frequency table. Pairs with the Word Frequency Counter. Everything runs locally in your browser.",
+    category: "Text",
+    icon: "☁️",
+    added: "2026-07-15T06:00:00Z",
+  },
+  {
     slug: "curl-to-code",
     name: "cURL to Code Converter",
     description: "Paste a curl command and get equivalent code in browser fetch, Node.js, Python requests, or Go net/http. Handles method, URL, headers (-H), data (-d, JSON or form), -X, and -u basic auth. JSON bodies are parsed and re-serialized as native objects. Pure text parsing — no requests are made; the converter only reads the command string. Everything runs locally in your browser.",

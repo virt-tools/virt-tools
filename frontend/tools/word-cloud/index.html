@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Word Cloud Generator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; margin:10px 0; }
+    .field { margin-bottom:0; }
+    .full { grid-column: 1 / -1; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:10px 0; }
+    textarea { width:100%; font-family:monospace; font-size:13px; min-height:140px; }
+    .cloud-wrap { border:1px solid var(--border,#2a2f3a); border-radius:8px; background:#fff; margin-top:10px; overflow:auto; max-height:70vh; }
+    svg.cloud { display:block; width:100%; height:auto; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    table { width:100%; border-collapse:collapse; margin-top:8px; }
+    th, td { text-align:left; padding:4px 10px; border-bottom:1px solid var(--border,#2a2f3a); font-size:12px; }
+    th { opacity:.65; }
+    td.n { font-family:monospace; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Word Cloud Generator</h1>
+      <p>Paste text and get a word cloud as an SVG — words sized by frequency, positioned with a simple spiral packing algorithm, coloured from a palette, with optional stopword filtering, case folding, and a minimum-frequency threshold. Download the SVG or copy the word frequency table. Pairs with the Word Frequency Counter. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field full">
+        <label for="text">Input text</label>
+        <textarea id="text" spellcheck="false" autocomplete="off" placeholder="Paste your text here…">The quick brown fox jumps over the lazy dog. The dog barks; the fox runs. Quick brown fox, lazy dog, quick dog.</textarea>
+      </div>
+      <div class="grid">
+        <div class="field"><label for="maxWords">Max words</label><input id="maxWords" type="number" min="5" max="500" value="80" style="width:90px;"></div>
+        <div class="field"><label for="minFreq">Minimum frequency</label><input id="minFreq" type="number" min="1" max="100" value="2" style="width:90px;"></div>
+        <div class="field"><label for="minLen">Min word length</label><input id="minLen" type="number" min="1" max="20" value="3" style="width:90px;"></div>
+        <div class="field"><label for="palette">Color palette</label>
+          <select id="palette">
+            <option value="blue" selected>Blue scale</option>
+            <option value="rainbow">Rainbow</option>
+            <option value="warm">Warm (red/orange)</option>
+            <option value="cool">Cool (blue/green)</option>
+            <option value="mono">Monochrome</option>
+          </select>
+        </div>
+        <div class="field"><label for="caseFold">Case</label>
+          <select id="caseFold"><option value="lower" selected>lower</option><option value="keep">keep</option></select>
+        </div>
+        <div class="field"><label for="stop">Stopwords</label>
+          <select id="stop"><option value="en" selected>English</option><option value="none">none</option></select>
+        </div>
+        <div class="field"><label for="svgW">SVG width (px)</label><input id="svgW" type="number" min="200" max="3000" value="800" style="width:90px;"></div>
+        <div class="field"><label for="svgH">SVG height (px)</label><input id="svgH" type="number" min="200" max="3000" value="500" style="width:90px;"></div>
+      </div>
+      <div class="row">
+        <button id="generate">Generate</button>
+        <button id="download" class="secondary">Download SVG</button>
+      </div>
+      <p class="err" id="err"></p>
+      <p class="note" id="note">Type text above.</p>
+      <div class="cloud-wrap"><svg class="cloud" id="cloud" xmlns="http://www.w3.org/2000/svg"></svg></div>
+      <h3>Top words</h3>
+      <table id="freq"><thead><tr><th>word</th><th>count</th></tr></thead><tbody></tbody></table>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var STOP = new Set("a an the and or but if then else when at by for with about against between into through during before after above below to from up down in out on off over under again further once here there all any both each few more most other some such no nor not only own same so than too very can will just don should now is are was were be been being have has had do does did doing am of as it its this that these those i me my we our you your he him his she her they them their what which who whom whose".split(/\s+/));
+
+    function palettes(name, n) {
+      var out = [];
+      for (var i = 0; i < n; i++) {
+        var t = i / Math.max(1, n - 1);
+        if (name === "blue") out.push("hsl(" + (210 - t * 30) + ", " + (50 + t * 30) + "%, " + (25 + t * 30) + "%)");
+        else if (name === "rainbow") out.push("hsl(" + (t * 300) + ", 70%, 45%)");
+        else if (name === "warm") out.push("hsl(" + (15 + t * 30) + ", " + (70 - t * 10) + "%, " + (40 + t * 10) + "%)");
+        else if (name === "cool") out.push("hsl(" + (180 + t * 60) + ", " + (60 - t * 10) + "%, " + (35 + t * 15) + "%)");
+        else out.push("#444");
+      }
+      return out;
+    }
+
+    function tokenize(text, caseFold) {
+      var words = text.toLowerCase().split(/[^a-z0-9'-]+/i).filter(Boolean);
+      if (caseFold === "lower") words = words.map(function (w) { return w.toLowerCase(); });
+      return words;
+    }
+
+    function count(text, caseFold, minLen, stop, minFreq) {
+      var tokens = tokenize(text, caseFold);
+      var counts = {};
+      tokens.forEach(function (w) {
+        if (w.length < minLen) return;
+        if (stop === "en" && STOP.has(w.toLowerCase())) return;
+        counts[w] = (counts[w] || 0) + 1;
+      });
+      return Object.keys(counts).map(function (k) { return { word: k, count: counts[k] }; })
+        .filter(function (x) { return x.count >= minFreq; })
+        .sort(function (a, b) { return b.count - a.count; });
+    }
+
+    function placeWord(placed, w, h, text, fontSize, fontWeight) {
+      var bbox = approxBBox(text, fontSize, fontWeight);
+      var tw = bbox.w, th = bbox.h;
+      // spiral from center outward
+      var cx = w / 2, cy = h / 2;
+      var step = Math.max(2, Math.round(fontSize / 6));
+      for (var r = 0; r < Math.max(w, h); r += step) {
+        var points = spiralPoints(cx, cy, r, step);
+        for (var p = 0; p < points.length; p++) {
+          var x = points[p][0] - tw / 2, y = points[p][1] - th / 2;
+          if (x < 2 || y < 2 || x + tw > w - 2 || y + th > h - 2) continue;
+          var ok = true;
+          for (var i = 0; i < placed.length; i++) {
+            var p2 = placed[i];
+            if (!(x + tw < p2.x || x > p2.x + p2.w || y + th < p2.y || y > p2.y + p2.h)) { ok = false; break; }
+          }
+          if (ok) { placed.push({ x: x, y: y, w: tw, h: th }); return { x: x, y: y + th * 0.78, w: tw, h: th }; }
+        }
+      }
+      return null;
+    }
+    function spiralPoints(cx, cy, r, step) {
+      var pts = [];
+      var steps = Math.max(8, Math.floor(r * 2 * Math.PI / step));
+      for (var i = 0; i < steps; i++) {
+        var a = i * (2 * Math.PI / steps);
+        pts.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]);
+      }
+      return pts;
+    }
+    function approxBBox(text, fontSize, fontWeight) {
+      // rough: average char width ≈ 0.55em, height ≈ 1.0em
+      var w = text.length * fontSize * 0.55;
+      var h = fontSize * 1.0;
+      return { w: w, h: h };
+    }
+
+    function generate() {
+      var errEl = $("err"); errEl.textContent = "";
+      var text = $("text").value;
+      if (!text.trim()) { $("cloud").innerHTML = ""; $("freq").querySelector("tbody").innerHTML = ""; $("note").textContent = "Type text above."; return; }
+      try {
+        var maxWords = parseInt($("maxWords").value, 10) || 80;
+        var minFreq = parseInt($("minFreq").value, 10) || 1;
+        var minLen = parseInt($("minLen").value, 10) || 1;
+        var palName = $("palette").value;
+        var caseFold = $("caseFold").value;
+        var stop = $("stop").value;
+        var w = parseInt($("svgW").value, 10) || 800;
+        var h = parseInt($("svgH").value, 10) || 500;
+
+        var items = count(text, caseFold, minLen, stop, minFreq).slice(0, maxWords);
+        if (!items.length) { errEl.textContent = "No words after filtering (lower min freq or min length, or turn off stopwords)."; return; }
+        var maxC = items[0].count, minC = items[items.length - 1].count;
+        var colors = palettes(palName, items.length);
+        var minFont = 12, maxFont = Math.min(120, Math.floor(h / 5));
+        var placed = [];
+        var svgParts = [];
+        svgParts.push('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + w + ' ' + h + '" width="' + w + '" height="' + h + '"><rect width="' + w + '" height="' + h + '" fill="#fff"/>');
+        for (var i = 0; i < items.length; i++) {
+          var t = (maxC === minC) ? 0.5 : (items[i].count - minC) / (maxC - minC);
+          var fontSize = Math.round(minFont + t * (maxFont - minFont));
+          var pos = placeWord(placed, w, h, items[i].word, fontSize, "bold");
+          if (!pos) continue;
+          svgParts.push('<text x="' + pos.x.toFixed(0) + '" y="' + pos.y.toFixed(0) + '" font-size="' + fontSize + '" font-family="sans-serif" font-weight="bold" fill="' + colors[i] + '">' + escXml(items[i].word) + '</text>');
+        }
+        svgParts.push('</svg>');
+        var svgStr = svgParts.join("\n");
+        $("cloud").outerHTML = svgStr;
+        // freq table
+        var tbody = $("freq").querySelector("tbody");
+        tbody.innerHTML = "";
+        items.slice(0, 50).forEach(function (it) {
+          var tr = document.createElement("tr");
+          tr.innerHTML = "<td>" + escHtml(it.word) + "</td><td class=\"n\">" + it.count + "</td>";
+          tbody.appendChild(tr);
+        });
+        window._svg = svgStr;
+        $("note").textContent = items.length + " word(s) placed.";
+      } catch (e) {
+        errEl.textContent = e.message || String(e);
+      }
+    }
+    function escXml(s) { return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+    function escHtml(s) { return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+    $("generate").addEventListener("click", generate);
+    ["text", "maxWords", "minFreq", "minLen", "palette", "caseFold", "stop", "svgW", "svgH"].forEach(function (id) {
+      $(id).addEventListener("input", generate);
+      $(id).addEventListener("change", generate);
+    });
+    $("download").addEventListener("click", function () {
+      if (!window._svg) return;
+      var blob = new Blob([window._svg], { type: "image/svg+xml" });
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "word-cloud.svg";
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+    generate();
+  })();
+  </script>
+</body>
+</html>
