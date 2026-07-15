@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Device &amp; Browser Info — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .section { margin-top: 22px; }
+    .section h2 { font-size: 15px; margin: 0 0 10px; opacity: .85; text-transform: uppercase; letter-spacing: .06em; }
+    .grid { display:grid; grid-template-columns: 230px 1fr auto; gap:5px 12px; align-items:center; }
+    .grid .k { opacity:.7; font-weight:600; }
+    .grid .v { font-family:monospace; word-break:break-word; }
+    .grid .copy-btn { padding:2px 8px; font-size:12px; }
+    .badge { display:inline-block; font-size:11px; padding:1px 7px; border-radius:5px; margin-left:8px; vertical-align:middle; }
+    .badge.ok { background: rgba(80,200,120,.15); color:#5cd690; }
+    .badge.no { background: rgba(220,80,90,.15); color:#ff7080; }
+    .summary { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:6px; }
+    .pill {
+      font-size:13px; padding:6px 12px; border-radius:20px;
+      background:var(--panel-2,#161a22); border:1px solid var(--border,#2a2f3a);
+      display:inline-flex; align-items:center; gap:6px;
+    }
+    .pill .p-ico { font-size:16px; }
+    .pill .p-val { font-weight:600; }
+    .toolbar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">&larr; All tools</a>
+      <h1>Device &amp; Browser Info</h1>
+      <p>Inspect what your browser knows about your device — screen, viewport, browser, OS, CPU cores, memory, battery, network, and feature support. Everything is read locally from the browser APIs; nothing is uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="toolbar">
+        <button type="button" class="secondary" id="copyAll">Copy all as text</button>
+        <button type="button" class="secondary" id="copyJson">Copy as JSON</button>
+        <button type="button" class="secondary" id="refresh">Refresh</button>
+      </div>
+
+      <div class="summary" id="summary"></div>
+      <div id="content"></div>
+
+      <p class="note">All values are read from local browser APIs (<code>navigator</code>, <code>screen</code>, <code>Battery</code>, <code>Network Information</code>, etc.). No information leaves your device. Some values are <em>hints</em> the browser volunteers and may be approximate, missing, or spoofed.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var content = document.getElementById("content");
+    var summary = document.getElementById("summary");
+    var info = {};
+
+    function esc(s) {
+      return String(s).replace(/[&<>]/g, function (c) { return c === "&" ? "&amp;" : c === "<" ? "&lt;" : "&gt;"; });
+    }
+    function safe(fn, fallback) {
+      try { var v = fn(); return (v === undefined || v === null) ? fallback : v; }
+      catch (e) { return fallback; }
+    }
+    function copyBtn(value) {
+      if (value === undefined || value === null || value === "") return '';
+      return '<button type="button" class="copy-btn secondary" data-v="' + encodeURIComponent(String(value)) + '">Copy</button>';
+    }
+    function yn(v) {
+      if (v) return '<span class="badge ok">yes</span>';
+      return '<span class="badge no">no</span>';
+    }
+
+    function section(title, rows) {
+      var html = '<div class="section"><h2>' + esc(title) + '</h2><div class="grid">';
+      rows.forEach(function (r) {
+        var label = r[0], value = r[1], raw = r.length > 2 ? r[2] : value;
+        info[title + " :: " + label] = raw;
+        html += '<div class="k">' + esc(label) + '</div><div class="v">' + (value === '' ? '<span style="opacity:.4">—</span>' : esc(String(value))) + '</div><div>' + copyBtn(raw) + '</div>';
+      });
+      html += '</div></div>';
+      return html;
+    }
+
+    function tzName(offsetMin) {
+      try { return Intl.DateTimeFormat().resolvedOptions().timeZone || "unknown"; }
+      catch (e) { return "unknown"; }
+    }
+
+    function batteryPromise() {
+      if (navigator.getBattery) return navigator.getBattery();
+      return Promise.resolve(null);
+    }
+
+    function render() {
+      info = {};
+      var n = navigator;
+      var s = window.screen || {};
+
+      // Summary pills
+      var pills = [];
+      pills.push({ ico: "🌐", val: safe(function(){ return n.userAgent ? browserShort(n.userAgent) : "unknown"; }, "?") });
+      pills.push({ ico: "🖥️", val: safe(function(){ return n.platform || (n.userAgentData && n.userAgentData.platform) || "—"; }, "—") });
+      pills.push({ ico: "📐", val: safe(function(){ return s.width + "×" + s.height; }, "—") });
+      pills.push({ ico: "🧠", val: safe(function(){ return (n.hardwareConcurrency || "—") + " cores"; }, "—") });
+      pills.push({ ico: "📶", val: safe(function(){ return (navigator.onLine ? "online" : "offline"); }, "—") });
+      summary.innerHTML = pills.map(function (p) {
+        return '<span class="pill"><span class="p-ico">' + p.ico + '</span><span class="p-val">' + esc(p.val) + '</span></span>';
+      }).join("");
+
+      var html = '';
+
+      // Browser & engine
+      html += section("Browser", [
+        ["User agent", safe(function(){ return n.userAgent; }, "—")],
+        ["App name", safe(function(){ return n.appName; }, "—")],
+        ["App version", safe(function(){ return n.appVersion; }, "—")],
+        ["App code name", safe(function(){ return n.appCodeName; }, "—")],
+        ["Product", safe(function(){ return n.product; }, "—")],
+        ["Vendor", safe(function(){ return n.vendor; }, "—")],
+        ["Language", safe(function(){ return n.language; }, "—")],
+        ["Languages", safe(function(){ return (n.languages || []).join(", "); }, "—")],
+        ["Cookie enabled", yn(safe(function(){ return n.cookieEnabled; }, false))],
+        ["Do Not Track", safe(function(){ return n.doNotTrack === "1" ? "yes (1)" : (n.doNotTrack === "0" ? "no (0)" : "not set (" + n.doNotTrack + ")"); }, "—")],
+        ["PDF viewer", yn(safe(function(){ return n.pdfViewerEnabled; }, false))],
+        ["WebDriver (automation)", yn(safe(function(){ return n.webdriver; }, false))],
+      ]);
+
+      // Engine
+      html += section("Engine", [
+        ["layout engine", safe(function(){ return engineName(n.userAgent); }, "—")],
+        ["Vendor product sub", safe(function(){ return n.productSub; }, "—")],
+        ["Build ID", safe(function(){ return navigator.buildID; }, "—")],
+        ["Gecko / WebKit", safe(function(){ return navigator.geckoVersion || navigator.webkitVersion || "—"; }, "—")],
+      ]);
+
+      // Operating system / platform
+      html += section("Operating system", [
+        ["Platform", safe(function(){ return n.platform; }, "—")],
+        ["OS CPU", safe(function(){ return n.oscpu; }, "—")],
+        ["UA-CH platform", safe(function(){ return n.userAgentData && n.userAgentData.platform; }, "—")],
+        ["Max touch points", safe(function(){ return n.maxTouchPoints; }, "0")],
+        ["Touch support", yn(safe(function(){ return 'ontouchstart' in window; }, false))],
+      ]);
+
+      // Hardware
+      html += section("Hardware", [
+        ["CPU cores", safe(function(){ return n.hardwareConcurrency; }, "—")],
+        ["Device memory (GB)", safe(function(){ return n.deviceMemory; }, "—")],
+        ["Architecture (UA-CH)", safe(function(){ return n.userAgentData && n.userAgentData.arch; }, "—")],
+        ["Bitness (UA-CH)", safe(function(){ return n.userAgentData && n.userAgentData.bitness; }, "—")],
+      ]);
+
+      // Screen & display
+      html += section("Screen & display", [
+        ["Screen size", safe(function(){ return s.width + " × " + s.height + " px"; }, "—")],
+        ["Available screen", safe(function(){ return s.availWidth + " × " + s.availHeight + " px"; }, "—")],
+        ["Color depth (bits)", safe(function(){ return s.colorDepth; }, "—")],
+        ["Pixel depth (bits)", safe(function(){ return s.pixelDepth; }, "—")],
+        ["Device pixel ratio", safe(function(){ return window.devicePixelRatio; }, "—")],
+        ["Orientation", safe(function(){ return (s.orientation && s.orientation.type) || "—"; }, "—")],
+      ]);
+
+      // Window & viewport
+      html += section("Window & viewport", [
+        ["Inner size", safe(function(){ return window.innerWidth + " × " + window.innerHeight + " px"; }, "—")],
+        ["Outer size", safe(function(){ return window.outerWidth + " × " + window.outerHeight + " px"; }, "—")],
+        ["Document size", safe(function(){ return document.documentElement.scrollWidth + " × " + document.documentElement.scrollHeight + " px"; }, "—")],
+        ["Scroll position", safe(function(){ return window.scrollX + ", " + window.scrollY; }, "—")],
+        ["Screen X / Y", safe(function(){ return window.screenX + ", " + window.screenY; }, "—")],
+      ]);
+
+      // Locale & time
+      html += section("Locale & time", [
+        ["Resolved locale", safe(function(){ return Intl.DateTimeFormat().resolvedOptions().locale; }, "—")],
+        ["Time zone", safe(function(){ return tzName(); }, "—")],
+        ["UTC offset (min)", safe(function(){ return new Date().getTimezoneOffset(); }, "—")],
+        ["Now (ISO)", safe(function(){ return new Date().toISOString(); }, "—")],
+        ["Calendar", safe(function(){ return Intl.DateTimeFormat().resolvedOptions().calendar; }, "—")],
+        ["Numbering system", safe(function(){ return Intl.DateTimeFormat().resolvedOptions().numberingSystem; }, "—")],
+      ]);
+
+      // Network & connection
+      html += section("Network", [
+        ["Online", yn(safe(function(){ return n.onLine; }, false))],
+        ["Connection type", safe(function(){ return (n.connection && n.connection.effectiveType) || "—"; }, "—")],
+        ["Downlink (Mbps)", safe(function(){ return (n.connection && n.connection.downlink) || "—"; }, "—")],
+        ["RTT (ms)", safe(function(){ return (n.connection && n.connection.rtt) || "—"; }, "—")],
+        ["Save data", yn(safe(function(){ return n.connection && n.connection.saveData; }, false))],
+      ]);
+
+      // Storage
+      var storageEst = "—", storageQuota = "—";
+      if (navigator.storage && navigator.storage.estimate) {
+        navigator.storage.estimate().then(function (est) {
+          storageEst = est.usage != null ? formatBytes(est.usage) : "—";
+          storageQuota = est.quota != null ? formatBytes(est.quota) : "—";
+          rerender(["Storage :: Usage estimate", "Storage :: Quota"], [storageEst, storageQuota]);
+        }).catch(function () {});
+      }
+      html += section("Storage", [
+        ["Persistent storage", yn(safe(function(){ return navigator.storage && navigator.storage.persisted ? "—" : "—"; }, "—"))],
+        ["LocalStorage", yn(safe(function(){ try { return 'localStorage' in window && window.localStorage !== null; } catch(e){ return false; } }, false))],
+        ["SessionStorage", yn(safe(function(){ try { return 'sessionStorage' in window && window.sessionStorage !== null; } catch(e){ return false; } }, false))],
+        ["IndexedDB", yn(safe(function(){ return 'indexedDB' in window; }, false))],
+        ["Cookies (count)", safe(function(){ return (document.cookie ? document.cookie.split(";").length : 0); }, "0")],
+        ["Usage estimate", storageEst],
+        ["Quota", storageQuota],
+      ]);
+
+      // Battery (async)
+      batteryPromise().then(function (b) {
+        if (!b) { rerender(["Battery :: status"], ["unsupported"]); return; }
+        function bUpd() {
+          rerender(
+            ["Battery :: Level", "Battery :: Charging", "Battery :: Charging time", "Battery :: Discharging time"],
+            [(b.level != null ? (b.level * 100).toFixed(0) + "%" : "—"), (b.charging ? "yes" : "no"), (b.chargingTime && b.chargingTime !== Infinity ? b.chargingTime + " s" : "—"), (b.dischargingTime && b.dischargingTime !== Infinity ? b.dischargingTime + " s" : "—")]
+          );
+        }
+        bUpd();
+        b.addEventListener("levelchange", bUpd);
+        b.addEventListener("chargingchange", bUpd);
+      });
+
+      html += section("Battery", [
+        ["Level", "—"],
+        ["Charging", "—"],
+        ["Charging time", "—"],
+        ["Discharging time", "—"],
+        ["status", "loading…"],
+      ]);
+
+      // Feature support
+      html += section("Feature support", [
+        ["WebAssembly", yn(safe(function(){ return typeof WebAssembly === 'object'; }, false))],
+        ["Service workers", yn(safe(function(){ return 'serviceWorker' in navigator; }, false))],
+        ["Web workers", yn(safe(function(){ return 'Worker' in window; }, false))],
+        ["Shared workers", yn(safe(function(){ return 'SharedWorker' in window; }, false))],
+        ["WebGL", yn(safe(function(){ var c = document.createElement('canvas'); return !!(window.WebGLRenderingContext && (c.getContext('webgl') || c.getContext('experimental-webgl'))); }, false))],
+        ["WebGL2", yn(safe(function(){ var c = document.createElement('canvas'); return !!(c.getContext('webgl2')); }, false))],
+        ["WebRTC", yn(safe(function(){ return 'RTCPeerConnection' in window; }, false))],
+        ["WebSocket", yn(safe(function(){ return 'WebSocket' in window; }, false))],
+        ["Web Audio", yn(safe(function(){ return 'AudioContext' in window || 'webkitAudioContext' in window; }, false))],
+        ["Notifications", yn(safe(function(){ return 'Notification' in window; }, false))],
+        ["Geolocation", yn(safe(function(){ return 'geolocation' in navigator; }, false))],
+        ["Vibration", yn(safe(function(){ return 'vibrate' in navigator; }, false))],
+        ["Clipboard", yn(safe(function(){ return navigator.clipboard && navigator.clipboard.writeText; }, false))],
+        ["Share API", yn(safe(function(){ return navigator.share; }, false))],
+        ["Bluetooth", yn(safe(function(){ return 'bluetooth' in navigator; }, false))],
+        ["USB", yn(safe(function(){ return 'usb' in navigator; }, false))],
+        ["Gamepads API", yn(safe(function(){ return 'getGamepads' in navigator; }, false))],
+        ["Credentials", yn(safe(function(){ return 'credentials' in navigator; }, false))],
+        ["Payment request", yn(safe(function(){ return 'PaymentRequest' in window; }, false))],
+        ["Web Authentication", yn(safe(function(){ return 'credentials' in navigator && 'PublicKeyCredential' in window; }, false))],
+        ["Compression streams", yn(safe(function(){ return 'CompressionStream' in window; }, false))],
+        ["Crypto (subtle)", yn(safe(function(){ return window.crypto && window.crypto.subtle; }, false))],
+        ["File System Access", yn(safe(function(){ return 'showOpenFilePicker' in window; }, false))],
+        ["Pointer lock", yn(safe(function(){ return 'requestPointerLock' in Element.prototype; }, false))],
+        ["Fullscreen API", yn(safe(function(){ return 'requestFullscreen' in Element.prototype || 'webkitRequestFullscreen' in Element.prototype; }, false))],
+        ["Picture-in-Picture", yn(safe(function(){ return 'pictureInPictureEnabled' in document; }, false))],
+      ]);
+
+      content.innerHTML = html;
+    }
+
+    function rerender(keys, vals) {
+      keys.forEach(function (k, i) { info[k] = vals[i]; });
+      // Patch visible cells by walking the grid
+      var sections = content.querySelectorAll(".section");
+      sections.forEach(function (sec) {
+        var title = sec.querySelector("h2").textContent;
+        var rows = sec.querySelectorAll(".grid > .k");
+        rows.forEach(function (kEl) {
+          var label = kEl.textContent;
+          var key = title + " :: " + label;
+          if (info[key] !== undefined) {
+            var vEl = kEl.nextElementSibling;
+            if (vEl) {
+              vEl.innerHTML = info[key] === "" ? '<span style="opacity:.4">—</span>' : esc(String(info[key]));
+            }
+          }
+        });
+      });
+    }
+
+    function browserShort(ua) {
+      if (/Edg\//.test(ua)) return "Edge";
+      if (/OPR\//.test(ua)) return "Opera";
+      if (/Firefox\//.test(ua)) return "Firefox";
+      if (/Chrome\//.test(ua)) return "Chrome";
+      if (/Safari\//.test(ua)) return "Safari";
+      return "unknown";
+    }
+    function engineName(ua) {
+      if (/Gecko\/|rv:/.test(ua) && !/like Gecko/.test(ua)) return "Gecko";
+      if (/AppleWebKit/.test(ua)) return "WebKit/Blink";
+      if (/Trident/.test(ua)) return "Trident";
+      if (/Presto/.test(ua)) return "Presto";
+      return "unknown";
+    }
+    function formatBytes(b) {
+      if (b == null) return "—";
+      if (b < 1024) return b + " B";
+      if (b < 1024*1024) return (b/1024).toFixed(1) + " KB";
+      if (b < 1024*1024*1024) return (b/(1024*1024)).toFixed(1) + " MB";
+      return (b/(1024*1024*1024)).toFixed(2) + " GB";
+    }
+
+    render();
+
+    // Copy handlers
+    document.addEventListener("click", function (e) {
+      var b = e.target.closest(".copy-btn");
+      if (!b) return;
+      var val = decodeURIComponent(b.getAttribute("data-v") || "");
+      if (!val) return;
+      doCopy(val, b);
+    });
+
+    function doCopy(text, btn) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () {
+          if (btn) flash(btn);
+        });
+      } else {
+        var ta = document.createElement("textarea");
+        ta.value = text; document.body.appendChild(ta); ta.select();
+        try { document.execCommand("copy"); if (btn) flash(btn); } catch (x) {}
+        ta.remove();
+      }
+    }
+    function flash(b) { var t = b.textContent; b.textContent = "Copied!"; setTimeout(function () { b.textContent = t; }, 1200); }
+
+    document.getElementById("copyAll").addEventListener("click", function () {
+      var lines = Object.keys(info).map(function (k) {
+        var parts = k.split(" :: ");
+        return parts[0] + "\t" + parts[1] + "\t" + info[k];
+      });
+      doCopy(lines.join("\n"), this);
+    });
+    document.getElementById("copyJson").addEventListener("click", function () {
+      var obj = {};
+      Object.keys(info).forEach(function (k) {
+        var parts = k.split(" :: ");
+        if (!obj[parts[0]]) obj[parts[0]] = {};
+        obj[parts[0]][parts[1]] = info[k];
+      });
+      doCopy(JSON.stringify(obj, null, 2), this);
+    });
+    document.getElementById("refresh").addEventListener("click", render);
+  })();
+  </script>
+</body>
+</html>

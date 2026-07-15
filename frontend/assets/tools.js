@@ -4282,4 +4282,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔤",
     added: "2026-07-14T23:00:00Z",
   },
+  {
+    slug: "device-info",
+    name: "Device & Browser Info",
+    description: "Inspect what your browser knows about your device — screen, viewport, browser, OS, CPU cores, memory, battery, network connection, storage quota, and ~25 feature-support checks (WebGL, WebRTC, WebAuthn, WebAssembly, Service Workers, Bluetooth, USB…). Read locally from browser APIs; nothing is uploaded.",
+    category: "System",
+    icon: "🖥️",
+    added: "2026-07-15T16:20:00Z",
+  },
 ];
