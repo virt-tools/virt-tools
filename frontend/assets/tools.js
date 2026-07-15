@@ -4330,4 +4330,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎯",
     added: "2026-07-15T18:50:00Z",
   },
+  {
+    slug: "image-dithering",
+    name: "Image Dithering & Color Quantization",
+    description: "Reduce an image to a limited palette and apply dithering — Floyd–Steinberg, Atkinson, ordered (Bayer 4×4 / 8×8), or none — with classic palettes (1-bit, Game Boy, CGA, EGA, PICO-8, Apple II, ZX Spectrum, web-safe) or your own custom colors. Downscale for chunky retro pixels. Great for pixel-art, e-ink, print, and retro-graphics workflows. Pairs with ASCII Art and Image Duotone. Everything runs locally on a canvas; nothing is uploaded.",
+    category: "Image",
+    icon: "🔲",
+    added: "2026-07-15T19:20:00Z",
+  },
 ];

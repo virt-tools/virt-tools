@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Image Dithering &amp; Color Quantization — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .layout { display:grid; grid-template-columns: 1fr 1fr; gap:16px; align-items:start; }
+    @media (max-width: 720px) { .layout { grid-template-columns: 1fr; } }
+    .field { margin-bottom:10px; }
+    .field label { font-size:.72rem; text-transform:uppercase; letter-spacing:.04em; opacity:.7; display:block; margin-bottom:3px; }
+    select, input[type="number"] { font-family:ui-monospace,monospace; font-size:13px; padding:6px 8px; border:1px solid var(--border,#2a2f3a); border-radius:6px; background:var(--bg,#14181f); color:inherit; }
+    .opts { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:10px; margin-bottom:10px; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:10px; }
+    .dropzone { border:2px dashed var(--border,#2a2f3a); border-radius:10px; padding:24px; text-align:center; cursor:pointer; transition:border-color .15s; }
+    .dropzone:hover, .dropzone.drag { border-color: var(--accent,#6ea8fe); }
+    .dropzone-hint { opacity:.6; margin:0; font-size:14px; }
+    .dropzone-name { margin:6px 0 0; font-size:13px; font-weight:600; }
+    .canvas-wrap { text-align:center; }
+    canvas { max-width:100%; border:1px solid var(--border,#2a2f3a); border-radius:8px; image-rendering:pixelated; image-rendering:crisp-edges; }
+    .palette-preview { display:flex; gap:2px; margin-top:6px; flex-wrap:wrap; }
+    .palette-preview span { width:18px; height:18px; border-radius:3px; border:1px solid var(--border,#2a2f3a); display:inline-block; }
+    .toolbar { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0; }
+    .check { font-size:13px; display:inline-flex; gap:4px; align-items:center; cursor:pointer; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Image Dithering &amp; Color Quantization</h1>
+      <p>Reduce an image to a limited palette and apply dithering — Floyd–Steinberg, Atkinson, ordered (Bayer 4×4 / 8×8), or none — with classic palettes (1-bit black &amp; white, Game Boy, CGA, EGA, PICO-8, web-safe, Apple II, ZX Spectrum) or your own custom colors. Great for retro graphics, print, e-ink, and pixel-art workflows. The image is processed on a local canvas — nothing is uploaded.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label>Image</label>
+        <div id="drop" class="dropzone">
+          <input type="file" id="file" accept="image/*" hidden>
+          <p class="dropzone-hint">Click to choose, or drag &amp; drop an image here</p>
+          <p class="dropzone-name" id="drop-name" hidden></p>
+        </div>
+      </div>
+
+      <div class="opts">
+        <div class="field">
+          <label for="algo">Algorithm</label>
+          <select id="algo">
+            <option value="floyd" selected>Floyd–Steinberg</option>
+            <option value="atkinson">Atkinson</option>
+            <option value="bayer4">Ordered (Bayer 4×4)</option>
+            <option value="bayer8">Ordered (Bayer 8×8)</option>
+            <option value="none">None (nearest)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="palette">Palette</label>
+          <select id="palette">
+            <option value="bw">1-bit Black &amp; White</option>
+            <option value="gray4">4 grays</option>
+            <option value="gameboy">Game Boy (4)</option>
+            <option value="cga">CGA (16)</option>
+            <option value="ega">EGA (16)</option>
+            <option value="pico8" selected>PICO-8 (16)</option>
+            <option value="apple2">Apple II HGR (16)</option>
+            <option value="spectrum">ZX Spectrum (15)</option>
+            <option value="websafe">Web-safe (216)</option>
+            <option value="custom">Custom…</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="scale">Downscale factor</label>
+          <input type="number" id="scale" min="1" max="16" value="1" style="width:70px;">
+        </div>
+      </div>
+
+      <div class="field" id="customPalette" style="display:none;">
+        <label>Custom palette (hex, comma or space separated)</label>
+        <input type="text" id="customColors" style="width:100%;font-family:ui-monospace,monospace;font-size:12px;padding:6px 8px;border:1px solid var(--border,#2a2f3a);border-radius:6px;background:var(--bg,#14181f);color:inherit;" placeholder="#ff004d, #ffec27, #29adff, #000000">
+      </div>
+
+      <div class="palette-preview" id="palettePreview"></div>
+
+      <div class="toolbar">
+        <button id="download" class="secondary">Download PNG</button>
+        <button id="reset" class="secondary">Reset</button>
+        <label class="check"><input type="checkbox" id="bayerInvert"> Invert Bayer threshold</label>
+      </div>
+
+      <div class="layout">
+        <div class="canvas-wrap">
+          <label style="font-size:.8rem;opacity:.7;">Original</label><br>
+          <canvas id="src"></canvas>
+        </div>
+        <div class="canvas-wrap">
+          <label style="font-size:.8rem;opacity:.7;">Dithered</label><br>
+          <canvas id="dst"></canvas>
+        </div>
+      </div>
+      <p class="note">Floyd–Steinberg and Atkinson are error-diffusion dithering (diffuse quantization error to neighbors); ordered dithering uses a Bayer threshold matrix for a regular halftone pattern. Downscale first for chunky pixels — set the factor above 1. Image never leaves your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var palettes = {
+      bw: ["#000000","#ffffff"],
+      gray4: ["#000000","#555555","#aaaaaa","#ffffff"],
+      gameboy: ["#0f380f","#306230","#8bac0f","#9bbc0f"],
+      cga: ["#000000","#0000aa","#00aa00","#00aaaa","#aa0000","#aa00aa","#aa5500","#aaaaaa","#555555","#5555ff","#55ff55","#55ffff","#ff5555","#ff55ff","#ffff55","#ffffff"],
+      ega: ["#000000","#0000aa","#00aa00","#00aaaa","#aa0000","#aa00aa","#aa5500","#aaaaaa","#555555","#5555ff","#55ff55","#55ffff","#ff5555","#ff55ff","#ffff55","#ffffff"],
+      pico8: ["#000000","#1d2b53","#7e2553","#008751","#ab5236","#5f574f","#c2c3c7","#fff1e8","#ff004d","#ffa300","#ffec27","#00e436","#29adff","#83769c","#ff77a8","#ffccaa"],
+      apple2: ["#000000","#0000ff","#ff0000","#ff00ff","#00ff00","#00ffff","#ffff00","#ffffff","#404040","#4040ff","#ff4040","#ff40ff","#40ff40","#40ffff","#ffff40","#ffff80"],
+      spectrum: ["#000000","#0000c0","#0000ff","#c00000","#c000c0","#c000ff","#ff0000","#ff00c0","#ff00ff","#00c000","#00c0c0","#00c0ff","#ffc000","#ffc0c0","#ffc0ff"],
+      websafe: (function(){ var p=[]; for(var r=0;r<=5;r++) for(var g=0;g<=5;g++) for(var b=0;b<=5;b++) p.push("#"+(r*51).toString(16).padStart(2,"0")+(g*51).toString(16).padStart(2,"0")+(b*51).toString(16).padStart(2,"0")); return p; })()
+    };
+
+    function getPalette() {
+      var key = document.getElementById("palette").value;
+      if (key === "custom") {
+        var raw = document.getElementById("customColors").value.trim();
+        return raw.split(/[\s,]+/).filter(function(h){ return /^#?[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(h); }).map(function(h){ return h[0]==="#"?h:"#"+h; });
+      }
+      return palettes[key] || palettes.bw;
+    }
+
+    var paletteRGB = [];
+    function buildPaletteRGB() {
+      paletteRGB = getPalette().map(function(hex) {
+        var h = hex.replace("#","");
+        if (h.length===3) h=h.split("").map(function(c){return c+c;}).join("");
+        var n = parseInt(h,16);
+        return [(n>>16)&255,(n>>8)&255,n&255];
+      });
+      var preview = document.getElementById("palettePreview");
+      preview.innerHTML = paletteRGB.map(function(c){return '<span style="background:rgb('+c[0]+','+c[1]+','+c[2]+')"></span>';}).join("");
+    }
+
+    var bayer4 = [
+      [0,8,2,10],[12,4,14,6],
+      [3,11,1,9],[15,7,13,5]
+    ];
+    var bayer8 = (function(){
+      var m=[[0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]];
+      var big=Array.from({length:8},function(){return new Array(8);});
+      for(var y=0;y<8;y++) for(var x=0;x<8;x++) {
+        var bx=x%4, by=y%4, ox=Math.floor(x/4)*16, oy=Math.floor(y/4)*16;
+        big[y][x]=m[by][bx]+ox+oy;
+      }
+      return big;
+    })();
+
+    function nearest(r,g,b) {
+      var best=0, bestD=Infinity;
+      for (var i=0;i<paletteRGB.length;i++) {
+        var p=paletteRGB[i];
+        var dr=r-p[0], dg=g-p[1], db=b-p[2];
+        var d=dr*dr+dg*dg+db*db;
+        if (d<bestD) { bestD=d; best=i; }
+      }
+      return paletteRGB[best];
+    }
+
+    function process() {
+      var srcCanvas = document.getElementById("src");
+      var dstCanvas = document.getElementById("dst");
+      var sctx = srcCanvas.getContext("2d");
+      var dctx = dstCanvas.getContext("2d");
+      if (!srcImage) return;
+      var scale = parseInt(document.getElementById("scale").value,10)||1;
+      var w = Math.max(1, Math.floor(srcImage.width/scale));
+      var h = Math.max(1, Math.floor(srcImage.height/scale));
+      srcCanvas.width=w; srcCanvas.height=h;
+      sctx.drawImage(srcImage,0,0,w,h);
+      dstCanvas.width=w; dstCanvas.height=h;
+
+      var img = sctx.getImageData(0,0,w,h);
+      var data = img.data;
+      var algo = document.getElementById("algo").value;
+      var invert = document.getElementById("bayerInvert").checked;
+
+      if (algo === "bayer4" || algo === "bayer8") {
+        var m = algo === "bayer4" ? bayer4 : bayer8;
+        var sz = m.length;
+        for (var y=0;y<h;y++) {
+          for (var x=0;x<w;x++) {
+            var i=(y*w+x)*4;
+            var lum = 0.299*data[i]+0.587*data[i+1]+0.114*data[i+2];
+            var thr = (m[y%sz][x%sz]+0.5)/(sz*sz)*255;
+            if (invert) thr = 255 - thr;
+            var v = lum < thr ? 0 : 255;
+            var c = nearest(v,v,v);
+            data[i]=c[0]; data[i+1]=c[1]; data[i+2]=c[2];
+          }
+        }
+      } else if (algo === "none") {
+        for (var p=0;p<data.length;p+=4) {
+          var c2=nearest(data[p],data[p+1],data[p+2]);
+          data[p]=c2[0];data[p+1]=c2[1];data[p+2]=c2[2];
+        }
+      } else {
+        // Error diffusion on a float copy
+        var buf = new Float32Array(data.length);
+        for (var k=0;k<data.length;k++) buf[k]=data[k];
+        for (var y2=0;y2<h;y2++) {
+          for (var x2=0;x2<w;x2++) {
+            var idx=(y2*w+x2)*4;
+            var oldR=buf[idx], oldG=buf[idx+1], oldB=buf[idx+2];
+            var nc=nearest(oldR,oldG,oldB);
+            buf[idx]=nc[0]; buf[idx+1]=nc[1]; buf[idx+2]=nc[2];
+            data[idx]=nc[0]; data[idx+1]=nc[1]; data[idx+2]=nc[2];
+            var er=oldR-nc[0], eg=oldG-nc[1], eb=oldB-nc[2];
+            if (algo==="floyd") {
+              distribute(buf, w, h, x2+1, y2,   er, eg, eb, 7/16);
+              distribute(buf, w, h, x2-1, y2+1, er, eg, eb, 3/16);
+              distribute(buf, w, h, x2,   y2+1, er, eg, eb, 5/16);
+              distribute(buf, w, h, x2+1, y2+1, er, eg, eb, 1/16);
+            } else if (algo==="atkinson") {
+              distribute(buf, w, h, x2+1, y2,   er, eg, eb, 1/8);
+              distribute(buf, w, h, x2+2, y2,   er, eg, eb, 1/8);
+              distribute(buf, w, h, x2-1, y2+1, er, eg, eb, 1/8);
+              distribute(buf, w, h, x2,   y2+1, er, eg, eb, 1/8);
+              distribute(buf, w, h, x2+1, y2+1, er, eg, eb, 1/8);
+              distribute(buf, w, h, x2,   y2+2, er, eg, eb, 1/8);
+            }
+          }
+        }
+      }
+      dctx.putImageData(img,0,0);
+    }
+
+    function distribute(buf, w, h, x, y, er, eg, eb, f) {
+      if (x<0||y<0||x>=w||y>=h) return;
+      var idx=(y*w+x)*4;
+      buf[idx]  += er*f;
+      buf[idx+1]+= eg*f;
+      buf[idx+2]+= eb*f;
+    }
+
+    var srcImage = null;
+    var fileEl = document.getElementById("file");
+    var drop = document.getElementById("drop");
+    var dropName = document.getElementById("drop-name");
+
+    function loadFile(file) {
+      if (!file || !file.type.startsWith("image/")) return;
+      var reader = new FileReader();
+      reader.onload = function (e) {
+        var img = new Image();
+        img.onload = function () {
+          srcImage = img;
+          dropName.textContent = file.name;
+          dropName.hidden = false;
+          process();
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    fileEl.addEventListener("change", function (e) { loadFile(e.target.files[0]); });
+    drop.addEventListener("click", function () { fileEl.click(); });
+    drop.addEventListener("dragover", function (e) { e.preventDefault(); drop.classList.add("drag"); });
+    drop.addEventListener("dragleave", function () { drop.classList.remove("drag"); });
+    drop.addEventListener("drop", function (e) {
+      e.preventDefault(); drop.classList.remove("drag");
+      if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+    });
+
+    ["algo","palette","scale","customColors","bayerInvert"].forEach(function (id) {
+      var el = document.getElementById(id);
+      el.addEventListener("input", function () {
+        if (id === "palette") {
+          document.getElementById("customPalette").style.display = (el.value === "custom") ? "" : "none";
+        }
+        buildPaletteRGB();
+        process();
+      });
+      el.addEventListener("change", function () {
+        if (id === "palette") {
+          document.getElementById("customPalette").style.display = (el.value === "custom") ? "" : "none";
+        }
+        buildPaletteRGB();
+        process();
+      });
+    });
+
+    document.getElementById("download").addEventListener("click", function () {
+      var canvas = document.getElementById("dst");
+      canvas.toBlob(function (blob) {
+        var a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "dithered.png";
+        a.click();
+        URL.revokeObjectURL(a.href);
+      }, "image/png");
+    });
+
+    document.getElementById("reset").addEventListener("click", function () {
+      document.getElementById("scale").value = 1;
+      document.getElementById("algo").value = "floyd";
+      document.getElementById("palette").value = "pico8";
+      document.getElementById("customPalette").style.display = "none";
+      buildPaletteRGB();
+      process();
+    });
+
+    buildPaletteRGB();
+  })();
+  </script>
+</body>
+</html>
