@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "font-specimen",
+    name: "Font Specimen & Preview",
+    description: "Preview a string in every font your browser knows — the system font stack available locally. Type a sample, set the size, weight, and style, and scroll through a live specimen for each family. Filter by name, click a row to copy its font-family value, or copy the whole font list. Pure CSS — the fonts are whatever your OS exposes to the browser, nothing is loaded from the network. Runs locally in your browser.",
+    category: "Design",
+    icon: "🔤",
+    added: "2026-07-15T06:30:00Z",
+  },
+  {
     slug: "word-cloud",
     name: "Word Cloud Generator",
     description: "Paste text and get a word cloud as an SVG — words sized by frequency, positioned with a spiral packing algorithm, coloured from a palette (blue, rainbow, warm, cool, or monochrome), with optional stopword filtering, case folding, min-frequency threshold, and configurable canvas size. Download the SVG or inspect the frequency table. Pairs with the Word Frequency Counter. Everything runs locally in your browser.",
