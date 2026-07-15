@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "contributing-generator",
+    name: "Contributing Guidelines Generator",
+    description: "Generate a CONTRIBUTING.md for your project — how to report bugs, propose features, set up the dev environment, run tests, follow code style, and submit pull requests. Toggle which sections to include and fill in project-specific details. Pairs with the README, license, .gitignore, changelog, and code-of-conduct generators. Pure text templates, runs locally in your browser.",
+    category: "Text",
+    icon: "📝",
+    added: "2026-07-15T13:00:00Z",
+  },
+  {
     slug: "code-of-conduct-generator",
     name: "Code of Conduct Generator",
     description: "Generate a CODE_OF_CONDUCT.md for your project from the Contributor Covenant 2.1 or Citizen Code of Conduct 1.1 templates. Fill in the contact / enforcement email and an optional project name, then copy or download. Pairs with the README, license, .gitignore, and changelog generators. Pure text templates, runs locally in your browser.",
