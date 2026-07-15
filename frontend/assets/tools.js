@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "ascii-banner",
+    name: "ASCII Banner Generator",
+    description: "Turn text into big ASCII-art banners using a block, block-3D, banner (6-line), or thin font. Pick a font, type your message (A–Z, 0–9, and common punctuation), set letter and line spacing, then copy or download the result. Each character is a fixed-width grid; spaces are inserted automatically between glyphs. Pure static font data, runs locally in your browser.",
+    category: "Text",
+    icon: "📣",
+    added: "2026-07-15T02:00:00Z",
+  },
+  {
     slug: "diceware-passphrase",
     name: "Diceware Passphrase Generator",
     description: "Generate strong, memorable passphrases by sampling words uniformly at random from the EFF Diceware wordlists — long (7776 words, five dice) or two short lists (1296 words, four dice). Web Crypto randomness with rejection sampling (no modulo bias). Choose word count, separator, case, and optional trailing digits/symbols; see the estimated entropy. Everything runs locally in your browser — your passphrase never leaves the page.",
