@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>CSV Deduplicator &amp; Unique Rows — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    textarea { width:100%; font-family:monospace; font-size:12px; min-height:120px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; margin:10px 0; }
+    .field { margin-bottom:0; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:10px 0; }
+    .cols { display:flex; flex-wrap:wrap; gap:8px; margin:6px 0; }
+    .cols label { display:inline-flex; align-items:center; gap:4px; font-size:12px; padding:3px 8px; border:1px solid var(--border,#2a2f3a); border-radius:6px; background:var(--panel-2,#161a22); }
+    .cols label.on { border-color: var(--accent,#6ea8fe); }
+    .wrap { overflow:auto; max-height:55vh; border:1px solid var(--border,#2a2f3a); border-radius:8px; margin-top:10px; }
+    table.result { border-collapse:collapse; font-size:12px; }
+    table.result th, table.result td { padding:4px 8px; border-bottom:1px solid var(--border,#2a2f3a); border-right:1px solid var(--border,#2a2f3a); white-space:nowrap; }
+    table.result th { background:var(--panel-2,#161a22); position:sticky; top:0; font-weight:600; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    .stats { font-size:13px; opacity:.7; margin-top:8px; }
+    .seg { display:inline-flex; border:1px solid var(--border,#2a2f3a); border-radius:8px; overflow:hidden; margin-bottom:10px; }
+    .seg button { border:none; border-radius:0; background:transparent; color:inherit; padding:6px 14px; cursor:pointer; }
+    .seg button.active { background: var(--accent,#6ea8fe); color:#08101f; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>CSV Deduplicator &amp; Unique Rows</h1>
+      <p>Remove duplicate rows from a CSV by full-row comparison or by a subset of key columns — choose which columns form the key (or use the whole row), with optional case-insensitive matching and whitespace trimming. Outputs the unique rows, with a count of duplicates removed. Auto-sniffs the delimiter (comma, semicolon, tab, pipe), handles quoted fields, and outputs to the delimiter of your choice. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="csv">CSV input</label>
+        <textarea id="csv" spellcheck="false" autocomplete="off" placeholder="name,city&#10;Ada,London&#10;Ada,London&#10;Lin,Tokyo">name,city
+Ada,London
+Ada,London
+Lin,Tokyo
+Ada,Paris
+Ada,London</textarea>
+      </div>
+      <div class="row">
+        <label>Output delimiter: <select id="outDelim"><option value=",">comma</option><option value=";">semicolon</option><option value="\t">tab</option><option value="|">pipe</option></select></label>
+        <label><input type="checkbox" id="hasHeader" checked> First row is header</label>
+        <label><input type="checkbox" id="caseInsensitive"> Case-insensitive</label>
+        <label><input type="checkbox" id="trim" checked> Trim whitespace</label>
+      </div>
+
+      <div class="seg" id="mode">
+        <button type="button" data-m="row" class="active">Whole row</button>
+        <button type="button" data-m="cols" class="secondary">Key columns…</button>
+      </div>
+      <div id="colsBox" hidden>
+        <p style="font-size:12px;opacity:.7;">Tick the columns that form the dedup key:</p>
+        <div class="cols" id="cols"></div>
+      </div>
+
+      <div class="row">
+        <button id="run">Deduplicate</button>
+        <button id="copy" class="secondary">Copy result</button>
+        <button id="download" class="secondary">Download .csv</button>
+      </div>
+
+      <p class="err" id="err"></p>
+      <p class="stats" id="stats"></p>
+      <p class="note" id="note">Paste CSV above.</p>
+      <div class="wrap"><table class="result" id="out"><tbody></tbody></table></div>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var mode = "row";
+    var keepCols = []; // array of booleans
+
+    function actualOutDelim() { var d = $("outDelim").value; return d === "\\t" ? "\t" : d; }
+    function sniffDelim(text) {
+      var cands = [",", "\t", ";", "|"], best = ",", bestScore = -1;
+      cands.forEach(function (d) {
+        var r = parseCSV(text, d);
+        if (r.length < 2) return;
+        var w0 = r[0].length;
+        var consistent = r.every(function (row) { return row.length === w0; });
+        var score = consistent ? w0 * r.length : -1;
+        if (score > bestScore) { bestScore = score; best = d; }
+      });
+      return best;
+    }
+    function parseCSV(text, delim) {
+      var rows = [];
+      var i = 0, n = text.length, field = "", row = [], inQ = false;
+      while (i < n) {
+        var c = text[i];
+        if (inQ) {
+          if (c === '"') {
+            if (text[i + 1] === '"') { field += '"'; i += 2; }
+            else { inQ = false; i++; }
+          } else { field += c; i++; }
+        } else {
+          if (c === '"') { inQ = true; i++; }
+          else if (c === delim) { row.push(field); field = ""; i++; }
+          else if (c === "\r") { i++; }
+          else if (c === "\n") { row.push(field); rows.push(row); row = []; field = ""; i++; }
+          else { field += c; i++; }
+        }
+      }
+      if (field !== "" || row.length) { row.push(field); rows.push(row); }
+      while (rows.length && rows[rows.length - 1].length === 1 && rows[rows.length - 1][0] === "") rows.pop();
+      var w = rows.reduce(function (m, r) { return Math.max(m, r.length); }, 0);
+      rows.forEach(function (r) { while (r.length < w) r.push(""); });
+      return rows;
+    }
+    function csvField(s, delim) {
+      s = String(s);
+      if (s === "") return "";
+      if (new RegExp('["' + delim + '\\n]').test(s)) return '"' + s.replace(/"/g, '""') + '"';
+      return s;
+    }
+    function buildCSV(rows, delim) { return rows.map(function (r) { return r.map(function (c) { return csvField(c, delim); }).join(delim); }).join("\n") + "\n"; }
+
+    function norm(s, ci, trim) {
+      s = String(s == null ? "" : s);
+      if (trim) s = s.trim();
+      if (ci) s = s.toLowerCase();
+      return s;
+    }
+
+    function renderCols(header) {
+      var wrap = $("cols");
+      wrap.innerHTML = "";
+      keepCols = header.map(function () { return true; });
+      header.forEach(function (h, i) {
+        var label = document.createElement("label");
+        label.className = "on";
+        label.innerHTML = '<input type="checkbox" checked> ' + esc(h || "col" + (i + 1));
+        var cb = label.querySelector("input");
+        cb.addEventListener("change", function () {
+          keepCols[i] = cb.checked;
+          label.classList.toggle("on", cb.checked);
+          run();
+        });
+        wrap.appendChild(label);
+      });
+    }
+
+    function run() {
+      var errEl = $("err"); errEl.textContent = "";
+      var text = $("csv").value.trim();
+      if (!text) { $("out").querySelector("tbody").innerHTML = ""; $("stats").textContent = ""; $("note").textContent = "Paste CSV above."; return; }
+      try {
+        var inDelim = sniffDelim(text);
+        var rows = parseCSV(text, inDelim);
+        if (!rows.length) { errEl.textContent = "No rows."; return; }
+        var hasHeader = $("hasHeader").checked;
+        var header = hasHeader ? rows.shift() : rows[0].map(function (_, i) { return "col" + (i + 1); });
+        var ci = $("caseInsensitive").checked;
+        var trim = $("trim").checked;
+
+        if (mode === "cols" && !keepCols.length) renderCols(header);
+
+        var seen = {};
+        var unique = [];
+        var dups = 0;
+        rows.forEach(function (r) {
+          var key;
+          if (mode === "row") {
+            key = r.map(function (v) { return norm(v, ci, trim); }).join("\u0001");
+          } else {
+            var parts = [];
+            for (var i = 0; i < r.length; i++) if (keepCols[i]) parts.push(norm(r[i], ci, trim));
+            key = parts.join("\u0001");
+          }
+          if (seen[key]) { dups++; }
+          else { seen[key] = true; unique.push(r); }
+        });
+
+        var outRows = [header].concat(unique);
+        // render
+        var tbody = $("out").querySelector("tbody");
+        tbody.innerHTML = "";
+        outRows.slice(0, 300).forEach(function (r, ri) {
+          var tr = document.createElement("tr");
+          r.forEach(function (c) { var cell = document.createElement(ri === 0 ? "th" : "td"); cell.textContent = c; tr.appendChild(cell); });
+          tbody.appendChild(tr);
+        });
+        $("stats").textContent = rows.length + " row(s) → " + unique.length + " unique, " + dups + " duplicate(s) removed.";
+        $("note").textContent = "Mode: " + (mode === "row" ? "whole row" : "key columns") + (ci ? ", case-insensitive" : "") + (trim ? ", trimmed" : "") + ".";
+        window._csv = buildCSV(outRows, actualOutDelim());
+      } catch (e) {
+        errEl.textContent = e.message || String(e);
+      }
+    }
+    function esc(s) { return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+    function refreshCols() {
+      var text = $("csv").value.trim();
+      if (!text) { $("cols").innerHTML = ""; return; }
+      var rows = parseCSV(text, sniffDelim(text));
+      if (!rows.length) { $("cols").innerHTML = ""; return; }
+      var header = $("hasHeader").checked ? rows[0] : rows[0].map(function (_, i) { return "col" + (i + 1); });
+      renderCols(header);
+    }
+
+    $("mode").addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-m]"); if (!b) return;
+      mode = b.getAttribute("data-m");
+      Array.prototype.forEach.call($("mode").querySelectorAll("button"), function (x) { x.classList.remove("active"); });
+      b.classList.add("active");
+      $("colsBox").hidden = mode !== "cols";
+      if (mode === "cols") refreshCols();
+      run();
+    });
+    $("csv").addEventListener("input", refreshCols);
+    $("hasHeader").addEventListener("change", function () { refreshCols(); run(); });
+    ["outDelim", "caseInsensitive", "trim"].forEach(function (id) { $(id).addEventListener("change", run); });
+    $("run").addEventListener("click", run);
+    $("copy").addEventListener("click", function () {
+      if (!window._csv) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(window._csv).then(function () { $("note").textContent = "Copied."; }, function () { $("note").textContent = "Copy failed."; });
+      } else $("note").textContent = "Clipboard unavailable.";
+    });
+    $("download").addEventListener("click", function () {
+      if (!window._csv) return;
+      var blob = new Blob([window._csv], { type: "text/csv" });
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "deduplicated.csv";
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+    refreshCols();
+    run();
+  })();
+  </script>
+</body>
+</html>

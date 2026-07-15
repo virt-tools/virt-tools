@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "csv-dedup",
+    name: "CSV Deduplicator & Unique Rows",
+    description: "Remove duplicate rows from a CSV by full-row comparison or by a subset of key columns — choose which columns form the dedup key (or use the whole row), with optional case-insensitive matching and whitespace trimming. Reports how many duplicates were removed. Auto-sniffs the delimiter (comma, semicolon, tab, pipe), handles quoted fields, and outputs to the delimiter of your choice. Everything runs locally in your browser.",
+    category: "Data",
+    icon: "♻️",
+    added: "2026-07-15T08:00:00Z",
+  },
+  {
     slug: "design-token-generator",
     name: "CSS Design Token Generator",
     description: "Define a set of design tokens — colors, spacing, font sizes, radii, shadows, or any name/value pair — and export them as CSS custom properties (--name), SCSS variables ($name), a JS object, JSON, or TypeScript (as const). Add or remove tokens, pick a prefix, and copy the result. Color and size values get a live preview swatch. Pairs with the Type Scale, CSS Grid, and CSS Named Colors tools. Everything runs locally in your browser.",
