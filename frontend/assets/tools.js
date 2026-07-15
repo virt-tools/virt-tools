@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "changelog-generator",
+    name: "Changelog Generator",
+    description: "Generate a Keep a Changelog-format CHANGELOG.md from a list of releases — each with a version, date, and entries grouped under Added, Changed, Deprecated, Removed, Fixed, and Security. Add or remove releases, type entries one per line, and see the Markdown update live. Copy or download the result. Pairs with the README, license, and .gitignore generators. Everything runs locally in your browser.",
+    category: "Text",
+    icon: "📋",
+    added: "2026-07-15T12:00:00Z",
+  },
+  {
     slug: "badge-generator",
     name: "SVG Badge Generator",
     description: "Generate shields.io-style SVG badges with a custom label, message, colors, and style (flat, flat-square, plastic, for-the-badge). Optional emoji logo, per-side colors, and a link URL wrapping the badge. Preview the badge live, then copy or download the SVG, or copy as a data URI for embedding. Pure SVG generation, runs locally in your browser.",
