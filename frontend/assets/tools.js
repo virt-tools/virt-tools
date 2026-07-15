@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "readme-generator",
+    name: "README.md Generator",
+    description: "Generate a project README.md from a form — title, tagline, description, features list, install and usage instructions (Markdown / shell), optional badges, table of contents, contributing section, license section, and contact. Live preview, copy or download. Pairs with the .gitignore generator, license generator, and security.txt generator. Pure text templates, runs locally in your browser.",
+    category: "Text",
+    icon: "📄",
+    added: "2026-07-15T11:00:00Z",
+  },
+  {
     slug: "env-generator",
     name: ".env File Generator",
     description: "Build a .env file from a list of environment variables — add or remove rows, set name, value, and an optional comment, then export as .env (with values), .env.example (values blanked for templates), or a shell export script (export NAME=value). Optionally fill empty values with generated secure random 256-bit hex secrets via Web Crypto. Pairs with the dotenv converter and gitignore generator. Everything runs locally in your browser.",
