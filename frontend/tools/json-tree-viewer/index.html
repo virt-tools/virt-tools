@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>JSON Tree Viewer — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    textarea { width:100%; font-family:monospace; font-size:12px; min-height:140px; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:10px 0; }
+    .tree { border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:10px; background:var(--panel-2,#161a22); margin-top:10px; font-family:monospace; font-size:13px; max-height:62vh; overflow:auto; }
+    ul.tree-list, ul.tree-list ul { list-style:none; padding-left:18px; margin:0; }
+    ul.tree-list { padding-left:0; }
+    .node { display:flex; align-items:flex-start; gap:4px; padding:1px 0; }
+    .toggle { cursor:pointer; user-select:none; width:14px; display:inline-block; text-align:center; opacity:.6; }
+    .toggle.leaf { opacity:0; }
+    .key { color: var(--accent,#6ea8fe); }
+    .colon { opacity:.5; }
+    .preview { opacity:.7; }
+    .type-string { color: #b5cea8; }
+    .type-number { color: #ce9178; }
+    .type-boolean { color: #569cd6; }
+    .type-null { color: #569cd6; opacity:.6; font-style:italic; }
+    .type-object, .type-array { color: #dcdcaa; }
+    .path-bar { font-family:monospace; font-size:12px; padding:6px 10px; border:1px solid var(--border,#2a2f3a); border-radius:6px; background:var(--panel,#0e1117); margin-top:6px; word-break:break-all; }
+    .path-bar .path { color: var(--accent,#6ea8fe); }
+    .meta { font-size:11px; opacity:.5; margin-left:6px; }
+    .collapsed > ul { display:none; }
+    .toolbar { display:flex; gap:8px; align-items:center; margin-top:6px; font-size:12px; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    button.mini { padding:2px 8px; font-size:11px; }
+    .hit { background: rgba(255,213,79,.18); border-radius:3px; }
+    .hit.current { background: rgba(255,213,79,.45); outline:1px solid #ffd54f; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>JSON Tree Viewer</h1>
+      <p>Paste JSON and navigate it as a collapsible tree. Click any node to expand or collapse it; click a key or value to see its JSON Pointer path and copy it to the clipboard. Each node shows its type, size, and a short preview. Search highlights matching keys and values, with prev/next navigation. Distinct from the JSON Formatter (which pretty-prints text) — this is an interactive structural explorer. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="input">JSON input</label>
+        <textarea id="input" spellcheck="false" autocomplete="off" placeholder='{"users":[{"name":"Ada","age":36},{"name":"Lin","age":29}]}'></textarea>
+      </div>
+      <div class="row">
+        <input id="search" type="search" placeholder="Search keys and values…" style="flex:1;min-width:200px;">
+        <button id="prevHit" class="mini">↑ Prev</button>
+        <button id="nextHit" class="mini">↓ Next</button>
+        <span class="meta" id="hitMeta"></span>
+      </div>
+      <div class="toolbar">
+        <button id="expandAll" class="mini">Expand all</button>
+        <button id="collapseAll" class="mini">Collapse all</button>
+        <span class="meta" id="stats"></span>
+      </div>
+      <div class="path-bar" id="pathBar"><span class="path">$</span> <span style="opacity:.5;">(click a node to see its path)</span></div>
+      <div class="tree" id="tree"></div>
+      <p class="err" id="err"></p>
+      <p class="note" id="note">Paste JSON above.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var root;
+    var hitNodes = [];
+    var hitIdx = -1;
+
+    function esc(s) { return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+    function escAttr(s) { return String(s).replace(/"/g, "&quot;"); }
+
+    function previewValue(v) {
+      var t = typeof v;
+      if (v === null) return "null";
+      if (t === "string") return '"' + (v.length > 40 ? v.slice(0, 40) + "…" : v) + '"';
+      if (t === "number" || t === "boolean") return String(v);
+      return "";
+    }
+    function metaFor(v) {
+      if (v === null) return "null";
+      if (Array.isArray(v)) return v.length + " item" + (v.length === 1 ? "" : "s");
+      if (typeof v === "object") return Object.keys(v).length + " key" + (Object.keys(v).length === 1 ? "" : "s");
+      return typeof v;
+    }
+    function typeClass(v) {
+      if (v === null) return "type-null";
+      if (Array.isArray(v)) return "type-array";
+      if (typeof v === "object") return "type-object";
+      return "type-" + typeof v;
+    }
+    function jsonPointerEscape(s) { return String(s).replace(/~/g, "~0").replace(/\//g, "~1"); }
+    function buildPath(path) {
+      return "$" + path.map(function (p) {
+        return /^\d+$/.test(p) ? "[" + p + "]" : "['" + p + "']";
+      }).join("");
+    }
+
+    function renderTree(value, path) {
+      var node = document.createElement("div");
+      node.className = "node";
+      var isLeaf = value === null || typeof value !== "object";
+      var toggle = document.createElement("span");
+      toggle.className = "toggle" + (isLeaf ? " leaf" : "");
+      toggle.textContent = isLeaf ? "" : "▼";
+      node.appendChild(toggle);
+      var label = document.createElement("span");
+      var meta = " <span class='meta'>" + esc(metaFor(value)) + "</span>";
+      if (path.length) {
+        var key = path[path.length - 1];
+        var keyNode = document.createElement("span");
+        keyNode.className = "key";
+        keyNode.textContent = /^\d+$/.test(key) ? "[" + key + "]" : JSON.stringify(key);
+        label.appendChild(keyNode);
+        var colon = document.createElement("span");
+        colon.className = "colon"; colon.textContent = ": ";
+        label.appendChild(colon);
+      }
+      if (isLeaf) {
+        var v = document.createElement("span");
+        v.className = typeClass(value);
+        v.textContent = previewValue(value);
+        label.appendChild(v);
+      } else {
+        var tEl = document.createElement("span");
+        tEl.className = typeClass(value);
+        tEl.textContent = Array.isArray(value) ? "[ ]" : "{ }";
+        label.appendChild(tEl);
+      }
+      var metaEl = document.createElement("span");
+      metaEl.className = "meta";
+      metaEl.innerHTML = meta;
+      label.appendChild(metaEl);
+      node.appendChild(label);
+
+      // click path
+      label.style.cursor = "pointer";
+      label.addEventListener("click", function (e) {
+        e.stopPropagation();
+        showPath(path);
+        copyToClipboard(buildPath(path));
+      });
+      toggle.addEventListener("click", function (e) {
+        e.stopPropagation();
+        var li = node.parentElement;
+        if (li) li.classList.toggle("collapsed");
+        toggle.textContent = li && li.classList.contains("collapsed") ? "▶" : "▼";
+      });
+
+      if (!isLeaf) {
+        var ul = document.createElement("ul");
+        ul.className = "tree-list";
+        if (Array.isArray(value)) {
+          value.forEach(function (item, i) {
+            var li = document.createElement("li");
+            li.appendChild(renderTree(item, path.concat(String(i))));
+            ul.appendChild(li);
+          });
+        } else {
+          Object.keys(value).forEach(function (k) {
+            var li = document.createElement("li");
+            li.appendChild(renderTree(value[k], path.concat(k)));
+            ul.appendChild(li);
+          });
+        }
+        var wrap = document.createElement("div");
+        wrap.style.display = "contents";
+        wrap.appendChild(ul);
+        node.appendChild(wrap);
+      }
+      return node;
+    }
+
+    function showPath(path) {
+      var p = buildPath(path);
+      $("pathBar").innerHTML = '<span class="path">' + esc(p) + '</span> <button class="mini" id="copyPath">Copy</button>';
+      var btn = document.getElementById("copyPath");
+      if (btn) btn.addEventListener("click", function () { copyToClipboard(p); $("note").textContent = "Path copied: " + p; });
+    }
+    function copyToClipboard(s) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(s);
+      }
+    }
+
+    function parseAndRender() {
+      var errEl = $("err"); errEl.textContent = "";
+      var text = $("input").value.trim();
+      if (!text) { $("tree").innerHTML = ""; $("stats").textContent = ""; $("note").textContent = "Paste JSON above."; return; }
+      try {
+        var v = JSON.parse(text);
+        root = v;
+        var tree = $("tree");
+        tree.innerHTML = "";
+        var ul = document.createElement("ul");
+        ul.className = "tree-list";
+        var li = document.createElement("li");
+        li.appendChild(renderTree(v, []));
+        ul.appendChild(li);
+        tree.appendChild(ul);
+        $("stats").textContent = countNodes(v) + " node(s)";
+        $("note").textContent = "Parsed.";
+      } catch (e) {
+        errEl.textContent = e.message || String(e);
+        $("tree").innerHTML = "";
+      }
+    }
+    function countNodes(v) {
+      if (v === null || typeof v !== "object") return 1;
+      var n = 1, keys = Array.isArray(v) ? v : Object.values(v);
+      for (var i = 0; i < keys.length; i++) n += countNodes(keys[i]);
+      return n;
+    }
+
+    function search() {
+      hitNodes = [];
+      hitIdx = -1;
+      var q = $("search").value.trim().toLowerCase();
+      // clear old highlights
+      Array.prototype.forEach.call($("tree").querySelectorAll(".hit"), function (el) { el.classList.remove("hit", "current"); });
+      if (!q) { $("hitMeta").textContent = ""; return; }
+      Array.prototype.forEach.call($("tree").querySelectorAll(".key, .type-string, .type-number, .type-boolean"), function (el) {
+        var txt = el.textContent.toLowerCase();
+        if (txt.indexOf(q) >= 0) {
+          el.classList.add("hit");
+          hitNodes.push(el);
+        }
+      });
+      if (hitNodes.length) { hitIdx = 0; showCurrent(); }
+      $("hitMeta").textContent = hitNodes.length ? (hitNodes.length + " hit(s)") : "no hits";
+    }
+    function showCurrent() {
+      Array.prototype.forEach.call($("tree").querySelectorAll(".current"), function (el) { el.classList.remove("current"); });
+      if (hitIdx < 0 || !hitNodes.length) return;
+      var el = hitNodes[hitIdx];
+      el.classList.add("current");
+      el.scrollIntoView({ block: "center", behavior: "smooth" });
+      $("hitMeta").textContent = (hitIdx + 1) + "/" + hitNodes.length;
+    }
+
+    function expandAll(on) {
+      Array.prototype.forEach.call($("tree").querySelectorAll("li"), function (li) {
+        if (on) li.classList.remove("collapsed");
+        else li.classList.add("collapsed");
+      });
+      Array.prototype.forEach.call($("tree").querySelectorAll(".toggle:not(.leaf)"), function (t) {
+        t.textContent = on ? "▼" : "▶";
+      });
+    }
+
+    var debounce;
+    $("input").addEventListener("input", function () {
+      clearTimeout(debounce);
+      debounce = setTimeout(parseAndRender, 250);
+    });
+    $("search").addEventListener("input", function () {
+      clearTimeout(debounce);
+      debounce = setTimeout(search, 200);
+    });
+    $("prevHit").addEventListener("click", function () {
+      if (!hitNodes.length) return;
+      hitIdx = (hitIdx - 1 + hitNodes.length) % hitNodes.length;
+      showCurrent();
+    });
+    $("nextHit").addEventListener("click", function () {
+      if (!hitNodes.length) return;
+      hitIdx = (hitIdx + 1) % hitNodes.length;
+      showCurrent();
+    });
+    $("expandAll").addEventListener("click", function () { expandAll(true); });
+    $("collapseAll").addEventListener("click", function () { expandAll(false); });
+
+    parseAndRender();
+  })();
+  </script>
+</body>
+</html>

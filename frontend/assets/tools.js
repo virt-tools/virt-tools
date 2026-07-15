@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "json-tree-viewer",
+    name: "JSON Tree Viewer",
+    description: "Paste JSON and navigate it as a collapsible tree. Click any node to expand or collapse it; click a key or value to see its JSON Pointer path and copy it. Each node shows its type, size, and a short preview. Search highlights matching keys and values with prev/next navigation, and expand-all / collapse-all. Distinct from the JSON Formatter — this is an interactive structural explorer. Everything runs locally in your browser.",
+    category: "Data",
+    icon: "🌳",
+    added: "2026-07-15T01:00:00Z",
+  },
+  {
     slug: "license-generator",
     name: "Open Source License Generator",
     description: "Generate an open source license file for your project — pick MIT, ISC, Apache 2.0, BSD 2-Clause, BSD 3-Clause, GPL 3.0, MPL 2.0, or The Unlicense, fill in the copyright holder name (and optionally project name/URL), and the year is inserted automatically. Copy or download the ready-to-use LICENSE text. Pure static templates, runs locally in your browser.",
