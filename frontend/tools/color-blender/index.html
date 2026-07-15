@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Color Blender &amp; Gradient Mixer — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px; margin:10px 0; }
+    .field { margin-bottom:0; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:10px 0; }
+    .stops { display:flex; gap:2px; height:40px; border-radius:8px; overflow:hidden; border:1px solid var(--border,#2a2f3a); margin:10px 0; }
+    .stops > div { flex:1; min-width:14px; }
+    table { width:100%; border-collapse:collapse; margin-top:10px; }
+    th, td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--border,#2a2f3a); font-size:13px; vertical-align:top; }
+    th { opacity:.65; white-space:nowrap; }
+    td.v { font-family:monospace; }
+    .swatch { display:inline-block; width:18px; height:18px; border-radius:4px; border:1px solid rgba(128,128,128,.25); vertical-align:middle; margin-right:6px; }
+    input[type=color] { width:48px; height:30px; border:1px solid var(--border,#2a2f3a); border-radius:6px; background:transparent; padding:0; cursor:pointer; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Color Blender &amp; Gradient Mixer</h1>
+      <p>Blend two colors at any ratio using a chosen interpolation — linear RGB (gamma-correct), sRGB (gamma-space), HSL short arc, HSL long arc, or OKLab (perceptual). Set the number of intermediate stops and inspect each one as a hex / RGB / HSL swatch. Copy any stop. Pure arithmetic, runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="grid">
+        <div class="field"><label for="c1">Color 1</label><input id="c1" type="color" value="#6ea8fe"></div>
+        <div class="field"><label for="c2">Color 2</label><input id="c2" type="color" value="#f87171"></div>
+        <div class="field"><label for="interp">Interpolation</label>
+          <select id="interp">
+            <option value="linear" selected>Linear RGB (gamma-correct)</option>
+            <option value="srgb">sRGB (gamma-space)</option>
+            <option value="hsl-short">HSL short arc</option>
+            <option value="hsl-long">HSL long arc</option>
+            <option value="oklab">OKLab (perceptual)</option>
+          </select>
+        </div>
+        <div class="field"><label for="stops">Number of stops</label><input id="stops" type="number" min="2" max="64" value="11" style="width:90px;"></div>
+      </div>
+
+      <div class="stops" id="bar"></div>
+
+      <table id="results"><thead><tr><th>#</th><th>swatch</th><th>hex</th><th>rgb</th><th>hsl</th><th>ratio</th></tr></thead><tbody></tbody></table>
+      <p class="note" id="note">Pick two colors and the interpolation.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+
+    function hexToRgb(hex) {
+      var n = parseInt(hex.slice(1), 16);
+      return [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
+    }
+    function rgbToHex(r, g, b) {
+      function h(x) { x = Math.round(Math.max(0, Math.min(255, x))); return (x < 16 ? "0" : "") + x.toString(16); }
+      return "#" + h(r) + h(g) + h(b);
+    }
+    function rgbToHsl(r, g, b) {
+      r /= 255; g /= 255; b /= 255;
+      var max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min, h = 0, s = 0, l = (max + min) / 2;
+      if (d !== 0) {
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        switch (max) {
+          case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+          case g: h = (b - r) / d + 2; break;
+          case b: h = (r - g) / d + 4; break;
+        }
+        h *= 60;
+      }
+      return [Math.round(h), Math.round(s * 100), Math.round(l * 100)];
+    }
+    function hslToRgb(h, s, l) {
+      h /= 360; s /= 100; l /= 100;
+      var r, g, b;
+      if (s === 0) { r = g = b = l; }
+      else {
+        function hue(p, q, t) { if (t < 0) t += 1; if (t > 1) t -= 1; if (t < 1/6) return p + (q - p) * 6 * t; if (t < 1/2) return q; if (t < 2/3) return p + (q - p) * (2/3 - t) * 6; return p; }
+        var q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+        var p = 2 * l - q;
+        r = hue(p, q, h + 1/3); g = hue(p, q, h); b = hue(p, q, h - 1/3);
+      }
+      return [r * 255, g * 255, b * 255];
+    }
+    function srgbToLinear(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
+    function linearToSrgb(c) { c = c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(Math.max(0, c), 1/2.4) - 0.055; return c * 255; }
+    function lerp(a, b, t) { return a + (b - a) * t; }
+
+    // OKLab matrices from the published spec
+    function srgbToOklab(r, g, b) {
+      var lr = srgbToLinear(r), lg = srgbToLinear(g), lb = srgbToLinear(b);
+      var l = 0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb;
+      var m = 0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb;
+      var s = 0.0883024619 * lr + 0.2817188376 * lg + 0.6299787005 * lb;
+      var l_ = Math.cbrt(l), m_ = Math.cbrt(m), s_ = Math.cbrt(s);
+      return [
+        0.2104542553 * l_ + 0.7936178 * m_ - 0.0040720468 * s_,
+        1.9779984951 * l_ - 2.428592205 * m_ + 0.4505937099 * s_,
+        0.0259040371 * l_ + 0.7827717662 * m_ - 0.808675766 * s_
+      ];
+    }
+    function oklabToSrgb(L, a, b) {
+      var l_ = L + 0.3963377774 * a + 0.2158037573 * b;
+      var m_ = L - 0.1055613458 * a - 0.0638541728 * b;
+      var s_ = L - 0.0894841775 * a - 1.291485548 * b;
+      var l = l_ * l_ * l_, m = m_ * m_ * m_, s = s_ * s_ * s_;
+      var lr = 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s;
+      var lg = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s;
+      var lb = -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s;
+      return [linearToSrgb(lr), linearToSrgb(lg), linearToSrgb(lb)];
+    }
+
+    function interp(c1, c2, t, mode) {
+      if (mode === "srgb") {
+        return [lerp(c1[0], c2[0], t), lerp(c1[1], c2[1], t), lerp(c1[2], c2[2], t)];
+      } else if (mode === "linear") {
+        var l1 = [srgbToLinear(c1[0]), srgbToLinear(c1[1]), srgbToLinear(c1[2])];
+        var l2 = [srgbToLinear(c2[0]), srgbToLinear(c2[1]), srgbToLinear(c2[2])];
+        return [linearToSrgb(lerp(l1[0], l2[0], t)), linearToSrgb(lerp(l1[1], l2[1], t)), linearToSrgb(lerp(l1[2], l2[2], t))];
+      } else if (mode === "hsl-short" || mode === "hsl-long") {
+        var h1 = rgbToHsl(c1[0], c1[1], c1[2]);
+        var h2 = rgbToHsl(c2[0], c2[1], c2[2]);
+        var h, s, l;
+        var dh = h2[0] - h1[0];
+        if (mode === "hsl-short") {
+          if (dh > 180) dh -= 360; else if (dh < -180) dh += 360;
+        }
+        h = (h1[0] + dh * t + 360) % 360;
+        s = lerp(h1[1], h2[1], t);
+        l = lerp(h1[2], h2[2], t);
+        return hslToRgb(h, s, l);
+      } else if (mode === "oklab") {
+        var o1 = srgbToOklab(c1[0], c1[1], c1[2]);
+        var o2 = srgbToOklab(c2[0], c2[1], c2[2]);
+        return oklabToSrgb(lerp(o1[0], o2[0], t), lerp(o1[1], o2[1], t), lerp(o1[2], o2[2], t));
+      }
+      return c1;
+    }
+
+    function render() {
+      var c1 = hexToRgb($("c1").value);
+      var c2 = hexToRgb($("c2").value);
+      var mode = $("interp").value;
+      var n = Math.max(2, Math.min(64, parseInt($("stops").value, 10) || 11));
+      // gradient bar
+      var bar = $("bar");
+      bar.innerHTML = "";
+      var barParts = [];
+      for (var i = 0; i < n; i++) {
+        var t = (i / (n - 1));
+        var rgb = interp(c1, c2, t, mode);
+        var hex = rgbToHex(rgb[0], rgb[1], rgb[2]);
+        barParts.push('<div style="background:' + hex + '"></div>');
+      }
+      bar.innerHTML = barParts.join("");
+      // table
+      var tbody = $("results").querySelector("tbody");
+      tbody.innerHTML = "";
+      for (var i = 0; i < n; i++) {
+        var t2 = (i / (n - 1));
+        var rgb2 = interp(c1, c2, t2, mode);
+        var hex2 = rgbToHex(rgb2[0], rgb2[1], rgb2[2]);
+        var hsl = rgbToHsl(rgb2[0], rgb2[1], rgb2[2]);
+        var rgbStr = "rgb(" + Math.round(rgb2[0]) + ", " + Math.round(rgb2[1]) + ", " + Math.round(rgb2[2]) + ")";
+        var hslStr = "hsl(" + hsl[0] + ", " + hsl[1] + "%, " + hsl[2] + "%)";
+        var tr = document.createElement("tr");
+        tr.innerHTML = '<td>' + (i + 1) + '</td><td><span class="swatch" style="background:' + hex2 + '"></span></td>' +
+          '<td class="v">' + hex2 + '</td><td class="v">' + rgbStr + '</td><td class="v">' + hslStr + '</td><td class="v">' + t2.toFixed(2) + '</td>';
+        tbody.appendChild(tr);
+      }
+      $("note").textContent = n + " stops, interpolation: " + mode + ".";
+    }
+
+    ["c1", "c2", "interp", "stops"].forEach(function (id) {
+      $(id).addEventListener("input", render);
+      $(id).addEventListener("change", render);
+    });
+    render();
+  })();
+  </script>
+</body>
+</html>
