@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "diceware-passphrase",
+    name: "Diceware Passphrase Generator",
+    description: "Generate strong, memorable passphrases by sampling words uniformly at random from the EFF Diceware wordlists — long (7776 words, five dice) or two short lists (1296 words, four dice). Web Crypto randomness with rejection sampling (no modulo bias). Choose word count, separator, case, and optional trailing digits/symbols; see the estimated entropy. Everything runs locally in your browser — your passphrase never leaves the page.",
+    category: "Security",
+    icon: "🎲",
+    added: "2026-07-15T01:30:00Z",
+  },
+  {
     slug: "json-tree-viewer",
     name: "JSON Tree Viewer",
     description: "Paste JSON and navigate it as a collapsible tree. Click any node to expand or collapse it; click a key or value to see its JSON Pointer path and copy it. Each node shows its type, size, and a short preview. Search highlights matching keys and values with prev/next navigation, and expand-all / collapse-all. Distinct from the JSON Formatter — this is an interactive structural explorer. Everything runs locally in your browser.",

@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Diceware Passphrase Generator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px; margin:10px 0; }
+    .field { margin-bottom:0; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:10px 0; }
+    .out { font-size:22px; font-weight:600; font-family:monospace; word-spacing:4px; padding:14px; border:1px solid var(--border,#2a2f3a); border-radius:8px; background:var(--panel-2,#161a22); margin:10px 0; word-break:break-word; min-height:60px; }
+    .entropy { font-size:13px; opacity:.7; margin-top:6px; }
+    .note b { color: var(--accent,#6ea8fe); }
+    .note code { background:var(--bg-elev-2,#1e222b); padding:1px 5px; border-radius:4px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Diceware Passphrase Generator</h1>
+      <p>Generate strong, memorable passphrases by sampling words uniformly at random from the EFF Diceware wordlists — the <a href="https://www.eff.org/dice" target="_blank" rel="noopener">EFF long list</a> (7776 words, rolled with five dice) or one of the two short lists (1296 words, four dice). The random indices use the Web Crypto API (crypto.getRandomValues with rejection sampling), so each word is drawn uniformly from the wordlist — no modulo bias. Choose the number of words, separators, capitalization, optional digits/symbols, and copy the result. Everything runs locally in your browser — your passphrase never leaves the page.</p>
+    </div>
+
+    <div class="panel">
+      <div class="grid">
+        <div class="field"><label for="list">Wordlist</label>
+          <select id="list">
+            <option value="long" selected>EFF long (7776 words, 5 dice)</option>
+            <option value="short1">EFF short #1 (1296 words, 4 dice)</option>
+            <option value="short2">EFF short #2 (1296 words, 4 dice)</option>
+          </select>
+        </div>
+        <div class="field"><label for="words">Number of words</label><input id="words" type="number" min="3" max="16" value="6" style="width:90px;"></div>
+        <div class="field"><label for="separator">Separator</label>
+          <select id="separator">
+            <option value=" " selected>space</option>
+            <option value="-">hyphen</option>
+            <option value="_">underscore</option>
+            <option value=".">period</option>
+            <option value="">none</option>
+          </select>
+        </div>
+        <div class="field"><label for="case">Case</label>
+          <select id="case">
+            <option value="lower" selected>lower</option>
+            <option value="upper">UPPER</option>
+            <option value="title">Title</option>
+          </select>
+        </div>
+        <div class="field"><label for="digits">Trailing digits (optional)</label><input id="digits" type="number" min="0" max="6" value="0" style="width:90px;"></div>
+        <div class="field"><label for="symbols">Trailing symbols (optional)</label><input id="symbols" type="number" min="0" max="6" value="0" style="width:90px;"></div>
+      </div>
+
+      <div class="row">
+        <button id="generate">Generate</button>
+        <button id="copy" class="secondary">Copy passphrase</button>
+      </div>
+
+      <div class="out" id="out">—</div>
+      <p class="entropy" id="entropy"></p>
+      <p class="note" id="note">Press Generate.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script src="/vendor/eff-wordlists.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var SYMBOLS = "!@#\$%^&*()-_=+[]{};:,.?/~";
+
+    function randBelow(n) {
+      // Uniform random integer in [0, n) via rejection sampling on crypto.getRandomValues
+      if (n <= 0) return 0;
+      var bits = Math.ceil(Math.log2(n));
+      var limit = Math.floor((Math.pow(2, 31) - 1) / n) * n;
+      var arr = new Uint32Array(1);
+      var v;
+      do { crypto.getRandomValues(arr); v = arr[0] >>> 0; } while (v >= limit);
+      return v % n;
+    }
+
+    function transformWord(w, c) {
+      if (c === "upper") return w.toUpperCase();
+      if (c === "title") return w.charAt(0).toUpperCase() + w.slice(1);
+      return w;
+    }
+
+    function generate() {
+      var listKey = $("list").value;
+      var wl = window.EFF_WORDLISTS[listKey];
+      if (!wl) { $("out").textContent = "—"; $("note").textContent = "Wordlist missing."; return; }
+      var n = Math.max(1, Math.min(64, parseInt($("words").value, 10) || 6));
+      var sep = $("separator").value;
+      var cas = $("case").value;
+      var digits = Math.max(0, Math.min(6, parseInt($("digits").value, 10) || 0));
+      var symbols = Math.max(0, Math.min(6, parseInt($("symbols").value, 10) || 0));
+
+      var words = [];
+      for (var i = 0; i < n; i++) {
+        words.push(transformWord(wl[randBelow(wl.length)], cas));
+      }
+      var pass = words.join(sep);
+      for (var d = 0; d < digits; d++) pass += randBelow(10);
+      for (var s = 0; s < symbols; s++) pass += SYMBOLS.charAt(randBelow(SYMBOLS.length));
+
+      $("out").textContent = pass;
+      // entropy estimate: log2(wl.length) per word + log2(10)*digits + log2(SYMBOLS.length)*symbols
+      var bitsPerWord = Math.log2(wl.length);
+      var totalBits = bitsPerWord * n + Math.log2(10) * digits + Math.log2(SYMBOLS.length) * symbols;
+      $("entropy").textContent = "≈ " + totalBits.toFixed(1) + " bits of entropy (" + n + " words × " + bitsPerWord.toFixed(2) + " bits" + (digits ? " + " + digits + " digit(s)" : "") + (symbols ? " + " + symbols + " symbol(s)" : "") + ").";
+      $("note").textContent = "Generated with Web Crypto randomness (rejection sampling, no modulo bias).";
+      window._pass = pass;
+    }
+
+    $("generate").addEventListener("click", generate);
+    ["list", "words", "separator", "case", "digits", "symbols"].forEach(function (id) {
+      $(id).addEventListener("change", generate);
+    });
+    $("copy").addEventListener("click", function () {
+      if (!window._pass) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(window._pass).then(function () { $("note").textContent = "Copied."; }, function () { $("note").textContent = "Copy failed."; });
+      } else $("note").textContent = "Clipboard unavailable.";
+    });
+    generate();
+  })();
+  </script>
+</body>
+</html>
