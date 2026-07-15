@@ -4354,4 +4354,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔌",
     added: "2026-07-15T20:20:00Z",
   },
+  {
+    slug: "media-query-generator",
+    name: "Media Query Generator",
+    description: "Generate responsive CSS @media queries from breakpoint presets (Tailwind, Bootstrap, MUI, Foundation) or custom widths. Mix min/max width and height, orientation, prefers-color-scheme, prefers-reduced-motion, pointer, hover, and print. Combine multiple queries into a single stylesheet. Copy-ready CSS. Pairs with the CSS Grid, Type Scale, and CSS Unit Converter. Everything runs locally in your browser.",
+    category: "Design",
+    icon: "📱",
+    added: "2026-07-15T20:44:00Z",
+  },
 ];
