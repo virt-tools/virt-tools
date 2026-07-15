@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "csv-column-manager",
+    name: "CSV Column Reorder & Remove",
+    description: "Reorder, rename, and drop columns from a CSV — drag rows to reorder, tick a checkbox to keep or drop a column, type a new name to rename it. Auto-sniffs the delimiter (comma, semicolon, tab, pipe), handles quoted fields, and outputs to the delimiter of your choice. Copy or download the result. Everything runs locally in your browser.",
+    category: "Data",
+    icon: "↔️",
+    added: "2026-07-15T07:00:00Z",
+  },
+  {
     slug: "font-specimen",
     name: "Font Specimen & Preview",
     description: "Preview a string in every font your browser knows — the system font stack available locally. Type a sample, set the size, weight, and style, and scroll through a live specimen for each family. Filter by name, click a row to copy its font-family value, or copy the whole font list. Pure CSS — the fonts are whatever your OS exposes to the browser, nothing is loaded from the network. Runs locally in your browser.",

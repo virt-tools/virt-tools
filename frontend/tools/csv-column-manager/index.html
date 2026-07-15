@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>CSV Column Reorder &amp; Remove — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    textarea { width:100%; font-family:monospace; font-size:12px; min-height:120px; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:10px 0; }
+    .cols { display:flex; flex-direction:column; gap:6px; margin:8px 0; }
+    .col-row { display:flex; align-items:center; gap:8px; padding:6px 10px; border:1px solid var(--border,#2a2f3a); border-radius:8px; background:var(--panel-2,#161a22); cursor:grab; }
+    .col-row.dragging { opacity:.5; }
+    .col-row.drop-target { border-color: var(--accent,#6ea8fe); }
+    .col-row .grip { opacity:.4; cursor:grab; user-select:none; }
+    .col-row .name { flex:1; font-family:monospace; font-size:13px; }
+    .col-row input[type=checkbox] { margin:0; }
+    .col-row .pos { font-size:11px; opacity:.5; }
+    .wrap { overflow:auto; max-height:50vh; border:1px solid var(--border,#2a2f3a); border-radius:8px; margin-top:10px; }
+    table.result { border-collapse:collapse; font-size:12px; }
+    table.result th, table.result td { padding:4px 8px; border-bottom:1px solid var(--border,#2a2f3a); border-right:1px solid var(--border,#2a2f3a); white-space:nowrap; }
+    table.result th { background:var(--panel-2,#161a22); position:sticky; top:0; font-weight:600; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>CSV Column Reorder &amp; Remove</h1>
+      <p>Reorder, rename, and drop columns from a CSV — drag rows to reorder, tick a checkbox to keep or drop a column, type a new name to rename it. Auto-sniffs the delimiter (comma, semicolon, tab, pipe), handles quoted fields, and outputs to the delimiter of your choice. Copy or download the result. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="csv">CSV input</label>
+        <textarea id="csv" spellcheck="false" autocomplete="off" placeholder="name,city,amount&#10;Ada,London,120&#10;Lin,New York,90">name,city,amount
+Ada,London,120
+Lin,New York,90
+Jay,Tokyo,300</textarea>
+      </div>
+      <div class="row">
+        <label>Output delimiter: <select id="outDelim"><option value=",">comma</option><option value=";">semicolon</option><option value="\t">tab</option><option value="|">pipe</option></select></label>
+        <label><input type="checkbox" id="hasHeader" checked> First row is header</label>
+        <button id="run">Apply</button>
+        <button id="copy" class="secondary">Copy result</button>
+        <button id="download" class="secondary">Download .csv</button>
+      </div>
+
+      <h3>Columns (drag to reorder, uncheck to drop, edit name to rename)</h3>
+      <div class="cols" id="cols"></div>
+
+      <p class="err" id="err"></p>
+      <p class="note" id="note">Paste CSV above.</p>
+      <div class="wrap"><table class="result" id="out"><tbody></tbody></table></div>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var cols = []; // {origIdx, name, keep}
+
+    function actualOutDelim() { var d = $("outDelim").value; return d === "\\t" ? "\t" : d; }
+    function sniffDelim(text) {
+      var cands = [",", "\t", ";", "|"], best = ",", bestScore = -1;
+      cands.forEach(function (d) {
+        var r = parseCSV(text, d);
+        if (r.length < 2) return;
+        var w0 = r[0].length;
+        var consistent = r.every(function (row) { return row.length === w0; });
+        var score = consistent ? w0 * r.length : -1;
+        if (score > bestScore) { bestScore = score; best = d; }
+      });
+      return best;
+    }
+    function parseCSV(text, delim) {
+      var rows = [];
+      var i = 0, n = text.length, field = "", row = [], inQ = false;
+      while (i < n) {
+        var c = text[i];
+        if (inQ) {
+          if (c === '"') {
+            if (text[i + 1] === '"') { field += '"'; i += 2; }
+            else { inQ = false; i++; }
+          } else { field += c; i++; }
+        } else {
+          if (c === '"') { inQ = true; i++; }
+          else if (c === delim) { row.push(field); field = ""; i++; }
+          else if (c === "\r") { i++; }
+          else if (c === "\n") { row.push(field); rows.push(row); row = []; field = ""; i++; }
+          else { field += c; i++; }
+        }
+      }
+      if (field !== "" || row.length) { row.push(field); rows.push(row); }
+      while (rows.length && rows[rows.length - 1].length === 1 && rows[rows.length - 1][0] === "") rows.pop();
+      var w = rows.reduce(function (m, r) { return Math.max(m, r.length); }, 0);
+      rows.forEach(function (r) { while (r.length < w) r.push(""); });
+      return rows;
+    }
+    function csvField(s, delim) {
+      s = String(s);
+      if (s === "") return "";
+      if (new RegExp('["' + delim + '\\n]').test(s)) return '"' + s.replace(/"/g, '""') + '"';
+      return s;
+    }
+    function buildCSV(rows, delim) { return rows.map(function (r) { return r.map(function (c) { return csvField(c, delim); }).join(delim); }).join("\n") + "\n"; }
+    function esc(s) { return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+    function refreshCols() {
+      var text = $("csv").value.trim();
+      if (!text) { cols = []; renderCols(); return; }
+      var rows = parseCSV(text, sniffDelim(text));
+      if (!rows.length) { cols = []; renderCols(); return; }
+      var header = $("hasHeader").checked ? rows[0] : rows[0].map(function (_, i) { return "col" + (i + 1); });
+      // preserve existing keep/rename if columns match
+      var prev = {};
+      cols.forEach(function (c) { prev[c.origIdx] = c; });
+      cols = header.map(function (h, i) {
+        var p = prev[i];
+        return { origIdx: i, name: p ? p.name : h, keep: p ? p.keep : true };
+      });
+      renderCols();
+    }
+
+    function renderCols() {
+      var wrap = $("cols");
+      wrap.innerHTML = "";
+      cols.forEach(function (c, idx) {
+        var div = document.createElement("div");
+        div.className = "col-row";
+        div.draggable = true;
+        div.setAttribute("data-idx", idx);
+        div.innerHTML =
+          '<span class="grip">⠿</span>' +
+          '<span class="pos">' + (idx + 1) + '</span>' +
+          '<input type="checkbox" class="keep" ' + (c.keep ? "checked" : "") + '>' +
+          '<input type="text" class="rename" value="' + esc(c.name) + '" spellcheck="false" style="flex:1;font-family:monospace;">';
+        var cb = div.querySelector(".keep");
+        cb.addEventListener("change", function () { c.keep = cb.checked; run(); });
+        var nm = div.querySelector(".rename");
+        nm.addEventListener("input", function () { c.name = nm.value; run(); });
+        // drag-and-drop
+        div.addEventListener("dragstart", function (e) {
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData("text/plain", String(idx));
+          div.classList.add("dragging");
+        });
+        div.addEventListener("dragend", function () { div.classList.remove("dragging"); });
+        div.addEventListener("dragover", function (e) { e.preventDefault(); div.classList.add("drop-target"); });
+        div.addEventListener("dragleave", function () { div.classList.remove("drop-target"); });
+        div.addEventListener("drop", function (e) {
+          e.preventDefault();
+          div.classList.remove("drop-target");
+          var fromIdx = parseInt(e.dataTransfer.getData("text/plain"), 10);
+          var toIdx = parseInt(div.getAttribute("data-idx"), 10);
+          if (isNaN(fromIdx) || isNaN(toIdx) || fromIdx === toIdx) return;
+          var moved = cols.splice(fromIdx, 1)[0];
+          cols.splice(toIdx, 0, moved);
+          renderCols(); run();
+        });
+        wrap.appendChild(div);
+      });
+    }
+
+    function run() {
+      var errEl = $("err"); errEl.textContent = "";
+      var text = $("csv").value.trim();
+      if (!text) { $("out").querySelector("tbody").innerHTML = ""; $("note").textContent = "Paste CSV above."; return; }
+      try {
+        var inDelim = sniffDelim(text);
+        var rows = parseCSV(text, inDelim);
+        if (!rows.length) { errEl.textContent = "No rows."; return; }
+        var hasHeader = $("hasHeader").checked;
+        var header = hasHeader ? rows.shift() : rows[0].map(function (_, i) { return "col" + (i + 1); });
+        var kept = cols.map(function (c, i) { return { origIdx: c.origIdx, name: c.name, keep: c.keep }; }).filter(function (c) { return c.keep; });
+        if (!kept.length) { errEl.textContent = "No columns kept."; return; }
+        var outHeader = kept.map(function (c) { return c.name; });
+        var outRows = [outHeader];
+        rows.forEach(function (r) {
+          outRows.push(kept.map(function (c) { return r[c.origIdx] === undefined ? "" : r[c.origIdx]; }));
+        });
+        // render
+        var tbody = $("out").querySelector("tbody");
+        tbody.innerHTML = "";
+        outRows.slice(0, 300).forEach(function (r, ri) {
+          var tr = document.createElement("tr");
+          r.forEach(function (c) { var cell = document.createElement(ri === 0 ? "th" : "td"); cell.textContent = c; tr.appendChild(cell); });
+          tbody.appendChild(tr);
+        });
+        var data = outRows.length - 1;
+        $("note").textContent = "Output: " + kept.length + " column(s) of " + cols.length + ", " + data + " row(s)." + (outRows.length > 301 ? " (Preview: first 300.)" : "");
+        window._csv = buildCSV(outRows, actualOutDelim());
+      } catch (e) {
+        errEl.textContent = e.message || String(e);
+      }
+    }
+
+    $("csv").addEventListener("input", refreshCols);
+    $("hasHeader").addEventListener("change", function () { refreshCols(); run(); });
+    $("run").addEventListener("click", run);
+    $("outDelim").addEventListener("change", run);
+    $("copy").addEventListener("click", function () {
+      if (!window._csv) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(window._csv).then(function () { $("note").textContent = "Copied."; }, function () { $("note").textContent = "Copy failed."; });
+      } else $("note").textContent = "Clipboard unavailable.";
+    });
+    $("download").addEventListener("click", function () {
+      if (!window._csv) return;
+      var blob = new Blob([window._csv], { type: "text/csv" });
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "columns.csv";
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+    refreshCols();
+    run();
+  })();
+  </script>
+</body>
+</html>
