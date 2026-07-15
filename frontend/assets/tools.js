@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "curl-to-code",
+    name: "cURL to Code Converter",
+    description: "Paste a curl command and get equivalent code in browser fetch, Node.js, Python requests, or Go net/http. Handles method, URL, headers (-H), data (-d, JSON or form), -X, and -u basic auth. JSON bodies are parsed and re-serialized as native objects. Pure text parsing — no requests are made; the converter only reads the command string. Everything runs locally in your browser.",
+    category: "Networking",
+    icon: "🔄",
+    added: "2026-07-15T05:30:00Z",
+  },
+  {
     slug: "batch-image-resizer",
     name: "Batch Image Resizer & Converter",
     description: "Resize and convert many images at once — drop a batch, choose a resize mode (percentage, max width, max height, fit within W×H, or exact dimensions), pick PNG / JPEG / WebP output with quality control, and download each result. Aspect ratio is preserved unless you choose exact dimensions. Each image is decoded and resampled on an in-memory canvas — nothing is uploaded. Great for thumbnails, web assets, or normalizing a folder of photos.",

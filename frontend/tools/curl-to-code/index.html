@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>cURL to Code Converter — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    @media (max-width:780px){ .grid2 { grid-template-columns:1fr; } }
+    textarea { width:100%; font-family:monospace; font-size:12px; min-height:180px; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:10px 0; }
+    .seg { display:inline-flex; border:1px solid var(--border,#2a2f3a); border-radius:8px; overflow:hidden; margin-bottom:10px; }
+    .seg button { border:none; border-radius:0; background:transparent; color:inherit; padding:6px 14px; cursor:pointer; }
+    .seg button.active { background: var(--accent,#6ea8fe); color:#08101f; }
+    pre#out { white-space:pre-wrap; word-break:break-word; font-family:monospace; font-size:12px; padding:10px; border:1px solid var(--border,#2a2f3a); border-radius:8px; background:var(--panel-2,#161a22); margin:8px 0; min-height:180px; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>cURL to Code Converter</h1>
+      <p>Paste a <code>curl</code> command and get equivalent code in browser <code>fetch</code>, Node.js (https + fetch), Python <code>requests</code>, or Go (<code>net/http</code>). Handles method, URL, headers (including <code>-H</code>/<code>--header</code>), data (<code>-d</code>/<code>--data</code>, JSON or form), <code>-X</code>, and <code>-u</code> basic auth. Output is copyable. Pure text parsing — no requests are made; the converter only reads the command string. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="seg" id="target">
+        <button type="button" data-t="fetch" class="active">fetch (browser)</button>
+        <button type="button" data-t="node" class="secondary">Node.js</button>
+        <button type="button" data-t="python" class="secondary">Python</button>
+        <button type="button" data-t="go" class="secondary">Go</button>
+      </div>
+
+      <div class="grid2">
+        <div>
+          <label for="input">cURL command</label>
+          <textarea id="input" spellcheck="false" autocomplete="off" placeholder='curl -X POST https://api.example.com/users -H "Content-Type: application/json" -d "{&quot;name&quot;:&quot;Ada&quot;}"'>curl -X POST https://api.example.com/users \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Ada","age":36}'</textarea>
+        </div>
+        <div>
+          <label>Generated code</label>
+          <pre id="out"></pre>
+        </div>
+      </div>
+
+      <div class="row">
+        <button id="convert">Convert</button>
+        <button id="copy" class="secondary">Copy output</button>
+      </div>
+      <p class="err" id="err"></p>
+      <p class="note" id="note">Paste a cURL command above.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var target = "fetch";
+
+    // Tokenize a cURL command, respecting single/double quotes and backslash line-continuations.
+    function tokenize(s) {
+      // strip leading "curl" and any line-continuation backslashes
+      s = s.replace(/\\\s*\n/g, " ").replace(/\s+/g, " ").trim();
+      if (/^curl\b/i.test(s)) s = s.replace(/^curl\s+/i, "");
+      var tokens = [];
+      var i = 0, n = s.length;
+      while (i < n) {
+        // skip whitespace
+        while (i < n && /\s/.test(s[i])) i++;
+        if (i >= n) break;
+        var q = s[i];
+        if (q === "'" || q === '"') {
+          i++;
+          var buf = "";
+          while (i < n && s[i] !== q) {
+            if (s[i] === "\\" && i + 1 < n) { buf += s[i + 1]; i += 2; }
+            else { buf += s[i]; i++; }
+          }
+          i++; // closing quote
+          tokens.push(buf);
+        } else {
+          var buf2 = "";
+          while (i < n && !/\s/.test(s[i])) {
+            if (s[i] === "\\" && i + 1 < n) { buf2 += s[i + 1]; i += 2; }
+            else { buf2 += s[i]; i++; }
+          }
+          tokens.push(buf2);
+        }
+      }
+      return tokens;
+    }
+
+    function parseCurl(s) {
+      var tokens = tokenize(s);
+      var cmd = { method: "GET", url: "", headers: [], data: null, auth: null };
+      for (var i = 0; i < tokens.length; i++) {
+        var t = tokens[i];
+        if (t === "-X" || t === "--request") {
+          cmd.method = tokens[++i] || "GET";
+        } else if (t === "-H" || t === "--header") {
+          var h = tokens[++i] || "";
+          var ci = h.indexOf(":");
+          if (ci > 0) cmd.headers.push([h.slice(0, ci).trim(), h.slice(ci + 1).trim()]);
+        } else if (t === "-d" || t === "--data" || t === "--data-raw" || t === "--data-binary") {
+          cmd.data = tokens[++i] || "";
+          if (cmd.method === "GET") cmd.method = "POST";
+        } else if (t === "-u" || t === "--user") {
+          cmd.auth = tokens[++i] || "";
+        } else if (t === "-A" || t === "--user-agent") {
+          cmd.headers.push(["User-Agent", tokens[++i] || ""]);
+        } else if (t === "-k" || t === "--insecure" || t === "-L" || t === "--location" || t === "-s" || t === "--silent" || t === "-S" || t === "--show-error" || t === "-i" || t === "--include" || t === "-v" || t === "--verbose") {
+          // ignored flags
+        } else if (t.indexOf("-") === 0) {
+          // unknown flag; skip its value if it looks like a flag with arg
+        } else {
+          // URL
+          if (!cmd.url) cmd.url = t;
+        }
+      }
+      return cmd;
+    }
+
+    function isJson(headers) {
+      return headers.some(function (h) { return h[0].toLowerCase() === "content-type" && h[1].toLowerCase().indexOf("json") >= 0; });
+    }
+    function isForm(headers) {
+      return headers.some(function (h) { return h[0].toLowerCase() === "content-type" && h[1].toLowerCase().indexOf("x-www-form-urlencoded") >= 0; });
+    }
+    function jsStr(s) { return JSON.stringify(s); }
+
+    function genFetch(cmd) {
+      var lines = [];
+      lines.push("const response = await fetch(" + jsStr(cmd.url) + ", {");
+      lines.push("  method: " + jsStr(cmd.method) + ",");
+      if (cmd.headers.length) {
+        lines.push("  headers: {");
+        cmd.headers.forEach(function (h, i) {
+          lines.push("    " + jsStr(h[0]) + ": " + jsStr(h[1]) + (i < cmd.headers.length - 1 ? "," : ""));
+        });
+        lines.push("  },");
+      }
+      if (cmd.data != null) {
+        if (isJson(cmd.headers)) {
+          try { var obj = JSON.parse(cmd.data); lines.push("  body: JSON.stringify(" + JSON.stringify(obj, null, 2).replace(/\n/g, "\n  ") + "),"); }
+          catch (e) { lines.push("  body: " + jsStr(cmd.data) + ","); }
+        } else {
+          lines.push("  body: " + jsStr(cmd.data) + ",");
+        }
+      }
+      if (cmd.auth) {
+        var p = cmd.auth.split(":");
+        lines.push("  // Basic auth: " + (p[0] || "") + ":" + (p[1] ? "***" : ""));
+      }
+      lines.push("});");
+      lines.push("const data = await response.json();");
+      lines.push("console.log(data);");
+      return lines.join("\n");
+    }
+
+    function genNode(cmd) {
+      var lines = [];
+      // detect JSON body to use JSON.stringify
+      lines.push("const response = await fetch(" + jsStr(cmd.url) + ", {");
+      lines.push("  method: " + jsStr(cmd.method) + ",");
+      if (cmd.headers.length) {
+        lines.push("  headers: {");
+        cmd.headers.forEach(function (h, i) {
+          lines.push("    " + jsStr(h[0]) + ": " + jsStr(h[1]) + (i < cmd.headers.length - 1 ? "," : ""));
+        });
+        lines.push("  },");
+      }
+      if (cmd.data != null) {
+        if (isJson(cmd.headers)) {
+          try { var obj = JSON.parse(cmd.data); lines.push("  body: JSON.stringify(" + JSON.stringify(obj, null, 2).replace(/\n/g, "\n  ") + "),"); }
+          catch (e) { lines.push("  body: " + jsStr(cmd.data) + ","); }
+        } else {
+          lines.push("  body: " + jsStr(cmd.data) + ",");
+        }
+      }
+      lines.push("});");
+      lines.push("const data = await response.json();");
+      lines.push("console.log(data);");
+      return "// Node.js 18+ (global fetch)\n" + lines.join("\n");
+    }
+
+    function genPython(cmd) {
+      var lines = [];
+      lines.push("import requests");
+      lines.push("");
+      var headers = {};
+      cmd.headers.forEach(function (h) { headers[h[0]] = h[1]; });
+      if (cmd.auth) {
+        var p = cmd.auth.split(":");
+        lines.push("url = " + jsStr(cmd.url));
+        lines.push("headers = " + pyDict(headers));
+        if (cmd.data != null) {
+          if (isJson(cmd.headers)) {
+            try { var obj = JSON.parse(cmd.data); lines.push("json_body = " + pyRepr(obj)); lines.push("response = requests.post(url, headers=headers, json=json_body)" + (cmd.method !== "POST" ? "  # method: " + cmd.method : "")); }
+            catch (e) { lines.push("data = " + jsStr(cmd.data)); lines.push("response = requests.request(" + jsStr(cmd.method) + ", url, headers=headers, data=data)"); }
+          } else {
+            lines.push("data = " + jsStr(cmd.data));
+            lines.push("response = requests.request(" + jsStr(cmd.method) + ", url, headers=headers, data=data)");
+          }
+        } else {
+          lines.push("response = requests.request(" + jsStr(cmd.method) + ", url, headers=headers)");
+        }
+      } else {
+        lines.push("url = " + jsStr(cmd.url));
+        lines.push("headers = " + pyDict(headers));
+        if (cmd.data != null) {
+          if (isJson(cmd.headers)) {
+            try { var obj2 = JSON.parse(cmd.data); lines.push("json_body = " + pyRepr(obj2)); lines.push("response = requests.request(" + jsStr(cmd.method) + ", url, headers=headers, json=json_body)"); }
+            catch (e) { lines.push("data = " + jsStr(cmd.data)); lines.push("response = requests.request(" + jsStr(cmd.method) + ", url, headers=headers, data=data)"); }
+          } else {
+            lines.push("data = " + jsStr(cmd.data));
+            lines.push("response = requests.request(" + jsStr(cmd.method) + ", url, headers=headers, data=data)");
+          }
+        } else {
+          lines.push("response = requests.request(" + jsStr(cmd.method) + ", url, headers=headers)");
+        }
+      }
+      lines.push("print(response.json())");
+      return lines.join("\n");
+    }
+    function pyDict(obj) {
+      var parts = [];
+      for (var k in obj) parts.push(pyStr(k) + ": " + pyStr(obj[k]));
+      return "{" + parts.join(", ") + "}";
+    }
+    function pyStr(s) { return JSON.stringify(s); }
+    function pyRepr(v) {
+      if (v === null) return "None";
+      if (typeof v === "boolean") return v ? "True" : "False";
+      if (typeof v === "number") return String(v);
+      if (typeof v === "string") return pyStr(v);
+      if (Array.isArray(v)) return "[" + v.map(pyRepr).join(", ") + "]";
+      if (typeof v === "object") {
+        var parts = [];
+        for (var k in v) parts.push(pyStr(k) + ": " + pyRepr(v[k]));
+        return "{" + parts.join(", ") + "}";
+      }
+      return "None";
+    }
+
+    function genGo(cmd) {
+      var lines = [];
+      lines.push("package main");
+      lines.push("");
+      lines.push("import (");
+      lines.push('\t"fmt"');
+      lines.push('\t"io"');
+      lines.push('\t"net/http"');
+      if (cmd.data != null) lines.push('\t"strings"');
+      lines.push(")");
+      lines.push("");
+      lines.push("func main() {");
+      var bodyExpr = "nil";
+      if (cmd.data != null) {
+        lines.push('\tbody := strings.NewReader(' + goStr(cmd.data) + ')');
+        bodyExpr = "body";
+      }
+      lines.push('\treq, err := http.NewRequest(' + goStr(cmd.method) + ", " + goStr(cmd.url) + ", " + bodyExpr + ")");
+      lines.push('\tif err != nil {');
+      lines.push('\t\tpanic(err)');
+      lines.push("\t}");
+      cmd.headers.forEach(function (h) { lines.push('\treq.Header.Set(' + goStr(h[0]) + ", " + goStr(h[1]) + ")"); });
+      if (cmd.auth) {
+        var p = cmd.auth.split(":");
+        lines.push('\treq.SetBasicAuth(' + goStr(p[0] || "") + ", " + goStr(p[1] || "") + ")");
+      }
+      lines.push('\tresp, err := http.DefaultClient.Do(req)');
+      lines.push('\tif err != nil {');
+      lines.push('\t\tpanic(err)');
+      lines.push("\t}");
+      lines.push('\tdefer resp.Body.Close()');
+      lines.push('\tbodyBytes, _ := io.ReadAll(resp.Body)');
+      lines.push('\tfmt.Println(string(bodyBytes))');
+      lines.push("}");
+      return lines.join("\n");
+    }
+    function goStr(s) { return JSON.stringify(s); }
+
+    function convert() {
+      var errEl = $("err"); errEl.textContent = "";
+      var raw = $("input").value.trim();
+      if (!raw) { $("out").textContent = ""; $("note").textContent = "Paste a cURL command above."; return; }
+      try {
+        if (!/^curl\b/i.test(raw.replace(/\s+/g, " ").trim())) { errEl.textContent = "Input must start with 'curl'."; return; }
+        var cmd = parseCurl(raw);
+        if (!cmd.url) { errEl.textContent = "No URL found in command."; return; }
+        var out = "";
+        if (target === "fetch") out = genFetch(cmd);
+        else if (target === "node") out = genNode(cmd);
+        else if (target === "python") out = genPython(cmd);
+        else if (target === "go") out = genGo(cmd);
+        $("out").textContent = out;
+        window._out = out;
+        $("note").textContent = "Parsed: " + cmd.method + " " + cmd.url + " · " + cmd.headers.length + " header(s)" + (cmd.data != null ? " · with body" : "");
+      } catch (e) {
+        errEl.textContent = e.message || String(e);
+        $("out").textContent = "";
+      }
+    }
+
+    $("target").addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-t]"); if (!b) return;
+      target = b.getAttribute("data-t");
+      Array.prototype.forEach.call($("target").querySelectorAll("button"), function (x) { x.classList.remove("active"); });
+      b.classList.add("active");
+      convert();
+    });
+    $("convert").addEventListener("click", convert);
+    $("input").addEventListener("input", convert);
+    $("copy").addEventListener("click", function () {
+      if (!window._out) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(window._out).then(function () { $("note").textContent = "Copied."; }, function () { $("note").textContent = "Copy failed."; });
+      } else $("note").textContent = "Clipboard unavailable.";
+    });
+    convert();
+  })();
+  </script>
+</body>
+</html>
