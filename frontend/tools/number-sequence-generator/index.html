@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Number Sequence Generator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .opts { display:flex; flex-wrap:wrap; gap:14px; align-items:center; margin:10px 0; }
+    .opts label { font-size:14px; display:inline-flex; gap:5px; align-items:center; }
+    select, input[type="number"] { background:var(--panel-2,#161a22); border:1px solid var(--border,#2a2f3a); color:inherit; border-radius:6px; padding:5px 8px; font-size:14px; }
+    .stats { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:10px; margin:10px 0; }
+    .stat { background:var(--panel-2,#161a22); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:8px 10px; }
+    .stat .n { font-size:18px; font-weight:600; font-variant-numeric: tabular-nums; }
+    .stat .l { font-size:12px; opacity:.7; }
+    .seq { font-family:monospace; white-space:pre-wrap; word-break:break-word; line-height:1.6; padding:10px; background:var(--panel-2,#161a22); border:1px solid var(--border,#2a2f3a); border-radius:8px; max-height:50vh; overflow:auto; }
+    .seq .idx { opacity:.4; font-size:11px; margin-right:4px; }
+    .seq .v { font-weight:600; }
+    .seq .sep { opacity:.3; margin:0 6px; }
+    .formula { font-family:monospace; background:var(--panel-2,#161a22); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:8px 10px; margin:10px 0; font-size:13px; }
+    .params { display:flex; flex-wrap:wrap; gap:10px; margin:6px 0 0; }
+    .params.hidden { display:none; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Number Sequence Generator</h1>
+      <p>Generate common number sequences — Fibonacci, Lucas, triangular, square, cube, pentagonal, primes, powers of two, Catalan, arithmetic and geometric progressions, and the Collatz hailstone sequence. Set the term count, copy the list, and inspect the closed-form or recurrence. All arithmetic uses big integers where needed. Runs locally.</p>
+    </div>
+
+    <div class="panel">
+      <div class="opts">
+        <label>Sequence
+          <select id="kind">
+            <option value="fib">Fibonacci</option>
+            <option value="lucas">Lucas</option>
+            <option value="triangular">Triangular numbers</option>
+            <option value="square">Square numbers</option>
+            <option value="cube">Cube numbers</option>
+            <option value="pentagonal">Pentagonal numbers</option>
+            <option value="hexagonal">Hexagonal numbers</option>
+            <option value="prime">Primes</option>
+            <option value="pow2">Powers of two</option>
+            <option value="powb">Powers of a base</option>
+            <option value="catalan">Catalan numbers</option>
+            <option value="arithmetic">Arithmetic progression</option>
+            <option value="geometric">Geometric progression</option>
+            <option value="collatz">Collatz hailstone</option>
+            <option value="factorial">Factorials</option>
+            <option value="lazy-caterer">Lazy caterer's cuts</option>
+            <option value="tetrahedral">Tetrahedral numbers</option>
+          </select>
+        </label>
+        <label>Count <input type="number" id="count" min="1" max="500" value="20" style="width:70px;"></label>
+        <label><input type="checkbox" id="indexed"> Show indices</label>
+        <button id="copy" class="secondary">Copy sequence</button>
+      </div>
+
+      <div class="params" id="params"></div>
+      <div class="formula" id="formula"></div>
+
+      <div class="stats" id="stats"></div>
+      <div class="seq" id="seq"></div>
+
+      <p class="note" id="note">All sequences computed locally. Big-integer arithmetic keeps Fibonacci, factorial, Catalan and powers exact however large they grow.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var kindEl = document.getElementById("kind");
+    var countEl = document.getElementById("count");
+    var indexedEl = document.getElementById("indexed");
+    var paramsEl = document.getElementById("params");
+    var formulaEl = document.getElementById("formula");
+    var statsEl = document.getElementById("stats");
+    var seqEl = document.getElementById("seq");
+    var copyBtn = document.getElementById("copy");
+
+    var lastSeq = [];
+
+    function esc(s) { return String(s).replace(/[&<>]/g, function(c){return c==="&"?"&amp;":c==="<"?"&lt;":"&gt;";}); }
+
+    function isPrime(n) {
+      if (n < 2n) return false;
+      if (n < 4n) return true;
+      if (n % 2n === 0n || n % 3n === 0n) return false;
+      for (var i = 5n; i * i <= n; i += 6n) {
+        if (n % i === 0n || n % (i + 2n) === 0n) return false;
+      }
+      return true;
+    }
+
+    function binomial(n, k) {
+      if (k < 0n || k > n) return 0n;
+      if (k === 0n || k === n) return 1n;
+      k = k < n - k ? k : n - k;
+      var r = 1n;
+      for (var i = 0n; i < k; i++) {
+        r = r * (n - i) / (i + 1n);
+      }
+      return r;
+    }
+
+    var paramDefs = {
+      "powb":        [["base","2"]],
+      "arithmetic":  [["first","1"],["diff","2"]],
+      "geometric":   [["first","1"],["ratio","2"]],
+      "collatz":     [["start","27"]],
+      "fib":         [["seed1","0"],["seed2","1"]],
+      "lucas":       [["seed1","2"],["seed2","1"]]
+    };
+
+    var formulas = {
+      "fib":         "F(n) = F(n−1) + F(n−2),  F(0)=a, F(1)=b",
+      "lucas":       "L(n) = L(n−1) + L(n−2),  L(0)=a, L(1)=b",
+      "triangular":  "T(n) = n(n+1)/2  →  1, 3, 6, 10, 15…",
+      "square":      "S(n) = n²  →  1, 4, 9, 16, 25…",
+      "cube":        "C(n) = n³  →  1, 8, 27, 64, 125…",
+      "pentagonal":  "P(n) = n(3n−1)/2  →  1, 5, 12, 22, 35…",
+      "hexagonal":   "H(n) = n(2n−1)  →  1, 6, 15, 28, 45…",
+      "prime":       "the n-th prime number  →  2, 3, 5, 7, 11…",
+      "pow2":        "2ⁿ  →  1, 2, 4, 8, 16…",
+      "powb":        "bⁿ  for a chosen base b",
+      "catalan":     "C(n) = (2n)! / ((n+1)! n!)  →  1, 1, 2, 5, 14, 42…",
+      "arithmetic":  "a, a+d, a+2d, a+3d…",
+      "geometric":   "a, a·r, a·r², a·r³…",
+      "collatz":     "if even → n/2, if odd → 3n+1, until 1 ( hailstone from start )",
+      "factorial":   "n! = 1·2·3···n  →  1, 1, 2, 6, 24, 120…",
+      "lazy-caterer":"L(n) = n(n+1)/2 + 1  →  1, 2, 4, 7, 11… ( max pieces from n cuts )",
+      "tetrahedral": "Te(n) = n(n+1)(n+2)/6  →  1, 4, 10, 20, 35…"
+    };
+
+    function paramVal(name) {
+      var el = document.getElementById("p-" + name);
+      if (!el) return null;
+      var v = el.value;
+      if (v === "" || v === null) return null;
+      try { return BigInt(v); } catch (e) { return null; }
+    }
+
+    function buildParams() {
+      var defs = paramDefs[kindEl.value];
+      if (!defs) { paramsEl.innerHTML = ""; paramsEl.classList.add("hidden"); return; }
+      paramsEl.classList.remove("hidden");
+      paramsEl.innerHTML = defs.map(function (d) {
+        return '<label>' + d[0] + ' <input type="number" id="p-' + d[0] + '" value="' + d[1] + '" style="width:70px;"></label>';
+      }).join("");
+      defs.forEach(function (d) {
+        var el = document.getElementById("p-" + d[0]);
+        el.addEventListener("input", compute);
+        el.addEventListener("change", compute);
+      });
+    }
+
+    function generate() {
+      var kind = kindEl.value;
+      var n = parseInt(countEl.value, 10);
+      if (!isFinite(n) || n < 1) n = 1;
+      if (n > 500) n = 500;
+      var seq = [];
+      var one = 1n, zero = 0n;
+
+      switch (kind) {
+        case "fib": {
+          var a = paramVal("seed1"); if (a === null) a = 0n;
+          var b = paramVal("seed2"); if (b === null) b = 1n;
+          for (var i = 0; i < n; i++) { seq.push(a); var t = a + b; a = b; b = t; }
+          break;
+        }
+        case "lucas": {
+          var la = paramVal("seed1"); if (la === null) la = 2n;
+          var lb = paramVal("seed2"); if (lb === null) lb = 1n;
+          for (var j = 0; j < n; j++) { seq.push(la); var t2 = la + lb; la = lb; lb = t2; }
+          break;
+        }
+        case "triangular":
+          for (var i = 1n; i <= BigInt(n); i++) seq.push(i * (i + one) / 2n);
+          break;
+        case "square":
+          for (var i = 1n; i <= BigInt(n); i++) seq.push(i * i);
+          break;
+        case "cube":
+          for (var i = 1n; i <= BigInt(n); i++) seq.push(i * i * i);
+          break;
+        case "pentagonal":
+          for (var i = 1n; i <= BigInt(n); i++) seq.push(i * (3n * i - one) / 2n);
+          break;
+        case "hexagonal":
+          for (var i = 1n; i <= BigInt(n); i++) seq.push(i * (2n * i - one));
+          break;
+        case "prime": {
+          var p = 2n, c = 0;
+          while (c < n) { if (isPrime(p)) { seq.push(p); c++; } p++; }
+          break;
+        }
+        case "pow2":
+          for (var i = 0n; i < BigInt(n); i++) seq.push(2n ** i);
+          break;
+        case "powb": {
+          var b = paramVal("base"); if (!b || b === zero) b = 2n;
+          for (var i = 0n; i < BigInt(n); i++) seq.push(b ** i);
+          break;
+        }
+        case "catalan":
+          for (var i = 0n; i < BigInt(n); i++) seq.push(binomial(2n * i, i) / (i + one));
+          break;
+        case "arithmetic": {
+          var first = paramVal("first"); if (first === null) first = 1n;
+          var diff = paramVal("diff"); if (diff === null) diff = 2n;
+          for (var i = 0n; i < BigInt(n); i++) seq.push(first + diff * i);
+          break;
+        }
+        case "geometric": {
+          var gFirst = paramVal("first"); if (gFirst === null) gFirst = 1n;
+          var r = paramVal("ratio"); if (r === null) r = 2n;
+          for (var i = 0n; i < BigInt(n); i++) seq.push(gFirst * (r ** i));
+          break;
+        }
+        case "collatz": {
+          var st = paramVal("start"); if (!st || st < one) st = 27n;
+          var v = st;
+          seq.push(v);
+          var guard = 0;
+          while (v !== one && guard < 10000) {
+            v = (v % 2n === 0n) ? v / 2n : 3n * v + one;
+            seq.push(v);
+            guard++;
+            if (seq.length >= n) break;
+          }
+          break;
+        }
+        case "factorial": {
+          var f = 1n;
+          for (var i = 0n; i < BigInt(n); i++) {
+            if (i > 0n) f = f * i;
+            seq.push(f);
+          }
+          // note: this gives 0!,1!,2!...
+          break;
+        }
+        case "lazy-caterer":
+          for (var i = 0n; i < BigInt(n); i++) seq.push(i * (i + one) / 2n + one);
+          break;
+        case "tetrahedral":
+          for (var i = 1n; i <= BigInt(n); i++) seq.push(i * (i + one) * (i + 2n) / 6n);
+          break;
+      }
+      return seq;
+    }
+
+    function compute() {
+      formulaEl.innerHTML = "<strong>Formula:</strong> " + esc(formulas[kindEl.value] || "");
+      var seq = generate();
+      lastSeq = seq;
+
+      var showIdx = indexedEl.checked;
+      seqEl.innerHTML = seq.map(function (v, i) {
+        return (showIdx ? '<span class="idx">' + i + '</span>' : '') + '<span class="v">' + esc(v.toString()) + '</span>' + (i < seq.length - 1 ? '<span class="sep">·</span>' : '');
+      }).join("");
+
+      if (seq.length) {
+        var last = seq[seq.length - 1];
+        var first = seq[0];
+        var sum = seq.reduce(function (a, b) { return a + b; }, 0n);
+        statsEl.innerHTML =
+          '<div class="stat"><div class="n">' + seq.length + '</div><div class="l">terms</div></div>' +
+          '<div class="stat"><div class="n">' + esc(first.toString()) + '</div><div class="l">first term</div></div>' +
+          '<div class="stat"><div class="n">' + esc(last.toString()) + '</div><div class="l">last term</div></div>' +
+          '<div class="stat"><div class="n">' + esc(sum.toString()) + '</div><div class="l">sum</div></div>';
+      } else {
+        statsEl.innerHTML = "";
+      }
+    }
+
+    kindEl.addEventListener("change", function () { buildParams(); compute(); });
+    countEl.addEventListener("input", compute);
+    countEl.addEventListener("change", compute);
+    indexedEl.addEventListener("change", compute);
+
+    copyBtn.addEventListener("click", function () {
+      var text = lastSeq.map(function (v) { return v.toString(); }).join(", ");
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () {
+          var t = copyBtn.textContent; copyBtn.textContent = "Copied!";
+          setTimeout(function () { copyBtn.textContent = t; }, 1200);
+        });
+      }
+    });
+
+    buildParams();
+    compute();
+  })();
+  </script>
+</body>
+</html>

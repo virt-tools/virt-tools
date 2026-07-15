@@ -4298,4 +4298,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📊",
     added: "2026-07-15T16:50:00Z",
   },
+  {
+    slug: "number-sequence-generator",
+    name: "Number Sequence Generator",
+    description: "Generate common number sequences — Fibonacci, Lucas, triangular, square, cube, pentagonal, hexagonal, tetrahedral, primes, powers of two, Catalan, factorial, lazy caterer, arithmetic and geometric progressions, and the Collatz hailstone. Set the term count, copy the list, and see the formula. Big-integer arithmetic keeps values exact however large they grow. Pairs with Pascal's Triangle, Prime Explorer, and Combinatorics. Runs locally in your browser.",
+    category: "Math",
+    icon: "🔢",
+    added: "2026-07-15T17:20:00Z",
+  },
 ];
