@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>ASCII Frame &amp; Box Drawing Generator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:12px; margin:10px 0; }
+    .field { margin-bottom:0; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:10px 0; }
+    textarea { width:100%; font-family:monospace; font-size:12px; min-height:120px; }
+    pre#out { white-space:pre; font-family:ui-monospace,Consolas,Menlo,monospace; font-size:13px; line-height:1.3; padding:10px; border:1px solid var(--border,#2a2f3a); border-radius:8px; background:var(--panel-2,#161a22); margin:8px 0; overflow:auto; max-height:50vh; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>ASCII Frame &amp; Box Drawing Generator</h1>
+      <p>Wrap text in a Unicode box-drawing frame — single line (─│┌┐└┘), double line (═║╔╗╚╝), rounded corners (╭╮╰╯), heavy (━┃┏┓┗┛), or plain ASCII (+-|). Adjustable horizontal and vertical padding, alignment, and optional title bar. Great for READMEs, source comments, and terminal output. Pure text manipulation, runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="input">Text to frame</label>
+        <textarea id="input" spellcheck="false" autocomplete="off" placeholder="Hello, world!&#10;This is a framed message.">Hello, world!
+This is a framed message.</textarea>
+      </div>
+      <div class="grid">
+        <div class="field"><label for="style">Border style</label>
+          <select id="style">
+            <option value="single" selected>Single (─│┌┐└┘)</option>
+            <option value="double">Double (═║╔╗╚╝)</option>
+            <option value="rounded">Rounded (─│╭╮╰╯)</option>
+            <option value="heavy">Heavy (━┃┏┓┗┛)</option>
+            <option value="ascii">ASCII (+-|)</option>
+          </select>
+        </div>
+        <div class="field"><label for="padH">Horizontal padding</label><input id="padH" type="number" min="0" max="20" value="2" style="width:80px;"></div>
+        <div class="field"><label for="padV">Vertical padding</label><input id="padV" type="number" min="0" max="20" value="0" style="width:80px;"></div>
+        <div class="field"><label for="align">Alignment</label>
+          <select id="align"><option value="left" selected>left</option><option value="center">center</option><option value="right">right</option></select>
+        </div>
+        <div class="field"><label for="title">Title (optional)</label><input id="title" type="text" placeholder="Title bar" style="width:100%;"></div>
+      </div>
+      <div class="row">
+        <button id="generate">Generate</button>
+        <button id="copy" class="secondary">Copy</button>
+        <button id="download" class="secondary">Download .txt</button>
+      </div>
+      <pre id="out"></pre>
+      <p class="err" id="err"></p>
+      <p class="note" id="note">Type text above.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+
+    var STYLES = {
+      single:  { tl: "┌", tr: "┐", bl: "└", br: "┘", h: "─", v: "│" },
+      double:  { tl: "╔", tr: "╗", bl: "╚", br: "╝", h: "═", v: "║" },
+      rounded: { tl: "╭", tr: "╮", bl: "╰", br: "╯", h: "─", v: "│" },
+      heavy:   { tl: "┏", tr: "┓", bl: "┗", br: "┛", h: "━", v: "┃" },
+      ascii:   { tl: "+", tr: "+", bl: "+", br: "+", h: "-", v: "|" }
+    };
+
+    function build() {
+      var errEl = $("err"); errEl.textContent = "";
+      var text = $("input").value;
+      if (!text.trim()) { $("out").textContent = ""; $("note").textContent = "Type text above."; return; }
+      try {
+        var s = STYLES[$("style").value] || STYLES.single;
+        var padH = Math.max(0, parseInt($("padH").value, 10) || 0);
+        var padV = Math.max(0, parseInt($("padV").value, 10) || 0);
+        var align = $("align").value;
+        var title = $("title").value;
+
+        // Preserve original lines without trimming (so leading indentation is kept);
+        // but drop a single trailing empty line from a trailing newline.
+        var lines = text.replace(/\r\n/g, "\n").split("\n");
+        if (lines.length && lines[lines.length - 1] === "") lines.pop();
+
+        // Each visible line content gets padH spaces on each side.
+        // Inner content width is the longest line's display width (code units).
+        var contentLines = lines.map(function (l) { return l; });
+        var maxLen = 0;
+        contentLines.forEach(function (l) {
+          var w = l.length;
+          if (w > maxLen) maxLen = w;
+        });
+        var innerW = maxLen + padH * 2;
+        var padStr = repeat(" ", padH);
+        var top = s.tl + repeat(s.h, innerW) + s.tr;
+        var bottom = s.bl + repeat(s.h, innerW) + s.br;
+
+        function alignLine(content) {
+          var w = content.length;
+          var extra = maxLen - w;
+          if (align === "center") {
+            var left = Math.floor(extra / 2);
+            var right = extra - left;
+            return repeat(" ", left) + content + repeat(" ", right);
+          } else if (align === "right") {
+            return repeat(" ", extra) + content;
+          }
+          return content + repeat(" ", extra);
+        }
+
+        var rows = [];
+        rows.push(top);
+        // title bar
+        if (title) {
+          var tlen = title.length;
+          var tLeft = Math.floor((innerW - tlen) / 2);
+          var tRight = innerW - tlen - tLeft;
+          if (tLeft < 0) tLeft = 0;
+          if (tRight < 0) tRight = 0;
+          var titleContent = repeat(" ", tLeft) + title.slice(0, innerW) + repeat(" ", tRight);
+          rows.push(s.v + titleContent + s.v);
+          // separator under title
+          rows.push(s.v + repeat(s.h, innerW) + s.v);
+        }
+        // vertical padding
+        for (var v = 0; v < padV; v++) rows.push(s.v + repeat(" ", innerW) + s.v);
+        // content
+        contentLines.forEach(function (l) {
+          var aligned = alignLine(l);
+          rows.push(s.v + padStr + aligned + padStr + s.v);
+        });
+        // vertical padding
+        for (var v2 = 0; v2 < padV; v2++) rows.push(s.v + repeat(" ", innerW) + s.v);
+        rows.push(bottom);
+        var out = rows.join("\n");
+        $("out").textContent = out;
+        window._out = out;
+        $("note").textContent = "Framed " + contentLines.length + " line(s) at " + (maxLen + padH * 2) + " cols.";
+      } catch (e) {
+        errEl.textContent = e.message || String(e);
+      }
+    }
+
+    function repeat(s, n) { n = Math.max(0, n); var r = ""; for (var i = 0; i < n; i++) r += s; return r; }
+
+    ["input", "style", "padH", "padV", "align", "title"].forEach(function (id) {
+      $(id).addEventListener("input", build);
+      $(id).addEventListener("change", build);
+    });
+    $("generate").addEventListener("click", build);
+    $("copy").addEventListener("click", function () {
+      if (!window._out) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(window._out).then(function () { $("note").textContent = "Copied."; }, function () { $("note").textContent = "Copy failed."; });
+      } else $("note").textContent = "Clipboard unavailable.";
+    });
+    $("download").addEventListener("click", function () {
+      if (!window._out) return;
+      var blob = new Blob([window._out], { type: "text/plain" });
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "framed.txt";
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+    build();
+  })();
+  </script>
+</body>
+</html>

@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "ascii-frame",
+    name: "ASCII Frame & Box Drawing Generator",
+    description: "Wrap text in a Unicode box-drawing frame — single line (─│┌┐└┘), double (═║╔╗╚╝), rounded (╭╮╰╯), heavy (━┃┏┓┗┛), or plain ASCII (+-|). Adjustable horizontal and vertical padding, left/center/right alignment, and optional title bar. Great for READMEs, source comments, and terminal output. Pure text manipulation, runs locally in your browser.",
+    category: "Text",
+    icon: "▢",
+    added: "2026-07-15T03:00:00Z",
+  },
+  {
     slug: "secret-generator",
     name: "Random Secret & API Key Generator",
     description: "Generate cryptographically secure random secrets, API keys, tokens, and encryption keys with the Web Crypto API. Choose byte length and output encoding — hex, Base64, Base64url (URL-safe), Base58, or a custom alphabet — with presets for AES-256 keys, JWT secrets, API keys, CSRF tokens, OAuth secrets, and UUID v4. Generate many at once. Everything runs locally — your secret never leaves the browser.",
