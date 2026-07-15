@@ -4306,4 +4306,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔢",
     added: "2026-07-15T17:20:00Z",
   },
+  {
+    slug: "og-meta-generator",
+    name: "Open Graph & Social Meta Tag Generator",
+    description: "Generate Open Graph, Twitter Card, and standard meta tags for a page — title, description, image, URL, site name, type, Twitter card style, and article author/published tags. Live social-card preview, copy-ready HTML, JSON-LD output, and a downloadable HTML stub. Pairs with the robots.txt and sitemap generators. Everything runs locally in your browser.",
+    category: "Text",
+    icon: "🏷️",
+    added: "2026-07-15T17:50:00Z",
+  },
 ];
