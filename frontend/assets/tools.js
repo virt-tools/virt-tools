@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "json-minifier",
+    name: "JSON Minifier",
+    description: "Minify JSON to a single line by stripping whitespace, removing unnecessary separators, and optionally normalizing numbers (drop leading zeros) and dropping trailing zeros in floats. Validates on parse and reports the byte savings. The reverse of the JSON Formatter — pairs with it and with the HTML/CSS minifiers. Everything runs locally in your browser.",
+    category: "Data",
+    icon: "🗜️",
+    added: "2026-07-15T09:30:00Z",
+  },
+  {
     slug: "unicode-explorer",
     name: "Unicode Block & Character Explorer",
     description: "Browse 170+ Unicode blocks — Basic Latin, Greek, Cyrillic, Arrows, Mathematical Operators, Box Drawing, Braille, Emoji ranges, and more. Click a block to see its glyphs in a grid; click a glyph to inspect its code point, UTF-8 bytes, UTF-16 escape, HTML entity, and copy it. Pairs with the Character & Unicode Inspector and the ASCII Table. Static reference data, runs locally in your browser.",
