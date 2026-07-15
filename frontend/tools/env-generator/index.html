@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>.env File Generator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    @media (max-width:780px){ .grid2 { grid-template-columns:1fr; } }
+    textarea { width:100%; font-family:monospace; font-size:12px; min-height:200px; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:10px 0; }
+    .seg { display:inline-flex; border:1px solid var(--border,#2a2f3a); border-radius:8px; overflow:hidden; margin-bottom:10px; }
+    .seg button { border:none; border-radius:0; background:transparent; color:inherit; padding:6px 14px; cursor:pointer; }
+    .seg button.active { background: var(--accent,#6ea8fe); color:#08101f; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>.env File Generator</h1>
+      <p>Build a <code>.env</code> file from a list of environment variables — add or remove rows, set name, value, and an optional comment, then export as <code>.env</code> (with values), <code>.env.example</code> (values blanked for templates), or a shell export script (<code>export NAME=value</code>). Optionally fill empty values with generated secure random secrets (hex, base64, base64url) via Web Crypto. Pairs with the dotenv converter and gitignore generator. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="seg" id="outMode">
+        <button type="button" data-m="env" class="active">.env</button>
+        <button type="button" data-m="example" class="secondary">.env.example</button>
+        <button type="button" data-m="shell" class="secondary">shell (export)</button>
+      </div>
+
+      <div class="row">
+        <button id="addRow">+ Add variable</button>
+        <button id="fillRandom" class="secondary">Fill empty with random</button>
+        <button id="copy" class="secondary">Copy output</button>
+        <button id="download" class="secondary">Download</button>
+      </div>
+
+      <table id="rows" style="width:100%; border-collapse:collapse; margin-top:8px;">
+        <thead><tr><th style="width:25%;">Name</th><th style="width:35%;">Value</th><th>Comment</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+
+      <h3>Output</h3>
+      <textarea id="output" readonly spellcheck="false" style="min-height:240px;"></textarea>
+      <p class="err" id="err"></p>
+      <p class="note" id="note">Add variables above.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var outMode = "env";
+    var rows = [
+      { name: "DATABASE_URL", value: "postgres://user:pass@localhost:5432/db", comment: "Postgres connection" },
+      { name: "PORT", value: "8080", comment: "HTTP listen port" },
+      { name: "JWT_SECRET", value: "", comment: "random hex" },
+      { name: "NODE_ENV", value: "production", comment: "" }
+    ];
+
+    function esc(s) { return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+    function escAttr(s) { return String(s).replace(/"/g, "&quot;"); }
+
+    function renderRows() {
+      var tbody = $("rows").querySelector("tbody");
+      tbody.innerHTML = "";
+      rows.forEach(function (r, idx) {
+        var tr = document.createElement("tr");
+        tr.innerHTML =
+          '<td><input class="r-name" type="text" value="' + escAttr(r.name) + '" spellcheck="false" style="width:100%;font-family:monospace;"></td>' +
+          '<td><input class="r-value" type="text" value="' + escAttr(r.value) + '" spellcheck="false" style="width:100%;font-family:monospace;"></td>' +
+          '<td><input class="r-comment" type="text" value="' + escAttr(r.comment) + '" spellcheck="false" style="width:100%;"></td>' +
+          '<td><button class="rm">✕</button></td>';
+        var nm = tr.querySelector(".r-name"), vl = tr.querySelector(".r-value"), cm = tr.querySelector(".r-comment"), rm = tr.querySelector(".rm");
+        nm.addEventListener("input", function () { r.name = nm.value; generate(); });
+        vl.addEventListener("input", function () { r.value = vl.value; generate(); });
+        cm.addEventListener("input", function () { r.comment = cm.value; generate(); });
+        rm.addEventListener("click", function () { rows.splice(idx, 1); renderRows(); generate(); });
+        tbody.appendChild(tr);
+      });
+    }
+
+    function dotenvEscape(v) {
+      // escape characters that are special in .env files
+      // Quote if value has spaces, #, =, $, newlines, or quotes
+      if (v === "") return "";
+      if (/[\s#=]/.test(v) && !/^["'].*["']$/.test(v)) {
+        return '"' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n") + '"';
+      }
+      return v;
+    }
+
+    function generate() {
+      var errEl = $("err"); errEl.textContent = "";
+      var out = "";
+      var valid = rows.filter(function (r) { return r.name.trim(); });
+      if (outMode === "env") {
+        out += "# Generated by virt.tools/.env-generator\n# https://virt.tools/tools/env-generator/\n\n";
+        valid.forEach(function (r) {
+          if (r.comment) out += "# " + r.comment + "\n";
+          out += r.name + "=" + dotenvEscape(r.value) + "\n";
+          if (r.comment) out += "\n";
+        });
+      } else if (outMode === "example") {
+        out += "# .env.example — copy to .env and fill in values\n# Generated by virt.tools/.env-generator\n\n";
+        valid.forEach(function (r) {
+          if (r.comment) out += "# " + r.comment + "\n";
+          out += r.name + "=\n";
+          if (r.comment) out += "\n";
+        });
+      } else if (outMode === "shell") {
+        out += "#!/usr/bin/env sh\n# Generated by virt.tools/.env-generator\n\n";
+        valid.forEach(function (r) {
+          if (r.comment) out += "# " + r.comment + "\n";
+          out += "export " + r.name + "=" + dotenvEscape(r.value) + "\n";
+          if (r.comment) out += "\n";
+        });
+      }
+      $("output").value = out;
+      window._out = out;
+      $("note").textContent = valid.length + " variable(s), output: " + outMode + ".";
+    }
+
+    function fillRandom() {
+      var arr = new Uint8Array(32);
+      rows.forEach(function (r) {
+        if (r.value.trim() === "") {
+          crypto.getRandomValues(arr);
+          var hex = "";
+          for (var i = 0; i < arr.length; i++) hex += (arr[i] < 16 ? "0" : "") + arr[i].toString(16);
+          r.value = hex;
+        }
+      });
+      renderRows();
+      generate();
+    }
+
+    $("outMode").addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-m]"); if (!b) return;
+      outMode = b.getAttribute("data-m");
+      Array.prototype.forEach.call($("outMode").querySelectorAll("button"), function (x) { x.classList.remove("active"); });
+      b.classList.add("active");
+      generate();
+    });
+    $("addRow").addEventListener("click", function () { rows.push({ name: "NEW_VAR", value: "", comment: "" }); renderRows(); generate(); });
+    $("fillRandom").addEventListener("click", fillRandom);
+    $("copy").addEventListener("click", function () {
+      if (!window._out) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(window._out).then(function () { $("note").textContent = "Copied."; }, function () { $("note").textContent = "Copy failed."; });
+      } else $("note").textContent = "Clipboard unavailable.";
+    });
+    $("download").addEventListener("click", function () {
+      if (!window._out) return;
+      var name = outMode === "example" ? ".env.example" : outMode === "shell" ? "env.sh" : ".env";
+      var blob = new Blob([window._out], { type: "text/plain" });
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = name;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+    renderRows();
+    generate();
+  })();
+  </script>
+</body>
+</html>
