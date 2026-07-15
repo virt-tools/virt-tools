@@ -4290,4 +4290,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🖥️",
     added: "2026-07-15T16:20:00Z",
   },
+  {
+    slug: "profit-margin-calculator",
+    name: "Profit Margin & Markup Calculator",
+    description: "Convert between cost, selling price, profit, margin and markup. Pick any two known values and the rest are solved — margin is profit ÷ price, markup is profit ÷ cost (a 50% margin equals a 100% markup). Reverse-solve the price from a target margin or markup, or the cost from a price and margin. Pairs with the Break-Even, Unit Price, and Discount calculators. Everything runs locally in your browser.",
+    category: "Finance",
+    icon: "📊",
+    added: "2026-07-15T16:50:00Z",
+  },
 ];

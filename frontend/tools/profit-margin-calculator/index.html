@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Profit Margin &amp; Markup Calculator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; margin:10px 0; }
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    .big { font-size:42px; font-weight:700; font-variant-numeric: tabular-nums; text-align:center; margin:8px 0 2px; }
+    .sub { text-align:center; opacity:.85; font-size:15px; margin-bottom:10px; }
+    .results { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:10px; margin:10px 0; }
+    .res { background:var(--panel-2,#161a22); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:8px 10px; }
+    .res .n { font-size:20px; font-weight:600; font-variant-numeric: tabular-nums; }
+    .res .l { font-size:12px; opacity:.7; }
+    .modes { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
+    .modes button { padding:7px 14px; border-radius:7px; border:1px solid var(--border,#2a2f3a); background:var(--panel-2,#161a22); color:inherit; cursor:pointer; font-size:13px; }
+    .modes button.active { border-color:var(--accent,#6ea8fe); background:rgba(110,168,254,.1); }
+    .note.warn { color:#f0a36e; }
+    .toggle { display:flex; gap:14px; align-items:center; margin:8px 0 4px; font-size:13px; }
+    .toggle label { display:inline-flex; gap:5px; align-items:center; margin:0; opacity:1; cursor:pointer; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Profit Margin &amp; Markup Calculator</h1>
+      <p>Convert between cost, selling price, profit, margin and markup. Pick any two known values and the rest are solved — margin is profit ÷ price, markup is profit ÷ cost. Supports reverse calculation from a target margin or markup back to the required price. All arithmetic runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="modes" id="modes">
+        <button type="button" data-mode="cost-price" class="active">Cost &amp; Price → Margin/Markup</button>
+        <button type="button" data-mode="cost-margin">Cost &amp; Margin → Price</button>
+        <button type="button" data-mode="cost-markup">Cost &amp; Markup → Price</button>
+        <button type="button" data-mode="price-margin">Price &amp; Margin → Cost</button>
+      </div>
+
+      <div class="grid" id="inputs"></div>
+
+      <div class="big" id="big">—</div>
+      <div class="sub" id="sub">Enter your values.</div>
+
+      <div class="results" id="results"></div>
+
+      <p class="note" id="note">Margin = profit ÷ selling price. Markup = profit ÷ cost. The two are not the same — a 50% margin equals a 100% markup. Profit = selling price − cost. Runs locally.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var modesEl = document.getElementById("modes");
+    var inputsEl = document.getElementById("inputs");
+    var bigEl = document.getElementById("big");
+    var subEl = document.getElementById("sub");
+    var resultsEl = document.getElementById("results");
+
+    var mode = "cost-price";
+
+    var fields = {
+      cost:   { label: "Cost",            step: "0.01", value: "40" },
+      price:  { label: "Selling price",   step: "0.01", value: "100" },
+      profit: { label: "Profit",          step: "0.01", value: "" },
+      margin: { label: "Margin (%)",      step: "0.01", value: "" },
+      markup: { label: "Markup (%)",      step: "0.01", value: "" }
+    };
+
+    var layouts = {
+      "cost-price":    ["cost", "price"],
+      "cost-margin":   ["cost", "margin"],
+      "cost-markup":   ["cost", "markup"],
+      "price-margin":  ["price", "margin"]
+    };
+
+    function num(id) { var el = document.getElementById(id); if (!el) return NaN; var v = parseFloat(el.value); return isFinite(v) ? v : NaN; }
+
+    function money(n) {
+      if (!isFinite(n)) return "—";
+      return "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function pct(n) {
+      if (!isFinite(n)) return "—";
+      return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "%";
+    }
+
+    function buildInputs() {
+      var keys = layouts[mode];
+      inputsEl.innerHTML = keys.map(function (k) {
+        var f = fields[k];
+        return '<div><label for="f-' + k + '">' + f.label + '</label><input type="number" id="f-' + k + '" min="0" step="' + f.step + '" value="' + (f.value || "") + '"></div>';
+      }).join("");
+      keys.forEach(function (k) {
+        var el = document.getElementById("f-" + k);
+        el.addEventListener("input", compute);
+        el.addEventListener("change", compute);
+      });
+    }
+
+    function compute() {
+      var keys = layouts[mode];
+      var vals = {};
+      keys.forEach(function (k) { vals[k] = num("f-" + k); });
+
+      for (var i = 0; i < keys.length; i++) {
+        if (!isFinite(vals[keys[i]]) || vals[keys[i]] < 0) {
+          bigEl.textContent = "—";
+          subEl.textContent = "Enter non-negative values.";
+          resultsEl.innerHTML = "";
+          return;
+        }
+      }
+
+      var cost, price, profit, margin, markup;
+
+      if (mode === "cost-price") {
+        cost = vals.cost; price = vals.price;
+        if (price < cost) { bigEl.textContent="—"; subEl.textContent="Price must be ≥ cost."; resultsEl.innerHTML=""; return; }
+        profit = price - cost;
+        margin = price > 0 ? profit / price * 100 : 0;
+        markup = cost > 0 ? profit / cost * 100 : 0;
+      } else if (mode === "cost-margin") {
+        cost = vals.cost; margin = vals.margin;
+        if (margin >= 100) { bigEl.textContent="—"; subEl.textContent="Margin must be < 100%."; resultsEl.innerHTML=""; return; }
+        price = cost / (1 - margin / 100);
+        profit = price - cost;
+        markup = cost > 0 ? profit / cost * 100 : 0;
+      } else if (mode === "cost-markup") {
+        cost = vals.cost; markup = vals.markup;
+        price = cost * (1 + markup / 100);
+        profit = price - cost;
+        margin = price > 0 ? profit / price * 100 : 0;
+      } else if (mode === "price-margin") {
+        price = vals.price; margin = vals.margin;
+        if (margin >= 100) { bigEl.textContent="—"; subEl.textContent="Margin must be < 100%."; resultsEl.innerHTML=""; return; }
+        cost = price * (1 - margin / 100);
+        profit = price - cost;
+        markup = cost > 0 ? profit / cost * 100 : 0;
+      }
+
+      bigEl.textContent = pct(margin);
+      subEl.textContent = "Profit " + money(profit) + " · Markup " + pct(markup);
+
+      resultsEl.innerHTML =
+        '<div class="res"><div class="n">' + money(cost) + '</div><div class="l">cost</div></div>' +
+        '<div class="res"><div class="n">' + money(price) + '</div><div class="l">selling price</div></div>' +
+        '<div class="res"><div class="n">' + money(profit) + '</div><div class="l">profit</div></div>' +
+        '<div class="res"><div class="n">' + pct(margin) + '</div><div class="l">margin</div></div>' +
+        '<div class="res"><div class="n">' + pct(markup) + '</div><div class="l">markup</div></div>';
+    }
+
+    modesEl.addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-mode]");
+      if (!b) return;
+      mode = b.getAttribute("data-mode");
+      Array.prototype.forEach.call(modesEl.querySelectorAll("button"), function (x) { x.classList.remove("active"); });
+      b.classList.add("active");
+      buildInputs();
+      compute();
+    });
+
+    buildInputs();
+    compute();
+  })();
+  </script>
+</body>
+</html>
