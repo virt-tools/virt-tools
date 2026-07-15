@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "unicode-explorer",
+    name: "Unicode Block & Character Explorer",
+    description: "Browse 170+ Unicode blocks — Basic Latin, Greek, Cyrillic, Arrows, Mathematical Operators, Box Drawing, Braille, Emoji ranges, and more. Click a block to see its glyphs in a grid; click a glyph to inspect its code point, UTF-8 bytes, UTF-16 escape, HTML entity, and copy it. Pairs with the Character & Unicode Inspector and the ASCII Table. Static reference data, runs locally in your browser.",
+    category: "Text",
+    icon: "🌐",
+    added: "2026-07-15T09:00:00Z",
+  },
+  {
     slug: "ini-parser",
     name: "INI File Parser & Editor",
     description: "Parse an INI configuration file into a structured key/value view grouped by section, and convert between INI text and JSON. Handles [section] headers, key=value pairs, line comments (# and ;), blank lines, inline comments, and quoted values. Round-trips back to INI text preserving sections and keys. Pairs with the dotenv converter and YAML/JSON converters. Everything runs locally in your browser.",
