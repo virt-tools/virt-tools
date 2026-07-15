@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "code-of-conduct-generator",
+    name: "Code of Conduct Generator",
+    description: "Generate a CODE_OF_CONDUCT.md for your project from the Contributor Covenant 2.1 or Citizen Code of Conduct 1.1 templates. Fill in the contact / enforcement email and an optional project name, then copy or download. Pairs with the README, license, .gitignore, and changelog generators. Pure text templates, runs locally in your browser.",
+    category: "Text",
+    icon: "🤝",
+    added: "2026-07-15T12:30:00Z",
+  },
+  {
     slug: "changelog-generator",
     name: "Changelog Generator",
     description: "Generate a Keep a Changelog-format CHANGELOG.md from a list of releases — each with a version, date, and entries grouped under Added, Changed, Deprecated, Removed, Fixed, and Security. Add or remove releases, type entries one per line, and see the Markdown update live. Copy or download the result. Pairs with the README, license, and .gitignore generators. Everything runs locally in your browser.",
