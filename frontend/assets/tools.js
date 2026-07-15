@@ -891,6 +891,14 @@ window.VIRTUAL_TOOLS = [
     added: "2026-07-03T13:40:00Z",
   },
   {
+    slug: "design-token-generator",
+    name: "CSS Design Token Generator",
+    description: "Define a set of design tokens — colors, spacing, font sizes, radii, shadows, or any name/value pair — and export them as CSS custom properties (--name), SCSS variables ($name), a JS object, JSON, or TypeScript (as const). Add or remove tokens, pick a prefix, and copy the result. Color and size values get a live preview swatch. Pairs with the Type Scale, CSS Grid, and CSS Named Colors tools. Everything runs locally in your browser.",
+    category: "Design",
+    icon: "🎨",
+    added: "2026-07-15T07:30:00Z",
+  },
+  {
     slug: "csv-column-manager",
     name: "CSV Column Reorder & Remove",
     description: "Reorder, rename, and drop columns from a CSV — drag rows to reorder, tick a checkbox to keep or drop a column, type a new name to rename it. Auto-sniffs the delimiter (comma, semicolon, tab, pipe), handles quoted fields, and outputs to the delimiter of your choice. Copy or download the result. Everything runs locally in your browser.",
