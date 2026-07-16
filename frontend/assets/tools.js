@@ -4474,4 +4474,12 @@ window.VIRTUAL_TOOLS = [
     icon: "⏳",
     added: "2026-07-16T06:30:00Z",
   },
+  {
+    slug: "css-blend-mode-generator",
+    name: "CSS Blend Mode Generator",
+    description: "Experiment with CSS mix-blend-mode, background-blend-mode, and backdrop-filter — multiply, screen, overlay, darken, lighten, color-dodge, color-burn, hard-light, soft-light, difference, exclusion, hue, saturation, color, luminosity, plus-lighter, and backdrop blur/brightness/contrast/saturate/invert/grayscale/sepia. Live preview over gradient, image, or solid backgrounds and copy-ready CSS. Pairs with the CSS Filter and CSS Gradient generators. Everything runs locally in your browser.",
+    category: "Design",
+    icon: "🎨",
+    added: "2026-07-16T07:00:00Z",
+  },
 ];
