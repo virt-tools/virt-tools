@@ -4682,4 +4682,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📏",
     added: "2026-07-16T19:30:00Z",
   },
+  {
+    slug: "text-to-columns",
+    name: "Text to Columns Converter",
+    description: "Split multi-line text by a delimiter (comma, tab, pipe, semicolon, colon, space, or custom) into aligned columns or convert between delimited formats (CSV, TSV, pipe, aligned). Optionally trim whitespace and detect headers. Pairs with the CSV Viewer and Fixed-Width Converter. Everything runs locally in your browser.",
+    category: "Text",
+    icon: "📋",
+    added: "2026-07-16T20:00:00Z",
+  },
 ];
