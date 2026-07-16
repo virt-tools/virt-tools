@@ -4554,4 +4554,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎙️",
     added: "2026-07-16T11:30:00Z",
   },
+  {
+    slug: "css-cursor-picker",
+    name: "CSS Cursor Picker",
+    description: "Browse, preview, and copy CSS cursor values. Hover each cell to see the cursor live in a demo area, then click to copy the CSS. Includes general, links, status, selection, resize, zoom, and grab cursors from CSS Level 2–4. Pairs with the CSS Filter and CSS Transform generators. Everything runs locally in your browser.",
+    category: "Design",
+    icon: "🖱️",
+    added: "2026-07-16T12:00:00Z",
+  },
 ];
