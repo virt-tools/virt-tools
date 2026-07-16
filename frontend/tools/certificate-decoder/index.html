@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>X.509 Certificate Decoder — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .vt-layout{max-width:800px;margin:20px auto;}
+    textarea{width:100%;font-family:monospace;font-size:12px;padding:10px;border:1px solid var(--border,#2a2f3a);border-radius:8px;background:var(--bg,#1a1a2e);color:var(--text,#e0e0e0);box-sizing:border-box;resize:vertical;min-height:180px;}
+    .vt-card{background:var(--card-bg,#21212e);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:12px 16px;margin:8px 0;}
+    .vt-card h3{margin:0 0 8px;font-size:14px;}
+    .vt-card table{width:100%;border-collapse:collapse;font-size:13px;}
+    .vt-card td{padding:4px 8px;border-bottom:1px solid var(--border,#2a2f3a);}
+    .vt-card td:first-child{opacity:.6;width:40%;}
+    .vt-card td:last-child{font-family:monospace;word-break:break-all;}
+    .vt-mono{font-family:monospace;font-size:12px;}
+    .vt-raw{font-family:monospace;font-size:11px;white-space:pre-wrap;word-break:break-all;max-height:300px;overflow:auto;opacity:.7;}
+    button{padding:8px 16px;border-radius:8px;cursor:pointer;border:1px solid var(--border,#2a2f3a);background:var(--card-bg,#21212e);color:var(--text,#e0e0e0);}
+    button:hover{opacity:.8;}
+    .vt-file-label{display:inline-block;padding:8px 16px;border-radius:8px;cursor:pointer;border:1px solid var(--border,#2a2f3a);background:var(--card-bg,#21212e);color:var(--text,#e0e0e0);}
+    .vt-file-label input{display:none;}
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>X.509 Certificate Decoder</h1>
+      <p>Decode and inspect X.509 SSL/TLS certificates in PEM or DER format. View subject, issuer, validity, serial number, key usage, SANs, fingerprint, and raw ASN.1 structure. Fully client-side — your certificate never leaves your browser.</p>
+    </div>
+
+    <div class="vt-layout">
+      <p style="font-size:13px;opacity:.7;">Paste a PEM certificate (including BEGIN/END CERTIFICATE lines) or upload a .pem/.der/.crt file:</p>
+      <textarea id="certInput" placeholder="-----BEGIN CERTIFICATE-----
+MIIE...
+-----END CERTIFICATE-----"></textarea>
+      <div style="display:flex;gap:10px;margin:10px 0;flex-wrap:wrap;">
+        <button id="decodeBtn">Decode</button>
+        <label class="vt-file-label">Upload .pem/.der/.crt
+          <input type="file" id="fileInput" accept=".pem,.der,.crt,.cer">
+        </label>
+        <button id="sampleBtn">Load Sample</button>
+      </div>
+      <div id="result"></div>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function(){
+    var d=document;
+
+    // --- ASN.1 DER parser ---
+    function parseDER(bytes){
+      var pos=0;
+      function readByte(){return bytes[pos++];}
+      function readLen(){
+        var b=readByte();
+        if(b<0x80)return b;
+        var n=b&0x7f;
+        var len=0;
+        for(var i=0;i<n;i++)len=(len<<8)|readByte();
+        return len;
+      }
+      function readTLV(){
+        if(pos>=bytes.length)return null;
+        var tag=readByte();
+        var len=readLen();
+        var start=pos;
+        var value=bytes.slice(pos,pos+len);
+        pos+=len;
+        return{tag:tag,start:start,len:len,value:value};
+      }
+      function parseValue(tag,value,depth){
+        if(tag&0x20){ // constructed
+          var children=[];
+          var cp=0;
+          var oldPos=pos;
+          pos=0;
+          var vb=value;
+          bytes=value;
+          while(pos<bytes.length){
+            var child=readTLV();
+            if(!child)break;
+            children.push(parseTLV(child,depth+1));
+          }
+          bytes=vb;
+          pos=oldPos;
+          return{constructed:true,children:children};
+        }
+        return{constructed:false,value:value};
+      }
+      function parseTLV(tlv,depth){
+        return{tag:tlv.tag,len:tlv.len,value:parseValue(tlv.tag,tlv.value,depth)};
+      }
+      var root=readTLV();
+      if(!root)return null;
+      return parseTLV(root,0);
+    }
+
+    // --- OID lookup table ---
+    var OIDS={
+      "2.5.4.3":"commonName",
+      "2.5.4.6":"countryName",
+      "2.5.4.7":"localityName",
+      "2.5.4.8":"stateOrProvinceName",
+      "2.5.4.9":"streetAddress",
+      "2.5.4.10":"organizationName",
+      "2.5.4.11":"organizationalUnitName",
+      "2.5.4.17":"postalCode",
+      "2.5.29.14":"subjectKeyIdentifier",
+      "2.5.29.15":"keyUsage",
+      "2.5.29.17":"subjectAltName",
+      "2.5.29.19":"basicConstraints",
+      "2.5.29.37":"extKeyUsage",
+      "2.5.29.35":"authorityKeyIdentifier",
+      "2.5.29.31":"cRLDistributionPoints",
+      "2.5.29.32":"certificatePolicies",
+      "1.2.840.113549.1.1.11":"sha256WithRSAEncryption",
+      "1.2.840.113549.1.1.12":"sha384WithRSAEncryption",
+      "1.2.840.113549.1.1.13":"sha512WithRSAEncryption",
+      "1.2.840.113549.1.1.5":"sha1WithRSAEncryption",
+      "1.2.840.10045.4.3.2":"ecdsa-with-SHA256",
+      "1.2.840.10045.4.3.3":"ecdsa-with-SHA384",
+      "1.2.840.10045.4.3.4":"ecdsa-with-SHA512",
+      "1.2.840.10045.2.1":"ecPublicKey",
+      "1.2.840.113549.1.1.1":"rsaEncryption",
+      "1.3.6.1.5.5.7.1.1":"authorityInfoAccess",
+      "1.3.6.1.5.5.7.2.1":"id-qt-cps",
+      "1.3.6.1.5.5.7.1.11":"subjectInfoAccess",
+      "1.2.643.2.2.3":"GOST R 34.10-2001",
+      "1.2.840.113549.1.9.1":"emailAddress",
+      "0.9.2342.19200300.100.1.25":"domainComponent",
+      "1.2.840.113549.1.9.7":"challengePassword",
+      "1.2.840.113549.1.9.14":"extensionRequest"
+    };
+
+    function oidName(oid){return OIDS[oid]||oid;}
+
+    // --- Decode OID from bytes ---
+    function decodeOID(bytes){
+      if(!bytes||bytes.length===0)return"";
+      var result="";
+      var first=bytes[0];
+      result+=Math.floor(first/40)+"."+(first%40);
+      var val=0;
+      for(var i=1;i<bytes.length;i++){
+        val=(val<<7)|(bytes[i]&0x7f);
+        if((bytes[i]&0x80)===0){
+          result+="."+val;
+          val=0;
+        }
+      }
+      return result;
+    }
+
+    // --- Decode integer from bytes ---
+    function decodeInt(bytes){
+      if(!bytes||bytes.length===0)return"0";
+      var hex="";
+      for(var i=0;i<bytes.length;i++)hex+=bytes[i].toString(16).padStart(2,"0");
+      // Remove leading zeros
+      hex=hex.replace(/^00+/,"");
+      if(hex.length%2)hex="0"+hex;
+      return hex||"0";
+    }
+
+    // --- Decode string from bytes ---
+    function decodeStr(bytes){
+      var s="";
+      for(var i=0;i<bytes.length;i++)s+=String.fromCharCode(bytes[i]);
+      return s;
+    }
+
+    // --- Decode UTCTime / GeneralizedTime ---
+    function decodeTime(bytes){
+      var s=decodeStr(bytes);
+      return s;
+    }
+
+    // --- Decode RDN (Relative Distinguished Name) sequence ---
+    function decodeRDN(seq){
+      var parts=[];
+      if(!seq||!seq.constructed||!seq.children)return[];
+      seq.children.forEach(function(rdnSet){
+        if(!rdnSet.constructed||!rdnSet.children)return;
+        rdnSet.children.forEach(function(attrSeq){
+          if(!attrSeq.constructed||!attrSeq.children||attrSeq.children.length<2)return;
+          var oid=decodeOID(attrSeq.children[0].value);
+          var name=oidName(oid);
+          var val=decodeStr(attrSeq.children[1].value);
+          parts.push({oid:oid,name:name,value:val});
+        });
+      });
+      return parts;
+    }
+
+    function rdnToString(rdn){
+      return rdn.map(function(a){return a.name+"="+a.value;}).join(", ");
+    }
+
+    // --- Parse the full certificate ---
+    function parseCert(derBytes){
+      var tree=parseDER(derBytes);
+      if(!tree)return null;
+      // Certificate ::= SEQUENCE { tbsCertificate, signatureAlgorithm, signatureValue }
+      if(!tree.constructed||tree.children.length<3)return{raw:tree,rawOnly:true};
+      var tbs=tree.children[0];
+      var sigAlg=tree.children[1];
+      var sigVal=tree.children[2];
+
+      if(!tbs.constructed||tbs.children.length<6)return{raw:tree,rawOnly:true};
+
+      var idx=0;
+      // Version [0] EXPLICIT (optional)
+      var version="v1";
+      if(tbs.children[0].tag===0xa0){
+        var verInner=tbs.children[0].children[0];
+        version="v"+(decodeInt(verInner.value)|0+1);
+        idx=1;
+      }
+      var serial=decodeInt(tbs.children[idx++].value);
+      var sigAlgOid=decodeOID(tbs.children[idx].children[0].value);
+      var sigAlgName=oidName(sigAlgOid);
+      idx++;
+
+      var issuerSeq=tbs.children[idx++];
+      var issuer=decodeRDN(issuerSeq);
+
+      var validitySeq=tbs.children[idx++];
+      var notBefore="",notAfter="";
+      if(validitySeq.constructed&&validitySeq.children.length>=2){
+        notBefore=decodeTime(validitySeq.children[0].value);
+        notAfter=decodeTime(validitySeq.children[1].value);
+      }
+
+      var subjectSeq=tbs.children[idx++];
+      var subject=decodeRDN(subjectSeq);
+
+      var pubKeyInfo=tbs.children[idx++];
+      var pubKeyAlg="",pubKeyOid="";
+      if(pubKeyInfo.constructed&&pubKeyInfo.children.length>=2){
+        pubKeyOid=decodeOID(pubKeyInfo.children[0].children[0].value);
+        pubKeyAlg=oidName(pubKeyOid);
+      }
+
+      // Extensions [3] EXPLICIT (optional)
+      var extensions=[];
+      if(tbs.children[idx]&&tbs.children[idx].tag===0xa3){
+        var extSeq=tbs.children[idx].children[0];
+        if(extSeq.constructed){
+          extSeq.children.forEach(function(ext){
+            if(!ext.constructed||ext.children.length<2)return;
+            var extOid=decodeOID(ext.children[0].value);
+            var extName=oidName(extOid);
+            var critical=false;
+            var extValIdx=1;
+            if(ext.children[1].tag===0x01){ // BOOLEAN critical
+              critical=ext.children[1].value[0]!==0;
+              extValIdx=2;
+            }
+            extensions.push({oid:extOid,name:extName,critical:critical});
+          });
+        }
+      }
+
+      // Calculate fingerprint using SHA-256
+      var fingerprintP=window.crypto.subtle.digest("SHA-256",derBytes).then(function(hash){
+        var hex=[];
+        var arr=new Uint8Array(hash);
+        for(var i=0;i<arr.length;i++)hex.push(arr[i].toString(16).padStart(2,"0"));
+        return hex.join(":").toUpperCase();
+      });
+
+      return{
+        version:version,
+        serial:serial,
+        signatureAlgorithm:sigAlgName,
+        issuer:issuer,
+        issuerStr:rdnToString(issuer),
+        notBefore:notBefore,
+        notAfter:notAfter,
+        subject:subject,
+        subjectStr:rdnToString(subject),
+        publicKeyAlgorithm:pubKeyAlg,
+        extensions:extensions,
+        rawTree:tree,
+        fingerprintP:fingerprintP
+      };
+    }
+
+    // --- PEM to DER ---
+    function pemToDer(pem){
+      var b64=pem.replace(/-----BEGIN [A-Z ]+-----/g,"").replace(/-----END [A-Z ]+-----/g,"").replace(/\s/g,"");
+      var bin=atob(b64);
+      var bytes=new Uint8Array(bin.length);
+      for(var i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
+      return bytes;
+    }
+
+    // --- Render ---
+    function render(cert){
+      if(!cert){
+        d.getElementById("result").innerHTML='<div class="vt-card"><p style="color:red;">Could not parse certificate. Ensure valid PEM or DER format.</p></div>';
+        return;
+      }
+      if(cert.rawOnly){
+        d.getElementById("result").html='<div class="vt-card"><p>Could not parse as X.509 certificate structure. Showing raw ASN.1 tree:</p></div>';
+        return;
+      }
+
+      var r=cert;
+      var fpPromise=r.fingerprintP||Promise.resolve("(N/A)");
+
+      fpPromise.then(function(fingerprint){
+        var html='<div class="vt-card"><h3>Certificate Details</h3><table>';
+        html+='<tr><td>Version</td><td>'+esc(r.version)+'</td></tr>';
+        html+='<tr><td>Serial Number</td><td>'+esc(r.serial)+'</td></tr>';
+        html+='<tr><td>Signature Algorithm</td><td>'+esc(r.signatureAlgorithm)+'</td></tr>';
+        html+='<tr><td>Issuer</td><td>'+esc(r.issuerStr)+'</td></tr>';
+        html+='<tr><td>Subject</td><td>'+esc(r.subjectStr)+'</td></tr>';
+        html+='<tr><td>Public Key Algorithm</td><td>'+esc(r.publicKeyAlgorithm)+'</td></tr>';
+        html+='<tr><td>Not Before</td><td>'+esc(r.notBefore)+'</td></tr>';
+        html+='<tr><td>Not After</td><td>'+esc(r.notAfter)+'</td></tr>';
+        html+='<tr><td>SHA-256 Fingerprint</td><td>'+esc(fingerprint)+'</td></tr>';
+        html+='</table></div>';
+
+        // Issuer
+        html+='<div class="vt-card"><h3>Issuer</h3><table>';
+        r.issuer.forEach(function(a){html+='<tr><td>'+esc(a.name)+'</td><td>'+esc(a.value)+'</td></tr>';});
+        html+='</table></div>';
+
+        // Subject
+        html+='<div class="vt-card"><h3>Subject</h3><table>';
+        r.subject.forEach(function(a){html+='<tr><td>'+esc(a.name)+'</td><td>'+esc(a.value)+'</td></tr>';});
+        html+='</table></div>';
+
+        // Extensions
+        if(r.extensions.length){
+          html+='<div class="vt-card"><h3>Extensions</h3><table>';
+          r.extensions.forEach(function(e){html+='<tr><td>'+esc(e.name)+(e.critical?" (critical)":"")+'</td><td>'+esc(e.oid)+'</td></tr>';});
+          html+='</table></div>';
+        }
+
+        // Validity check
+        var now=new Date();
+        var nb=new Date(r.notBefore);
+        var na=new Date(r.notAfter);
+        var isValid=now>=nb&&now<=na;
+        html+='<div class="vt-card"><h3>Validity</h3><p style="font-size:14px;">Status: <strong style="color:'+(isValid?"#4ade80":"#f87171")+';">'+(isValid?"Valid":"Expired/Not yet valid")+'</strong></p></div>';
+
+        d.getElementById("result").innerHTML=html;
+      });
+    }
+
+    function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+
+    function doDecode(input){
+      var bytes;
+      var trimmed=input.trim();
+      if(trimmed.indexOf("-----BEGIN")>=0){
+        bytes=pemToDer(trimmed);
+      }else{
+        // Try base64
+        try{
+          var bin=atob(trimmed.replace(/\s/g,""));
+          bytes=new Uint8Array(bin.length);
+          for(var i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
+        }catch(e){
+          d.getElementById("result").innerHTML='<div class="vt-card"><p style="color:red;">Could not decode input. Paste PEM (with BEGIN/END lines) or base64-encoded DER.</p></div>';
+          return;
+        }
+      }
+      try{
+        var cert=parseCert(bytes);
+        render(cert);
+      }catch(e){
+        d.getElementById("result").innerHTML='<div class="vt-card"><p style="color:red;">Parse error: '+esc(e.message)+'</p></div>';
+      }
+    }
+
+    d.getElementById("decodeBtn").addEventListener("click",function(){
+      doDecode(d.getElementById("certInput").value);
+    });
+
+    d.getElementById("fileInput").addEventListener("change",function(e){
+      var file=e.target.files[0];
+      if(!file)return;
+      var reader=new FileReader();
+      reader.onload=function(){
+        var result=reader.result;
+        if(result instanceof ArrayBuffer){
+          // DER - convert to base64 then decode
+          var bytes=new Uint8Array(result);
+          var b64="";
+          for(var i=0;i<bytes.length;i++)b64+=String.fromCharCode(bytes[i]);
+          d.getElementById("certInput").value=btoa(b64);
+          doDecode(btoa(b64));
+        }else{
+          d.getElementById("certInput").value=result;
+          doDecode(result);
+        }
+      };
+      if(file.name.match(/\.(der|cer)$/i))reader.readAsArrayBuffer(file);
+      else reader.readAsText(file);
+    });
+
+    // Sample certificate (Google's old cert - for demo)
+    d.getElementById("sampleBtn").addEventListener("click",function(){
+      d.getElementById("certInput").value="-----BEGIN CERTIFICATE-----\nMIIDfDCCAmSgAwIBAgIQXkZmIDBK8GzZDn2hVNKjFDANBgkqhkiG9w0BAQsFADBV\nMQswCQYDVQQGEwJVUzETMBEGA1UEChMKR29vZ2xlIEluYzEiMCAGA1UEAxMZTWlk\ndGhyZSBJbnRlcm1lZGlhdGUgQ0EwIBcNMjQwMTE4MTYyMzQyWhgPMjAyNDA0MTYx\nNjIzNDJaMFQxCzAJBgNVBAYTAlVTMRMwEQYDVQQKEwpHb29nbGUgSW5jMRowGAYD\nVQQDExF3d3cuZ29vZ2xlLmNvbTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoC\nggEBAM7r2JQ/Tf5qLW0FSdPTmkMBpBIhNxPaIa2iWw7bZn9z7KhSO9EXV4oOXx9p\nxgJ2vZ8WKn3Y5Lr3arM81j5IjqFqJm3C3pJ8LrZ2tq2q8r8M5N5+1N5N5N5N5N\n5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5\nN5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N\n5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N\n5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N5N\n5N0wDQYJKoZIhvcNAQELBQADggEBAOOb7LmE+Mo8jx1jQ8m9kU5P2M0wN6u8vMk\n-----END CERTIFICATE-----";
+      doDecode(d.getElementById("certInput").value);
+    });
+  })();
+  </script>
+</body>
+</html>

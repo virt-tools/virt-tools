@@ -4810,4 +4810,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌐",
     added: "2026-07-17T00:40:00Z",
   },
+  {
+    slug: "certificate-decoder",
+    name: "X.509 Certificate Decoder",
+    description: "Decode and inspect X.509 SSL/TLS certificates in PEM or DER format. View subject, issuer, validity, serial number, extensions, and SHA-256 fingerprint. Fully client-side.",
+    category: "Networking",
+    icon: "🔐",
+    added: "2026-07-17T00:50:00Z",
+  },
 ];
