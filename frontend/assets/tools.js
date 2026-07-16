@@ -4498,4 +4498,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📶",
     added: "2026-07-16T08:00:00Z",
   },
+  {
+    slug: "json-ld-generator",
+    name: "JSON-LD / Schema.org Generator",
+    description: "Generate JSON-LD structured data for SEO and rich results — 12 schema types (WebSite, Article, Product, Organization, LocalBusiness, Event, FAQPage, BreadcrumbList, Recipe, HowTo, Person, VideoObject) with type-specific fields. Copy the ready-to-paste JSON-LD or the full <script> tag for your page head. Pairs with the Open Graph Meta Tag Generator. Everything runs locally in your browser.",
+    category: "Text",
+    icon: "🔖",
+    added: "2026-07-16T08:30:00Z",
+  },
 ];
