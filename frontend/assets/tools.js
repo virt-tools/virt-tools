@@ -4450,4 +4450,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🧭",
     added: "2026-07-16T05:00:00Z",
   },
+  {
+    slug: "text-repeater",
+    name: "Text Repeater",
+    description: "Repeat a block of text any number of times with a custom separator — newline, blank line, comma, space, tab, custom string, or none. Number each repetition, trim whitespace, reverse the order, or repeat each line independently. Useful for test data, padded strings, repeated patterns, and bulk text generation. Pairs with the Lorem Ipsum and Mock Data generators. Everything runs locally in your browser.",
+    category: "Text",
+    icon: "🔁",
+    added: "2026-07-16T05:30:00Z",
+  },
 ];
