@@ -4530,4 +4530,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎨",
     added: "2026-07-16T10:00:00Z",
   },
+  {
+    slug: "color-harmony-wheel",
+    name: "Color Harmony Wheel",
+    description: "Pick a base color and see its harmonious color schemes — complementary, analogous, triadic, tetradic (square), split-complementary, and monochromatic — displayed on an interactive color wheel. Click any swatch to copy its hex. Pairs with the Color Converter, Palette Generator, and Color Shade Scale Generator. Everything runs locally in your browser.",
+    category: "Design",
+    icon: "🎡",
+    added: "2026-07-16T10:30:00Z",
+  },
 ];
