@@ -4818,4 +4818,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔐",
     added: "2026-07-17T00:50:00Z",
   },
+  {
+    slug: "curl-builder",
+    name: "cURL Command Builder & Parser",
+    description: "Build cURL commands visually with headers, body, auth, and flags, or parse existing cURL commands to understand their components. Fully client-side.",
+    category: "Networking",
+    icon: "📤",
+    added: "2026-07-17T01:00:00Z",
+  },
 ];
