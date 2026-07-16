@@ -4770,4 +4770,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🧾",
     added: "2026-07-16T23:40:00Z",
   },
+  {
+    slug: "audio-converter",
+    name: "Audio Converter",
+    description: "Convert audio between WAV, OGG/Opus, and M4A/AAC formats. Resample, change channels, and preview — all client-side using the Web Audio API.",
+    category: "Audio",
+    icon: "🔊",
+    added: "2026-07-17T00:00:00Z",
+  },
 ];

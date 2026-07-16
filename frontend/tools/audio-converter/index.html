@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Audio Converter — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .ac-layout { max-width:700px; margin:20px auto; }
+    .drop-zone {
+      border:2px dashed var(--border,#2a2f3a); border-radius:12px; padding:40px; text-align:center;
+      cursor:pointer; transition:border-color .2s, background .2s;
+    }
+    .drop-zone.drag { border-color:var(--accent,#4a9eff); background:rgba(74,158,255,.06); }
+    .drop-zone:hover { border-color:var(--accent,#4a9eff); }
+    .ac-file-info { margin:14px 0; padding:12px 16px; background:var(--bg-inset,#1e1e2e); border-radius:8px; border:1px solid var(--border,#2a2f3a); }
+    .ac-controls { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin:16px 0; }
+    .ac-controls select, .ac-controls button { font-size:14px; }
+    .ac-wave { width:100%; height:80px; background:var(--bg-inset,#1e1e2e); border-radius:8px; margin:12px 0; }
+    .progress { height:4px; background:var(--border,#2a2f3a); border-radius:2px; overflow:hidden; margin:8px 0; }
+    .progress-bar { height:100%; background:var(--accent,#4a9eff); width:0; transition:width .3s; }
+    .ac-result { margin:16px 0; }
+    audio { width:100%; margin:8px 0; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Audio Converter</h1>
+      <p>Convert audio files between WAV, MP3, and OGG formats entirely in your browser. No upload, no server — everything runs client-side using the Web Audio API and MediaRecorder.</p>
+    </div>
+
+    <div class="ac-layout">
+      <div class="drop-zone" id="dropZone">
+        <p style="font-size:16px; margin:0 0 6px;">Drop an audio file here or click to browse</p>
+        <p style="font-size:12px; opacity:.5; margin:0;">Supports WAV, MP3, OGG, M4A, FLAC, WebM and more</p>
+        <input type="file" id="fileInput" accept="audio/*" style="display:none">
+      </div>
+
+      <div id="fileInfo" style="display:none;">
+        <div class="ac-file-info">
+          <strong id="fileName"></strong> — <span id="fileDetails"></span>
+        </div>
+        <canvas class="ac-wave" id="waveform"></canvas>
+        <div class="ac-controls">
+          <label>Format:
+            <select id="format">
+              <option value="audio/wav">WAV</option>
+              <option value="audio/webm;codecs=opus">OGG/Opus</option>
+              <option value="audio/mp4;codecs=mp4a.40.2">M4A/AAC</option>
+            </select>
+          </label>
+          <label>Sample rate:
+            <select id="sampleRate">
+              <option value="0">Original</option>
+              <option value="8000">8 kHz</option>
+              <option value="16000">16 kHz</option>
+              <option value="22050">22 kHz</option>
+              <option value="44100">44.1 kHz</option>
+              <option value="48000">48 kHz</option>
+            </select>
+          </label>
+          <label>Channels:
+            <select id="channels">
+              <option value="0">Original</option>
+              <option value="1">Mono</option>
+              <option value="2">Stereo</option>
+            </select>
+          </label>
+          <button id="convertBtn">Convert</button>
+        </div>
+        <div class="progress" id="progress" style="display:none;"><div class="progress-bar" id="progressBar"></div></div>
+        <div class="ac-result" id="result" style="display:none;">
+          <h3>Converted audio</h3>
+          <audio id="resultAudio" controls></audio>
+          <div style="margin-top:8px;">
+            <button id="downloadBtn">Download</button>
+            <span id="resultInfo" style="margin-left:12px; opacity:.6; font-size:13px;"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var d = document;
+    var audioCtx = null;
+    var decodedBuffer = null;
+    var originalFile = null;
+    var convertedBlob = null;
+    var fmtExt = { "audio/wav": "wav", "audio/webm;codecs=opus": "ogg", "audio/mp4;codecs=mp4a.40.2": "m4a" };
+
+    function ensureCtx() {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      return audioCtx;
+    }
+
+    // File input
+    d.getElementById("dropZone").addEventListener("click", function () { d.getElementById("fileInput").click(); });
+    d.getElementById("fileInput").addEventListener("change", function (e) { if (e.target.files[0]) loadFile(e.target.files[0]); });
+
+    d.getElementById("dropZone").addEventListener("dragover", function (e) { e.preventDefault(); this.classList.add("drag"); });
+    d.getElementById("dropZone").addEventListener("dragleave", function () { this.classList.remove("drag"); });
+    d.getElementById("dropZone").addEventListener("drop", function (e) {
+      e.preventDefault(); this.classList.remove("drag");
+      if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+    });
+
+    function loadFile(file) {
+      originalFile = file;
+      d.getElementById("fileInfo").style.display = "";
+      d.getElementById("dropZone").style.display = "none";
+      d.getElementById("result").style.display = "none";
+      d.getElementById("fileName").textContent = file.name;
+      d.getElementById("fileDetails").textContent = (file.size / 1024 / 1024).toFixed(2) + " MB · " + (file.type || "unknown type");
+
+      var ctx = ensureCtx();
+      var reader = new FileReader();
+      reader.onload = function (e) {
+        ctx.decodeAudioData(e.target.result, function (buf) {
+          decodedBuffer = buf;
+          drawWaveform(buf);
+        }, function (err) {
+          alert("Could not decode this audio file. Try a different format.");
+        });
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function drawWaveform(buf) {
+      var canvas = d.getElementById("waveform");
+      var ctx2 = canvas.getContext("2d");
+      canvas.width = canvas.offsetWidth;
+      canvas.height = 80;
+      var data = buf.getChannelData(0);
+      var step = Math.ceil(data.length / canvas.width);
+      ctx2.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--accent") || "#4a9eff";
+      ctx2.clearRect(0, 0, canvas.width, canvas.height);
+      for (var x = 0; x < canvas.width; x++) {
+        var min = 1, max = -1;
+        for (var i = 0; i < step; i++) {
+          var v = data[x * step + i] || 0;
+          if (v < min) min = v;
+          if (v > max) max = v;
+        }
+        var h = (max - min) * canvas.height / 2;
+        ctx2.fillRect(x, canvas.height / 2 - h, 1, h * 2);
+      }
+    }
+
+    d.getElementById("convertBtn").addEventListener("click", function () {
+      if (!decodedBuffer) return;
+      var fmt = d.getElementById("format").value;
+      var sr = parseInt(d.getElementById("sampleRate").value);
+      var ch = parseInt(d.getElementById("channels").value);
+
+      d.getElementById("progress").style.display = "";
+      d.getElementById("progressBar").style.width = "10%";
+
+      var targetSR = sr || decodedBuffer.sampleRate;
+      var targetCH = ch || decodedBuffer.numberOfChannels;
+
+      // Resample via OfflineAudioContext
+      var offline = new OfflineAudioContext(targetCH, Math.ceil(decodedBuffer.duration * targetSR), targetSR);
+      var src = offline.createBufferSource();
+      src.buffer = decodedBuffer;
+      src.connect(offline.destination);
+      src.start();
+
+      d.getElementById("progressBar").style.width = "30%";
+
+      offline.startRendering().then(function (rendered) {
+        d.getElementById("progressBar").style.width = "60%";
+
+        if (fmt === "audio/wav") {
+          convertedBlob = encodeWAV(rendered);
+          showResult(convertedBlob, fmt);
+        } else {
+          // Use MediaRecorder for OGG/M4A
+          var ctx = ensureCtx();
+          var dest = ctx.createMediaStreamDestination();
+          var src2 = ctx.createBufferSource();
+          src2.buffer = rendered;
+          src2.connect(dest);
+          src2.start();
+
+          var rec = new MediaRecorder(dest.stream, { mimeType: fmt });
+          var chunks = [];
+          rec.ondataavailable = function (e) { if (e.data.size) chunks.push(e.data); };
+          rec.onstop = function () {
+            convertedBlob = new Blob(chunks, { type: fmt });
+            showResult(convertedBlob, fmt);
+          };
+          rec.start();
+          src2.onended = function () { rec.stop(); };
+        }
+      });
+    });
+
+    function encodeWAV(buf) {
+      var numCH = buf.numberOfChannels;
+      var sr = buf.sampleRate;
+      var len = buf.length * numCH * 2;
+      var ab = new ArrayBuffer(44 + len);
+      var v = new DataView(ab);
+      var writeStr = function (off, s) { for (var i = 0; i < s.length; i++) v.setUint8(off + i, s.charCodeAt(i)); };
+
+      writeStr(0, "RIFF");
+      v.setUint32(4, 36 + len, true);
+      writeStr(8, "WAVE");
+      writeStr(12, "fmt ");
+      v.setUint32(16, 16, true);
+      v.setUint16(20, 1, true);
+      v.setUint16(22, numCH, true);
+      v.setUint32(24, sr, true);
+      v.setUint32(28, sr * numCH * 2, true);
+      v.setUint16(32, numCH * 2, true);
+      v.setUint16(34, 16, true);
+      writeStr(36, "data");
+      v.setUint32(40, len, true);
+
+      var off = 44;
+      var channels = [];
+      for (var c = 0; c < numCH; c++) channels.push(buf.getChannelData(c));
+      for (var i = 0; i < buf.length; i++) {
+        for (var c = 0; c < numCH; c++) {
+          var s = Math.max(-1, Math.min(1, channels[c][i]));
+          v.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+          off += 2;
+        }
+      }
+      return new Blob([ab], { type: "audio/wav" });
+    }
+
+    function showResult(blob, fmt) {
+      d.getElementById("progressBar").style.width = "100%";
+      setTimeout(function () { d.getElementById("progress").style.display = "none"; }, 500);
+      d.getElementById("result").style.display = "";
+      var url = URL.createObjectURL(blob);
+      d.getElementById("resultAudio").src = url;
+      var ext = fmtExt[fmt] || "bin";
+      d.getElementById("resultInfo").textContent = (blob.size / 1024).toFixed(1) + " KB · ." + ext;
+      d.getElementById("downloadBtn").onclick = function () {
+        var a = d.createElement("a");
+        a.href = url;
+        a.download = (originalFile.name.replace(/\.[^.]+$/, "") || "audio") + "-converted." + ext;
+        a.click();
+      };
+    }
+  })();
+  </script>
+</body>
+</html>
