@@ -4466,4 +4466,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌈",
     added: "2026-07-16T06:00:00Z",
   },
+  {
+    slug: "countdown-to-date",
+    name: "Countdown to Date",
+    description: "Count down to any future date and time — or count up from a past date. Live remaining or elapsed time broken into days, hours, minutes, and seconds, with totals in weeks, hours, minutes, and seconds. Presets for New Year, Christmas, Halloween, +1 week/month/year. Works in your local time zone. Pairs with the Date Duration, Date & Age, and Unix Timestamp tools. Everything runs locally in your browser.",
+    category: "Time",
+    icon: "⏳",
+    added: "2026-07-16T06:30:00Z",
+  },
 ];
