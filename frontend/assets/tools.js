@@ -4578,4 +4578,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📐",
     added: "2026-07-16T13:00:00Z",
   },
+  {
+    slug: "image-block-art",
+    name: "Image to Block Art",
+    description: "Turn an image into Unicode block art using the full block character set (█▉▊▋▌▍▎▏). Each pixel row maps to one character — the character encodes brightness from full to empty, giving higher vertical resolution than ASCII art. Pick a ramp (eighths, quarters, halves, binary, shading), set width, invert for light backgrounds, and optionally colorize. Pairs with the ASCII Art and Braille Art generators. Everything runs locally on a canvas; nothing is uploaded.",
+    category: "Image",
+    icon: "🟦",
+    added: "2026-07-16T13:30:00Z",
+  },
 ];
