@@ -4570,4 +4570,12 @@ window.VIRTUAL_TOOLS = [
     icon: "⊞",
     added: "2026-07-16T12:30:00Z",
   },
+  {
+    slug: "css-clamp-generator",
+    name: "CSS Clamp & Fluid Typography Generator",
+    description: "Generate CSS clamp() values for fluid typography and spacing that scales smoothly between a minimum and maximum viewport width — no media queries needed. Set min/max font sizes, viewport range, and px/rem units. Live preview with a viewport slider shows the computed size at any width. Pairs with the Type Scale, CSS Unit Converter, and Media Query generators. Everything runs locally in your browser.",
+    category: "Design",
+    icon: "📐",
+    added: "2026-07-16T13:00:00Z",
+  },
 ];
