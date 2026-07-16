@@ -4706,4 +4706,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📰",
     added: "2026-07-16T21:00:00Z",
   },
+  {
+    slug: "css-position-visualizer",
+    name: "CSS Position & Z-Index Visualizer",
+    description: "Experiment with CSS position (static, relative, absolute, fixed, sticky) and z-index with a live preview. Select one of three boxes, set its position type, offset values, and z-index, and see how it stacks. Copy the ready-to-paste CSS. Pairs with the CSS Flexbox, Grid, and Transform generators. Everything runs locally in your browser.",
+    category: "Design",
+    icon: "🧩",
+    added: "2026-07-16T21:30:00Z",
+  },
 ];
