@@ -4642,4 +4642,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🗂️",
     added: "2026-07-16T17:00:00Z",
   },
+  {
+    slug: "csv-merge",
+    name: "CSV Merger",
+    description: "Merge (concatenate) multiple CSV files or text blocks into one. Add as many CSV inputs as needed, keep the header from the first file only, and optionally align columns by header name so matching headers line up. Handles quoted fields and embedded newlines. Pairs with the CSV Viewer, CSV Sort, and CSV Splitter. Everything runs locally in your browser.",
+    category: "Data",
+    icon: "🔗",
+    added: "2026-07-16T17:30:00Z",
+  },
 ];

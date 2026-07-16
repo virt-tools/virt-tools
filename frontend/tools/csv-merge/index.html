@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>CSV Merger — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    label.f { font-size:13px; opacity:.85; display:block; margin-bottom:4px; }
+    textarea { width:100%; box-sizing:border-box; min-height:100px; font-family:ui-monospace,monospace; font-size:13px; resize:vertical; background:var(--bg,#14181f); border:1px solid var(--border,#2a2f3a); border-radius:8px; color:inherit; padding:8px; }
+    .opts { display:flex; flex-wrap:wrap; gap:10px 18px; align-items:center; margin:10px 0; font-size:13px; }
+    .opts label { display:inline-flex; gap:5px; align-items:center; cursor:pointer; }
+    select { font-family:ui-monospace,monospace; font-size:13px; padding:5px 8px; border:1px solid var(--border,#2a2f3a); border-radius:6px; background:var(--bg,#14181f); color:inherit; }
+    .docs { margin:10px 0; }
+    .doc-item { margin-bottom:8px; }
+    .doc-item label { font-size:12px; opacity:.6; }
+    .toolbar { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0; }
+    .stats { font-size:13px; opacity:.7; margin:6px 0; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>CSV Merger</h1>
+      <p>Merge (concatenate) multiple CSV files or text blocks into one. Add as many CSV inputs as you need, choose whether to keep the header from the first file only (avoiding repeated headers), and optionally align columns by header name. Handles quoted fields and embedded newlines. Pairs with the CSV Viewer, CSV Sort, and CSV Splitter. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="opts">
+        <label>Delimiter
+          <select id="delim">
+            <option value="auto" selected>auto</option>
+            <option value=",">comma</option>
+            <option value=";">semicolon</option>
+            <option value="\t">tab</option>
+            <option value="|">pipe</option>
+          </select>
+        </label>
+        <label><input type="checkbox" id="keepHeader" checked> keep first header only</label>
+        <label><input type="checkbox" id="alignCols"> align by header name</label>
+      </div>
+
+      <div class="docs" id="docs"></div>
+      <div class="toolbar">
+        <button id="addDoc" class="secondary">+ Add CSV</button>
+      </div>
+
+      <div class="toolbar">
+        <button id="merge">Merge</button>
+        <button id="copy" class="secondary">Copy result</button>
+        <button id="download" class="secondary">Download .csv</button>
+      </div>
+      <div class="stats" id="stats"></div>
+      <label class="f" for="output">Merged output</label>
+      <textarea id="output" rows="10" readonly spellcheck="false" style="min-height:200px;"></textarea>
+      <p class="note">"Keep first header only" strips the header row from subsequent CSVs. "Align by header name" reorders columns so matching headers line up; missing columns in a CSV are left empty. Pairs with CSV Viewer, CSV Sort, and CSV Splitter. Runs locally.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var docsEl = document.getElementById("docs");
+    var outputEl = document.getElementById("output");
+    var statsEl = document.getElementById("stats");
+    var docs = [
+      "name,age,city\nAlice,30,London\nBob,25,Paris",
+      "name,age,city\nCarol,35,Berlin\nDave,28,Madrid"
+    ];
+
+    function sniffDelim(text) {
+      var firstLine = text.split("\n")[0] || "";
+      var counts = { ",":0, ";":0, "\t":0, "|":0 };
+      for (var i = 0; i < firstLine.length; i++) { var c = firstLine[i]; if (counts[c] !== undefined) counts[c]++; }
+      var best = ",", max = 0;
+      for (var d in counts) { if (counts[d] > max) { max = counts[d]; best = d; } }
+      return best;
+    }
+
+    function parseCSV(text, delim) {
+      if (delim === "auto") delim = sniffDelim(text);
+      else if (delim === "\\t") delim = "\t";
+      var rows = [], row = [], field = "", inQuotes = false;
+      for (var i = 0; i < text.length; i++) {
+        var c = text[i];
+        if (inQuotes) { if (c === '"') { if (text[i+1] === '"') { field += '"'; i++; } else inQuotes = false; } else field += c; }
+        else { if (c === '"') inQuotes = true; else if (c === delim) { row.push(field); field = ""; } else if (c === "\n") { row.push(field); if (row.length > 1 || row[0] !== "") rows.push(row); row = []; field = ""; } else if (c !== "\r") field += c; }
+      }
+      if (field !== "" || row.length) { row.push(field); if (row.length > 1 || row[0] !== "") rows.push(row); }
+      return rows;
+    }
+
+    function toCSV(rows, delim) {
+      return rows.map(function (r) {
+        return r.map(function (cell) {
+          cell = String(cell);
+          if (cell.indexOf(delim) !== -1 || cell.indexOf('"') !== -1 || cell.indexOf("\n") !== -1) return '"' + cell.replace(/"/g, '""') + '"';
+          return cell;
+        }).join(delim);
+      }).join("\n");
+    }
+
+    function esc(s){ return String(s).replace(/[&<>]/g,function(c){return c==="&"?"&amp;":c==="<"?"&lt;":"&gt;";}); }
+
+    function buildDocs() {
+      docsEl.innerHTML = docs.map(function (d, i) {
+        return '<div class="doc-item"><label>CSV ' + (i+1) + '</label><textarea id="doc-' + i + '" rows="4" spellcheck="false">' + esc(d) + '</textarea></div>';
+      }).join("");
+      docs.forEach(function (_, i) {
+        document.getElementById("doc-" + i).addEventListener("input", function () { docs[i] = this.value; });
+      });
+    }
+
+    function merge() {
+      var delim = document.getElementById("delim").value;
+      var keepFirst = document.getElementById("keepHeader").checked;
+      var align = document.getElementById("alignCols").checked;
+      var parsed = docs.map(function (d) { return parseCSV(d, delim); });
+      if (delim === "auto") delim = sniffDelim(docs[0] || ",");
+      else if (delim === "\\t") delim = "\t";
+
+      var allCols = [];
+      var allRows = [];
+
+      if (align) {
+        // Collect all column names
+        parsed.forEach(function (rows, fi) {
+          if (!rows.length) return;
+          var header = fi === 0 || !keepFirst ? rows[0] : parsed[0][0];
+          header.forEach(function (h) { if (allCols.indexOf(h) === -1) allCols.push(h); });
+        });
+        parsed.forEach(function (rows, fi) {
+          var startIdx = (fi === 0 || !keepFirst) ? 0 : 1;
+          if (fi === 0 && rows.length === 0) return;
+          if (fi > 0 && keepFirst && rows.length <= 1) return;
+          var header = (fi === 0 || !keepFirst) ? rows[0] : parsed[0][0];
+          // For subsequent files, get their own header for alignment
+          var theirHeader = keepFirst ? rows[0] : (fi === 0 ? rows[0] : parsed[0][0]);
+          if (fi > 0 && keepFirst) theirHeader = rows[0];
+          if (fi === 0) theirHeader = rows[0];
+          var colMap = allCols.map(function (c) { return theirHeader.indexOf(c); });
+          for (var ri = startIdx; ri < rows.length; ri++) {
+            var row = allCols.map(function (_, ci) { return colMap[ci] >= 0 ? rows[ri][colMap[ci]] || "" : ""; });
+            allRows.push(row);
+          }
+        });
+        allRows.unshift(allCols);
+      } else {
+        parsed.forEach(function (rows, fi) {
+          if (!rows.length) return;
+          var startIdx = (fi === 0 || !keepFirst) ? 0 : 1;
+          for (var ri = startIdx; ri < rows.length; ri++) allRows.push(rows[ri]);
+        });
+      }
+
+      outputEl.value = toCSV(allRows, delim);
+      statsEl.textContent = "Merged " + docs.length + " CSV" + (docs.length !== 1 ? "s" : "") + " → " + allRows.length + " total rows.";
+    }
+
+    document.getElementById("addDoc").addEventListener("click", function () { docs.push("col1,col2\n"); buildDocs(); });
+    document.getElementById("merge").addEventListener("click", merge);
+    ["delim","keepHeader","alignCols"].forEach(function (id) {
+      document.getElementById(id).addEventListener("change", merge);
+    });
+
+    document.getElementById("copy").addEventListener("click", function () {
+      outputEl.select();
+      try { document.execCommand("copy"); var b = document.getElementById("copy"); var t = b.textContent; b.textContent = "Copied!"; setTimeout(function(){ b.textContent = t; }, 1200); } catch(e){}
+    });
+
+    document.getElementById("download").addEventListener("click", function () {
+      var blob = new Blob([outputEl.value], {type:"text/csv"});
+      var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "merged.csv"; a.click(); URL.revokeObjectURL(a.href);
+    });
+
+    buildDocs();
+    merge();
+  })();
+  </script>
+</body>
+</html>
