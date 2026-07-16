@@ -4394,4 +4394,12 @@ window.VIRTUAL_TOOLS = [
     icon: "✨",
     added: "2026-07-16T01:30:00Z",
   },
+  {
+    slug: "image-filter-kernel",
+    name: "Image Filter & Convolution Kernel",
+    description: "Apply adjustable image filters — brightness, contrast, saturation, hue rotate, blur, grayscale, sepia, invert — and run a custom 3×3 convolution kernel (sharpen, edge detect, emboss, box blur, Gaussian, Sobel X/Y, Laplacian, or your own matrix with divisor and offset). Filter presets (vivid, warm, cool, vintage, noir, invert) and side-by-side preview. Download as PNG. Pairs with Image Duotone, Image Dithering, and Image Histogram. Everything runs locally on a canvas; nothing is uploaded.",
+    category: "Image",
+    icon: "🎚️",
+    added: "2026-07-16T02:00:00Z",
+  },
 ];
