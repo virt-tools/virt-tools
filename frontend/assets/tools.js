@@ -4650,4 +4650,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔗",
     added: "2026-07-16T17:30:00Z",
   },
+  {
+    slug: "csv-shuffle",
+    name: "CSV Shuffler & Random Sampler",
+    description: "Shuffle the rows of a CSV into random order, or sample a random subset of N rows. Fisher-Yates shuffle with optional numeric or text seed for reproducibility. Auto-sniffs the delimiter, handles quoted fields and embedded newlines, and optionally preserves the header. Pairs with the CSV Viewer, CSV Sort, and CSV Merger. Everything runs locally in your browser.",
+    category: "Data",
+    icon: "🎲",
+    added: "2026-07-16T18:00:00Z",
+  },
 ];

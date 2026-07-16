@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>CSV Shuffler &amp; Random Sampler — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .layout { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
+    @media (max-width: 760px) { .layout { grid-template-columns: 1fr; } }
+    label.f { font-size:13px; opacity:.85; display:block; margin-bottom:4px; }
+    textarea { width:100%; box-sizing:border-box; min-height:180px; font-family:ui-monospace,monospace; font-size:13px; resize:vertical; background:var(--bg,#14181f); border:1px solid var(--border,#2a2f3a); border-radius:8px; color:inherit; padding:8px; }
+    .opts { display:flex; flex-wrap:wrap; gap:10px 18px; align-items:center; margin:10px 0; font-size:13px; }
+    .opts label { display:inline-flex; gap:5px; align-items:center; cursor:pointer; }
+    select, input[type="text"] { font-family:ui-monospace,monospace; font-size:13px; padding:5px 8px; border:1px solid var(--border,#2a2f3a); border-radius:6px; background:var(--bg,#14181f); color:inherit; }
+    .toolbar { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0; }
+    .stats { font-size:13px; opacity:.7; margin:6px 0; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>CSV Shuffler &amp; Random Sampler</h1>
+      <p>Shuffle the rows of a CSV into random order, or sample a random subset of N rows. Fisher-Yates shuffle with optional numeric or text seed for reproducibility. Handles quoted fields, embedded commas and newlines, and auto-sniffs the delimiter. Pairs with the CSV Viewer, CSV Sort, and CSV Merger. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="opts">
+        <label>Mode
+          <select id="mode">
+            <option value="shuffle" selected>Shuffle all rows</option>
+            <option value="sample">Sample N rows</option>
+          </select>
+        </label>
+        <label>Sample size <input type="text" id="sampleSize" value="3" style="width:60px;"></label>
+        <label>Seed <input type="text" id="seed" placeholder="(random)" style="width:90px;"></label>
+        <label>Delimiter
+          <select id="delim">
+            <option value="auto" selected>auto</option>
+            <option value=",">comma</option>
+            <option value=";">semicolon</option>
+            <option value="\t">tab</option>
+            <option value="|">pipe</option>
+          </select>
+        </label>
+        <label><input type="checkbox" id="header" checked> keep header</label>
+      </div>
+
+      <div class="layout">
+        <div>
+          <label class="f" for="input">CSV input</label>
+          <textarea id="input" spellcheck="false" placeholder="Paste CSV here…">name,age,city
+Alice,30,London
+Bob,25,Paris
+Carol,35,Berlin
+Dave,28,Madrid
+Eve,30,Paris</textarea>
+        </div>
+        <div>
+          <div class="toolbar">
+            <button id="go">Shuffle / Sample</button>
+            <button id="copy" class="secondary">Copy result</button>
+            <button id="download" class="secondary">Download .csv</button>
+          </div>
+          <div class="stats" id="stats"></div>
+          <label class="f" for="output">Output</label>
+          <textarea id="output" rows="10" readonly spellcheck="false" style="min-height:180px;"></textarea>
+        </div>
+      </div>
+      <p class="note">Fisher-Yates shuffle produces an unbiased random permutation. A seed makes the result reproducible — the same seed and input always produce the same shuffle. "Sample N rows" shuffles then takes the first N rows. Pairs with CSV Viewer, CSV Sort, and CSV Merger. Runs locally.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var inputEl = document.getElementById("input");
+    var outputEl = document.getElementById("output");
+    var statsEl = document.getElementById("stats");
+
+    function sniffDelim(text) {
+      var firstLine = text.split("\n")[0] || "";
+      var counts = { ",":0, ";":0, "\t":0, "|":0 };
+      for (var i = 0; i < firstLine.length; i++) { var c = firstLine[i]; if (counts[c] !== undefined) counts[c]++; }
+      var best = ",", max = 0;
+      for (var d in counts) { if (counts[d] > max) { max = counts[d]; best = d; } }
+      return best;
+    }
+
+    function parseCSV(text, delim) {
+      if (delim === "auto") delim = sniffDelim(text);
+      else if (delim === "\\t") delim = "\t";
+      var rows = [], row = [], field = "", inQuotes = false;
+      for (var i = 0; i < text.length; i++) {
+        var c = text[i];
+        if (inQuotes) { if (c === '"') { if (text[i+1] === '"') { field += '"'; i++; } else inQuotes = false; } else field += c; }
+        else { if (c === '"') inQuotes = true; else if (c === delim) { row.push(field); field = ""; } else if (c === "\n") { row.push(field); if (row.length > 1 || row[0] !== "") rows.push(row); row = []; field = ""; } else if (c !== "\r") field += c; }
+      }
+      if (field !== "" || row.length) { row.push(field); if (row.length > 1 || row[0] !== "") rows.push(row); }
+      return rows;
+    }
+
+    function toCSV(rows, delim) {
+      return rows.map(function (r) {
+        return r.map(function (cell) {
+          cell = String(cell);
+          if (cell.indexOf(delim) !== -1 || cell.indexOf('"') !== -1 || cell.indexOf("\n") !== -1) return '"' + cell.replace(/"/g, '""') + '"';
+          return cell;
+        }).join(delim);
+      }).join("\n");
+    }
+
+    function hashStr(str) {
+      var h = 1779033703 ^ str.length;
+      for (var i = 0; i < str.length; i++) { h = Math.imul(h ^ str.charCodeAt(i), 3432918353); h = h << 13 | h >>> 19; }
+      return h;
+    }
+
+    function makeRng(seed) {
+      if (!seed) return Math.random;
+      var s = hashStr(String(seed));
+      return function () { s |= 0; s = s + 0x6D2B79F5 | 0; var t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+    }
+
+    function shuffle(arr, rng) {
+      for (var i = arr.length - 1; i > 0; i--) {
+        var j = Math.floor(rng() * (i + 1));
+        var t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+      }
+      return arr;
+    }
+
+    function go() {
+      var text = inputEl.value;
+      if (!text.trim()) { outputEl.value = ""; statsEl.textContent = ""; return; }
+      var delim = document.getElementById("delim").value;
+      var mode = document.getElementById("mode").value;
+      var sampleSize = parseInt(document.getElementById("sampleSize").value, 10) || 0;
+      var seed = document.getElementById("seed").value.trim();
+      var keepHeader = document.getElementById("header").checked;
+      var rows = parseCSV(text, delim);
+      if (delim === "auto") delim = sniffDelim(text);
+      else if (delim === "\\t") delim = "\t";
+      if (!rows.length) { outputEl.value = ""; return; }
+
+      var header = keepHeader ? rows[0] : null;
+      var data = keepHeader ? rows.slice(1) : rows;
+      var rng = makeRng(seed);
+      shuffle(data, rng);
+
+      if (mode === "sample" && sampleSize > 0 && sampleSize < data.length) {
+        data = data.slice(0, sampleSize);
+      }
+
+      var result = header ? [header].concat(data) : data;
+      outputEl.value = toCSV(result, delim);
+      statsEl.textContent = (mode === "sample" ? "Sampled " + data.length + " of " + (keepHeader ? rows.length - 1 : rows.length) : "Shuffled " + data.length) + " rows." + (seed ? " Seed: " + seed : "");
+    }
+
+    document.getElementById("go").addEventListener("click", go);
+    [inputEl, "mode","sampleSize","seed","delim","header"].forEach(function (id) {
+      var el = typeof id === "string" ? document.getElementById(id) : id;
+      el.addEventListener("change", go);
+    });
+
+    document.getElementById("copy").addEventListener("click", function () {
+      outputEl.select();
+      try { document.execCommand("copy"); var b = document.getElementById("copy"); var t = b.textContent; b.textContent = "Copied!"; setTimeout(function(){ b.textContent = t; }, 1200); } catch(e){}
+    });
+
+    document.getElementById("download").addEventListener("click", function () {
+      var blob = new Blob([outputEl.value], {type:"text/csv"});
+      var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "shuffled.csv"; a.click(); URL.revokeObjectURL(a.href);
+    });
+
+    go();
+  })();
+  </script>
+</body>
+</html>
