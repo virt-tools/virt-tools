@@ -4426,4 +4426,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🚩",
     added: "2026-07-16T03:30:00Z",
   },
+  {
+    slug: "polar-cartesian-converter",
+    name: "Polar ↔ Cartesian Converter",
+    description: "Convert points between polar (r, θ) and Cartesian (x, y) coordinates with a live plot. Enter either form and the other is computed instantly. Supports degrees and radians, and multiple points at once. Pairs with the Vector Calculator, Complex Number, and Trigonometry tools. Everything runs locally in your browser.",
+    category: "Math",
+    icon: "📍",
+    added: "2026-07-16T04:00:00Z",
+  },
 ];

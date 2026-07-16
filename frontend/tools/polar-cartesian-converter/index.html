@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Polar ↔ Cartesian Converter — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .layout { display:grid; grid-template-columns: 1fr 1fr; gap:16px; align-items:start; }
+    @media (max-width: 760px) { .layout { grid-template-columns: 1fr; } }
+    label.f { font-size:13px; opacity:.85; display:block; margin-bottom:4px; }
+    input[type="number"] { width:100%; box-sizing:border-box; font-family:ui-monospace,monospace; font-size:13px; padding:6px 8px; border:1px solid var(--border,#2a2f3a); border-radius:6px; background:var(--bg,#14181f); color:inherit; }
+    select { font-family:ui-monospace,monospace; font-size:13px; padding:5px 8px; border:1px solid var(--border,#2a2f3a); border-radius:6px; background:var(--bg,#14181f); color:inherit; }
+    .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .plot { display:flex; justify-content:center; }
+    canvas { border:1px solid var(--border,#2a2f3a); border-radius:8px; background:var(--panel-2,#161a22); }
+    .results { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:10px; margin:10px 0; }
+    .res { background:var(--panel-2,#161a22); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:8px 10px; }
+    .res .n { font-size:18px; font-weight:600; font-variant-numeric: tabular-nums; font-family:ui-monospace,monospace; }
+    .res .l { font-size:12px; opacity:.7; }
+    .toolbar { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Polar ↔ Cartesian Converter</h1>
+      <p>Convert points between polar (r, θ) and Cartesian (x, y) coordinates, with a live plot. Enter either form and the other is computed instantly. Supports degrees and radians, and multiple points at once. Pairs with the Vector Calculator, Complex Number, and Trigonometry tools. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="toolbar">
+        <label style="font-size:13px;display:inline-flex;gap:5px;align-items:center;">Angle unit
+          <select id="angleUnit">
+            <option value="deg" selected>degrees</option>
+            <option value="rad">radians</option>
+          </select>
+        </label>
+        <button id="clear" class="secondary">Clear all</button>
+      </div>
+
+      <div class="layout">
+        <div>
+          <label class="f">Polar input <span style="opacity:.5;font-size:11px;">(r, θ) — one per line</span></label>
+          <textarea id="polar" rows="5" style="width:100%;box-sizing:border-box;font-family:ui-monospace,monospace;font-size:13px;padding:8px;border:1px solid var(--border,#2a2f3a);border-radius:8px;background:var(--bg,#14181f);color:inherit;resize:vertical;" spellcheck="false" placeholder="5, 30&#10;3.6, 53.13">5, 30
+3.6, 53.13</textarea>
+          <div style="height:12px;"></div>
+          <label class="f">Cartesian input <span style="opacity:.5;font-size:11px;">(x, y) — one per line</span></label>
+          <textarea id="cartesian" rows="5" style="width:100%;box-sizing:border-box;font-family:ui-monospace,monospace;font-size:13px;padding:8px;border:1px solid var(--border,#2a2f3a);border-radius:8px;background:var(--bg,#14181f);color:inherit;resize:vertical;" spellcheck="false" placeholder="4.33, 2.5"></textarea>
+        </div>
+        <div>
+          <div class="plot"><canvas id="plot" width="320" height="320"></canvas></div>
+          <div class="results" id="results"></div>
+        </div>
+      </div>
+      <p class="note">Polar → Cartesian: x = r·cos(θ), y = r·sin(θ). Cartesian → Polar: r = √(x² + y²), θ = atan2(y, x). Negative r reflects through the origin. Pairs with the Vector Calculator and Complex Number tools. Runs locally.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var polarEl = document.getElementById("polar");
+    var cartEl = document.getElementById("cartesian");
+    var canvas = document.getElementById("plot");
+    var resultsEl = document.getElementById("results");
+    var angleUnit = "deg";
+
+    function toRad(theta, unit) { return unit === "deg" ? theta * Math.PI / 180 : theta; }
+    function fromRad(rad, unit) { return unit === "deg" ? rad * 180 / Math.PI : rad; }
+
+    function parsePoints(text) {
+      return text.split("\n").map(function (line) {
+        line = line.trim();
+        if (!line) return null;
+        var parts = line.split(/[\s,;]+/).map(parseFloat);
+        if (parts.length >= 2 && isFinite(parts[0]) && isFinite(parts[1])) return [parts[0], parts[1]];
+        return null;
+      }).filter(Boolean);
+    }
+
+    function polarToCart(r, theta) {
+      var rad = toRad(theta, angleUnit);
+      return [r * Math.cos(rad), r * Math.sin(rad)];
+    }
+    function cartToPolar(x, y) {
+      var r = Math.sqrt(x*x + y*y);
+      var theta = Math.atan2(y, x);
+      return [r, fromRad(theta, angleUnit)];
+    }
+
+    function draw(points) {
+      var ctx = canvas.getContext("2d");
+      var w = canvas.width, h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+      var cx = w/2, cy = h/2;
+      var scale = 30;
+
+      // Grid
+      ctx.strokeStyle = "rgba(127,127,127,0.15)";
+      ctx.lineWidth = 1;
+      for (var i = -5; i <= 5; i++) {
+        if (i === 0) continue;
+        ctx.beginPath(); ctx.moveTo(cx + i*scale, 0); ctx.lineTo(cx + i*scale, h); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, cy + i*scale); ctx.lineTo(w, cy + i*scale); ctx.stroke();
+      }
+      // Axes
+      ctx.strokeStyle = "rgba(127,127,127,0.4)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(w, cy); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, h); ctx.stroke();
+      // Labels
+      ctx.fillStyle = "rgba(127,127,127,0.6)";
+      ctx.font = "11px monospace";
+      ctx.fillText("x", w-12, cy-4);
+      ctx.fillText("y", cx+4, 12);
+
+      // Plot points
+      var colors = ["#6ea8fe","#a78bfa","#5cd690","#ff77a8","#ffd27a","#f0a36e"];
+      points.forEach(function (p, i) {
+        var color = colors[i % colors.length];
+        var x = p[0], y = p[1];
+        var px = cx + x * scale;
+        var py = cy - y * scale;
+        // Line from origin
+        ctx.strokeStyle = color + "88";
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4,3]);
+        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(px, py); ctx.stroke();
+        ctx.setLineDash([]);
+        // Point
+        ctx.fillStyle = color;
+        ctx.beginPath(); ctx.arc(px, py, 5, 0, Math.PI*2); ctx.fill();
+        // Label
+        ctx.fillStyle = color;
+        ctx.font = "bold 11px monospace";
+        ctx.fillText("P" + (i+1), px + 8, py - 6);
+      });
+    }
+
+    function compute() {
+      var polarPts = parsePoints(polarEl.value);
+      var cartPts = parsePoints(cartEl.value);
+      var all = [];
+
+      // Auto-fill: if polar has points, compute cartesian; if cart has points, compute polar
+      polarPts.forEach(function (p) {
+        var c = polarToCart(p[0], p[1]);
+        all.push({ r: p[0], theta: p[1], x: c[0], y: c[1], src: "polar" });
+      });
+      cartPts.forEach(function (p) {
+        var po = cartToPolar(p[0], p[1]);
+        all.push({ r: po[0], theta: po[1], x: p[0], y: p[1], src: "cart" });
+      });
+
+      // Sync the empty box
+      if (polarPts.length && !cartPts.length) {
+        cartEl.value = all.map(function (p) { return p.x.toFixed(4) + ", " + p.y.toFixed(4); }).join("\n");
+      }
+      if (cartPts.length && !polarPts.length) {
+        polarEl.value = all.map(function (p) { return p.r.toFixed(4) + ", " + p.theta.toFixed(4); }).join("\n");
+      }
+
+      draw(all);
+      resultsEl.innerHTML = all.map(function (p, i) {
+        var unitLabel = angleUnit === "deg" ? "°" : " rad";
+        return '<div class="res"><div class="n">P' + (i+1) + '</div><div class="l">r=' + p.r.toFixed(3) + ' · θ=' + p.theta.toFixed(3) + unitLabel + '<br>x=' + p.x.toFixed(3) + ' · y=' + p.y.toFixed(3) + '</div></div>';
+      }).join("");
+    }
+
+    polarEl.addEventListener("input", function () { if (!cartEl.value) compute(); else { cartEl.value=""; compute(); } });
+    cartEl.addEventListener("input", function () { if (!polarEl.value) compute(); else { polarEl.value=""; compute(); } });
+    document.getElementById("angleUnit").addEventListener("change", function () { angleUnit = this.value; compute(); });
+    document.getElementById("clear").addEventListener("click", function () {
+      polarEl.value = ""; cartEl.value = ""; resultsEl.innerHTML = ""; draw([]);
+    });
+
+    compute();
+  })();
+  </script>
+</body>
+</html>
