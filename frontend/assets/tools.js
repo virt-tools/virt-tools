@@ -4802,4 +4802,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🖥️",
     added: "2026-07-17T00:30:00Z",
   },
+  {
+    slug: "ip-subnet-calculator",
+    name: "IP & Subnet Calculator",
+    description: "Calculate IPv4 and IPv6 subnets from CIDR notation. Get network address, broadcast, host range, binary representation, and more. Fully client-side.",
+    category: "Networking",
+    icon: "🌐",
+    added: "2026-07-17T00:40:00Z",
+  },
 ];
