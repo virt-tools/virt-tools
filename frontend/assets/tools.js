@@ -4778,4 +4778,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔊",
     added: "2026-07-17T00:00:00Z",
   },
+  {
+    slug: "video-trimmer",
+    name: "Video Trimmer & Compressor",
+    description: "Trim start/end and re-encode video files in your browser. Choose format, bitrate, and FPS — fully client-side using canvas capture and MediaRecorder.",
+    category: "Video",
+    icon: "🎬",
+    added: "2026-07-17T00:10:00Z",
+  },
 ];

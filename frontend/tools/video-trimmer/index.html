@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Video Trimmer & Compressor — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .vt-layout { max-width:760px; margin:20px auto; }
+    .drop-zone {
+      border:2px dashed var(--border,#2a2f3a); border-radius:12px; padding:40px; text-align:center;
+      cursor:pointer; transition:border-color .2s, background .2s;
+    }
+    .drop-zone.drag { border-color:var(--accent,#4a9eff); background:rgba(74,158,255,.06); }
+    .drop-zone:hover { border-color:var(--accent,#4a9eff); }
+    .vt-file-info { margin:14px 0; padding:12px 16px; background:var(--bg-inset,#1e1e2e); border-radius:8px; border:1px solid var(--border,#2a2f3a); }
+    video { width:100%; border-radius:8px; margin:12px 0; background:#000; }
+    .vt-controls { display:flex; flex-direction:column; gap:12px; margin:16px 0; }
+    .vt-row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+    .vt-range { width:100%; }
+    input[type="range"] { accent-color:var(--accent,#4a9eff); }
+    .progress { height:4px; background:var(--border,#2a2f3a); border-radius:2px; overflow:hidden; margin:8px 0; }
+    .progress-bar { height:100%; background:var(--accent,#4a9eff); width:0; transition:width .3s; }
+    .vt-time-labels { display:flex; justify-content:space-between; font-size:12px; opacity:.6; margin-top:4px; }
+    label { font-size:13px; }
+    select, input[type="number"] { font-size:13px; padding:4px 8px; background:var(--bg,#1a1a2e); color:var(--text,#e0e0e0); border:1px solid var(--border,#2a2f3a); border-radius:4px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Video Trimmer & Compressor</h1>
+      <p>Trim and re-encode video files right in your browser. Set start/end points, choose quality, and download the result — no upload, no server, fully client-side using the MediaRecorder API.</p>
+    </div>
+
+    <div class="vt-layout">
+      <div class="drop-zone" id="dropZone">
+        <p style="font-size:16px; margin:0 0 6px;">Drop a video here or click to browse</p>
+        <p style="font-size:12px; opacity:.5; margin:0;">Supports MP4, WebM, MOV, AVI and more</p>
+        <input type="file" id="fileInput" accept="video/*" style="display:none">
+      </div>
+
+      <div id="editor" style="display:none;">
+        <div class="vt-file-info">
+          <strong id="fileName"></strong> — <span id="fileDetails"></span>
+        </div>
+
+        <video id="player" controls></video>
+
+        <div class="vt-controls">
+          <div>
+            <label>Trim range:</label>
+            <div class="vt-range">
+              <input type="range" id="startRange" min="0" max="100" value="0" step="0.1" style="width:48%;">
+              <input type="range" id="endRange" min="0" max="100" value="100" step="0.1" style="width:48%;">
+            </div>
+            <div class="vt-time-labels">
+              <span>Start: <strong id="startTime">0:00</strong></span>
+              <span>End: <strong id="endTime">0:00</strong></span>
+            </div>
+          </div>
+
+          <div class="vt-row">
+            <label>Output format:
+              <select id="format">
+                <option value="video/webm;codecs=vp9">WebM (VP9)</option>
+                <option value="video/webm;codecs=vp8">WebM (VP8)</option>
+                <option value="video/mp4">MP4 (H.264)</option>
+              </select>
+            </label>
+            <label>Video bitrate:
+              <select id="bitrate">
+                <option value="500000">0.5 Mbps (low)</option>
+                <option value="1500000" selected>1.5 Mbps (medium)</option>
+                <option value="3000000">3 Mbps (high)</option>
+                <option value="6000000">6 Mbps (very high)</option>
+              </select>
+            </label>
+            <label>FPS:
+              <select id="fps">
+                <option value="0">Original</option>
+                <option value="24">24</option>
+                <option value="30">30</option>
+                <option value="60">60</option>
+              </select>
+            </label>
+          </div>
+
+          <button id="processBtn" style="padding:8px 24px; font-size:15px;">Trim & Compress</button>
+        </div>
+
+        <div class="progress" id="progress" style="display:none;"><div class="progress-bar" id="progressBar"></div></div>
+
+        <div id="result" style="display:none; margin-top:16px;">
+          <h3>Result</h3>
+          <video id="resultVideo" controls></video>
+          <div style="margin-top:8px; display:flex; gap:12px; align-items:center;">
+            <button id="downloadBtn">Download</button>
+            <span id="resultInfo" style="opacity:.6; font-size:13px;"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var d = document;
+    var video = d.getElementById("player");
+    var startTime = 0, endTime = 0;
+    var originalFile = null;
+    var resultBlob = null;
+    var fmtExt = { "video/webm;codecs=vp9": "webm", "video/webm;codecs=vp8": "webm", "video/mp4": "mp4" };
+
+    d.getElementById("dropZone").addEventListener("click", function () { d.getElementById("fileInput").click(); });
+    d.getElementById("fileInput").addEventListener("change", function (e) { if (e.target.files[0]) loadFile(e.target.files[0]); });
+    d.getElementById("dropZone").addEventListener("dragover", function (e) { e.preventDefault(); this.classList.add("drag"); });
+    d.getElementById("dropZone").addEventListener("dragleave", function () { this.classList.remove("drag"); });
+    d.getElementById("dropZone").addEventListener("drop", function (e) {
+      e.preventDefault(); this.classList.remove("drag");
+      if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+    });
+
+    function loadFile(file) {
+      originalFile = file;
+      d.getElementById("dropZone").style.display = "none";
+      d.getElementById("editor").style.display = "";
+      d.getElementById("result").style.display = "none";
+      d.getElementById("fileName").textContent = file.name;
+      d.getElementById("fileDetails").textContent = (file.size / 1024 / 1024).toFixed(2) + " MB · " + (file.type || "unknown");
+
+      video.src = URL.createObjectURL(file);
+      video.onloadedmetadata = function () {
+        endTime = video.duration;
+        d.getElementById("startTime").textContent = fmtTime(0);
+        d.getElementById("endTime").textContent = fmtTime(endTime);
+        d.getElementById("startRange").max = video.duration;
+        d.getElementById("endRange").max = video.duration;
+        d.getElementById("endRange").value = video.duration;
+      };
+    }
+
+    function fmtTime(s) {
+      var m = Math.floor(s / 60);
+      var sec = Math.floor(s % 60);
+      return m + ":" + (sec < 10 ? "0" : "") + sec;
+    }
+
+    d.getElementById("startRange").addEventListener("input", function () {
+      startTime = parseFloat(this.value);
+      d.getElementById("startTime").textContent = fmtTime(startTime);
+      if (startTime >= endTime) { endTime = startTime + 0.1; d.getElementById("endRange").value = endTime; d.getElementById("endTime").textContent = fmtTime(endTime); }
+    });
+    d.getElementById("endRange").addEventListener("input", function () {
+      endTime = parseFloat(this.value);
+      d.getElementById("endTime").textContent = fmtTime(endTime);
+      if (endTime <= startTime) { startTime = endTime - 0.1; d.getElementById("startRange").value = startTime; d.getElementById("startTime").textContent = fmtTime(startTime); }
+    });
+
+    d.getElementById("processBtn").addEventListener("click", function () {
+      var fmt = d.getElementById("format").value;
+      var br = parseInt(d.getElementById("bitrate").value);
+      var fps = parseInt(d.getElementById("fps").value);
+      var duration = endTime - startTime;
+      if (duration <= 0) { alert("Invalid trim range"); return; }
+
+      d.getElementById("progress").style.display = "";
+      d.getElementById("progressBar").style.width = "5%";
+
+      // Use canvas capture + MediaRecorder approach
+      var canvas = d.createElement("canvas");
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+      var ctx = canvas.getContext("2d");
+
+      var stream = canvas.captureStream(fps || 30);
+      var rec = new MediaRecorder(stream, { mimeType: fmt, videoBitsPerSecond: br });
+      var chunks = [];
+      rec.ondataavailable = function (e) { if (e.data.size) chunks.push(e.data); };
+      rec.onstop = function () {
+        resultBlob = new Blob(chunks, { type: fmt });
+        d.getElementById("progressBar").style.width = "100%";
+        setTimeout(function () { d.getElementById("progress").style.display = "none"; }, 500);
+        d.getElementById("result").style.display = "";
+        var url = URL.createObjectURL(resultBlob);
+        var rv = d.getElementById("resultVideo");
+        rv.src = url;
+        var ext = fmtExt[fmt] || "webm";
+        var origSize = originalFile.size;
+        var newSize = resultBlob.size;
+        var pct = Math.round((1 - newSize / origSize) * 100);
+        d.getElementById("resultInfo").textContent = (newSize / 1024 / 1024).toFixed(2) + " MB (" + (pct >= 0 ? "-" + pct + "%" : "+" + Math.abs(pct) + "%") + " vs original)";
+        d.getElementById("downloadBtn").onclick = function () {
+          var a = d.createElement("a");
+          a.href = url;
+          a.download = (originalFile.name.replace(/\.[^.]+$/, "") || "video") + "-trimmed." + ext;
+          a.click();
+        };
+      };
+
+      video.currentTime = startTime;
+      video.play();
+      rec.start();
+
+      var elapsed = 0;
+      var interval = setInterval(function () {
+        elapsed += 0.1;
+        var pct = Math.min(95, 5 + (elapsed / duration) * 90);
+        d.getElementById("progressBar").style.width = pct + "%";
+        if (video.currentTime >= endTime || video.ended) {
+          clearInterval(interval);
+          video.pause();
+          rec.stop();
+        }
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      }, 100);
+
+      // Also draw on a regular rAF loop for smoothness
+      function drawLoop() {
+        if (video.currentTime < endTime && !video.ended) {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          requestAnimationFrame(drawLoop);
+        }
+      }
+      requestAnimationFrame(drawLoop);
+    });
+  })();
+  </script>
+</body>
+</html>
