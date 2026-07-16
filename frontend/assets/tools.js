@@ -4442,4 +4442,12 @@ window.VIRTUAL_TOOLS = [
     icon: "⠿",
     added: "2026-07-16T04:30:00Z",
   },
+  {
+    slug: "bearing-distance-calculator",
+    name: "Bearing & Distance Calculator",
+    description: "Compute the great-circle distance and initial bearing (compass heading) between two geographic coordinates using the haversine formula, plus the destination point given a start, bearing, and distance. Distances in km, miles, and nautical miles; bearings in degrees with compass direction. Live compass visualization. Pairs with the Geographic Coordinate Converter, Geohash, and Geo Distance tools. Everything runs locally in your browser.",
+    category: "Geography",
+    icon: "🧭",
+    added: "2026-07-16T05:00:00Z",
+  },
 ];
