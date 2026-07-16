@@ -4538,4 +4538,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎡",
     added: "2026-07-16T10:30:00Z",
   },
+  {
+    slug: "csv-to-sql",
+    name: "CSV to SQL INSERT Converter",
+    description: "Convert CSV data into SQL INSERT statements. Enter a table name, pick a dialect (PostgreSQL, MySQL, SQLite, generic), and optionally batch multi-row inserts. Handles quoted fields, embedded commas and newlines, NULL detection, numeric/boolean auto-typing, and empty-to-NULL. Pairs with the SQL INSERT Generator and SQL Formatter. Everything runs locally in your browser.",
+    category: "Data",
+    icon: "📥",
+    added: "2026-07-16T11:00:00Z",
+  },
 ];
