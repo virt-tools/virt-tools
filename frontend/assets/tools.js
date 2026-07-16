@@ -4786,4 +4786,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎬",
     added: "2026-07-17T00:10:00Z",
   },
+  {
+    slug: "qr-code-generator",
+    name: "QR Code Generator",
+    description: "Generate QR codes for URLs, text, and more — entirely in your browser. Customize error correction, colors, and size. Download as PNG or SVG.",
+    category: "Image",
+    icon: "📱",
+    added: "2026-07-17T00:20:00Z",
+  },
 ];
