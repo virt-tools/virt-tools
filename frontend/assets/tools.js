@@ -4826,4 +4826,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📤",
     added: "2026-07-17T01:00:00Z",
   },
+  {
+    slug: "permission-calculator",
+    name: "Unix Permissions Calculator",
+    description: "Convert between numeric (chmod) and symbolic (rwx) permission notation. Interactive checkboxes, octal/symbolic input, and umask calculator. Fully client-side.",
+    category: "System",
+    icon: "🔑",
+    added: "2026-07-17T01:10:00Z",
+  },
 ];
