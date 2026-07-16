@@ -4602,4 +4602,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📄",
     added: "2026-07-16T14:30:00Z",
   },
+  {
+    slug: "image-to-emoji",
+    name: "Image to Emoji Art",
+    description: "Turn an image into emoji art — each pixel block maps to the emoji whose average color is closest. Pick a palette set (basic colors, nature, food, faces, hearts, colored circles, or colored squares), set the output width, and optionally invert. Copy or download the result. Pairs with the ASCII Art, Braille Art, and Block Art generators. Everything runs locally on a canvas; nothing is uploaded.",
+    category: "Image",
+    icon: "😀",
+    added: "2026-07-16T15:00:00Z",
+  },
 ];
