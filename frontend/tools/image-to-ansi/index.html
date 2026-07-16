@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Image to ANSI Art — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    textarea { width:100%; box-sizing:border-box; font-family:ui-monospace,"Cascadia Mono",Consolas,monospace; font-size:11px; }
+    #preview { white-space:pre; overflow:auto; line-height:1.0; font-size:10px; background:#000; padding:10px; border:1px solid var(--border,#2a2f3a); border-radius:8px; min-height:200px; }
+    .opts { display:flex; flex-wrap:wrap; gap:10px 16px; align-items:flex-end; margin:8px 0; }
+    .opts label { font-size:13px; }
+    input[type="number"], select { font-family:ui-monospace,monospace; font-size:13px; padding:4px 6px; border:1px solid var(--border,#2a2f3a); border-radius:6px; background:var(--bg,#14181f); color:inherit; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Image to ANSI Art</h1>
+      <p>Turn an image into ANSI terminal art using 24-bit true color escape codes. Each pixel block maps to a <code>\x1b[38;2;R;G;Bm</code> color code with a half-block character (▀ or ▄), so two pixel rows fit in one text line — double the vertical resolution of basic block art. Copy the ANSI sequence to paste into a terminal, or download the .ans file. The image is processed on a local canvas — nothing is uploaded. Pairs with the Block Art and Braille Art generators.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="file">Image</label>
+        <div id="drop" class="dropzone">
+          <input type="file" id="file" accept="image/*" hidden>
+          <p class="dropzone-hint">Click to choose, or drag &amp; drop an image here</p>
+          <p class="dropzone-name" id="drop-name" hidden></p>
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="opts">
+        <div>
+          <label for="cols">Output width (columns)</label>
+          <input type="number" id="cols" value="80" min="8" max="300" step="1">
+        </div>
+        <label class="check"><input type="checkbox" id="bgBlack" checked> black background</label>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="row" style="justify-content:space-between; align-items:center;">
+        <label>Preview (rendered)</label>
+        <span>
+          <button id="copy" class="secondary" style="padding:4px 10px;">Copy ANSI</button>
+          <button id="dl" class="secondary" style="padding:4px 10px;">Download .ans</button>
+        </span>
+      </div>
+      <div id="preview"></div>
+      <p class="note" id="info"></p>
+      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var fileEl = document.getElementById("file");
+    var drop = document.getElementById("drop");
+    var dropName = document.getElementById("drop-name");
+    var colsEl = document.getElementById("cols");
+    var bgBlackEl = document.getElementById("bgBlack");
+    var preview = document.getElementById("preview");
+    var info = document.getElementById("info");
+    var err = document.getElementById("err");
+    var lastImage = null;
+    var lastAnsi = "";
+
+    function esc(s){ return String(s).replace(/[&<>]/g,function(c){return c==="&"?"&amp;":c==="<"?"&lt;":"&gt;";}); }
+
+    function ansiFromRgba(data, w, h, cols, bgBlack) {
+      cols = Math.max(1, Math.floor(cols));
+      var xstep = w / cols;
+      // Each output line covers 2 pixel rows (upper half = foreground, lower half = background)
+      var pixelRows = Math.max(1, Math.round(h / xstep));
+      if (pixelRows % 2 !== 0) pixelRows++;
+      var lines = Math.floor(pixelRows / 2);
+      var ystep = h / pixelRows;
+      var out = "";
+
+      for (var li = 0; li < lines; li++) {
+        for (var c = 0; c < cols; c++) {
+          var x0 = Math.floor(c * xstep), x1 = Math.floor((c + 1) * xstep);
+          if (x1 <= x0) x1 = x0 + 1;
+          // Upper pixel
+          var uy = Math.floor(li * 2 * ystep);
+          var uy1 = Math.floor((li * 2 + 1) * ystep);
+          if (uy1 <= uy) uy1 = uy + 1;
+          // Lower pixel
+          var ly = Math.floor((li * 2 + 1) * ystep);
+          var ly1 = Math.floor((li * 2 + 2) * ystep);
+          if (ly1 <= ly) ly1 = ly + 1;
+          var up = avgColor(data, w, x0, x1, uy, uy1, h);
+          var lp = avgColor(data, w, x0, x1, ly, ly1, h);
+          if (bgBlack) {
+            // Use ▀ with foreground=upper, and set background=lower if different from black
+            if (lp[0] < 10 && lp[1] < 10 && lp[2] < 10) {
+              // Background is effectively black, just use foreground
+              out += "\x1b[38;2;" + up[0] + ";" + up[1] + ";" + up[2] + "m▀";
+            } else {
+              out += "\x1b[38;2;" + up[0] + ";" + up[1] + ";" + up[2] + "m\x1b[48;2;" + lp[0] + ";" + lp[1] + ";" + lp[2] + "m▀";
+            }
+          } else {
+            out += "\x1b[38;2;" + up[0] + ";" + up[1] + ";" + up[2] + "m\x1b[48;2;" + lp[0] + ";" + lp[1] + ";" + lp[2] + "m▀";
+          }
+        }
+        out += "\x1b[0m\n";
+      }
+      return out;
+    }
+
+    function avgColor(data, w, x0, x1, y0, y1, maxH) {
+      var rs = 0, gs = 0, bs = 0, n = 0;
+      for (var y = y0; y < y1 && y < maxH; y++) {
+        for (var x = x0; x < x1; x++) {
+          var i = (y * w + x) * 4;
+          rs += data[i]; gs += data[i+1]; bs += data[i+2]; n++;
+        }
+      }
+      return [n > 0 ? Math.round(rs/n) : 0, n > 0 ? Math.round(gs/n) : 0, n > 0 ? Math.round(bs/n) : 0];
+    }
+
+    function renderPreview(ansi) {
+      // Render ANSI as HTML spans for preview
+      var html = "";
+      var lines = ansi.split("\n");
+      lines.forEach(function (line) {
+        var parts = line.split(/\x1b\[/);
+        var currentFg = null, currentBg = null;
+        parts.forEach(function (part) {
+          if (!part) return;
+          var m = part.match(/^(\d+(?:;\d+)*)m(.*)$/);
+          if (m) {
+            var codes = m[1].split(";");
+            if (codes[0] === "38" && codes[1] === "2") currentFg = codes[2] + "," + codes[3] + "," + codes[4];
+            else if (codes[0] === "48" && codes[1] === "2") currentBg = codes[2] + "," + codes[3] + "," + codes[4];
+            else if (codes[0] === "0") { currentFg = null; currentBg = null; }
+            var text = m[2];
+            if (text) {
+              var style = "";
+              if (currentFg) style += "color:rgb(" + currentFg + ");";
+              if (currentBg) style += "background:rgb(" + currentBg + ");";
+              html += '<span style="' + style + '">' + esc(text) + '</span>';
+            }
+          } else {
+            html += esc(part);
+          }
+        });
+        html += "\n";
+      });
+      preview.innerHTML = html;
+    }
+
+    function process() {
+      if (!lastImage) return;
+      err.hidden = true;
+      try {
+        var cols = parseInt(colsEl.value, 10) || 80;
+        if (cols < 8) cols = 8;
+        if (cols > 300) cols = 300;
+        var bgBlack = bgBlackEl.checked;
+
+        var canvas = document.createElement("canvas");
+        var ctx = canvas.getContext("2d");
+        var targetW = cols;
+        var scale = targetW / lastImage.naturalWidth;
+        var targetH = Math.round(lastImage.naturalHeight * scale);
+        canvas.width = targetW;
+        canvas.height = targetH;
+        ctx.drawImage(lastImage, 0, 0, targetW, targetH);
+        var imgData = ctx.getImageData(0, 0, targetW, targetH);
+        lastAnsi = ansiFromRgba(imgData.data, targetW, targetH, cols, bgBlack);
+        renderPreview(lastAnsi);
+        var outLines = lastAnsi.split("\n").length;
+        info.textContent = "Output: " + cols + " cols × " + outLines + " lines. " + lastAnsi.length.toLocaleString() + " bytes of ANSI. Image processed locally.";
+      } catch (e) {
+        err.hidden = false;
+        err.textContent = "Error: " + e.message;
+      }
+    }
+
+    function loadFile(file) {
+      if (!file || !file.type.startsWith("image/")) return;
+      var reader = new FileReader();
+      reader.onload = function (e) {
+        var img = new Image();
+        img.onload = function () {
+          lastImage = img;
+          dropName.textContent = file.name;
+          dropName.hidden = false;
+          process();
+        };
+        img.onerror = function () { err.hidden = false; err.textContent = "Could not load image."; };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    fileEl.addEventListener("change", function (e) { loadFile(e.target.files[0]); });
+    drop.addEventListener("click", function () { fileEl.click(); });
+    drop.addEventListener("dragover", function (e) { e.preventDefault(); drop.classList.add("drag"); });
+    drop.addEventListener("dragleave", function () { drop.classList.remove("drag"); });
+    drop.addEventListener("drop", function (e) {
+      e.preventDefault(); drop.classList.remove("drag");
+      if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+    });
+
+    [colsEl, bgBlackEl].forEach(function (el) {
+      el.addEventListener("input", process);
+      el.addEventListener("change", process);
+    });
+
+    document.getElementById("copy").addEventListener("click", function () {
+      if (!lastAnsi) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(lastAnsi).then(function () {
+          var b = document.getElementById("copy"); var t = b.textContent; b.textContent = "Copied!";
+          setTimeout(function(){ b.textContent = t; }, 1200);
+        });
+      }
+    });
+
+    document.getElementById("dl").addEventListener("click", function () {
+      if (!lastAnsi) return;
+      var blob = new Blob([lastAnsi], {type:"text/plain;charset=utf-8"});
+      var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "ansi-art.ans"; a.click(); URL.revokeObjectURL(a.href);
+    });
+  })();
+  </script>
+</body>
+</html>

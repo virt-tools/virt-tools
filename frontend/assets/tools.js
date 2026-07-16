@@ -4610,4 +4610,12 @@ window.VIRTUAL_TOOLS = [
     icon: "😀",
     added: "2026-07-16T15:00:00Z",
   },
+  {
+    slug: "image-to-ansi",
+    name: "Image to ANSI Art",
+    description: "Turn an image into ANSI terminal art using 24-bit true color escape codes. Each pixel block maps to a colored half-block character, so two pixel rows fit in one text line — double the vertical resolution. Copy the ANSI sequence to paste into a terminal, or download the .ans file. Live rendered preview. Pairs with the Block Art and Braille Art generators. Everything runs locally on a canvas; nothing is uploaded.",
+    category: "Image",
+    icon: "🖥️",
+    added: "2026-07-16T15:30:00Z",
+  },
 ];
