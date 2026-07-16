@@ -4730,4 +4730,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔗",
     added: "2026-07-16T22:30:00Z",
   },
+  {
+    slug: "html-encode-decode",
+    name: "HTML Entity Encode / Decode",
+    description: "Encode text into HTML entities or decode named, decimal, and hex entities back to text. Modes: HTML-special only, named entities, decimal, or hex. Handles common named entities plus all non-ASCII. Everything runs locally in your browser.",
+    category: "Encoding",
+    icon: "🏷️",
+    added: "2026-07-16T22:50:00Z",
+  },
 ];
