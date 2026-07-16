@@ -4658,4 +4658,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎲",
     added: "2026-07-16T18:00:00Z",
   },
+  {
+    slug: "csv-tsv-converter",
+    name: "CSV ⇄ TSV Converter",
+    description: "Convert between CSV, TSV (tab-separated), semicolon, pipe, or any custom delimiter. Handles quoted fields, embedded delimiters, and newlines. Auto-detects the input delimiter and re-quotes only when needed for the output format. Pairs with the CSV Viewer, CSV to JSON, and CSV to Markdown. Everything runs locally in your browser.",
+    category: "Data",
+    icon: "🔄",
+    added: "2026-07-16T18:30:00Z",
+  },
 ];
