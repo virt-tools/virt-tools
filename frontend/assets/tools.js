@@ -4690,4 +4690,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📋",
     added: "2026-07-16T20:00:00Z",
   },
+  {
+    slug: "css-opacity-rgba",
+    name: "CSS Opacity & RGBA Calculator",
+    description: "Convert a hex color + opacity to CSS rgba(), hsla(), and 8-digit hex (#RRGGBBAA). Adjust the alpha slider, preview over white, black, and checkerboard backgrounds, and copy the ready-to-paste CSS. Pairs with the Color Converter and Contrast Checker. Everything runs locally in your browser.",
+    category: "Design",
+    icon: "🌫️",
+    added: "2026-07-16T20:30:00Z",
+  },
 ];
