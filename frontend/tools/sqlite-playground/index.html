@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>SQLite Playground — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .playground { display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin:14px 0; min-height:400px; }
+    @media (max-width:780px){ .playground { grid-template-columns: 1fr; } }
+    .editor-panel { display:flex; flex-direction:column; gap:8px; }
+    .editor-panel textarea { flex:1; min-height:300px; font-family:monospace; font-size:13px; resize:vertical; }
+    .result-panel { display:flex; flex-direction:column; gap:8px; }
+    .result-panel pre { flex:1; min-height:300px; overflow:auto; font-family:monospace; font-size:12px; background:var(--bg-inset,#1e1e2e); padding:12px; border-radius:8px; border:1px solid var(--border,#2a2f3a); white-space:pre; }
+    .toolbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .toolbar button, .toolbar select { font-size:13px; }
+    .status { font-size:12px; opacity:.7; }
+    .status.err { color:var(--bad,#ef4444); opacity:1; }
+    .status.ok { color:var(--good,#4ade80); opacity:1; }
+    table.results { border-collapse:collapse; width:100%; font-size:12px; }
+    table.results th, table.results td { border:1px solid var(--border,#2a2f3a); padding:4px 8px; text-align:left; }
+    table.results th { background:var(--bg-inset,#1e1e2e); }
+    table.results tr:nth-child(even) { background:rgba(128,128,128,.05); }
+    .schema-label { font-size:12px; opacity:.6; margin-top:8px; }
+    .schema pre { font-size:11px; max-height:200px; overflow:auto; background:var(--bg-inset,#1e1e2e); padding:10px; border-radius:8px; border:1px solid var(--border,#2a2f3a); }
+    .examples { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+    .examples button { font-size:11px; padding:3px 8px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>SQLite Playground</h1>
+      <p>Write and run SQL queries against an in-browser SQLite database — no server, no uploads. Powered by sql.js (SQLite compiled to WebAssembly). Create tables, insert data, run SELECTs, and see results instantly. Your database lives only in this browser tab.</p>
+    </div>
+
+    <div class="panel">
+      <div class="toolbar">
+        <button id="runBtn" class="primary">Run (Ctrl+Enter)</button>
+        <button id="clearBtn" class="secondary">Clear output</button>
+        <button id="resetBtn" class="secondary">Reset database</button>
+        <button id="downloadBtn" class="secondary">Download .sqlite</button>
+        <label class="status" id="status">Loading SQLite engine…</label>
+      </div>
+
+      <div class="playground">
+        <div class="editor-panel">
+          <label style="font-size:12px;opacity:.6;">SQL input</label>
+          <textarea id="sql" spellcheck="false" placeholder="CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, age INTEGER);&#10;INSERT INTO users VALUES (1,'Alice',30),(2,'Bob',25);&#10;SELECT * FROM users WHERE age > 20;">-- Try a quick query:
+CREATE TABLE IF NOT EXISTS products (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  price REAL,
+  stocked INTEGER DEFAULT 1
+);
+
+INSERT INTO products (name, price) VALUES
+  ('Widget', 9.99),
+  ('Gadget', 19.99),
+  ('Gizmo', 4.49);
+
+SELECT name, price FROM products ORDER BY price DESC;</textarea>
+        </div>
+        <div class="result-panel">
+          <label style="font-size:12px;opacity:.6;">Results</label>
+          <pre id="output">SQLite engine loading…</pre>
+        </div>
+      </div>
+
+      <div class="examples">
+        <button class="secondary" data-sql="-- List all tables&#10;SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;">List tables</button>
+        <button class="secondary" data-sql="-- Schema for a table&#10;SELECT sql FROM sqlite_master WHERE name='products';">Show schema</button>
+        <button class="secondary" data-sql="-- Aggregate&#10;SELECT COUNT(*) AS count, ROUND(AVG(price),2) AS avg_price, MIN(price) AS min_price, MAX(price) AS max_price FROM products;">Aggregate</button>
+        <button class="secondary" data-sql="-- Join example&#10;CREATE TABLE orders (id INTEGER PRIMARY KEY, product_id INTEGER, qty INTEGER);&#10;INSERT INTO orders VALUES (1,1,3),(2,3,1),(3,1,2);&#10;SELECT p.name, o.qty, p.price * o.qty AS line_total FROM orders o JOIN products p ON o.product_id = p.id;">Join</button>
+      </div>
+
+      <div class="schema-label">Database schema</div>
+      <div class="schema"><pre id="schema">(empty)</pre></div>
+    </div>
+  </main>
+
+  <script src="/vendor/sql-wasm.js"></script>
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var SQL = null;
+    var db = null;
+    var sqlEl = document.getElementById("sql");
+    var outEl = document.getElementById("output");
+    var schemaEl = document.getElementById("schema");
+    var statusEl = document.getElementById("status");
+    var runBtn = document.getElementById("runBtn");
+    var clearBtn = document.getElementById("clearBtn");
+    var resetBtn = document.getElementById("resetBtn");
+    var downloadBtn = document.getElementById("downloadBtn");
+
+    function setStatus(msg, cls) {
+      statusEl.textContent = msg;
+      statusEl.className = "status" + (cls ? " " + cls : "");
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    }
+
+    function renderResults(results) {
+      if (!results || results.length === 0) {
+        outEl.innerHTML = escapeHtml("(no rows — statement executed successfully)");
+        return;
+      }
+      var html = "";
+      results.forEach(function (r) {
+        if (r.columns) {
+          html += '<table class="results"><thead><tr>';
+          r.columns.forEach(function (c) { html += "<th>" + escapeHtml(c) + "</th>"; });
+          html += "</tr></thead><tbody>";
+          r.values.forEach(function (row) {
+            html += "<tr>";
+            row.forEach(function (cell) {
+              html += "<td>" + (cell === null ? "<em style='opacity:.4'>NULL</em>" : escapeHtml(cell)) + "</td>";
+            });
+            html += "</tr>";
+          });
+          html += "</tbody></table>";
+        }
+      });
+      outEl.innerHTML = html || "(no results)";
+    }
+
+    function updateSchema() {
+      if (!db) { schemaEl.textContent = "(engine not loaded)"; return; }
+      try {
+        var res = db.exec("SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name");
+        if (!res.length) { schemaEl.textContent = "(no tables)"; return; }
+        var lines = [];
+        res[0].values.forEach(function (row) {
+          lines.push("-- " + row[0]);
+          lines.push(row[1] + ";");
+          lines.push("");
+        });
+        schemaEl.textContent = lines.join("\n");
+      } catch (e) {
+        schemaEl.textContent = "(error reading schema: " + e.message + ")";
+      }
+    }
+
+    function runSQL() {
+      if (!db) { setStatus("Database not ready yet.", "err"); return; }
+      var sql = sqlEl.value.trim();
+      if (!sql) { setStatus("Nothing to run.", "err"); return; }
+      try {
+        var results = db.exec(sql);
+        renderResults(results);
+        updateSchema();
+        var n = results.length;
+        setStatus("OK — " + (n === 0 ? "statement executed (no result set)" : n + " result set" + (n > 1 ? "s" : "")), "ok");
+      } catch (e) {
+        outEl.innerHTML = '<span style="color:var(--bad,#ef4444)">' + escapeHtml(e.message) + "</span>";
+        setStatus("Error: " + e.message, "err");
+      }
+    }
+
+    function resetDB() {
+      if (db) { try { db.close(); } catch(e){} }
+      db = new SQL.Database();
+      updateSchema();
+      outEl.textContent = "(database reset — ready for queries)";
+      setStatus("Database reset.", "ok");
+    }
+
+    function downloadDB() {
+      if (!db) return;
+      var data = db.export();
+      var blob = new Blob([data], { type: "application/x-sqlite3" });
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "playground.sqlite";
+      a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+    }
+
+    runBtn.addEventListener("click", runSQL);
+    clearBtn.addEventListener("click", function () {
+      outEl.textContent = "(cleared)";
+      setStatus("");
+    });
+    resetBtn.addEventListener("click", resetDB);
+    downloadBtn.addEventListener("click", downloadDB);
+
+    document.querySelectorAll("[data-sql]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        sqlEl.value = btn.getAttribute("data-sql");
+        runSQL();
+      });
+    });
+
+    sqlEl.addEventListener("keydown", function (e) {
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        e.preventDefault();
+        runSQL();
+      }
+    });
+
+    // Load sql.js
+    initSqlJs({ locateFile: function (path) { return "/vendor/" + path; } })
+      .then(function (SQLModule) {
+        SQL = SQLModule;
+        db = new SQL.Database();
+        updateSchema();
+        setStatus("Ready.", "ok");
+        // Run initial query
+        runSQL();
+      })
+      .catch(function (err) {
+        setStatus("Failed to load SQLite: " + err.message, "err");
+        outEl.textContent = "Error loading SQLite engine: " + err.message;
+      });
+  })();
+  </script>
+</body>
+</html>

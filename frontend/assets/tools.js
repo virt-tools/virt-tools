@@ -4746,4 +4746,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎨",
     added: "2026-07-16T23:10:00Z",
   },
+  {
+    slug: "sqlite-playground",
+    name: "SQLite Playground",
+    description: "Write and run SQL queries against an in-browser SQLite database — no server, no uploads. Powered by sql.js (SQLite compiled to WebAssembly). Create tables, insert data, run SELECTs, and see results instantly. Your database lives only in this browser tab.",
+    category: "Data",
+    icon: "🗄️",
+    added: "2026-07-16T23:20:00Z",
+  },
 ];
