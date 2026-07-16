@@ -4674,4 +4674,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🖼️",
     added: "2026-07-16T19:00:00Z",
   },
+  {
+    slug: "fixed-width-converter",
+    name: "Fixed-Width ⇄ CSV Converter",
+    description: "Convert between fixed-width (positional) text and CSV. Parse fixed-width files by specifying column widths or by auto-detecting field boundaries from the header line — or convert CSV to fixed-width by padding each field to the longest value in its column. Pairs with the CSV Viewer, CSV to TSV, and CSV to SQL converters. Everything runs locally in your browser.",
+    category: "Data",
+    icon: "📏",
+    added: "2026-07-16T19:30:00Z",
+  },
 ];

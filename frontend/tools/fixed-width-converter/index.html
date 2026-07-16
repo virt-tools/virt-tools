@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Fixed-Width ⇄ CSV Converter — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .layout { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
+    @media (max-width: 760px) { .layout { grid-template-columns: 1fr; } }
+    label.f { font-size:13px; opacity:.85; display:block; margin-bottom:4px; }
+    textarea { width:100%; box-sizing:border-box; min-height:180px; font-family:ui-monospace,monospace; font-size:13px; resize:vertical; background:var(--bg,#14181f); border:1px solid var(--border,#2a2f3a); border-radius:8px; color:inherit; padding:8px; }
+    .opts { display:flex; flex-wrap:wrap; gap:10px 18px; align-items:center; margin:10px 0; font-size:13px; }
+    .opts label { display:inline-flex; gap:5px; align-items:center; cursor:pointer; }
+    select, input[type="text"] { font-family:ui-monospace,monospace; font-size:13px; padding:5px 8px; border:1px solid var(--border,#2a2f3a); border-radius:6px; background:var(--bg,#14181f); color:inherit; }
+    .toolbar { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0; }
+    .stats { font-size:13px; opacity:.7; margin:6px 0; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Fixed-Width ⇄ CSV Converter</h1>
+      <p>Convert between fixed-width (positional) text and CSV. Parse fixed-width files by specifying column widths or by detecting field boundaries from a header line — or convert CSV to fixed-width by padding each field to the column width. Pairs with the CSV Viewer, CSV to TSV, and CSV to SQL converters. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="opts">
+        <label>Mode
+          <select id="mode">
+            <option value="fw2csv" selected>Fixed-width → CSV</option>
+            <option value="csv2fw">CSV → Fixed-width</option>
+          </select>
+        </label>
+        <label>Column widths (comma-sep) <input type="text" id="widths" value="10,5,15" style="width:140px;"></label>
+        <label><input type="checkbox" id="autoDetect"> auto-detect from first line</label>
+        <label><input type="checkbox" id="header" checked> first row is header</label>
+        <label>CSV delimiter
+          <select id="csvDelim">
+            <option value="," selected>comma</option>
+            <option value=";">semicolon</option>
+            <option value="\t">tab</option>
+            <option value="|">pipe</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="layout">
+        <div>
+          <label class="f" for="input">Input</label>
+          <textarea id="input" spellcheck="false" placeholder="Paste data here…">Name      Age  City          
+Alice     30   London       
+Bob       25   Paris        
+Carol     35   New York     </textarea>
+        </div>
+        <div>
+          <div class="toolbar">
+            <button id="convert">Convert</button>
+            <button id="copy" class="secondary">Copy result</button>
+          </div>
+          <div class="stats" id="stats"></div>
+          <label class="f" for="output">Output</label>
+          <textarea id="output" rows="10" readonly spellcheck="false" style="min-height:180px;"></textarea>
+        </div>
+      </div>
+      <p class="note">"Auto-detect" finds column boundaries from the first line by treating 2+ consecutive spaces as a field separator. For manual mode, specify widths like "10,5,15" — each field is that many characters wide. CSV→fixed-width pads each field with spaces to the longest value in its column. Pairs with CSV Viewer, CSV to TSV, and CSV to SQL. Runs locally.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var inputEl = document.getElementById("input");
+    var outputEl = document.getElementById("output");
+    var statsEl = document.getElementById("stats");
+
+    function parseCSV(text, delim) {
+      if (delim === "\\t") delim = "\t";
+      var rows = [], row = [], field = "", inQuotes = false;
+      for (var i = 0; i < text.length; i++) {
+        var c = text[i];
+        if (inQuotes) { if (c === '"') { if (text[i+1] === '"') { field += '"'; i++; } else inQuotes = false; } else field += c; }
+        else { if (c === '"') inQuotes = true; else if (c === delim) { row.push(field); field = ""; } else if (c === "\n") { row.push(field); if (row.length > 1 || row[0] !== "") rows.push(row); row = []; field = ""; } else if (c !== "\r") field += c; }
+      }
+      if (field !== "" || row.length) { row.push(field); if (row.length > 1 || row[0] !== "") rows.push(row); }
+      return rows;
+    }
+
+    function toCSV(rows, delim) {
+      if (delim === "\\t") delim = "\t";
+      return rows.map(function (r) {
+        return r.map(function (cell) {
+          cell = String(cell);
+          if (cell.indexOf(delim) !== -1 || cell.indexOf('"') !== -1 || cell.indexOf("\n") !== -1) return '"' + cell.replace(/"/g, '""') + '"';
+          return cell;
+        }).join(delim);
+      }).join("\n");
+    }
+
+    function detectWidths(firstLine) {
+      var widths = [];
+      var i = 0;
+      while (i < firstLine.length) {
+        // Skip non-space chars (field)
+        while (i < firstLine.length && firstLine[i] !== " ") i++;
+        // Count spaces
+        var start = i;
+        while (i < firstLine.length && firstLine[i] === " ") i++;
+        if (i > start && i < firstLine.length) widths.push({ start: start, gap: i - start });
+      }
+      // Build column boundaries from gaps
+      var bounds = [];
+      var pos = 0;
+      for (var g = 0; g < widths.length; g++) {
+        bounds.push(widths[g].start);
+      }
+      bounds.push(firstLine.length);
+      var colWidths = [];
+      for (var b = 0; b < bounds.length; b++) {
+        colWidths.push(b === 0 ? bounds[b] : bounds[b] - bounds[b-1] - (widths[b-1] ? widths[b-1].gap : 0));
+      }
+      // Simplify: just use the boundary positions to split
+      return bounds.map(function (b, i) { return i === 0 ? b : b - bounds[i-1]; });
+    }
+
+    function fw2csv(text, widths, autoDetect, hasHeader, csvDelim) {
+      var lines = text.split("\n").filter(function (l) { return l.trim() !== ""; });
+      if (!lines.length) return "";
+      if (autoDetect) widths = detectWidths(lines[0]);
+      var rows = lines.map(function (line) {
+        var row = [], pos = 0;
+        for (var i = 0; i < widths.length; i++) {
+          var w = widths[i];
+          row.push(line.substr(pos, w).trim());
+          pos += w;
+        }
+        return row;
+      });
+      return toCSV(rows, csvDelim);
+    }
+
+    function csv2fw(text, hasHeader, csvDelim) {
+      var rows = parseCSV(text, csvDelim);
+      if (!rows.length) return "";
+      var maxCols = rows.reduce(function (m, r) { return Math.max(m, r.length); }, 0);
+      var colWidths = [];
+      for (var c = 0; c < maxCols; c++) {
+        var w = 0;
+        rows.forEach(function (r) { w = Math.max(w, (r[c] || "").length); });
+        colWidths.push(w + 2);
+      }
+      return rows.map(function (r) {
+        var line = "";
+        for (var c = 0; c < maxCols; c++) {
+          line += (r[c] || "").padEnd(colWidths[c]);
+        }
+        return line;
+      }).join("\n");
+    }
+
+    function convert() {
+      var text = inputEl.value;
+      if (!text.trim()) { outputEl.value = ""; statsEl.textContent = ""; return; }
+      var mode = document.getElementById("mode").value;
+      var widthsStr = document.getElementById("widths").value.trim();
+      var autoDetect = document.getElementById("autoDetect").checked;
+      var hasHeader = document.getElementById("header").checked;
+      var csvDelim = document.getElementById("csvDelim").value;
+      var widths = widthsStr.split(",").map(function (w) { return parseInt(w.trim(), 10) || 0; }).filter(function (w) { return w > 0; });
+
+      if (mode === "fw2csv") {
+        outputEl.value = fw2csv(text, widths, autoDetect, hasHeader, csvDelim);
+      } else {
+        outputEl.value = csv2fw(text, hasHeader, csvDelim);
+      }
+      var outLines = outputEl.value.split("\n");
+      statsEl.textContent = "Converted " + outLines.length + " row" + (outLines.length !== 1 ? "s" : "") + ".";
+    }
+
+    document.getElementById("convert").addEventListener("click", convert);
+    [inputEl, "mode","widths","autoDetect","header","csvDelim"].forEach(function (id) {
+      var el = typeof id === "string" ? document.getElementById(id) : id;
+      el.addEventListener("change", convert);
+      el.addEventListener("input", convert);
+    });
+
+    document.getElementById("copy").addEventListener("click", function () {
+      outputEl.select();
+      try { document.execCommand("copy"); var b = document.getElementById("copy"); var t = b.textContent; b.textContent = "Copied!"; setTimeout(function(){ b.textContent = t; }, 1200); } catch(e){}
+    });
+
+    convert();
+  })();
+  </script>
+</body>
+</html>
