@@ -4402,4 +4402,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎚️",
     added: "2026-07-16T02:00:00Z",
   },
+  {
+    slug: "css-flexbox-generator",
+    name: "CSS Flexbox Generator",
+    description: "Build a CSS flexbox layout visually and copy the generated CSS. Set the container's flex-direction, flex-wrap, justify-content, align-items, align-content, gap, and padding; control each item's flex-grow, flex-shrink, flex-basis, align-self, and order. Live preview, add/remove items. Pairs with the CSS Grid Generator. Everything runs locally in your browser.",
+    category: "Design",
+    icon: "📦",
+    added: "2026-07-16T02:30:00Z",
+  },
 ];
