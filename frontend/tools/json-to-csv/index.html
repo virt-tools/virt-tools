@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>JSON to CSV Converter — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    label { font-size:13px; opacity:.8; display:block; margin-bottom:4px; }
+    textarea { width:100%; font-family:monospace; font-size:12px; min-height:160px; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:10px 0; }
+    .row label { display:inline-flex; align-items:center; gap:4px; }
+    .out { width:100%; font-family:monospace; font-size:12px; min-height:160px; white-space:pre; overflow:auto; }
+    .err { color:var(--bad,#f87171); font-size:13px; margin:6px 0; min-height:1em; }
+    .stats { font-size:13px; opacity:.7; margin-top:8px; }
+    .toolbar { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>JSON to CSV Converter</h1>
+      <p>Convert a JSON array of objects (or a single object) into CSV. Collects every key across all rows to form the header, flattens nested objects using dot notation, and escapes values that contain commas, quotes, or newlines. Choose the output delimiter, whether to include the header row, and how to handle missing keys. Everything runs locally in your browser — no data leaves your machine.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="json">JSON input</label>
+        <textarea id="json" spellcheck="false" autocomplete="off" placeholder='[{"name":"Ada","city":"London"},{"name":"Lin","city":"Tokyo"}]'>[
+  { "name": "Ada Lovelace", "city": "London", "born": 1815, "alive": false },
+  { "name": "Linus Torvalds", "city": "Helsinki", "born": 1969, "alive": true, "role": "engineer" },
+  { "name": "Grace Hopper", "city": "New York", "born": 1906, "alive": false, "skills": ["COBOL","math"] }
+]</textarea>
+      </div>
+      <div class="row">
+        <label>Delimiter: <select id="delim"><option value=",">comma</option><option value=";">semicolon</option><option value="\t">tab</option><option value="|">pipe</option></select></label>
+        <label><input type="checkbox" id="header" checked> Header row</label>
+        <label><input type="checkbox" id="flatten" checked> Flatten nested (dot notation)</label>
+        <label><input type="checkbox" id="arrays" > Arrays as JSON</label>
+      </div>
+      <div class="toolbar">
+        <button id="convert" class="primary">Convert</button>
+        <button id="copy" class="secondary">Copy CSV</button>
+        <button id="clear" class="secondary">Clear</button>
+      </div>
+      <div class="err" id="err"></div>
+      <div class="field">
+        <label for="csv">CSV output</label>
+        <textarea id="csv" class="out" readonly spellcheck="false"></textarea>
+      </div>
+      <div class="stats" id="stats"></div>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var $json = document.getElementById("json");
+    var $csv  = document.getElementById("csv");
+    var $err  = document.getElementById("err");
+    var $stats= document.getElementById("stats");
+
+    function esc(v, delim) {
+      var s = String(v);
+      var need = s.indexOf(delim) >= 0 || s.indexOf('"') >= 0 || s.indexOf("\n") >= 0 || s.indexOf("\r") >= 0;
+      if (need) s = '"' + s.replace(/"/g, '""') + '"';
+      return s;
+    }
+
+    function realDelim() {
+      var d = document.getElementById("delim").value;
+      return d === "\\t" ? "\t" : d;
+    }
+
+    function flatten(obj, prefix, into, flattenOn, arrayAsJson) {
+      for (var k in obj) {
+        if (!Object.prototype.hasOwnProperty.call(obj, k)) continue;
+        var key = prefix ? prefix + "." + k : k;
+        var val = obj[k];
+        if (val && typeof val === "object" && !Array.isArray(val) && flattenOn) {
+          flatten(val, key, into, flattenOn, arrayAsJson);
+        } else if (Array.isArray(val) && arrayAsJson) {
+          into[key] = JSON.stringify(val);
+        } else if (Array.isArray(val) && flattenOn) {
+          into[key] = val.join(", ");
+        } else if (val && typeof val === "object") {
+          into[key] = arrayAsJson ? JSON.stringify(val) : String(val);
+        } else if (val === null || val === undefined) {
+          into[key] = "";
+        } else {
+          into[key] = val;
+        }
+      }
+    }
+
+    function convert() {
+      $err.textContent = "";
+      var raw = $json.value.trim();
+      if (!raw) { $csv.value = ""; $stats.textContent = ""; return; }
+      var data;
+      try { data = JSON.parse(raw); }
+      catch (e) { $err.textContent = "Invalid JSON: " + e.message; return; }
+
+      if (!Array.isArray(data)) data = [data];
+
+      var flattenOn = document.getElementById("flatten").checked;
+      var arrayAsJson = document.getElementById("arrays").checked;
+      var wantHeader = document.getElementById("header").checked;
+      var delim = realDelim();
+
+      var rows = [];
+      var keys = [];
+      var keySet = {};
+      for (var i = 0; i < data.length; i++) {
+        var flat = {};
+        flatten(data[i], "", flat, flattenOn, arrayAsJson);
+        for (var kk in flat) if (!keySet[kk]) { keySet[kk] = 1; keys.push(kk); }
+        rows.push(flat);
+      }
+
+      var lines = [];
+      if (wantHeader) {
+        lines.push(keys.map(function (k) { return esc(k, delim); }).join(delim));
+      }
+      for (var r = 0; r < rows.length; r++) {
+        var row = rows[r];
+        lines.push(keys.map(function (k) {
+          var v = row[k];
+          if (v === undefined || v === null) return "";
+          return esc(v, delim);
+        }).join(delim));
+      }
+      $csv.value = lines.join("\n");
+      $stats.textContent = rows.length + " row" + (rows.length === 1 ? "" : "s") + ", " + keys.length + " column" + (keys.length === 1 ? "" : "s") + ".";
+    }
+
+    document.getElementById("convert").addEventListener("click", convert);
+    document.getElementById("delim").addEventListener("change", convert);
+    document.getElementById("header").addEventListener("change", convert);
+    document.getElementById("flatten").addEventListener("change", convert);
+    document.getElementById("arrays").addEventListener("change", convert);
+
+    document.getElementById("copy").addEventListener("click", function () {
+      var t = $csv.value;
+      if (!t) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(t).then(function () {
+          var b = document.getElementById("copy"); var x = b.textContent; b.textContent = "Copied!";
+          setTimeout(function () { b.textContent = x; }, 1200);
+        });
+      } else {
+        $csv.select(); document.execCommand("copy");
+      }
+    });
+
+    document.getElementById("clear").addEventListener("click", function () {
+      $json.value = ""; $csv.value = ""; $err.textContent = ""; $stats.textContent = "";
+    });
+
+    convert();
+  })();
+  </script>
+</body>
+</html>

@@ -4714,4 +4714,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🧩",
     added: "2026-07-16T21:30:00Z",
   },
+  {
+    slug: "json-to-csv",
+    name: "JSON to CSV Converter",
+    description: "Convert a JSON array of objects (or a single object) into CSV. Collects every key across all rows to form the header, flattens nested objects using dot notation, and escapes values containing commas, quotes, or newlines. Choose output delimiter, header row, and array handling. Everything runs locally in your browser.",
+    category: "Data",
+    icon: "🔁",
+    added: "2026-07-16T22:00:00Z",
+  },
 ];
