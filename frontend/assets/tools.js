@@ -4626,4 +4626,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📊",
     added: "2026-07-16T16:00:00Z",
   },
+  {
+    slug: "css-scroll-snap",
+    name: "CSS Scroll Snap Generator",
+    description: "Build CSS scroll-snap layouts with a live scrollable preview. Set the container's snap-type (mandatory/proximity, x/y/both), item snap-align (start/center/end/none), snap-stop, scroll-padding, and item width. Copy the ready-to-paste CSS. Pairs with the CSS Grid and Flexbox generators. Everything runs locally in your browser.",
+    category: "Design",
+    icon: "📜",
+    added: "2026-07-16T16:30:00Z",
+  },
 ];
