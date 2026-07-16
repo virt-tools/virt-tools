@@ -4458,4 +4458,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔁",
     added: "2026-07-16T05:30:00Z",
   },
+  {
+    slug: "conic-gradient-generator",
+    name: "Conic Gradient Generator",
+    description: "Build CSS conic-gradient() backgrounds with a live circular preview. Set the starting angle and origin, add and reorder color stops, toggle repeating mode, and switch between circular and square preview. Copy the ready-to-paste CSS. Pairs with the CSS Gradient and Border Radius generators. Everything runs locally in your browser.",
+    category: "Design",
+    icon: "🌈",
+    added: "2026-07-16T06:00:00Z",
+  },
 ];
