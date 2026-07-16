@@ -4762,4 +4762,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📝",
     added: "2026-07-16T23:30:00Z",
   },
+  {
+    slug: "invoice-generator",
+    name: "Invoice Generator",
+    description: "Create professional invoices with line items, tax, discounts, and multiple currencies. Live preview, print to PDF, or download as HTML. Everything stays in your browser.",
+    category: "Finance",
+    icon: "🧾",
+    added: "2026-07-16T23:40:00Z",
+  },
 ];
