@@ -4378,4 +4378,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔀",
     added: "2026-07-16T00:30:00Z",
   },
+  {
+    slug: "json-merge",
+    name: "JSON Merger",
+    description: "Deep-merge two or more JSON documents into one. Objects merge key-by-key (later documents win on conflicts); arrays replace, concatenate, or merge by index. Optional key sorting and null-keep. Pairs with the JSON Formatter, JSON Flatten, JSON Sort, and JSON Diff tools. Everything runs locally in your browser; nothing is uploaded.",
+    category: "Data",
+    icon: "🔗",
+    added: "2026-07-16T01:00:00Z",
+  },
 ];
