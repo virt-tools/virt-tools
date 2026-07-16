@@ -4434,4 +4434,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📍",
     added: "2026-07-16T04:00:00Z",
   },
+  {
+    slug: "braille-art-generator",
+    name: "Braille Art Generator",
+    description: "Turn an image into Unicode braille art — each 2×4 pixel block becomes a single braille character (U+2800–U+28FF), producing a high-resolution text rendering. Pick a threshold, dither, or density mode, set the output width, and flip light/dark for the background. Copy or download the result. Pairs with the ASCII Art generator. Everything runs locally; nothing is uploaded.",
+    category: "Image",
+    icon: "⠿",
+    added: "2026-07-16T04:30:00Z",
+  },
 ];

@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Braille ASCII Art Generator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    textarea { width:100%; box-sizing:border-box; font-family:ui-monospace,"Cascadia Mono",Consolas,monospace; }
+    #out { white-space:pre; overflow:auto; line-height:1.0; font-size:12px; }
+    .opts { display:flex; flex-wrap:wrap; gap:10px 16px; align-items:flex-end; margin:8px 0; }
+    .opts label { font-size:13px; }
+    input[type="number"] { width:80px; font-family:ui-monospace,monospace; font-size:13px; padding:4px 6px; border:1px solid var(--border,#2a2f3a); border-radius:6px; background:var(--bg,#14181f); color:inherit; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Braille Art Generator</h1>
+      <p>Turn an image into Unicode braille art — each 2×4 pixel block becomes a single braille character (U+2800…U+28FF), producing a high-resolution text rendering. Pick a threshold (or dither), set the output width, and flip light/dark for the background. Copy or download the result. The image is read with FileReader and drawn to a local canvas — nothing is uploaded, and no network requests are made. Pairs with the ASCII Art generator.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="file">Image</label>
+        <div id="drop" class="dropzone">
+          <input type="file" id="file" accept="image/*" hidden>
+          <p class="dropzone-hint">Click to choose, or drag &amp; drop an image here</p>
+          <p class="dropzone-name" id="drop-name" hidden></p>
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="opts">
+        <div>
+          <label for="cols">Output width (columns)</label>
+          <input type="number" id="cols" value="100" min="8" max="400" step="1">
+        </div>
+        <div>
+          <label for="threshold">Threshold (0–255)</label>
+          <input type="number" id="threshold" value="128" min="0" max="255" step="1">
+        </div>
+        <div>
+          <label for="mode">Mode</label>
+          <select id="mode">
+            <option value="threshold" selected>Threshold</option>
+            <option value="dither">Dither</option>
+            <option value="density">Density (4-level)</option>
+          </select>
+        </div>
+        <label class="check"><input type="checkbox" id="invert"> invert (for light backgrounds)</label>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="row" style="justify-content:space-between; align-items:center;">
+        <label>Braille output</label>
+        <span>
+          <button id="copy" class="secondary" style="padding:4px 10px;">Copy</button>
+          <button id="dl" class="secondary" style="padding:4px 10px;">Download .txt</button>
+        </span>
+      </div>
+      <textarea id="out" rows="20" readonly spellcheck="false" placeholder="Braille art will appear here…"></textarea>
+      <p class="note" id="info"></p>
+      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var fileEl = document.getElementById("file");
+    var drop = document.getElementById("drop");
+    var dropName = document.getElementById("drop-name");
+    var colsEl = document.getElementById("cols");
+    var thresholdEl = document.getElementById("threshold");
+    var modeEl = document.getElementById("mode");
+    var invertEl = document.getElementById("invert");
+    var out = document.getElementById("out");
+    var info = document.getElementById("info");
+    var err = document.getElementById("err");
+    var copyBtn = document.getElementById("copy");
+    var dlBtn = document.getElementById("dl");
+
+    var lastImage = null;
+
+    // Braille dot bit offsets within a 2-wide × 4-tall cell.
+    // Braille Unicode base is U+2800. Dots numbered 1–8 with bits:
+    // 1(0x01) 4(0x08)  top row    [left, right]
+    // 2(0x02) 5(0x10)
+    // 3(0x04) 6(0x20)
+    // 7(0x40) 8(0x80)  bottom row
+    // In a 2×4 cell, pixel positions map to dots:
+    var dotBits = [
+      [0x01, 0x08], // row 0: dot1, dot4
+      [0x02, 0x10], // row 1: dot2, dot5
+      [0x04, 0x20], // row 2: dot3, dot6
+      [0x40, 0x80]  // row 3: dot7, dot8
+    ];
+
+    function brailleFromRgba(data, w, h, cols, threshold, mode, invert) {
+      cols = Math.max(1, Math.floor(cols));
+      var xstep = w / cols;
+      // Each braille char is 2 wide × 4 tall, so rows = h / (xstep * 4 / 2) = h / (2*xstep)
+      var rows = Math.max(1, Math.round(h / (xstep * 2)));
+      var ystep = h / rows;
+      // Each cell covers 2 px wide, 4 px tall
+      var lines = [];
+
+      for (var r = 0; r < rows; r++) {
+        var line = "";
+        for (var c = 0; c < cols; c++) {
+          // Average 2×4 block
+          var blockW = Math.max(1, Math.floor(xstep));
+          var blockH = Math.max(1, Math.floor(ystep / 4));
+          var lumVals = [];
+          for (var by = 0; by < 4; by++) {
+            for (var bx = 0; bx < 2; bx++) {
+              // Average the sub-region for this dot
+              var px0 = Math.floor(c * xstep + bx * xstep / 2);
+              var py0 = Math.floor(r * ystep + by * ystep / 4);
+              var px1 = Math.floor(c * xstep + (bx + 1) * xstep / 2);
+              var py1 = Math.floor(r * ystep + (by + 1) * ystep / 4);
+              if (px1 <= px0) px1 = px0 + 1;
+              if (py1 <= py0) py1 = py0 + 1;
+              if (px1 > w) px1 = w;
+              if (py1 > h) py1 = h;
+              var sum = 0, n = 0;
+              for (var yy = py0; yy < py1; yy++) {
+                for (var xx = px0; xx < px1; xx++) {
+                  var i = (yy * w + xx) * 4;
+                  sum += 0.2126 * data[i] + 0.7152 * data[i+1] + 0.0722 * data[i+2];
+                  n++;
+                }
+              }
+              lumVals.push(n > 0 ? sum / n : 0);
+            }
+          }
+
+          // Build braille char
+          if (mode === "threshold" || mode === "dither") {
+            var bits = 0;
+            for (var dy = 0; dy < 4; dy++) {
+              for (var dx = 0; dx < 2; dx++) {
+                var lum = lumVals[dy * 2 + dx];
+                var on;
+                if (mode === "dither") {
+                  // Simple ordered dither per-dot
+                  var thresh = threshold + ((dx * 17 + dy * 31) % 32) - 16;
+                  on = invert ? (lum > thresh) : (lum < thresh);
+                } else {
+                  on = invert ? (lum > threshold) : (lum < threshold);
+                }
+                if (on) bits |= dotBits[dy][dx];
+              }
+            }
+            line += String.fromCharCode(0x2800 + bits);
+          } else if (mode === "density") {
+            // 4-level: full dot, half density (checker), sparse, none
+            var bits2 = 0;
+            for (var d2 = 0; d2 < 4; d2++) {
+              for (var d3 = 0; d3 < 2; d3++) {
+                var l2 = lumVals[d2 * 2 + d3];
+                var level = l2 < 64 ? 3 : l2 < 128 ? 2 : l2 < 192 ? 1 : 0;
+                if (invert) level = 4 - level;
+                if (level >= 3) bits2 |= dotBits[d2][d3];
+                else if (level === 2 && ((d2 + d3) % 2 === 0)) bits2 |= dotBits[d2][d3];
+                else if (level === 1 && (d2 === 0 && d3 === 0)) bits2 |= dotBits[d2][d3];
+              }
+            }
+            line += String.fromCharCode(0x2800 + bits2);
+          }
+        }
+        lines.push(line);
+      }
+      return lines.join("\n");
+    }
+
+    function process() {
+      if (!lastImage) return;
+      err.hidden = true;
+      try {
+        var cols = parseInt(colsEl.value, 10) || 100;
+        if (cols < 8) cols = 8;
+        if (cols > 400) cols = 400;
+        var threshold = parseInt(thresholdEl.value, 10) || 128;
+        var mode = modeEl.value;
+        var invert = invertEl.checked;
+
+        var canvas = document.createElement("canvas");
+        var ctx = canvas.getContext("2d");
+        // Downscale image to cols * 2 pixels wide
+        var targetW = cols * 2;
+        var scale = targetW / lastImage.naturalWidth;
+        var targetH = Math.round(lastImage.naturalHeight * scale);
+        // Round height to multiple of 4
+        targetH = Math.max(4, Math.ceil(targetH / 4) * 4);
+        canvas.width = targetW;
+        canvas.height = targetH;
+        ctx.drawImage(lastImage, 0, 0, targetW, targetH);
+        var imgData = ctx.getImageData(0, 0, targetW, targetH);
+        var result = brailleFromRgba(imgData.data, targetW, targetH, cols, threshold, mode, invert);
+        out.value = result;
+        var outRows = result.split("\n").length;
+        out.rows = Math.min(30, Math.max(5, outRows));
+        info.textContent = "Output: " + cols + " cols × " + outRows + " rows. Image processed locally.";
+      } catch (e) {
+        err.hidden = false;
+        err.textContent = "Error: " + e.message;
+      }
+    }
+
+    function loadFile(file) {
+      if (!file || !file.type.startsWith("image/")) return;
+      var reader = new FileReader();
+      reader.onload = function (e) {
+        var img = new Image();
+        img.onload = function () {
+          lastImage = img;
+          dropName.textContent = file.name;
+          dropName.hidden = false;
+          process();
+        };
+        img.onerror = function () { err.hidden = false; err.textContent = "Could not load image."; };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    fileEl.addEventListener("change", function (e) { loadFile(e.target.files[0]); });
+    drop.addEventListener("click", function () { fileEl.click(); });
+    drop.addEventListener("dragover", function (e) { e.preventDefault(); drop.classList.add("drag"); });
+    drop.addEventListener("dragleave", function () { drop.classList.remove("drag"); });
+    drop.addEventListener("drop", function (e) {
+      e.preventDefault(); drop.classList.remove("drag");
+      if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+    });
+
+    [colsEl, thresholdEl, modeEl, invertEl].forEach(function (el) {
+      el.addEventListener("input", process);
+      el.addEventListener("change", process);
+    });
+
+    copyBtn.addEventListener("click", function () {
+      out.select();
+      try { document.execCommand("copy"); copyBtn.textContent = "Copied!";
+        setTimeout(function(){ copyBtn.textContent = "Copy"; }, 1200);
+      } catch (e) {}
+    });
+
+    dlBtn.addEventListener("click", function () {
+      var blob = new Blob([out.value], {type:"text/plain;charset=utf-8"});
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "braille-art.txt";
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+  })();
+  </script>
+</body>
+</html>
