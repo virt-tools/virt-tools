@@ -4386,4 +4386,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔗",
     added: "2026-07-16T01:00:00Z",
   },
+  {
+    slug: "fancy-text-styler",
+    name: "Fancy Unicode Text Styler",
+    description: "Convert plain text into 15 Unicode font variants — bold, italic, bold-italic, script, bold-script, fraktur, double-struck, monospace, sans-serif, sans-bold, sans-italic, circled, squared, fullwidth, and small-caps. The output is real Unicode text you can paste anywhere — social media, chat, documents. Unsupported characters pass through unchanged. Pairs with the Case Converter. Everything runs locally in your browser.",
+    category: "Text",
+    icon: "✨",
+    added: "2026-07-16T01:30:00Z",
+  },
 ];
