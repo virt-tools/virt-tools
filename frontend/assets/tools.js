@@ -4370,4 +4370,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🛤️",
     added: "2026-07-15T21:14:00Z",
   },
+  {
+    slug: "text-shuffler",
+    name: "Text Shuffler & Scrambler",
+    description: "Shuffle or scramble text six ways — shuffle words within each line, shuffle lines, shuffle all characters, shuffle characters within each word, scramble each word into a typoglycemic anagram (keep first and last letter, jumble the middle), and apply random case. Optional numeric or text seed for reproducible output. Pairs with the Text Reverser and Case Converter. Runs locally in your browser.",
+    category: "Text",
+    icon: "🔀",
+    added: "2026-07-16T00:30:00Z",
+  },
 ];

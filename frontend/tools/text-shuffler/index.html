@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Text Shuffler &amp; Scrambler — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .opts { display:flex; flex-wrap:wrap; gap:10px 18px; align-items:center; margin:10px 0; font-size:13px; }
+    .opts label { display:inline-flex; gap:5px; align-items:center; cursor:pointer; }
+    .btns { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0; }
+    textarea { width:100%; box-sizing:border-box; min-height:130px; font-family:ui-monospace,monospace; font-size:13px; resize:vertical; background:var(--bg,#14181f); border:1px solid var(--border,#2a2f3a); border-radius:8px; color:inherit; padding:8px; }
+    .out { width:100%; box-sizing:border-box; min-height:130px; font-family:ui-monospace,monospace; font-size:13px; white-space:pre-wrap; word-break:break-word; background:var(--bg,#14181f); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:8px; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Text Shuffler &amp; Scrambler</h1>
+      <p>Shuffle or scramble text six ways — shuffle words within each line, shuffle characters across the whole text, shuffle characters within each word, scramble each word into a typoglycemic anagram (keep the first and last letter, jumble the middle — the trick that supposedly keeps text readable), shuffle lines, and apply random letter case. Optional numeric seed for reproducible output. Pairs with the Text Reverser and Case Converter. Runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label for="in">Input</label>
+        <textarea id="in" placeholder="Type or paste text…">According to a researcher at Cambridge University, it doesn't matter in what order the letters in a word are, the only important thing is that the first and last letter be at the right place.</textarea>
+      </div>
+
+      <div class="opts">
+        <label>Seed <input type="text" id="seed" placeholder="(none)" style="width:90px;font-family:ui-monospace,monospace;font-size:12px;padding:4px 6px;border:1px solid var(--border,#2a2f3a);border-radius:6px;background:var(--bg,#14181f);color:inherit;"></label>
+        <label><input type="checkbox" id="keepPunct" checked> keep punctuation attached</label>
+        <label><input type="checkbox" id="keepCase"> preserve original case</label>
+      </div>
+
+      <div class="btns">
+        <button id="shufWords">Shuffle words</button>
+        <button id="shufLines" class="secondary">Shuffle lines</button>
+        <button id="shufCharsAll" class="secondary">Shuffle all chars</button>
+        <button id="shufWordChars" class="secondary">Shuffle chars in each word</button>
+        <button id="scramble" class="secondary">Scramble words (typoglycemia)</button>
+        <button id="randCase" class="secondary">Random case</button>
+        <button id="clear" class="secondary">Clear</button>
+      </div>
+
+      <div class="row" style="justify-content:space-between;">
+        <label for="out">Output</label>
+        <button id="copy" class="secondary" style="padding:4px 10px;">Copy</button>
+      </div>
+      <div class="out" id="out"></div>
+      <p class="note" id="note">Each button applies to the current input. The optional seed makes a shuffle reproducible — the same seed and input always produce the same output. Runs locally.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var inp = document.getElementById("in");
+    var out = document.getElementById("out");
+    var seedEl = document.getElementById("seed");
+    var keepPunctEl = document.getElementById("keepPunct");
+    var keepCaseEl = document.getElementById("keepCase");
+
+    // Seedable PRNG (mulberry32) — deterministic when a seed is given.
+    function makeRng(seed) {
+      if (seed === "" || seed == null) return Math.random;
+      var s = hashStr(String(seed));
+      return function () {
+        s |= 0; s = s + 0x6D2B79F5 | 0;
+        var t = Math.imul(s ^ s >>> 15, 1 | s);
+        t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+      };
+    }
+    function hashStr(str) {
+      var h = 1779033703 ^ str.length;
+      for (var i = 0; i < str.length; i++) {
+        h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
+        h = h << 13 | h >>> 19;
+      }
+      return h;
+    }
+    function shuffle(arr, rng) {
+      for (var i = arr.length - 1; i > 0; i--) {
+        var j = Math.floor(rng() * (i + 1));
+        var t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+      }
+      return arr;
+    }
+
+    function setOut(text) { out.textContent = text; }
+
+    function splitKeepPunct(word) {
+      // Return [core, leadingPunct, trailingPunct]
+      var m = word.match(/^([^A-Za-z0-9]*)([A-Za-z0-9]+)([^A-Za-z0-9]*)$/);
+      if (m) return [m[2], m[1], m[3]];
+      return [word, "", ""];
+    }
+
+    function scrambleWord(word, rng) {
+      var parts = splitKeepPunct(word);
+      var core = parts[0];
+      if (core.length < 4) return word; // too short to scramble meaningfully
+      var chars = core.split("");
+      var first = chars.shift();
+      var last = chars.pop();
+      shuffle(chars, rng);
+      var mid = chars.join("");
+      var res = first + mid + last;
+      if (!keepCaseEl.checked) {
+        // leave as-is (shuffle preserves chars)
+      }
+      return parts[1] + res + parts[2];
+    }
+
+    function doShuffleWords() {
+      var rng = makeRng(seedEl.value.trim());
+      setOut(inp.value.split("\n").map(function (line) {
+        return shuffle(line.split(/(\s+)/), rng).join("");
+      }).join("\n"));
+    }
+    function doShuffleLines() {
+      var rng = makeRng(seedEl.value.trim());
+      setOut(shuffle(inp.value.split("\n"), rng).join("\n"));
+    }
+    function doShuffleCharsAll() {
+      var rng = makeRng(seedEl.value.trim());
+      var chars = Array.from(inp.value);
+      setOut(shuffle(chars, rng).join(""));
+    }
+    function doShuffleWordChars() {
+      var rng = makeRng(seedEl.value.trim());
+      setOut(inp.value.split("\n").map(function (line) {
+        return line.split(/(\s+)/).map(function (tok) {
+          if (/^\s+$/.test(tok)) return tok;
+          if (keepPunctEl.checked) {
+            var parts = splitKeepPunct(tok);
+            return parts[1] + shuffle(parts[0].split(""), rng).join("") + parts[2];
+          }
+          return shuffle(tok.split(""), rng).join("");
+        }).join("");
+      }).join("\n"));
+    }
+    function doScramble() {
+      var rng = makeRng(seedEl.value.trim());
+      setOut(inp.value.split("\n").map(function (line) {
+        return line.split(/(\s+)/).map(function (tok) {
+          if (/^\s+$/.test(tok)) return tok;
+          return scrambleWord(tok, rng);
+        }).join("");
+      }).join("\n"));
+    }
+    function doRandCase() {
+      var rng = makeRng(seedEl.value.trim());
+      setOut(inp.value.split("").map(function (c) {
+        if (!/[a-zA-Z]/.test(c)) return c;
+        return rng() < 0.5 ? c.toLowerCase() : c.toUpperCase();
+      }).join(""));
+    }
+
+    document.getElementById("shufWords").addEventListener("click", doShuffleWords);
+    document.getElementById("shufLines").addEventListener("click", doShuffleLines);
+    document.getElementById("shufCharsAll").addEventListener("click", doShuffleCharsAll);
+    document.getElementById("shufWordChars").addEventListener("click", doShuffleWordChars);
+    document.getElementById("scramble").addEventListener("click", doScramble);
+    document.getElementById("randCase").addEventListener("click", doRandCase);
+    document.getElementById("clear").addEventListener("click", function () { inp.value = ""; setOut(""); });
+
+    document.getElementById("copy").addEventListener("click", function () {
+      var text = out.textContent;
+      if (!text) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () {
+          var b = document.getElementById("copy"); var t = b.textContent; b.textContent = "Copied!";
+          setTimeout(function(){ b.textContent = t; }, 1200);
+        });
+      }
+    });
+
+    doScramble();
+  })();
+  </script>
+</body>
+</html>
