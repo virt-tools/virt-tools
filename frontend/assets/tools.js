@@ -4514,4 +4514,12 @@ window.VIRTUAL_TOOLS = [
     icon: "↕️",
     added: "2026-07-16T09:00:00Z",
   },
+  {
+    slug: "image-pixelate",
+    name: "Image Pixelator",
+    description: "Pixelate an image to create chunky, retro-style pixels. Set the pixel block size and optionally reduce the color palette (1-bit, Game Boy, PICO-8, NES, CGA, EGA, 4/16 grays) for an 8-bit look. Adjust output scale to export small pixel art at usable sizes. Side-by-side preview, download as PNG. Pairs with the Image Dithering and ASCII Art tools. Everything runs locally on a canvas; nothing is uploaded.",
+    category: "Image",
+    icon: "🟫",
+    added: "2026-07-16T09:30:00Z",
+  },
 ];

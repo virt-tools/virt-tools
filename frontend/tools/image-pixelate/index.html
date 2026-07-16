@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Image Pixelator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .layout { display:grid; grid-template-columns: 1fr 1fr; gap:14px; }
+    @media (max-width: 720px) { .layout { grid-template-columns: 1fr; } }
+    .field { margin-bottom:10px; }
+    .field label { font-size:.72rem; text-transform:uppercase; letter-spacing:.04em; opacity:.7; display:block; margin-bottom:3px; }
+    .opts { display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:10px; margin-bottom:10px; }
+    .opts label { font-size:12px; opacity:.8; display:block; margin-bottom:3px; }
+    .opts input[type="range"] { width:100%; }
+    .opts .v { font-family:ui-monospace,monospace; font-size:11px; opacity:.6; text-align:right; }
+    .dropzone { border:2px dashed var(--border,#2a2f3a); border-radius:10px; padding:24px; text-align:center; cursor:pointer; }
+    .dropzone:hover, .dropzone.drag { border-color: var(--accent,#6ea8fe); }
+    .dropzone-hint { opacity:.6; margin:0; font-size:14px; }
+    .dropzone-name { margin:6px 0 0; font-size:13px; font-weight:600; }
+    .canvas-wrap { text-align:center; }
+    canvas { max-width:100%; border:1px solid var(--border,#2a2f3a); border-radius:8px; image-rendering:pixelated; image-rendering:crisp-edges; }
+    .toolbar { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0; }
+    .check { font-size:13px; display:inline-flex; gap:4px; align-items:center; cursor:pointer; }
+    select { font-family:ui-monospace,monospace; font-size:13px; padding:5px 8px; border:1px solid var(--border,#2a2f3a); border-radius:6px; background:var(--bg,#14181f); color:inherit; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Image Pixelator</h1>
+      <p>Pixelate an image to create chunky, retro-style pixels. Set the pixel block size and optionally reduce the color palette for an 8-bit look. Choose from preset palettes (Game Boy, PICO-8, NES, CGA) or keep the original colors — just blocky. Adjust the pixel grid, then download as PNG. The image is processed on a local canvas — nothing is uploaded. Pairs with the Image Dithering and ASCII Art tools.</p>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label>Image</label>
+        <div id="drop" class="dropzone">
+          <input type="file" id="file" accept="image/*" hidden>
+          <p class="dropzone-hint">Click to choose, or drag &amp; drop an image here</p>
+          <p class="dropzone-name" id="drop-name" hidden></p>
+        </div>
+      </div>
+
+      <div class="opts">
+        <div>
+          <label for="blockSize">Pixel block size <span class="v" id="blockSizeV">8px</span></label>
+          <input type="range" id="blockSize" min="1" max="40" value="8">
+        </div>
+        <div>
+          <label for="palette">Color palette</label>
+          <select id="palette">
+            <option value="none" selected>Original colors</option>
+            <option value="bw">1-bit Black &amp; White</option>
+            <option value="gameboy">Game Boy (4)</option>
+            <option value="pico8">PICO-8 (16)</option>
+            <option value="nes">NES (16)</option>
+            <option value="cga">CGA (16)</option>
+            <option value="ega">EGA (16)</option>
+            <option value="gray4">4 grays</option>
+            <option value="gray16">16 grays</option>
+          </select>
+        </div>
+        <div>
+          <label for="scale">Output scale <span class="v" id="scaleV">1×</span></label>
+          <input type="range" id="scale" min="1" max="8" value="1">
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <button id="download" class="secondary">Download PNG</button>
+        <button id="reset" class="secondary">Reset</button>
+      </div>
+
+      <div class="layout">
+        <div class="canvas-wrap"><label style="font-size:.8rem;opacity:.7;">Original</label><br><canvas id="src"></canvas></div>
+        <div class="canvas-wrap"><label style="font-size:.8rem;opacity:.7;">Pixelated</label><br><canvas id="dst"></canvas></div>
+      </div>
+      <p class="note">The block size controls how chunky each pixel is — larger values make bigger blocks. The palette option quantizes each block's average color to a limited set for a retro look. Output scale upscales the result so small pixel art exports at a usable size. Pairs with Image Dithering and ASCII Art. Runs locally.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var palettes = {
+      bw: ["#000000","#ffffff"],
+      gameboy: ["#0f380f","#306230","#8bac0f","#9bbc0f"],
+      pico8: ["#000000","#1d2b53","#7e2553","#008751","#ab5236","#5f574f","#c2c3c7","#fff1e8","#ff004d","#ffa300","#ffec27","#00e436","#29adff","#83769c","#ff77a8","#ffccaa"],
+      nes: ["#7c7c7c","#0000fc","#0000bc","#4428bc","#940084","#a80020","#a81000","#881400","#503000","#007800","#006800","#005800","#004058","#000000","#bcbcbc","#0078f8"],
+      cga: ["#000000","#0000aa","#00aa00","#00aaaa","#aa0000","#aa00aa","#aa5500","#aaaaaa","#555555","#5555ff","#55ff55","#55ffff","#ff5555","#ff55ff","#ffff55","#ffffff"],
+      ega: ["#000000","#0000aa","#00aa00","#00aaaa","#aa0000","#aa00aa","#aa5500","#aaaaaa","#555555","#5555ff","#55ff55","#55ffff","#ff5555","#ff55ff","#ffff55","#ffffff"],
+      gray4: ["#000000","#555555","#aaaaaa","#ffffff"],
+      gray16: ["#000000","#111111","#222222","#333333","#444444","#555555","#666666","#777777","#888888","#999999","#aaaaaa","#bbbbbb","#cccccc","#dddddd","#eeeeee","#ffffff"]
+    };
+
+    function hexToRgb(hex) {
+      hex = hex.replace("#","");
+      if (hex.length === 3) hex = hex.split("").map(function(c){return c+c;}).join("");
+      var n = parseInt(hex,16);
+      return [(n>>16)&255,(n>>8)&255,n&255];
+    }
+
+    var paletteRGB = null;
+    function buildPalette() {
+      var key = document.getElementById("palette").value;
+      paletteRGB = key === "none" ? null : palettes[key].map(hexToRgb);
+    }
+
+    function nearest(r,g,b) {
+      var best = paletteRGB[0], bestD = Infinity;
+      for (var i = 0; i < paletteRGB.length; i++) {
+        var p = paletteRGB[i];
+        var d = (r-p[0])*(r-p[0]) + (g-p[1])*(g-p[1]) + (b-p[2])*(b-p[2]);
+        if (d < bestD) { bestD = d; best = p; }
+      }
+      return best;
+    }
+
+    var srcCanvas = document.getElementById("src");
+    var dstCanvas = document.getElementById("dst");
+    var srcImage = null;
+
+    function process() {
+      if (!srcImage) return;
+      var block = parseInt(document.getElementById("blockSize").value, 10) || 1;
+      var scale = parseInt(document.getElementById("scale").value, 10) || 1;
+      buildPalette();
+
+      var origW = srcImage.naturalWidth, origH = srcImage.naturalHeight;
+      // Downsample to block grid
+      var gridW = Math.max(1, Math.floor(origW / block));
+      var gridH = Math.max(1, Math.floor(origH / block));
+
+      srcCanvas.width = origW; srcCanvas.height = origH;
+      var sctx = srcCanvas.getContext("2d");
+      sctx.drawImage(srcImage, 0, 0, origW, origH);
+
+      // Get pixelated image by drawing at low res then scaling up
+      var tmp = document.createElement("canvas");
+      tmp.width = gridW; tmp.height = gridH;
+      var tctx = tmp.getContext("2d");
+      tctx.imageSmoothingEnabled = true;
+      tctx.drawImage(srcImage, 0, 0, gridW, gridH);
+
+      // Apply palette quantization if needed
+      if (paletteRGB) {
+        var imgData = tctx.getImageData(0, 0, gridW, gridH);
+        var data = imgData.data;
+        for (var i = 0; i < data.length; i += 4) {
+          var c = nearest(data[i], data[i+1], data[i+2]);
+          data[i] = c[0]; data[i+1] = c[1]; data[i+2] = c[2];
+        }
+        tctx.putImageData(imgData, 0, 0);
+      }
+
+      // Scale up to output
+      var outW = gridW * scale, outH = gridH * scale;
+      dstCanvas.width = outW; dstCanvas.height = outH;
+      var dctx = dstCanvas.getContext("2d");
+      dctx.imageSmoothingEnabled = false;
+      dctx.drawImage(tmp, 0, 0, gridW, gridH, 0, 0, outW, outH);
+
+      // Also draw a small original preview
+      var maxPreview = 400;
+      if (origW > maxPreview || origH > maxPreview) {
+        var s = maxPreview / Math.max(origW, origH);
+        srcCanvas.width = Math.floor(origW * s);
+        srcCanvas.height = Math.floor(origH * s);
+        sctx.drawImage(srcImage, 0, 0, srcCanvas.width, srcCanvas.height);
+      }
+    }
+
+    function loadFile(file) {
+      if (!file || !file.type.startsWith("image/")) return;
+      var reader = new FileReader();
+      reader.onload = function (e) {
+        var img = new Image();
+        img.onload = function () {
+          srcImage = img;
+          document.getElementById("drop-name").textContent = file.name;
+          document.getElementById("drop-name").hidden = false;
+          process();
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    var fileEl = document.getElementById("file");
+    var drop = document.getElementById("drop");
+    fileEl.addEventListener("change", function (e) { loadFile(e.target.files[0]); });
+    drop.addEventListener("click", function () { fileEl.click(); });
+    drop.addEventListener("dragover", function (e) { e.preventDefault(); drop.classList.add("drag"); });
+    drop.addEventListener("dragleave", function () { drop.classList.remove("drag"); });
+    drop.addEventListener("drop", function (e) {
+      e.preventDefault(); drop.classList.remove("drag");
+      if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+    });
+
+    ["blockSize","palette","scale"].forEach(function (id) {
+      var el = document.getElementById(id);
+      el.addEventListener("input", function () {
+        if (id === "blockSize") document.getElementById("blockSizeV").textContent = el.value + "px";
+        if (id === "scale") document.getElementById("scaleV").textContent = el.value + "×";
+        process();
+      });
+      el.addEventListener("change", process);
+    });
+
+    document.getElementById("download").addEventListener("click", function () {
+      dstCanvas.toBlob(function (blob) {
+        var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "pixelated.png"; a.click(); URL.revokeObjectURL(a.href);
+      }, "image/png");
+    });
+
+    document.getElementById("reset").addEventListener("click", function () {
+      document.getElementById("blockSize").value = 8;
+      document.getElementById("scale").value = 1;
+      document.getElementById("palette").value = "none";
+      document.getElementById("blockSizeV").textContent = "8px";
+      document.getElementById("scaleV").textContent = "1×";
+      process();
+    });
+  })();
+  </script>
+</body>
+</html>
