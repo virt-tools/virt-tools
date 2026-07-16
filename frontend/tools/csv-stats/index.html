@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>CSV Statistics &amp; Summary — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    label.f { font-size:13px; opacity:.85; display:block; margin-bottom:4px; }
+    textarea { width:100%; box-sizing:border-box; min-height:120px; font-family:ui-monospace,monospace; font-size:13px; resize:vertical; background:var(--bg,#14181f); border:1px solid var(--border,#2a2f3a); border-radius:8px; color:inherit; padding:8px; }
+    .opts { display:flex; flex-wrap:wrap; gap:10px 18px; align-items:center; margin:10px 0; font-size:13px; }
+    .opts label { display:inline-flex; gap:5px; align-items:center; cursor:pointer; }
+    select { font-family:ui-monospace,monospace; font-size:13px; padding:5px 8px; border:1px solid var(--border,#2a2f3a); border-radius:6px; background:var(--bg,#14181f); color:inherit; }
+    .stats-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:10px; margin:10px 0; }
+    .col-card { border:1px solid var(--border,#2a2f3a); border-radius:10px; padding:12px; background:var(--panel-2,#161a22); }
+    .col-card h4 { margin:0 0 8px; font-size:14px; }
+    .col-card .type { font-size:11px; text-transform:uppercase; letter-spacing:.04em; opacity:.5; }
+    .col-card .row { font-size:13px; display:flex; justify-content:space-between; margin:3px 0; }
+    .col-card .row .l { opacity:.6; }
+    .col-card .row .v { font-family:ui-monospace,monospace; font-weight:600; }
+    .summary { font-size:14px; margin:10px 0; }
+    .summary .stat { display:inline-block; background:var(--panel-2,#161a22); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:6px 12px; margin:4px 6px 4px 0; }
+    .summary .stat .n { font-weight:700; font-variant-numeric:tabular-nums; }
+    .summary .stat .l { font-size:11px; opacity:.6; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>CSV Statistics &amp; Summary</h1>
+      <p>Get summary statistics for every column of a CSV — count, null count, unique count, min, max, mean, median, std dev, and most frequent value. Auto-detects numeric vs string columns and the delimiter. Pairs with the CSV Viewer, CSV Filter, and Statistics Calculator. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="opts">
+        <label>Delimiter
+          <select id="delim">
+            <option value="auto" selected>auto</option>
+            <option value=",">comma</option>
+            <option value=";">semicolon</option>
+            <option value="\t">tab</option>
+            <option value="|">pipe</option>
+          </select>
+        </label>
+        <label><input type="checkbox" id="header" checked> first row is header</label>
+      </div>
+
+      <div class="field">
+        <label class="f" for="input">CSV input</label>
+        <textarea id="input" spellcheck="false" placeholder="Paste CSV here…">name,age,score,city
+Alice,30,85.5,London
+Bob,25,92.3,Paris
+Carol,35,78.9,London
+Dave,25,88.1,Berlin
+Eve,30,95.0,Paris</textarea>
+      </div>
+
+      <div class="summary" id="summary"></div>
+      <h3 style="font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;opacity:.7;font-weight:600;margin:16px 0 8px;">Per-column statistics</h3>
+      <div class="stats-grid" id="stats"></div>
+
+      <p class="note">Numeric columns get min, max, mean, median, std dev, and quartiles. String columns get count, null count, unique count, most frequent value, and shortest/longest value. Auto-sniffs the delimiter. Pairs with CSV Viewer and Statistics Calculator. Runs locally.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var inputEl = document.getElementById("input");
+    var statsEl = document.getElementById("stats");
+    var summaryEl = document.getElementById("summary");
+
+    function sniffDelim(text) {
+      var firstLine = text.split("\n")[0] || "";
+      var counts = { ",":0, ";":0, "\t":0, "|":0 };
+      for (var i = 0; i < firstLine.length; i++) { var c = firstLine[i]; if (counts[c] !== undefined) counts[c]++; }
+      var best = ",", max = 0;
+      for (var d in counts) { if (counts[d] > max) { max = counts[d]; best = d; } }
+      return best;
+    }
+
+    function parseCSV(text, delim) {
+      if (delim === "auto") delim = sniffDelim(text);
+      else if (delim === "\\t") delim = "\t";
+      var rows = [], row = [], field = "", inQuotes = false;
+      for (var i = 0; i < text.length; i++) {
+        var c = text[i];
+        if (inQuotes) { if (c === '"') { if (text[i+1] === '"') { field += '"'; i++; } else inQuotes = false; } else field += c; }
+        else { if (c === '"') inQuotes = true; else if (c === delim) { row.push(field); field = ""; } else if (c === "\n") { row.push(field); if (row.length > 1 || row[0] !== "") rows.push(row); row = []; field = ""; } else if (c !== "\r") field += c; }
+      }
+      if (field !== "" || row.length) { row.push(field); if (row.length > 1 || row[0] !== "") rows.push(row); }
+      return rows;
+    }
+
+    function isNumeric(v) { return v !== "" && v !== null && !isNaN(Number(v)) && /^-?\d+\.?\d*([eE][-+]?\d+)?$/.test(v.trim()); }
+
+    function median(arr) {
+      var s = arr.slice().sort(function(a,b){return a-b;});
+      var m = Math.floor(s.length/2);
+      return s.length % 2 ? s[m] : (s[m-1]+s[m])/2;
+    }
+    function stdDev(arr, mean) {
+      if (arr.length < 2) return 0;
+      var sum = arr.reduce(function(s,v){return s+(v-mean)*(v-mean);},0);
+      return Math.sqrt(sum/arr.length);
+    }
+    function quartile(arr, q) {
+      var s = arr.slice().sort(function(a,b){return a-b;});
+      var pos = (s.length - 1) * q;
+      var base = Math.floor(pos), rest = pos - base;
+      return s[base + 1] !== undefined ? s[base] + rest * (s[base+1] - s[base]) : s[base];
+    }
+
+    function esc(s){ return String(s).replace(/[&<>]/g,function(c){return c==="&"?"&amp;":c==="<"?"&lt;":"&gt;";}); }
+
+    function compute() {
+      var text = inputEl.value;
+      if (!text.trim()) { statsEl.innerHTML = ""; summaryEl.innerHTML = ""; return; }
+      var delim = document.getElementById("delim").value;
+      var hasHeader = document.getElementById("header").checked;
+      var rows = parseCSV(text, delim);
+      if (!rows.length) { statsEl.innerHTML = ""; summaryEl.innerHTML = ""; return; }
+      var cols = hasHeader ? rows[0] : rows[0].map(function(_,i){return "col"+(i+1);});
+      var data = hasHeader ? rows.slice(1) : rows;
+      var maxCols = rows.reduce(function(m,r){return Math.max(m,r.length);},0);
+      while (cols.length < maxCols) cols.push("col"+(cols.length+1));
+
+      var html = "";
+      cols.forEach(function (colName, ci) {
+        var values = data.map(function(r){return r[ci] !== undefined ? r[ci] : "";});
+        var nonEmpty = values.filter(function(v){return v !== "";});
+        var nullCount = values.length - nonEmpty.length;
+        var unique = {};
+        nonEmpty.forEach(function(v){ unique[v] = (unique[v]||0)+1; });
+        var uniqueCount = Object.keys(unique).length;
+        var isNum = nonEmpty.length > 0 && nonEmpty.every(isNumeric);
+
+        if (isNum) {
+          var nums = nonEmpty.map(Number);
+          var sum = nums.reduce(function(a,b){return a+b;},0);
+          var mean = sum / nums.length;
+          var med = median(nums);
+          var sd = stdDev(nums, mean);
+          var mn = Math.min.apply(null, nums);
+          var mx = Math.max.apply(null, nums);
+          var q1 = quartile(nums, 0.25);
+          var q3 = quartile(nums, 0.75);
+          html += '<div class="col-card"><h4>' + esc(colName) + ' <span class="type">numeric</span></h4>';
+          html += '<div class="row"><span class="l">count</span><span class="v">' + values.length + '</span></div>';
+          html += '<div class="row"><span class="l">nulls</span><span class="v">' + nullCount + '</span></div>';
+          html += '<div class="row"><span class="l">unique</span><span class="v">' + uniqueCount + '</span></div>';
+          html += '<div class="row"><span class="l">min</span><span class="v">' + mn.toFixed(2) + '</span></div>';
+          html += '<div class="row"><span class="l">max</span><span class="v">' + mx.toFixed(2) + '</span></div>';
+          html += '<div class="row"><span class="l">mean</span><span class="v">' + mean.toFixed(2) + '</span></div>';
+          html += '<div class="row"><span class="l">median</span><span class="v">' + med.toFixed(2) + '</span></div>';
+          html += '<div class="row"><span class="l">std dev</span><span class="v">' + sd.toFixed(2) + '</span></div>';
+          html += '<div class="row"><span class="l">Q1</span><span class="v">' + q1.toFixed(2) + '</span></div>';
+          html += '<div class="row"><span class="l">Q3</span><span class="v">' + q3.toFixed(2) + '</span></div>';
+          html += '</div>';
+        } else {
+          var mostFreq = "", mostCount = 0;
+          Object.keys(unique).forEach(function(k){ if (unique[k] > mostCount) { mostCount = unique[k]; mostFreq = k; } });
+          var shortest = nonEmpty.reduce(function(s,v){return v.length < s.length ? v : s;}, nonEmpty[0]||"");
+          var longest = nonEmpty.reduce(function(s,v){return v.length > s.length ? v : s;}, "");
+          html += '<div class="col-card"><h4>' + esc(colName) + ' <span class="type">string</span></h4>';
+          html += '<div class="row"><span class="l">count</span><span class="v">' + values.length + '</span></div>';
+          html += '<div class="row"><span class="l">nulls</span><span class="v">' + nullCount + '</span></div>';
+          html += '<div class="row"><span class="l">unique</span><span class="v">' + uniqueCount + '</span></div>';
+          html += '<div class="row"><span class="l">most frequent</span><span class="v">' + esc(mostFreq) + ' (' + mostCount + ')</span></div>';
+          html += '<div class="row"><span class="l">shortest</span><span class="v">' + esc(shortest) + ' (' + shortest.length + ')</span></div>';
+          html += '<div class="row"><span class="l">longest</span><span class="v">' + esc(longest) + ' (' + longest.length + ')</span></div>';
+          html += '</div>';
+        }
+      });
+      statsEl.innerHTML = html;
+
+      summaryEl.innerHTML =
+        '<span class="stat"><span class="n">' + data.length + '</span> <span class="l">rows</span></span>' +
+        '<span class="stat"><span class="n">' + cols.length + '</span> <span class="l">columns</span></span>' +
+        '<span class="stat"><span class="n">' + cols.filter(function(_,ci){var v=data.map(function(r){return r[ci]||"";}).filter(function(x){return x!=="";}); return v.length>0 && v.every(isNumeric);}).length + '</span> <span class="l">numeric cols</span></span>' +
+        '<span class="stat"><span class="n">' + cols.filter(function(_,ci){var v=data.map(function(r){return r[ci]||"";}).filter(function(x){return x!=="";}); return v.length>0 && !v.every(isNumeric);}).length + '</span> <span class="l">string cols</span></span>';
+    }
+
+    [inputEl, "delim", "header"].forEach(function (id) {
+      var el = typeof id === "string" ? document.getElementById(id) : id;
+      el.addEventListener("input", compute);
+      el.addEventListener("change", compute);
+    });
+
+    compute();
+  })();
+  </script>
+</body>
+</html>

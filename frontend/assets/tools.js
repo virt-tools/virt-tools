@@ -4618,4 +4618,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🖥️",
     added: "2026-07-16T15:30:00Z",
   },
+  {
+    slug: "csv-stats",
+    name: "CSV Statistics & Summary",
+    description: "Get summary statistics for every column of a CSV — count, nulls, unique count, min, max, mean, median, std dev, and quartiles for numeric columns; most frequent, shortest, and longest for string columns. Auto-detects numeric vs string types and the delimiter. Pairs with the CSV Viewer, CSV Filter, and Statistics Calculator. Everything runs locally in your browser.",
+    category: "Data",
+    icon: "📊",
+    added: "2026-07-16T16:00:00Z",
+  },
 ];
