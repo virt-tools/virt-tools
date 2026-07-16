@@ -4722,4 +4722,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔁",
     added: "2026-07-16T22:00:00Z",
   },
+  {
+    slug: "url-encode-decode",
+    name: "URL Encode / Decode",
+    description: "Encode text for safe use in URLs or decode percent-encoded strings back. Supports encodeURIComponent (component), encodeURI (full URL), and RFC 3986 (also encodes !'()*). Handles UTF-8 correctly. Everything runs locally in your browser.",
+    category: "Encoding",
+    icon: "🔗",
+    added: "2026-07-16T22:30:00Z",
+  },
 ];
