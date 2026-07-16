@@ -4410,4 +4410,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📦",
     added: "2026-07-16T02:30:00Z",
   },
+  {
+    slug: "circle-of-fifths",
+    name: "Circle of Fifths",
+    description: "An interactive Circle of Fifths — the fundamental diagram showing the 12 chromatic tones, their key signatures, and the major and minor scales built from them. Click a key to see its scale, relative minor/major, sharps or flats, diatonic chords (Roman numerals), and common cadences. Toggle major/minor emphasis. Pairs with the Key Signature, Scale Generator, and Chord Identifier tools. Runs locally in your browser.",
+    category: "Time",
+    icon: "🎡",
+    added: "2026-07-16T03:00:00Z",
+  },
 ];
