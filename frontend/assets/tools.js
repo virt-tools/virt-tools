@@ -4666,4 +4666,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔄",
     added: "2026-07-16T18:30:00Z",
   },
+  {
+    slug: "css-object-fit",
+    name: "CSS Object-Fit & Position Previewer",
+    description: "Preview how object-fit (fill, contain, cover, none, scale-down) and object-position (top, center, bottom, left, right, or custom) affect an image inside a container. Upload an image, adjust container size and fit/position, and copy the ready-to-paste CSS. Pairs with the CSS Aspect Ratio and Image Resizer tools. Everything runs locally in your browser.",
+    category: "Design",
+    icon: "🖼️",
+    added: "2026-07-16T19:00:00Z",
+  },
 ];
