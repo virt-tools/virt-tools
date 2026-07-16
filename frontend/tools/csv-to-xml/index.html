@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>CSV to XML Converter — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .layout { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
+    @media (max-width: 760px) { .layout { grid-template-columns: 1fr; } }
+    label.f { font-size:13px; opacity:.85; display:block; margin-bottom:4px; }
+    textarea { width:100%; box-sizing:border-box; min-height:200px; font-family:ui-monospace,monospace; font-size:13px; resize:vertical; background:var(--bg,#14181f); border:1px solid var(--border,#2a2f3a); border-radius:8px; color:inherit; padding:8px; }
+    .opts { display:flex; flex-wrap:wrap; gap:10px 18px; align-items:center; margin:10px 0; font-size:13px; }
+    .opts label { display:inline-flex; gap:5px; align-items:center; cursor:pointer; }
+    select, input[type="text"] { font-family:ui-monospace,monospace; font-size:13px; padding:5px 8px; border:1px solid var(--border,#2a2f3a); border-radius:6px; background:var(--bg,#14181f); color:inherit; }
+    .toolbar { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0; }
+    .stats { font-size:13px; opacity:.7; margin:6px 0; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>CSV to XML Converter</h1>
+      <p>Convert CSV data into XML. Each row becomes a child element under a root, with column names as element tags. Handles quoted fields, embedded commas and newlines, ragged rows, and XML-special character escaping. Choose the delimiter, root element name, row element name, and whether the first row is a header. Pairs with the XML Formatter and CSV to JSON. Everything runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="opts">
+        <label>Root element <input type="text" id="root" value="data"></label>
+        <label>Row element <input type="text" id="row" value="row"></label>
+        <label>Delimiter
+          <select id="delim">
+            <option value="auto" selected>auto</option>
+            <option value=",">comma</option>
+            <option value=";">semicolon</option>
+            <option value="\t">tab</option>
+            <option value="|">pipe</option>
+          </select>
+        </label>
+        <label><input type="checkbox" id="header" checked> first row is headers</label>
+        <label><input type="checkbox" id="attr"> attributes (not elements)</label>
+      </div>
+
+      <div class="layout">
+        <div>
+          <label class="f" for="input">CSV input</label>
+          <textarea id="input" spellcheck="false" placeholder="Paste CSV here…">name,age,city
+Alice,30,London
+Bob,25,Paris
+"Carol, Jr.",35,"New York, NY"</textarea>
+        </div>
+        <div>
+          <div class="toolbar">
+            <button id="copy" class="secondary">Copy XML</button>
+            <button id="download" class="secondary">Download .xml</button>
+          </div>
+          <div class="stats" id="stats"></div>
+          <label class="f" for="output">XML output</label>
+          <textarea id="output" rows="14" readonly spellcheck="false" style="min-height:300px;"></textarea>
+        </div>
+      </div>
+      <p class="note">Column names are sanitized to valid XML tag names (spaces and special chars → underscores, leading digits prefixed). Characters &amp;, &lt;, &gt;, " are escaped. Use "attributes" mode to put column values in attributes instead of child elements. Pairs with the XML Formatter and CSV to JSON. Runs locally.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var inputEl = document.getElementById("input");
+    var outputEl = document.getElementById("output");
+    var statsEl = document.getElementById("stats");
+
+    function sniffDelim(text) {
+      var firstLine = text.split("\n")[0] || "";
+      var counts = { ",":0, ";":0, "\t":0, "|":0 };
+      for (var i = 0; i < firstLine.length; i++) { var c = firstLine[i]; if (counts[c] !== undefined) counts[c]++; }
+      var best = ",", max = 0;
+      for (var d in counts) { if (counts[d] > max) { max = counts[d]; best = d; } }
+      return best;
+    }
+
+    function parseCSV(text, delim) {
+      if (delim === "auto") delim = sniffDelim(text);
+      else if (delim === "\\t") delim = "\t";
+      var rows = [], row = [], field = "", inQuotes = false;
+      for (var i = 0; i < text.length; i++) {
+        var c = text[i];
+        if (inQuotes) { if (c === '"') { if (text[i+1] === '"') { field += '"'; i++; } else inQuotes = false; } else field += c; }
+        else { if (c === '"') inQuotes = true; else if (c === delim) { row.push(field); field = ""; } else if (c === "\n") { row.push(field); if (row.length > 1 || row[0] !== "") rows.push(row); row = []; field = ""; } else if (c !== "\r") field += c; }
+      }
+      if (field !== "" || row.length) { row.push(field); if (row.length > 1 || row[0] !== "") rows.push(row); }
+      return rows;
+    }
+
+    function escXml(s) { return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+
+    function tagName(name) {
+      var n = name.replace(/[^a-zA-Z0-9_\-:]/g, "_");
+      if (/^[0-9\-\.]/.test(n)) n = "_" + n;
+      return n || "_";
+    }
+
+    function convert() {
+      var text = inputEl.value;
+      if (!text.trim()) { outputEl.value = ""; statsEl.textContent = ""; return; }
+      var delim = document.getElementById("delim").value;
+      var root = document.getElementById("root").value.trim() || "data";
+      var rowName = document.getElementById("row").value.trim() || "row";
+      var hasHeader = document.getElementById("header").checked;
+      var useAttr = document.getElementById("attr").checked;
+      var rows = parseCSV(text, delim);
+      if (!rows.length) { outputEl.value = ""; return; }
+      var maxCols = rows.reduce(function (m, r) { return Math.max(m, r.length); }, 0);
+      rows.forEach(function (r) { while (r.length < maxCols) r.push(""); });
+
+      var cols, data;
+      if (hasHeader) { cols = rows[0].map(tagName); data = rows.slice(1); }
+      else { cols = rows[0].map(function (_, i) { return "col" + (i+1); }); data = rows; }
+
+      var lines = [];
+      lines.push('<?xml version="1.0" encoding="UTF-8"?>');
+      lines.push("<" + root + ">");
+      data.forEach(function (r) {
+        if (useAttr) {
+          var attrs = cols.map(function (c, i) { return c + '="' + escXml(r[i]) + '"'; }).join(" ");
+          lines.push("  <" + rowName + " " + attrs + " />");
+        } else {
+          lines.push("  <" + rowName + ">");
+          cols.forEach(function (c, i) {
+            lines.push("    <" + c + ">" + escXml(r[i]) + "</" + c + ">");
+          });
+          lines.push("  </" + rowName + ">");
+        }
+      });
+      lines.push("</" + root + ">");
+
+      outputEl.value = lines.join("\n");
+      statsEl.textContent = "Converted " + data.length + " row" + (data.length !== 1 ? "s" : "") + " × " + maxCols + " columns.";
+    }
+
+    [inputEl, "root", "row", "delim", "header", "attr"].forEach(function (id) {
+      var el = typeof id === "string" ? document.getElementById(id) : id;
+      el.addEventListener("input", convert);
+      el.addEventListener("change", convert);
+    });
+
+    document.getElementById("copy").addEventListener("click", function () {
+      outputEl.select();
+      try { document.execCommand("copy"); var b = document.getElementById("copy"); var t = b.textContent; b.textContent = "Copied!"; setTimeout(function(){ b.textContent = t; }, 1200); } catch(e){}
+    });
+
+    document.getElementById("download").addEventListener("click", function () {
+      var blob = new Blob([outputEl.value], {type:"text/xml"});
+      var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "data.xml"; a.click(); URL.revokeObjectURL(a.href);
+    });
+
+    convert();
+  })();
+  </script>
+</body>
+</html>

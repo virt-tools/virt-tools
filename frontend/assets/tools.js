@@ -4634,4 +4634,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📜",
     added: "2026-07-16T16:30:00Z",
   },
+  {
+    slug: "csv-to-xml",
+    name: "CSV to XML Converter",
+    description: "Convert CSV data into XML. Each row becomes a child element under a root, with column names as element tags (or attributes). Handles quoted fields, embedded commas and newlines, ragged rows, XML-special character escaping, and tag-name sanitization. Choose delimiter, root and row element names, and header toggle. Pairs with the XML Formatter and CSV to JSON. Everything runs locally in your browser.",
+    category: "Data",
+    icon: "🗂️",
+    added: "2026-07-16T17:00:00Z",
+  },
 ];
