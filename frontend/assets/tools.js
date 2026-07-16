@@ -4698,4 +4698,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌫️",
     added: "2026-07-16T20:30:00Z",
   },
+  {
+    slug: "css-columns-generator",
+    name: "CSS Columns Generator",
+    description: "Generate CSS multi-column layouts (newspaper-style text columns) with a live preview. Set column count or width, gap, divider line (style, width, color), and column-fill behavior. Copy the ready-to-paste CSS. Pairs with the CSS Flexbox, Grid, and Scroll Snap generators. Everything runs locally in your browser.",
+    category: "Design",
+    icon: "📰",
+    added: "2026-07-16T21:00:00Z",
+  },
 ];
