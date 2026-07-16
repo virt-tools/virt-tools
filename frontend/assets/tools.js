@@ -4794,4 +4794,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📱",
     added: "2026-07-17T00:20:00Z",
   },
+  {
+    slug: "ua-parser",
+    name: "User-Agent Parser & Generator",
+    description: "Parse any user-agent string to identify browser, OS, device, and engine — or generate realistic UA strings for testing. Fully client-side.",
+    category: "Networking",
+    icon: "🖥️",
+    added: "2026-07-17T00:30:00Z",
+  },
 ];
