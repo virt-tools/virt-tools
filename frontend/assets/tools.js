@@ -4482,4 +4482,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎨",
     added: "2026-07-16T07:00:00Z",
   },
+  {
+    slug: "syllable-counter",
+    name: "Syllable Counter & Word Analyzer",
+    description: "Count syllables in words and text, and analyze total syllables, words, sentences, average syllables per word, and estimated reading and speaking time. See each word with its syllable count and a sorted list of the most syllable-heavy words. The syllable counter uses a heuristic vowel-group algorithm with silent-e, consecutive-vowel, and 'le'-ending handling. Pairs with the Word Counter and Readability Score. Everything runs locally in your browser.",
+    category: "Text",
+    icon: "📊",
+    added: "2026-07-16T07:30:00Z",
+  },
 ];
