@@ -4738,4 +4738,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🏷️",
     added: "2026-07-16T22:50:00Z",
   },
+  {
+    slug: "color-picker",
+    name: "Color Picker",
+    description: "Pick a color using the native picker, RGB/HSL sliders, hex input, or quick swatches. Live values in HEX, RGB, HSL, HSV, and CMYK. Copy any format with one click. Recent colors saved in your browser. Everything runs locally.",
+    category: "Color",
+    icon: "🎨",
+    added: "2026-07-16T23:10:00Z",
+  },
 ];
