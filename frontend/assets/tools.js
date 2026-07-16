@@ -4594,4 +4594,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🗂️",
     added: "2026-07-16T14:00:00Z",
   },
+  {
+    slug: "csv-to-yaml",
+    name: "CSV to YAML Converter",
+    description: "Convert CSV data into YAML — each row becomes a list item with header keys. Handles quoted fields, embedded commas and newlines, and ragged rows. Choose delimiter (auto, comma, semicolon, tab, pipe), toggle header, and use block or flow style. Pairs with the YAML Converter and CSV to JSON. Everything runs locally in your browser.",
+    category: "Data",
+    icon: "📄",
+    added: "2026-07-16T14:30:00Z",
+  },
 ];
