@@ -4490,4 +4490,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📊",
     added: "2026-07-16T07:30:00Z",
   },
+  {
+    slug: "wifi-qr-generator",
+    name: "WiFi QR Code Generator",
+    description: "Generate a QR code that connects people to your WiFi network — point a phone camera at it and it offers to join. Enter SSID, encryption type (WPA/WEP/open), and password; optionally mark the network as hidden. Encodes the standard WIFI: URI recognized by iOS and Android Camera apps. Pairs with the QR Code Generator. Everything runs locally; no network details leave your device.",
+    category: "Encoding",
+    icon: "📶",
+    added: "2026-07-16T08:00:00Z",
+  },
 ];
