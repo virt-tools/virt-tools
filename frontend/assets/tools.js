@@ -4522,4 +4522,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🟫",
     added: "2026-07-16T09:30:00Z",
   },
+  {
+    slug: "css-pattern-generator",
+    name: "CSS Background Pattern Generator",
+    description: "Generate seamless CSS background patterns — horizontal, vertical, and diagonal stripes, dots, grid, checkerboard, plaid, crosshatch, zigzag, waves, triangles, and hearts — using only CSS gradients (no images). Pick a pattern, adjust colors, size, and angle, and copy the ready-to-paste CSS. Pairs with the CSS Gradient and Conic Gradient generators. Everything runs locally in your browser.",
+    category: "Design",
+    icon: "🎨",
+    added: "2026-07-16T10:00:00Z",
+  },
 ];
