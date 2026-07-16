@@ -4506,4 +4506,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔖",
     added: "2026-07-16T08:30:00Z",
   },
+  {
+    slug: "csv-sort",
+    name: "CSV Sort & Multi-Column Sort",
+    description: "Sort CSV data by one or more columns with configurable sort order, numeric or string comparison, and case sensitivity. Add multiple sort levels (primary, secondary, etc.) for multi-key sorting. Auto-sniffs the delimiter, handles quoted fields and embedded newlines. Pairs with the CSV Viewer, CSV Filter, and CSV Deduplicator. Everything runs locally in your browser.",
+    category: "Data",
+    icon: "↕️",
+    added: "2026-07-16T09:00:00Z",
+  },
 ];
