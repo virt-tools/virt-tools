@@ -4562,4 +4562,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🖱️",
     added: "2026-07-16T12:00:00Z",
   },
+  {
+    slug: "csv-to-markdown",
+    name: "CSV to Markdown Table",
+    description: "Convert CSV data into a GitHub-flavoured Markdown table. Handles quoted fields, embedded commas and newlines, ragged rows, and per-column alignment (left, center, right). Auto-sniffs the delimiter (comma, semicolon, tab, pipe) and detects headers. Pairs with the Markdown Table Generator and CSV Viewer. Everything runs locally in your browser.",
+    category: "Data",
+    icon: "⊞",
+    added: "2026-07-16T12:30:00Z",
+  },
 ];
