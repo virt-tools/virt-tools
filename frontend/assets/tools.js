@@ -4754,4 +4754,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🗄️",
     added: "2026-07-16T23:20:00Z",
   },
+  {
+    slug: "privacy-notepad",
+    name: "Privacy Notepad",
+    description: "A zero-network scratchpad. Everything you type is saved locally in your browser — nothing is ever sent to a server. Includes live word/character/sentence counts, reading-time estimate, find & replace, and most-frequent-words analysis.",
+    category: "Text",
+    icon: "📝",
+    added: "2026-07-16T23:30:00Z",
+  },
 ];

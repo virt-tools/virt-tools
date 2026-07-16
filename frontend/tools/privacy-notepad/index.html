@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Privacy Notepad — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .notepad-wrap { display:grid; grid-template-columns: 1fr 220px; gap:14px; margin:14px 0; }
+    @media (max-width:780px){ .notepad-wrap { grid-template-columns: 1fr; } }
+    .editor-area textarea { width:100%; min-height:440px; font-family:monospace; font-size:14px; line-height:1.6; resize:vertical; padding:14px; border-radius:8px; border:1px solid var(--border,#2a2f3a); background:var(--bg-inset,#1e1e2e); color:var(--text,#e0e0e0); box-sizing:border-box; }
+    .stats { display:flex; flex-direction:column; gap:12px; }
+    .stat-card { background:var(--bg-inset,#1e1e2e); border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:12px; }
+    .stat-card h3 { margin:0 0 8px; font-size:12px; text-transform:uppercase; opacity:.6; letter-spacing:.05em; }
+    .stat-card .val { font-size:28px; font-weight:700; }
+    .stat-card .sub { font-size:11px; opacity:.5; margin-top:2px; }
+    .find-bar { display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
+    .find-bar input { flex:1; min-width:120px; font-size:13px; padding:6px 10px; border-radius:6px; border:1px solid var(--border,#2a2f3a); background:var(--bg,#16161e); color:var(--text,#e0e0e0); }
+    .find-bar button { font-size:12px; padding:6px 12px; }
+    .replace-bar { display:flex; gap:6px; margin-top:4px; }
+    .replace-bar input { flex:1; font-size:13px; padding:6px 10px; border-radius:6px; border:1px solid var(--border,#2a2f3a); background:var(--bg,#16161e); color:var(--text,#e0e0e0); }
+    .saved-label { font-size:11px; opacity:.5; margin-top:4px; }
+    .toolbar { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:8px; }
+    .toolbar button, .toolbar select { font-size:13px; }
+    .word-freq { font-size:12px; }
+    .word-freq li { margin:2px 0; display:flex; justify-content:space-between; }
+    .word-freq .count { opacity:.5; }
+    .reading-time { font-size:12px; opacity:.7; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Privacy Notepad</h1>
+      <p>A zero-network scratchpad. Everything you type is saved locally in your browser (localStorage) — nothing is ever sent to a server. Includes live word/character/sentence counts, reading-time estimate, find & replace, and most-frequent-words analysis.</p>
+    </div>
+
+    <div class="panel">
+      <div class="toolbar">
+        <button id="clearBtn" class="secondary">Clear all</button>
+        <button id="copyBtn" class="secondary">Copy text</button>
+        <button id="downloadBtn" class="secondary">Download .txt</button>
+        <button id="undoBtn" class="secondary">Undo (Ctrl+Z)</button>
+        <select id="fontSize">
+          <option value="12px">12px</option>
+          <option value="14px" selected>14px</option>
+          <option value="16px">16px</option>
+          <option value="18px">18px</option>
+          <option value="20px">20px</option>
+        </select>
+        <label class="saved-label" id="savedLabel"></label>
+      </div>
+
+      <div class="notepad-wrap">
+        <div class="editor-area">
+          <textarea id="notepad" placeholder="Start typing… Your text stays in this browser. Nothing is uploaded."></textarea>
+        </div>
+        <div class="stats">
+          <div class="stat-card">
+            <h3>Characters</h3>
+            <div class="val" id="charCount">0</div>
+            <div class="sub" id="charNoSpace">0 without spaces</div>
+          </div>
+          <div class="stat-card">
+            <h3>Words</h3>
+            <div class="val" id="wordCount">0</div>
+            <div class="sub" id="sentenceCount">0 sentences</div>
+          </div>
+          <div class="stat-card">
+            <h3>Lines</h3>
+            <div class="val" id="lineCount">0</div>
+            <div class="sub" id="paraCount">0 paragraphs</div>
+          </div>
+          <div class="stat-card">
+            <h3>Reading Time</h3>
+            <div class="val reading-time" id="readTime">0 sec</div>
+          </div>
+          <div class="stat-card">
+            <h3>Top Words</h3>
+            <ol class="word-freq" id="wordFreq">
+              <li style="opacity:.4">—</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+
+      <div class="find-bar">
+        <input type="text" id="findInput" placeholder="Find…">
+        <button id="findPrev" class="secondary">↑</button>
+        <button id="findNext" class="secondary">↓</button>
+        <button id="findAll" class="secondary">Count</button>
+        <span class="saved-label" id="findLabel"></span>
+      </div>
+      <div class="replace-bar">
+        <input type="text" id="replaceInput" placeholder="Replace with…">
+        <button id="replaceOne" class="secondary">Replace</button>
+        <button id="replaceAll" class="secondary">Replace all</button>
+      </div>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var STORAGE_KEY = "vt_privacy_notepad";
+    var ta = document.getElementById("notepad");
+    var charCount = document.getElementById("charCount");
+    var charNoSpace = document.getElementById("charNoSpace");
+    var wordCount = document.getElementById("wordCount");
+    var sentenceCount = document.getElementById("sentenceCount");
+    var lineCount = document.getElementById("lineCount");
+    var paraCount = document.getElementById("paraCount");
+    var readTime = document.getElementById("readTime");
+    var wordFreq = document.getElementById("wordFreq");
+    var savedLabel = document.getElementById("savedLabel");
+    var findInput = document.getElementById("findInput");
+    var replaceInput = document.getElementById("replaceInput");
+    var findLabel = document.getElementById("findLabel");
+
+    var undoStack = [];
+    var lastVal = "";
+
+    function save() {
+      try {
+        localStorage.setItem(STORAGE_KEY, ta.value);
+        var now = new Date();
+        savedLabel.textContent = "Saved " + now.toLocaleTimeString();
+      } catch (e) {
+        savedLabel.textContent = "Save failed";
+      }
+    }
+
+    function pushUndo() {
+      if (ta.value !== lastVal) {
+        undoStack.push(lastVal);
+        if (undoStack.length > 50) undoStack.shift();
+        lastVal = ta.value;
+      }
+    }
+
+    function updateStats() {
+      var text = ta.value;
+      charCount.textContent = text.length.toLocaleString();
+      charNoSpace.textContent = text.replace(/\s/g, "").length.toLocaleString() + " without spaces";
+      var words = text.trim() ? text.trim().split(/\s+/) : [];
+      wordCount.textContent = words.length.toLocaleString();
+      var sentences = text.split(/[.!?]+(?:\s|$)/).filter(function (s) { return s.trim().length > 0; });
+      sentenceCount.textContent = sentences.length + " sentences";
+      lineCount.textContent = text ? text.split("\n").length : 0;
+      var paras = text.split(/\n\s*\n/).filter(function (p) { return p.trim().length > 0; });
+      paraCount.textContent = paras.length + " paragraphs";
+      var secs = Math.round(words.length / 3.5);
+      if (secs < 60) readTime.textContent = secs + " sec";
+      else if (secs < 3600) readTime.textContent = Math.floor(secs / 60) + " min " + (secs % 60) + " sec";
+      else readTime.textContent = (secs / 3600).toFixed(1) + " hr";
+
+      // Word frequency
+      var freq = {};
+      words.forEach(function (w) {
+        var lw = w.toLowerCase().replace(/[^a-z0-9'\-]/g, "");
+        if (lw.length < 2) return;
+        freq[lw] = (freq[lw] || 0) + 1;
+      });
+      var sorted = Object.keys(freq).sort(function (a, b) { return freq[b] - freq[a]; }).slice(0, 8);
+      if (sorted.length === 0) {
+        wordFreq.innerHTML = '<li style="opacity:.4">—</li>';
+      } else {
+        wordFreq.innerHTML = sorted.map(function (w) {
+          return "<li><span>" + w + "</span><span class='count'>" + freq[w] + "</span></li>";
+        }).join("");
+      }
+    }
+
+    var saveTimer = null;
+    function onInput() {
+      if (saveTimer) clearTimeout(saveTimer);
+      saveTimer = setTimeout(function () { pushUndo(); save(); }, 800);
+      updateStats();
+    }
+
+    ta.addEventListener("input", onInput);
+
+    document.getElementById("clearBtn").addEventListener("click", function () {
+      if (confirm("Clear all text? This cannot be undone.")) {
+        pushUndo();
+        ta.value = "";
+        save();
+        updateStats();
+        ta.focus();
+      }
+    });
+
+    document.getElementById("copyBtn").addEventListener("click", function () {
+      ta.select();
+      document.execCommand("copy");
+      savedLabel.textContent = "Copied to clipboard";
+    });
+
+    document.getElementById("downloadBtn").addEventListener("click", function () {
+      var blob = new Blob([ta.value], { type: "text/plain" });
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "notepad.txt";
+      a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+    });
+
+    document.getElementById("undoBtn").addEventListener("click", function () {
+      if (undoStack.length > 0) {
+        ta.value = undoStack.pop();
+        lastVal = ta.value;
+        save();
+        updateStats();
+      }
+    });
+
+    document.getElementById("fontSize").addEventListener("change", function () {
+      ta.style.fontSize = this.value;
+    });
+
+    // Find / Replace
+    function findNext(startPos) {
+      var query = findInput.value;
+      if (!query) return -1;
+      var pos = ta.value.indexOf(query, startPos);
+      if (pos === -1) pos = ta.value.indexOf(query, 0);
+      return pos;
+    }
+
+    document.getElementById("findNext").addEventListener("click", function () {
+      var start = ta.selectionEnd || 0;
+      var pos = findNext(start);
+      if (pos !== -1) {
+        ta.focus();
+        ta.setSelectionRange(pos, pos + findInput.value.length);
+        findLabel.textContent = "Match at position " + pos;
+      } else {
+        findLabel.textContent = "No match";
+      }
+    });
+
+    document.getElementById("findPrev").addEventListener("click", function () {
+      var query = findInput.value;
+      if (!query) return;
+      var start = ta.selectionStart || ta.value.length;
+      var pos = ta.value.lastIndexOf(query, start - 1);
+      if (pos === -1) pos = ta.value.lastIndexOf(query);
+      if (pos !== -1) {
+        ta.focus();
+        ta.setSelectionRange(pos, pos + query.length);
+        findLabel.textContent = "Match at position " + pos;
+      } else {
+        findLabel.textContent = "No match";
+      }
+    });
+
+    document.getElementById("findAll").addEventListener("click", function () {
+      var query = findInput.value;
+      if (!query) { findLabel.textContent = ""; return; }
+      var count = 0;
+      var pos = 0;
+      while ((pos = ta.value.indexOf(query, pos)) !== -1) { count++; pos += query.length; }
+      findLabel.textContent = count + " match" + (count !== 1 ? "es" : "");
+    });
+
+    document.getElementById("replaceOne").addEventListener("click", function () {
+      var query = findInput.value;
+      var repl = replaceInput.value;
+      if (!query) return;
+      var start = ta.selectionStart || 0;
+      var pos = ta.value.indexOf(query, start);
+      if (pos === -1) pos = ta.value.indexOf(query, 0);
+      if (pos !== -1) {
+        pushUndo();
+        ta.value = ta.value.slice(0, pos) + repl + ta.value.slice(pos + query.length);
+        ta.setSelectionRange(pos, pos + repl.length);
+        save();
+        updateStats();
+        findLabel.textContent = "Replaced at " + pos;
+      } else {
+        findLabel.textContent = "No match to replace";
+      }
+    });
+
+    document.getElementById("replaceAll").addEventListener("click", function () {
+      var query = findInput.value;
+      var repl = replaceInput.value;
+      if (!query) return;
+      pushUndo();
+      var parts = ta.value.split(query);
+      var count = parts.length - 1;
+      if (count > 0) {
+        ta.value = parts.join(repl);
+        save();
+        updateStats();
+        findLabel.textContent = "Replaced " + count + " occurrence" + (count !== 1 ? "s" : "");
+      } else {
+        findLabel.textContent = "No matches";
+      }
+    });
+
+    // Load saved text
+    try {
+      var saved = localStorage.getItem(STORAGE_KEY);
+      if (saved !== null) {
+        ta.value = saved;
+        savedLabel.textContent = "Restored from previous session";
+      }
+    } catch (e) {}
+
+    updateStats();
+  })();
+  </script>
+</body>
+</html>
