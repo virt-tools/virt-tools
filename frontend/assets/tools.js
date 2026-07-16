@@ -4418,4 +4418,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎡",
     added: "2026-07-16T03:00:00Z",
   },
+  {
+    slug: "semaphore-translator",
+    name: "Semaphore Flag Translator",
+    description: "Encode text into flag semaphore — the visual signaling system used at sea and by scouts — and decode it back. Each letter is shown as a diagram of two flag positions around the body. Includes the numeric shift for digits and a full A–Z chart. Pairs with the Morse Code, Braille, and NATO Phonetic tools. Runs locally in your browser.",
+    category: "Text",
+    icon: "🚩",
+    added: "2026-07-16T03:30:00Z",
+  },
 ];

@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Semaphore Flag Translator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .layout { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
+    @media (max-width: 700px) { .layout { grid-template-columns: 1fr; } }
+    label.f { font-size:13px; opacity:.85; display:block; margin-bottom:4px; }
+    textarea { width:100%; box-sizing:border-box; min-height:100px; font-family:ui-monospace,monospace; font-size:14px; resize:vertical; background:var(--bg,#14181f); border:1px solid var(--border,#2a2f3a); border-radius:8px; color:inherit; padding:8px; }
+    .flags { display:flex; flex-wrap:wrap; gap:12px; margin:10px 0; justify-content:center; }
+    .flag-cell { text-align:center; }
+    .flag-cell svg { background:var(--panel-2,#161a22); border:1px solid var(--border,#2a2f3a); border-radius:8px; }
+    .flag-cell .ch { font-weight:700; font-size:14px; margin-top:4px; }
+    .opts { display:flex; flex-wrap:wrap; gap:10px 18px; align-items:center; margin:8px 0; font-size:13px; }
+    .opts label { display:inline-flex; gap:5px; align-items:center; cursor:pointer; }
+    .toolbar { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Semaphore Flag Translator</h1>
+      <p>Encode text into flag semaphore — the visual signaling system used at sea and by scouts — and decode it back. Each letter is represented by a person holding two flags in one of eight positions (like the hours of a clock). The diagram shows the flag positions for every letter A–Z, digits, and the numeric-shift and space signals. Pairs with the Morse Code and NATO Phonetic tools. Runs locally in your browser.</p>
+    </div>
+
+    <div class="panel">
+      <div class="layout">
+        <div>
+          <label class="f" for="encode">Text to encode</label>
+          <textarea id="encode" placeholder="HELLO WORLD">HELLO WORLD</textarea>
+          <div class="toolbar">
+            <button id="encodeBtn">Encode →</button>
+            <button id="clear" class="secondary">Clear</button>
+          </div>
+          <div class="flags" id="encoded"></div>
+        </div>
+        <div>
+          <label class="f" for="decode">Semaphore letters to decode</label>
+          <textarea id="decode" placeholder="HELLO (type letters A–Z)"></textarea>
+          <div class="toolbar">
+            <button id="decodeBtn">← Decode</button>
+          </div>
+          <div class="out" id="decoded" style="font-size:16px;font-weight:600;padding:10px;min-height:40px;"></div>
+        </div>
+      </div>
+
+      <h3 style="font-size:.85rem;text-transform:uppercase;letter-spacing:.05em;opacity:.7;font-weight:600;margin:16px 0 8px;">Semaphore chart</h3>
+      <div class="flags" id="chart"></div>
+
+      <p class="note">Flag semaphore uses eight positions around the body, like a clock face. The two flag positions combine to represent each letter. In the numeric shift, letters A–D become digits 1–4 and J, E–I become 5–9, and K is zero. Pairs with Morse Code, Braille, and NATO Phonetic tools. Runs locally.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var NS = "http://www.w3.org/2000/svg";
+    // Semaphore: each letter maps to two clock positions (1-8, like hours on a compass)
+    // Positions: 1=down, 2=down-left, 3=left, 4=up-left, 5=up, 6=up-right, 7=right, 8=down-right
+    var positions = {
+      "A":[7,8], "B":[7,1], "C":[7,2], "D":[7,3], "E":[7,4], "F":[7,5],
+      "G":[8,5], "H":[8,6], "I":[8,1], "J":[8,2], "K":[8,3],
+      "L":[6,5], "M":[5,4], "N":[5,3], "O":[5,2], "P":[5,1], "Q":[5,8],
+      "R":[4,3], "S":[4,2], "T":[4,1], "U":[4,8], "V":[3,2],
+      "W":[3,1], "X":[3,8], "Y":[2,8], "Z":[2,6]
+    };
+    // Numeric shift
+    var numericShift = [7,5]; // J position
+    var numericMap = { "A":"1","B":"2","C":"3","D":"4","E":"5","F":"6","G":"7","H":"8","I":"9","K":"0" };
+
+    function clockAngle(pos) {
+      // position 1=down (270°), 2=down-left (225°), ... going counter-clockwise
+      // Let's map: 1=6 o'clock, 2=7:30, 3=9, 4=10:30, 5=12, 6=1:30, 7=3, 8=4:30
+      var angles = { 1:90, 2:135, 3:180, 4:225, 5:270, 6:315, 7:0, 8:45 };
+      return (angles[pos] || 0) * Math.PI / 180;
+    }
+
+    function drawFlag(letter, size) {
+      size = size || 100;
+      var svg = document.createElementNS(NS, "svg");
+      svg.setAttribute("width", size);
+      svg.setAttribute("height", size);
+      svg.setAttribute("viewBox", "0 0 100 100");
+      var cx = 50, cy = 50;
+      // Body (head)
+      var head = document.createElementNS(NS, "circle");
+      head.setAttribute("cx", cx); head.setAttribute("cy", cy - 5); head.setAttribute("r", 6);
+      head.setAttribute("fill", "none"); head.setAttribute("stroke", "#888"); head.setAttribute("stroke-width", "1.5");
+      svg.appendChild(head);
+      var body = document.createElementNS(NS, "line");
+      body.setAttribute("x1", cx); body.setAttribute("y1", cy); body.setAttribute("x2", cx); body.setAttribute("y2", cy + 25);
+      body.setAttribute("stroke", "#888"); body.setAttribute("stroke-width", "1.5");
+      svg.appendChild(body);
+      // Arms line
+      var armY = cy + 8;
+
+      var pos = positions[letter];
+      if (!pos) {
+        var t = document.createElementNS(NS, "text");
+        t.setAttribute("x", cx); t.setAttribute("y", cy);
+        t.setAttribute("text-anchor", "middle"); t.setAttribute("fill", "#888");
+        t.setAttribute("font-size", "14"); t.textContent = letter === " " ? "␣" : "?";
+        svg.appendChild(t);
+        return svg;
+      }
+
+      pos.forEach(function (p) {
+        var angle = clockAngle(p);
+        var armLen = 22;
+        var handX = cx + Math.cos(angle) * armLen;
+        var handY = armY + Math.sin(angle) * armLen;
+        // Arm
+        var arm = document.createElementNS(NS, "line");
+        arm.setAttribute("x1", cx); arm.setAttribute("y1", armY);
+        arm.setAttribute("x2", handX); arm.setAttribute("y2", handY);
+        arm.setAttribute("stroke", "#aaa"); arm.setAttribute("stroke-width", "2");
+        svg.appendChild(arm);
+        // Flag (red/yellow diagonal)
+        var flagColor = p <= 4 ? "#e04040" : "#e8c020";
+        var perp = angle + Math.PI / 2;
+        var flagW = 14, flagH = 10;
+        var f1x = handX + Math.cos(angle) * 3 - Math.cos(perp) * flagH/2;
+        var f1y = handY + Math.sin(angle) * 3 - Math.sin(perp) * flagH/2;
+        var f2x = handX + Math.cos(angle) * (3 + flagW) - Math.cos(perp) * flagH/2;
+        var f2y = handY + Math.sin(angle) * (3 + flagW) - Math.sin(perp) * flagH/2;
+        var f3x = handX + Math.cos(angle) * (3 + flagW) + Math.cos(perp) * flagH/2;
+        var f3y = handY + Math.sin(angle) * (3 + flagW) + Math.sin(perp) * flagH/2;
+        var f4x = handX + Math.cos(angle) * 3 + Math.cos(perp) * flagH/2;
+        var f4y = handY + Math.sin(angle) * 3 + Math.sin(perp) * flagH/2;
+        var flag = document.createElementNS(NS, "polygon");
+        flag.setAttribute("points", f1x+","+f1y+" "+f2x+","+f2y+" "+f3x+","+f3y+" "+f4x+","+f4y);
+        flag.setAttribute("fill", flagColor); flag.setAttribute("stroke", "#333"); flag.setAttribute("stroke-width", "0.5");
+        svg.appendChild(flag);
+      });
+
+      return svg;
+    }
+
+    function esc(s){ return String(s).replace(/[&<>]/g,function(c){return c==="&"?"&amp;":c==="<"?"&lt;":"&gt;";}); }
+
+    function encodeText() {
+      var text = document.getElementById("encode").value.toUpperCase();
+      var el = document.getElementById("encoded");
+      el.innerHTML = "";
+      var inNumeric = false;
+      Array.from(text).forEach(function (ch) {
+        if (ch === " ") {
+          var cell = document.createElement("div");
+          cell.className = "flag-cell";
+          var div = document.createElement("div");
+          div.style.cssText = "width:80px;height:80px;display:flex;align-items:center;justify-content:center;background:var(--panel-2,#161a22);border:1px solid var(--border,#2a2f3a);border-radius:8px;font-size:22px;";
+          div.textContent = "␣";
+          cell.appendChild(div);
+          el.appendChild(cell);
+          return;
+        }
+        if (/[0-9]/.test(ch)) {
+          // Numeric shift needed
+          if (!inNumeric) {
+            var nsCell = document.createElement("div");
+            nsCell.className = "flag-cell";
+            nsCell.appendChild(drawFlag("J", 80));
+            var nsLabel = document.createElement("div");
+            nsLabel.className = "ch"; nsLabel.textContent = "#"; nsLabel.style.fontSize = "10px";
+            nsCell.appendChild(nsLabel);
+            el.appendChild(nsCell);
+            inNumeric = true;
+          }
+          // Map digit back to letter
+          var letterForDigit = Object.keys(numericMap).find(function(k){return numericMap[k]===ch;}) || ch;
+          var dCell = document.createElement("div");
+          dCell.className = "flag-cell";
+          dCell.appendChild(drawFlag(letterForDigit, 80));
+          var dLabel = document.createElement("div");
+          dLabel.className = "ch"; dLabel.textContent = ch;
+          dCell.appendChild(dLabel);
+          el.appendChild(dCell);
+          return;
+        }
+        if (positions[ch]) {
+          inNumeric = false;
+          var cell2 = document.createElement("div");
+          cell2.className = "flag-cell";
+          cell2.appendChild(drawFlag(ch, 80));
+          var label2 = document.createElement("div");
+          label2.className = "ch"; label2.textContent = ch;
+          cell2.appendChild(label2);
+          el.appendChild(cell2);
+        }
+      });
+    }
+
+    function decodeText() {
+      var text = document.getElementById("decode").value.toUpperCase().trim();
+      var out = document.getElementById("decoded");
+      // Simple: letters A-Z and space, # for numeric shift
+      var result = "";
+      var inNumeric = false;
+      for (var i = 0; i < text.length; i++) {
+        var ch = text[i];
+        if (ch === "#" || ch === "♯") { inNumeric = true; continue; }
+        if (ch === " " || ch === "␣") { result += " "; inNumeric = false; continue; }
+        if (positions[ch]) {
+          if (inNumeric && numericMap[ch]) result += numericMap[ch];
+          else { result += ch; inNumeric = false; }
+        }
+      }
+      out.textContent = result;
+    }
+
+    function buildChart() {
+      var chart = document.getElementById("chart");
+      var letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+      Array.from(letters).forEach(function (ch) {
+        var cell = document.createElement("div");
+        cell.className = "flag-cell";
+        cell.appendChild(drawFlag(ch, 80));
+        var label = document.createElement("div");
+        label.className = "ch"; label.textContent = ch;
+        cell.appendChild(label);
+        chart.appendChild(cell);
+      });
+    }
+
+    document.getElementById("encodeBtn").addEventListener("click", encodeText);
+    document.getElementById("decodeBtn").addEventListener("click", decodeText);
+    document.getElementById("clear").addEventListener("click", function () {
+      document.getElementById("encode").value = ""; document.getElementById("encoded").innerHTML = "";
+    });
+    document.getElementById("decode").addEventListener("input", decodeText);
+    document.getElementById("encode").addEventListener("input", encodeText);
+
+    encodeText();
+    buildChart();
+  })();
+  </script>
+</body>
+</html>
