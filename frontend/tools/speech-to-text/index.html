@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Speech to Text — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .controls { display:flex; flex-wrap:wrap; gap:10px 18px; align-items:center; margin:10px 0; font-size:13px; }
+    .controls label { display:inline-flex; gap:5px; align-items:center; }
+    select { font-family:ui-monospace,monospace; font-size:13px; padding:5px 8px; border:1px solid var(--border,#2a2f3a); border-radius:6px; background:var(--bg,#14181f); color:inherit; }
+    .mic-btn { width:64px; height:64px; border-radius:50%; border:2px solid var(--border,#2a2f3a); background:var(--panel-2,#161a22); color:inherit; font-size:28px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; transition: all .2s; }
+    .mic-btn.recording { border-color: #ff4040; background: rgba(255,64,64,.15); animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100%{ box-shadow:0 0 0 0 rgba(255,64,64,.4);} 50%{ box-shadow:0 0 0 12px rgba(255,64,64,0);} }
+    .mic-row { display:flex; gap:14px; align-items:center; margin:14px 0; }
+    .status { font-size:14px; opacity:.7; }
+    .status.recording { color:#ff7080; opacity:1; font-weight:600; }
+    textarea { width:100%; box-sizing:border-box; min-height:200px; font-size:15px; line-height:1.6; resize:vertical; background:var(--bg,#14181f); border:1px solid var(--border,#2a2f3a); border-radius:8px; color:inherit; padding:10px; }
+    .interim { color:#888; font-style:italic; }
+    .toolbar { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0; }
+    .warn { color:#f0a36e; font-size:13px; margin:8px 0; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Speech to Text</h1>
+      <p>Transcribe speech to text in your browser using the Web Speech API. Click the microphone, start speaking, and your words appear as you talk — no upload, no recording, no API key. Choose a language, toggle continuous recognition and interim results. Copy or download the transcript. Pairs with the Text to Speech tool. Everything runs locally in your browser; audio is processed by the browser's built-in speech engine and never sent to a server by this tool.</p>
+    </div>
+
+    <div class="panel">
+      <div class="controls">
+        <label>Language
+          <select id="lang">
+            <option value="en-US" selected>English (US)</option>
+            <option value="en-GB">English (UK)</option>
+            <option value="es-ES">Español</option>
+            <option value="fr-FR">Français</option>
+            <option value="de-DE">Deutsch</option>
+            <option value="it-IT">Italiano</option>
+            <option value="pt-BR">Português (BR)</option>
+            <option value="ja-JP">日本語</option>
+            <option value="zh-CN">中文 (简体)</option>
+            <option value="ko-KR">한국어</option>
+            <option value="ru-RU">Русский</option>
+            <option value="hi-IN">हिन्दी</option>
+            <option value="ar-SA">العربية</option>
+            <option value="nl-NL">Nederlands</option>
+            <option value="pl-PL">Polski</option>
+            <option value="tr-TR">Türkçe</option>
+          </select>
+        </label>
+        <label><input type="checkbox" id="continuous" checked> continuous</label>
+        <label><input type="checkbox" id="interim" checked> interim results</label>
+      </div>
+
+      <div class="mic-row">
+        <button class="mic-btn" id="mic" title="Start / stop recording">🎤</button>
+        <div class="status" id="status">Click the microphone to start.</div>
+      </div>
+
+      <div class="warn" id="unsupported" style="display:none;"></div>
+
+      <div class="toolbar">
+        <button id="copy" class="secondary">Copy text</button>
+        <button id="download" class="secondary">Download .txt</button>
+        <button id="clear" class="secondary">Clear</button>
+      </div>
+
+      <label for="output" style="font-size:13px;opacity:.85;display:block;margin-bottom:4px;">Transcript</label>
+      <textarea id="output" readonly placeholder="Your transcription will appear here…"></textarea>
+
+      <p class="note">The Web Speech API is supported in Chrome, Edge, and Safari, and requires a network connection for the browser's speech engine (the audio is not sent by this tool — the browser handles it natively). Firefox support is limited. Interim results are shown in grey and replaced when finalized. Pairs with the Text to Speech tool. Runs locally in your browser.</p>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    var micBtn = document.getElementById("mic");
+    var statusEl = document.getElementById("status");
+    var outputEl = document.getElementById("output");
+    var langEl = document.getElementById("lang");
+    var continuousEl = document.getElementById("continuous");
+    var interimEl = document.getElementById("interim");
+    var unsupportedEl = document.getElementById("unsupported");
+
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    var recognition = null;
+    var recording = false;
+    var finalText = "";
+    var interimText = "";
+
+    if (!SR) {
+      unsupportedEl.style.display = "";
+      unsupportedEl.textContent = "Your browser does not support the Web Speech API. Try Chrome, Edge, or Safari.";
+      micBtn.disabled = true;
+      micBtn.style.opacity = "0.4";
+    } else {
+      recognition = new SR();
+    }
+
+    function setupRecognition() {
+      if (!recognition) return;
+      recognition.lang = langEl.value;
+      recognition.continuous = continuousEl.checked;
+      recognition.interimResults = interimEl.checked;
+      recognition.onresult = function (e) {
+        interimText = "";
+        for (var i = e.resultIndex; i < e.results.length; i++) {
+          var transcript = e.results[i][0].transcript;
+          if (e.results[i].isFinal) {
+            finalText += transcript + (transcript.endsWith("\n") ? "" : "\n");
+          } else {
+            interimText += transcript;
+          }
+        }
+        updateOutput();
+      };
+      recognition.onerror = function (e) {
+        statusEl.textContent = "Error: " + e.error;
+        statusEl.className = "status";
+        if (e.error === "not-allowed") statusEl.textContent = "Microphone access denied.";
+        if (e.error === "no-speech") statusEl.textContent = "No speech detected. Try again.";
+      };
+      recognition.onend = function () {
+        if (recording) {
+          // Auto-restart if still in recording mode (continuous)
+          try { recognition.start(); } catch (e) { stopRecording(); }
+        } else {
+          statusEl.textContent = "Stopped.";
+          statusEl.className = "status";
+          micBtn.classList.remove("recording");
+        }
+      };
+    }
+
+    function updateOutput() {
+      outputEl.value = finalText + (interimText ? (finalText && !finalText.endsWith("\n") ? "\n" : "") + interimText : "");
+    }
+
+    function startRecording() {
+      if (!recognition) return;
+      finalText = outputEl.value ? outputEl.value : "";
+      setupRecognition();
+      try {
+        recognition.start();
+        recording = true;
+        micBtn.classList.add("recording");
+        statusEl.textContent = "Listening… speak now.";
+        statusEl.className = "status recording";
+      } catch (e) {
+        statusEl.textContent = "Could not start: " + e.message;
+      }
+    }
+
+    function stopRecording() {
+      if (!recognition) return;
+      recording = false;
+      try { recognition.stop(); } catch (e) {}
+      micBtn.classList.remove("recording");
+      statusEl.textContent = "Stopped.";
+      statusEl.className = "status";
+      // Finalize interim
+      if (interimText) { finalText += interimText + "\n"; interimText = ""; updateOutput(); }
+    }
+
+    micBtn.addEventListener("click", function () {
+      if (recording) stopRecording();
+      else startRecording();
+    });
+
+    [langEl, continuousEl, interimEl].forEach(function (el) {
+      el.addEventListener("change", function () {
+        if (recording) { stopRecording(); startRecording(); }
+      });
+    });
+
+    document.getElementById("copy").addEventListener("click", function () {
+      outputEl.select();
+      try { document.execCommand("copy"); var b = document.getElementById("copy"); var t = b.textContent; b.textContent = "Copied!"; setTimeout(function(){ b.textContent = t; }, 1200); } catch(e){}
+    });
+
+    document.getElementById("download").addEventListener("click", function () {
+      var blob = new Blob([outputEl.value], {type:"text/plain;charset=utf-8"});
+      var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "transcript.txt"; a.click(); URL.revokeObjectURL(a.href);
+    });
+
+    document.getElementById("clear").addEventListener("click", function () { outputEl.value = ""; finalText = ""; interimText = ""; });
+  })();
+  </script>
+</body>
+</html>

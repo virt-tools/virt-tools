@@ -4546,4 +4546,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📥",
     added: "2026-07-16T11:00:00Z",
   },
+  {
+    slug: "speech-to-text",
+    name: "Speech to Text",
+    description: "Transcribe speech to text in your browser using the Web Speech API. Click the microphone, start speaking, and your words appear live — no upload, no recording, no API key. Choose from 16 languages, toggle continuous recognition and interim results. Copy or download the transcript. Pairs with the Text to Speech tool. Everything runs locally in your browser.",
+    category: "Text",
+    icon: "🎙️",
+    added: "2026-07-16T11:30:00Z",
+  },
 ];
