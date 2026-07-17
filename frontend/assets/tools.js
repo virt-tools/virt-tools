@@ -4954,4 +4954,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🍽️",
     added: "2026-07-17T04:00:00Z",
   },
+  {
+    slug: "prime-factorization",
+    name: "Prime Factorization & Number Explorer",
+    description: "Factor any integer into primes, check primality, view the factorization tree, count divisors, classify perfect/abundant/deficient, and explore nearby primes.",
+    category: "Math",
+    icon: "🔢",
+    added: "2026-07-17T04:15:00Z",
+  },
 ];

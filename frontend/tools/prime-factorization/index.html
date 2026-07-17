@@ -4,16 +4,30 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <script src="/assets/theme-init.js"></script>
-  <title>Prime Factorization — Virtual Tools</title>
+  <title>Prime Factorization & Number Explorer — Virtual Tools</title>
   <link rel="stylesheet" href="/assets/style.css">
   <style>
-    input.num { font-family: ui-monospace, monospace; font-size: 20px; width: 240px; }
-    .factorization { font-size: 22px; font-family: ui-monospace, monospace; word-break: break-all; }
-    .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 10px; }
-    .summary .stat { padding: 8px 10px; border: 1px solid var(--border,#444); border-radius: 6px; }
-    .summary .stat-value { display:block; font-size: 18px; font-weight: 700; font-family: ui-monospace, monospace; }
-    .summary .stat-label { font-size: 12px; opacity: .8; }
-    .divisors { font-family: ui-monospace, monospace; font-size: 13px; max-height: 160px; overflow:auto; word-break: break-all; line-height: 1.7; }
+    .tool-wrap { max-width: 640px; margin: 0 auto; }
+    .field { margin-bottom: 16px; }
+    .field label { display: block; font-weight: 600; margin-bottom: 4px; font-size: 14px; }
+    .field input { width: 100%; background: var(--bg-panel,#11151c); color: var(--text,#d4d9e0); border: 1px solid var(--border,#2a2f3a); border-radius: 8px; padding: 10px 12px; font-size: 18px; box-sizing: border-box; }
+    .result-card { background: var(--bg-panel,#11151c); border: 1px solid var(--border,#2a2f3a); border-radius: 12px; padding: 20px; margin-top: 16px; }
+    .factor-tree { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 14px; line-height: 1.8; white-space: pre; overflow-x: auto; }
+    .badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: 700; }
+    .badge.prime { background: #2d7d46; color: #fff; }
+    .badge.composite { background: #8b5a2b; color: #fff; }
+    .badge.one { background: #555; color: #fff; }
+    .factor-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+    .chip { background: var(--bg-panel,#11151c); border: 1px solid var(--accent,#6ea8fe); color: var(--accent,#6ea8fe); border-radius: 8px; padding: 6px 14px; font-size: 15px; font-weight: 600; }
+    .chip .exp { opacity: .5; font-weight: 400; }
+    .nearby-primes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .nearby-primes span { background: var(--bg-panel,#11151c); border: 1px solid var(--border,#2a2f3a); border-radius: 6px; padding: 4px 10px; font-size: 13px; }
+    .nearby-primes span.target { border-color: #2d7d46; color: #2d7d46; font-weight: 700; }
+    .row { display: flex; gap: 12px; }
+    .row .field { flex: 1; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 14px; }
+    td { padding: 6px 8px; border-bottom: 1px solid var(--border,#2a2f3a); }
+    td:first-child { font-weight: 600; color: var(--accent,#6ea8fe); }
   </style>
 </head>
 <body>
@@ -21,178 +35,134 @@
   <main>
     <div class="tool-header">
       <a class="back" href="/">← All tools</a>
-      <h1>Prime Factorization</h1>
-      <p>Factor a positive integer into its prime factors, and explore its number-theoretic properties: whether it is prime, how many divisors it has (τ), their sum (σ), Euler's totient (φ), and the full list of divisors. All arithmetic uses big integers and exact integer division, so values stay precise even for large inputs. Everything runs locally in your browser.</p>
+      <h1>Prime Factorization & Number Explorer</h1>
+      <p>Factor any integer into its prime components, check primality, view the factorization tree, and explore nearby primes. All calculations are done in your browser — no data leaves your device.</p>
     </div>
-
-    <div class="panel">
+    <div class="panel tool-wrap">
       <div class="field">
-        <label for="n">Number</label><br>
-        <input class="num" id="n" type="text" inputmode="numeric" value="360" placeholder="e.g. 360">
+        <label for="num">Enter a number (up to 10¹⁵)</label>
+        <input type="number" id="num" value="840" min="0" max="1e15" step="1" inputmode="numeric">
       </div>
-      <p class="note" id="err" hidden style="color:var(--bad);"></p>
-
-      <div class="spacer"></div>
-      <label>Prime factorization</label>
-      <div class="factorization" id="factorization">—</div>
-      <p class="note" id="primality"></p>
-
-      <div class="spacer"></div>
-      <label>Properties</label>
-      <div class="summary" id="summary"></div>
-
-      <div class="spacer"></div>
-      <label>Divisors</label>
-      <div class="divisors note" id="divisors"></div>
+      <div class="result-card" id="result"></div>
     </div>
   </main>
-
   <script src="/assets/app.js"></script>
   <script>
-  (function () {
-    var nEl = document.getElementById("n");
-    var errEl = document.getElementById("err");
-    var factEl = document.getElementById("factorization");
-    var primEl = document.getElementById("primality");
-    var summaryEl = document.getElementById("summary");
-    var divsEl = document.getElementById("divisors");
+  (function() {
+    const input = document.getElementById('num');
+    const result = document.getElementById('result');
 
-    function showErr(m) { errEl.textContent = m; errEl.hidden = !m; }
-    function clear(t) { t.innerHTML = ""; t.textContent = ""; }
-
-    var CAP = 10000000000000n;   // 1e13 (sqrt ~3.16e6 -> trial division stays snappy)
-
-    function parseNN(s) {
-      s = String(s).trim();
-      if (s === "" || !/^\d+$/.test(s)) return null;
-      return BigInt(s);
+    function isPrime(n) {
+      if (n < 2) return false;
+      if (n < 4) return true;
+      if (n % 2 === 0) return false;
+      if (n % 3 === 0) return n === 3;
+      for (let i = 5, s = Math.floor(Math.sqrt(n)); i <= s; i += 6) {
+        if (n % i === 0 || n % (i + 2) === 0) return false;
+      }
+      return true;
     }
 
-    // Trial division: returns array of [prime, exponent] BigInt pairs (ascending primes). n>=1.
     function factorize(n) {
-      if (n < 1n) return null;
-      var factors = [];
-      function add(p) {
-        if (factors.length && factors[factors.length - 1][0] === p) {
-          factors[factors.length - 1][1] += 1n;
-        } else {
-          factors.push([p, 1n]);
-        }
-      }
-      var d = 2n;
+      const factors = [];
+      let d = 2;
       while (d * d <= n) {
-        while (n % d === 0n) { add(d); n /= d; }
-        d += (d === 2n) ? 1n : 2n;
+        while (n % d === 0) { factors.push(d); n = n / d; }
+        d += d === 2 ? 1 : 2;
       }
-      if (n > 1n) add(n);
+      if (n > 1) factors.push(n);
       return factors;
     }
 
-    function numDivisors(f) {
-      var r = 1n;
-      for (var i = 0; i < f.length; i++) r *= (f[i][1] + 1n);
-      return r;
+    function groupFactors(factors) {
+      const map = new Map();
+      factors.forEach(f => map.set(f, (map.get(f) || 0) + 1));
+      return [...map.entries()].map(([p, e]) => ({ p, e }));
     }
-    function sumDivisors(f) {
-      var r = 1n;
-      for (var i = 0; i < f.length; i++) {
-        var p = f[i][0], e = f[i][1];
-        // (p^(e+1) - 1) / (p - 1)
-        r *= (pow(p, e + 1n) - 1n) / (p - 1n);
+
+    function treeStr(n, indent) {
+      if (n < 2) return indent + String(n);
+      if (isPrime(n)) return indent + String(n) + ' (prime)';
+      let p = 2;
+      while (n % p !== 0) p = p === 2 ? 3 : p + 2;
+      const q = n / p;
+      return indent + String(n) + '\n' +
+             indent + '├── ' + p + ' (prime)\n' +
+             treeStr(q, indent + '└── ');
+    }
+
+    function nearbyPrimes(n) {
+      const primes = [];
+      let lower = Math.max(2, n - 20);
+      let upper = n + 20;
+      for (let i = lower; i <= upper; i++) if (isPrime(i)) primes.push(i);
+      return primes;
+    }
+
+    function formatFactors(groups) {
+      if (groups.length === 0) return '—';
+      return groups.map(g => g.e > 1 ? g.p + '<span class="exp">^' + g.e + '</span>' : String(g.p)).join(' × ');
+    }
+
+    function divisorsCount(groups) {
+      return groups.reduce((a, g) => a * (g.e + 1), 1);
+    }
+
+    function sumDivisors(groups) {
+      let sum = 1;
+      groups.forEach(g => {
+        let pow = 1, term = 0;
+        for (let i = 0; i <= g.e; i++) { term += pow; pow *= g.p; }
+        sum *= term;
+      });
+      return sum;
+    }
+
+    function render() {
+      const n = parseInt(input.value);
+      if (isNaN(n) || n < 0) { result.innerHTML = '<p style="opacity:.6">Enter a positive integer.</p>'; return; }
+      if (n === 0) { result.innerHTML = '<p><span class="badge one">special</span> 0 has no prime factorization (it is divisible by every prime).</p>'; return; }
+      if (n === 1) {
+        result.innerHTML = '<p><span class="badge one">unit</span> 1 has no prime factors. It is the empty product.</p>';
+        return;
       }
-      return r;
-    }
-    function eulerTotient(f) {
-      var r = 1n;
-      for (var i = 0; i < f.length; i++) {
-        var p = f[i][0], e = f[i][1];
-        r *= pow(p, e - 1n) * (p - 1n);
+      const prime = isPrime(n);
+      const factors = factorize(n);
+      const groups = groupFactors(factors);
+      const badge = prime ? '<span class="badge prime">prime</span>' : '<span class="badge composite">composite</span>';
+      const dCount = divisorsCount(groups);
+      const dSum = sumDivisors(groups);
+
+      let html = '<div style="margin-bottom:12px"><span style="font-size:28px;font-weight:800">' + n + '</span> ' + badge + '</div>';
+      html += '<div class="factor-chips">' + formatFactors(groups).split(' × ').map(p => '<div class="chip">' + p + '</div>').join('') + '</div>';
+      html += '<table>';
+      html += '<tr><td>Factorization</td><td>' + groups.map(g => g.e > 1 ? g.p + '<sup>' + g.e + '</sup>' : g.p).join(' × ') + '</td></tr>';
+      html += '<tr><td>Number of factors</td><td>' + dCount + '</td></tr>';
+      html += '<tr><td>Sum of all factors</td><td>' + dSum + '</td></tr>';
+      html += '<tr><td>Proper sum (aliquot)</td><td>' + (dSum - n) + '</td></tr>';
+      const aliq = dSum - n;
+      if (n > 1) {
+        if (aliq === n) html += '<tr><td>Classification</td><td>Perfect number</td></tr>';
+        else if (aliq > n) html += '<tr><td>Classification</td><td>Abundant (aliquot &gt; n)</td></tr>';
+        else html += '<tr><td>Classification</td><td>Deficient (aliquot &lt; n)</td></tr>';
       }
-      return r;
-    }
-    function pow(base, exp) {
-      var r = 1n; for (var i = 0n; i < exp; i++) r *= base; return r;
-    }
-    function allDivisors(f) {
-      var divs = [1n];
-      for (var i = 0; i < f.length; i++) {
-        var p = f[i][0], e = f[i][1];
-        var cur = [];
-        var pk = 1n;
-        for (var k = 0n; k <= e; k++) {
-          for (var j = 0; j < divs.length; j++) cur.push(divs[j] * pk);
-          pk *= p;
-        }
-        cur.sort(function (a, b) { return a < b ? -1 : a > b ? 1 : 0; });
-        divs = cur;
-      }
-      return divs;
-    }
+      html += '</table>';
 
-    function groupBig(x) {
-      var neg = x < 0n; if (neg) x = -x;
-      var s = x.toString(), out = "", len = s.length;
-      for (var i = 0; i < len; i++) { if (i > 0 && (len - i) % 3 === 0) out += ","; out += s[i]; }
-      return (neg ? "-" : "") + out;
-    }
-    var SUP = { "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹" };
-    function sup(exp) {
-      var s = exp.toString(), out = "";
-      for (var i = 0; i < s.length; i++) out += (SUP[s[i]] || s[i]);
-      return out;
-    }
-    function fmtFactorization(f) {
-      if (f.length === 0) return "1  (no prime factors)";
-      var parts = [];
-      for (var i = 0; i < f.length; i++) {
-        var p = f[i][0], e = f[i][1];
-        parts.push(e === 1n ? groupBig(p) : groupBig(p) + sup(e));
-      }
-      return parts.join(" × ");
-    }
-
-    function stat(parent, val, label) {
-      var d = document.createElement("div"); d.className = "stat";
-      var v = document.createElement("span"); v.className = "stat-value"; v.textContent = val;
-      var l = document.createElement("span"); l.className = "stat-label"; l.textContent = label;
-      d.appendChild(v); d.appendChild(l); parent.appendChild(d);
-    }
-
-    function compute() {
-      clear(factEl); clear(primEl); clear(summaryEl); clear(divsEl); showErr("");
-      var n = parseNN(nEl.value);
-      if (n === null) { showErr("Enter a positive integer."); window.__pf = null; return; }
-      if (n === 0n) { showErr("Enter a positive integer greater than zero."); window.__pf = null; return; }
-      if (n > CAP) { showErr("Number is too large (max " + groupBig(CAP) + ")."); window.__pf = null; return; }
-
-      var f = factorize(n);
-      factEl.textContent = groupBig(n) + "  =  " + fmtFactorization(f);
-
-      var prime = (f.length === 1 && f[0][1] === 1n);
-      primEl.textContent = n === 1n
-        ? "1 is neither prime nor composite."
-        : (prime ? "Prime number." : "Composite number.");
-
-      stat(summaryEl, groupBig(numDivisors(f)), "Divisors (τ)");
-      stat(summaryEl, groupBig(sumDivisors(f)), "Sum of divisors (σ)");
-      stat(summaryEl, groupBig(eulerTotient(f)), "Euler's totient (φ)");
-      stat(summaryEl, String(f.length), "Distinct prime factors (ω)");
-
-      var divs = allDivisors(f);
-      if (divs.length <= 256) {
-        divsEl.textContent = "[" + divs.length + "]  " + divs.map(groupBig).join(",  ");
-      } else {
-        // show first 64 and last 8 with ellipsis
-        var head = divs.slice(0, 64).map(groupBig).join(",  ");
-        var tail = divs.slice(-8).map(groupBig).join(",  ");
-        divsEl.textContent = "[" + divs.length + "]  " + head + ",  …,  " + tail;
+      if (n <= 1e6) {
+        html += '<h3 style="margin-top:18px;font-size:15px">Factorization Tree</h3>';
+        html += '<pre class="factor-tree">' + treeStr(n, '') + '</pre>';
       }
 
-      window.__pf = { n: n, factors: f, prime: prime, tau: numDivisors(f), sigma: sumDivisors(f), phi: eulerTotient(f), divs: divs };
+      html += '<h3 style="margin-top:18px;font-size:15px">Nearby Primes (±20)</h3>';
+      const nearby = nearbyPrimes(n);
+      html += '<div class="nearby-primes">' + nearby.map(p => '<span class="' + (p === n ? 'target' : '') + '">' + p + '</span>').join('') + '</div>';
+      if (nearby.length === 0) html += '<p style="opacity:.5">None found in range.</p>';
+
+      result.innerHTML = html;
     }
 
-    nEl.addEventListener("input", compute);
-    compute();
+    input.addEventListener('input', render);
+    render();
   })();
   </script>
 </body>
