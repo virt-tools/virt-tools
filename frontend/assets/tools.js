@@ -5162,4 +5162,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎹",
     added: "2026-07-17T10:45:00Z",
   },
+  {
+    slug: "drum-machine",
+    name: "Drum Machine",
+    description: "16-step beat sequencer with 6 drum sounds (kick, snare, hi-hat, open hat, clap, tom). Adjustable BPM, swing, and volume. All sounds synthesized via Web Audio API — no samples loaded. Fully client-side.",
+    category: "Fun",
+    icon: "🥁",
+    added: "2026-07-17T11:00:00Z",
+  },
 ];
