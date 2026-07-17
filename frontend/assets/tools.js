@@ -5010,4 +5010,12 @@ window.VIRTUAL_TOOLS = [
     icon: "⚡",
     added: "2026-07-17T05:45:00Z",
   },
+  {
+    slug: "simon-says",
+    name: "Simon Says",
+    description: "Classic color-and-sound memory game. Watch the pattern, repeat it back. Each round adds one more step. Web Audio tones, keyboard support, best streak tracking. Fully client-side.",
+    category: "Fun",
+    icon: "🎮",
+    added: "2026-07-17T06:00:00Z",
+  },
 ];
