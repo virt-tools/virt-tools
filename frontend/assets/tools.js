@@ -5250,4 +5250,12 @@ window.VIRTUAL_TOOLS = [
     icon: "😀",
     added: "2026-07-17T13:30:00Z",
   },
+  {
+    slug: "trivia-quiz",
+    name: "Trivia Quiz",
+    description: "Test your knowledge with 70+ trivia questions across 8 categories (Science, History, Geography, Sports, Movies, Music, Literature, Technology). Difficulty filter, instant feedback, score tracking.",
+    category: "Fun",
+    icon: "❓",
+    added: "2026-07-17T13:45:00Z",
+  },
 ];
