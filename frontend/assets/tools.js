@@ -5202,4 +5202,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎹",
     added: "2026-07-17T12:00:00Z",
   },
+  {
+    slug: "hiit-timer",
+    name: "HIIT Interval Timer",
+    description: "High-Intensity Interval Training timer with configurable work/rest/rounds, prep countdown, audio cues, and progress ring. Tabata, EMOM, and custom presets.",
+    category: "Health",
+    icon: "⏱️",
+    added: "2026-07-17T12:15:00Z",
+  },
 ];

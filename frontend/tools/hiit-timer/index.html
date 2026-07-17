@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>HIIT Interval Timer — Virtual Tools</title>
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.tool-wrap{max-width:600px;margin:0 auto;text-align:center;}
+.timer-display{font-size:72px;font-weight:bold;margin:20px 0;font-variant-numeric:tabular-nums;}
+.phase{font-size:20px;text-transform:uppercase;letter-spacing:2px;margin:10px 0;}
+.round{font-size:16px;opacity:.7;}
+.progress-ring{position:relative;width:280px;height:280px;margin:0 auto 20px;}
+.progress-ring svg{transform:rotate(-90deg);}
+.progress-ring circle{fill:none;stroke-width:8;}
+.progress-ring .bg{stroke:var(--border,#333);}
+.progress-ring .fg{stroke:#1565c0;stroke-linecap:round;transition:stroke-dashoffset .1s linear;}
+.progress-ring .label{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;}
+.controls{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:15px 0;}
+.controls button{padding:12px 24px;border-radius:8px;border:1px solid var(--border,#333);background:var(--bg-alt,#1a1f2e);color:var(--text,#e0e0e0);cursor:pointer;font-size:16px;}
+.controls button.primary{background:#1565c0;color:#fff;border:none;}
+.controls button:disabled{opacity:.4;cursor:not-allowed;}
+.config{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:15px 0;text-align:left;}
+.config label{font-size:14px;}
+.config input{width:100%;padding:8px;border-radius:6px;border:1px solid var(--border,#333);background:var(--bg-alt,#1a1f2e);color:var(--text,#e0e0e0);font-size:16px;}
+.config select{width:100%;padding:8px;border-radius:6px;border:1px solid var(--border,#333);background:var(--bg-alt,#1a1f2e);color:var(--text,#e0e0e0);font-size:16px;}
+.presets{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin:10px 0;}
+.presets button{padding:6px 14px;border-radius:6px;border:1px solid var(--border,#333);background:var(--bg-alt);color:var(--text);cursor:pointer;font-size:13px;}
+.summary{margin:15px 0;padding:15px;border:1px solid var(--border,#333);border-radius:8px;display:none;}
+.summary.show{display:block;}
+.work-color{color:#e91e63;}.rest-color{color:#4caf50;}.prep-color{color:#ff9800;}
+</style>
+</head>
+<body>
+<header id="site-header"></header>
+<main>
+<div class="tool-wrap">
+<h1>HIIT Interval Timer</h1>
+<p class="tool-desc">High-Intensity Interval Training timer with configurable work/rest periods, rounds, and audio cues. Tabata, EMOM, and custom presets.</p>
+
+<div class="presets">
+<button onclick="loadPreset('tabata')">Tabata (20/10 ×8)</button>
+<button onclick="loadPreset('emom')">EMOM 60s ×10</button>
+<button onclick="loadPreset('30-30')">30/30 ×10</button>
+<button onclick="loadPreset('45-15')">45/15 ×5</button>
+</div>
+
+<div class="config">
+<div><label>Prep (sec)</label><input type="number" id="prepInput" value="10" min="0" max="60"></div>
+<div><label>Work (sec)</label><input type="number" id="workInput" value="20" min="5" max="600"></div>
+<div><label>Rest (sec)</label><input type="number" id="restInput" value="10" min="0" max="600"></div>
+<div><label>Rounds</label><input type="number" id="roundsInput" value="8" min="1" max="100"></div>
+<div><label>Audio cue</label><select id="cueSelect"><option value="beep">Beep</option><option value="tone">Tone</option><option value="none">None</option></select></div>
+<div><label>Countdown last N sec</label><input type="number" id="countdownInput" value="3" min="0" max="10"></div>
+</div>
+
+<div class="progress-ring">
+<svg width="280" height="280">
+<circle class="bg" cx="140" cy="140" r="130"/>
+<circle class="fg" cx="140" cy="140" r="130" id="progressCircle" stroke-dasharray="816.8" stroke-dashoffset="0"/>
+</svg>
+<div class="label">
+<div class="phase" id="phaseLabel">Ready</div>
+<div class="timer-display" id="timerDisplay">0:00</div>
+<div class="round" id="roundLabel"></div>
+</div>
+</div>
+
+<div class="controls">
+<button class="primary" onclick="start()" id="startBtn">Start</button>
+<button onclick="pause()" id="pauseBtn" disabled>Pause</button>
+<button onclick="reset()" id="resetBtn">Reset</button>
+</div>
+
+<div class="summary" id="summary">
+<h3>Workout Complete!</h3>
+<p id="summaryText"></p>
+</div>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+let state='idle',phase='prep',secLeft=0,round=0,totalSec=0,elapsed=0,intervalId=null,audioCtx=null;
+const CIRC=2*Math.PI*130;
+
+function loadPreset(name){
+if(state==='running')return;
+const presets={'tabata':{prep:10,work:20,rest:10,rounds:8},'emom':{prep:10,work:60,rest:0,rounds:10},'30-30':{prep:10,work:30,rest:30,rounds:10},'45-15':{prep:10,work:45,rest:15,rounds:5}};
+const p=presets[name];
+document.getElementById('prepInput').value=p.prep;
+document.getElementById('workInput').value=p.work;
+document.getElementById('restInput').value=p.rest;
+document.getElementById('roundsInput').value=p.rounds;
+}
+
+function getConfig(){
+return{
+prep:parseInt(document.getElementById('prepInput').value)||0,
+work:parseInt(document.getElementById('workInput').value)||1,
+rest:parseInt(document.getElementById('restInput').value)||0,
+rounds:parseInt(document.getElementById('roundsInput').value)||1,
+cue:document.getElementById('cueSelect').value,
+countdown:parseInt(document.getElementById('countdownInput').value)||0,
+};
+}
+
+function start(){
+if(state==='running')return;
+if(state==='idle'){const c=getConfig();phase='prep';secLeft=c.prep;round=0;elapsed=0;}
+state='running';
+document.getElementById('startBtn').disabled=true;
+document.getElementById('pauseBtn').disabled=false;
+tick();intervalId=setInterval(tick,1000);
+}
+
+function pause(){
+if(state!=='running')return;
+state='paused';clearInterval(intervalId);
+document.getElementById('startBtn').disabled=false;
+document.getElementById('startBtn').textContent='Resume';
+document.getElementById('pauseBtn').disabled=true;
+}
+
+function reset(){
+state='idle';clearInterval(intervalId);
+phase='prep';secLeft=0;round=0;elapsed=0;
+document.getElementById('startBtn').disabled=false;
+document.getElementById('startBtn').textContent='Start';
+document.getElementById('pauseBtn').disabled=true;
+document.getElementById('phaseLabel').textContent='Ready';
+document.getElementById('phaseLabel').className='phase';
+document.getElementById('timerDisplay').textContent='0:00';
+document.getElementById('roundLabel').textContent='';
+document.getElementById('progressCircle').setAttribute('stroke-dashoffset',0);
+document.getElementById('summary').classList.remove('show');
+}
+
+function tick(){
+const c=getConfig();
+if(secLeft>0){secLeft--;elapsed++;}
+
+if(secLeft<=c.countdown&&secLeft>0)playCue(880,0.1);
+if(secLeft===0)playCue(1320,0.2);
+
+if(secLeft<=0){
+if(phase==='prep'){phase='work';secLeft=c.work;round=1;playCue(660,0.3);}
+else if(phase==='work'){
+if(c.rest>0){phase='rest';secLeft=c.rest;playCue(440,0.3);}
+else{
+if(round>=c.rounds){finish();return;}
+round++;phase='work';secLeft=c.work;playCue(660,0.3);
+}
+}
+else if(phase==='rest'){
+if(round>=c.rounds){finish();return;}
+round++;phase='work';secLeft=c.work;playCue(660,0.3);
+}
+}
+
+const phaseDur=phase==='prep'?c.prep:phase==='work'?c.work:c.rest;
+const phaseText=phase==='prep'?'Prepare':phase==='work'?'WORK':phase==='rest'?'Rest';
+document.getElementById('phaseLabel').textContent=phaseText;
+document.getElementById('phaseLabel').className='phase '+phase+'-color';
+const m=Math.floor(secLeft/60),s=secLeft%60;
+document.getElementById('timerDisplay').textContent=m+':'+String(s).padStart(2,'0');
+document.getElementById('roundLabel').textContent=phase!=='prep'?`Round ${round} / ${c.rounds}`:'';
+const progress=phaseDur>0?1-secLeft/phaseDur:0;
+document.getElementById('progressCircle').setAttribute('stroke-dashoffset',CIRC*(1-progress));
+if(phase==='work')document.getElementById('progressCircle').style.stroke='#e91e63';
+else if(phase==='rest')document.getElementById('progressCircle').style.stroke='#4caf50';
+else document.getElementById('progressCircle').style.stroke='#ff9800';
+}
+
+function finish(){
+clearInterval(intervalId);state='done';
+const c=getConfig();
+const total=c.prep+(c.work+c.rest)*c.rounds;
+const m=Math.floor(total/60),s=total%60;
+document.getElementById('phaseLabel').textContent='Done!';
+document.getElementById('timerDisplay').textContent='0:00';
+document.getElementById('roundLabel').textContent='';
+document.getElementById('progressCircle').setAttribute('stroke-dashoffset',0);
+document.getElementById('startBtn').disabled=true;
+document.getElementById('pauseBtn').disabled=true;
+document.getElementById('summary').classList.add('show');
+document.getElementById('summaryText').textContent=`${c.rounds} rounds completed in ${m}:${String(s).padStart(2,'0')}. Great workout!`;
+playCue(880,0.5);setTimeout(()=>playCue(1100,0.5),300);setTimeout(()=>playCue(1320,0.5),600);
+}
+
+function playCue(freq,dur){
+const cue=document.getElementById('cueSelect').value;
+if(cue==='none')return;
+if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+const osc=audioCtx.createOscillator();const gain=audioCtx.createGain();
+osc.frequency.value=freq;osc.type=cue==='tone'?'sine':'square';
+gain.gain.setValueAtTime(0.2,audioCtx.currentTime);
+gain.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+dur);
+osc.connect(gain);gain.connect(audioCtx.destination);
+osc.start();osc.stop(audioCtx.currentTime+dur);
+}
+
+VT.ready(function(){});
+</script>
+</body>
+</html>
