@@ -5242,4 +5242,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📝",
     added: "2026-07-17T13:15:00Z",
   },
+  {
+    slug: "emoji-translator",
+    name: "Emoji Translator",
+    description: "Translate text into emoji and back. 120+ word-to-emoji mappings. Tap dictionary entries to add them. Fun for messages and social media. All client-side.",
+    category: "Fun",
+    icon: "😀",
+    added: "2026-07-17T13:30:00Z",
+  },
 ];
