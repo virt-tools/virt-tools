@@ -4914,4 +4914,12 @@ window.VIRTUAL_TOOLS = [
     icon: "💣",
     added: "2026-07-17T02:50:00Z",
   },
+  {
+    slug: "vigenere-cipher",
+    name: "Vigenère Cipher",
+    description: "Encrypt and decrypt text using the Vigenère polyalphabetic cipher. Step-by-step visualization and full Vigenère tableau. Fully client-side.",
+    category: "Text",
+    icon: "🔐",
+    added: "2026-07-17T03:00:00Z",
+  },
 ];
