@@ -5314,4 +5314,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎲",
     added: "2026-07-17T20:45:00Z",
   },
+  {
+    slug: "solitaire",
+    name: "Solitaire",
+    description: "Classic Klondike Solitaire — draw one card at a time, build foundations Ace→King by suit, move tableau cards in alternating colors. Click or double-click to play.",
+    category: "Fun",
+    icon: "🃏",
+    added: "2026-07-17T21:15:00Z",
+  },
 ];
