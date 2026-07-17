@@ -5218,4 +5218,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌧️",
     added: "2026-07-17T12:30:00Z",
   },
+  {
+    slug: "magic-8ball",
+    name: "Magic 8-Ball",
+    description: "The classic Magic 8-Ball fortune teller. Ask a yes-or-no question, shake the ball, and get one of 20 classic answers. Question history saved locally.",
+    category: "Fun",
+    icon: "🎱",
+    added: "2026-07-17T12:45:00Z",
+  },
 ];
