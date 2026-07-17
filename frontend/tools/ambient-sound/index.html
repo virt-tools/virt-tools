@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>White Noise & Ambient Sound Generator — Virtual Tools</title>
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.tool-wrap{max-width:700px;margin:0 auto;}
+.noise-card{border:1px solid var(--border,#333);border-radius:12px;padding:20px;margin:10px 0;cursor:pointer;transition:all .2s;}
+.noise-card:hover{border-color:#1565c0;transform:translateY(-2px);}
+.noise-card.active{border-color:#1565c0;background:rgba(21,101,192,.1);}
+.noise-card h3{margin:0 0 5px;font-size:18px;}
+.noise-card p{margin:0;font-size:13px;opacity:.7;}
+.noise-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin:15px 0;}
+.noise-icon{font-size:32px;margin-bottom:8px;}
+.master-vol{margin:15px 0;}
+.master-vol label{display:block;margin-bottom:5px;font-size:14px;}
+input[type=range]{width:100%;accent-color:#1565c0;}
+.controls{display:flex;gap:10px;justify-content:center;margin:15px 0;}
+.controls button{padding:10px 24px;border-radius:8px;border:1px solid var(--border,#333);background:var(--bg-alt,#1a1f2e);color:var(--text,#e0e0e0);cursor:pointer;font-size:14px;}
+.controls button.active{background:#1565c0;color:#fff;border:none;}
+.timer-row{display:flex;gap:10px;align-items:center;justify-content:center;margin:10px 0;flex-wrap:wrap;}
+.timer-row select,input{padding:6px;border-radius:6px;border:1px solid var(--border,#333);background:var(--bg-alt,#1a1f2e);color:var(--text,#e0e0e0);}
+.status{text-align:center;font-size:14px;opacity:.7;margin:5px 0;}
+</style>
+</head>
+<body>
+<header id="site-header"></header>
+<main>
+<div class="tool-wrap">
+<h1>White Noise & Ambient Sound Generator</h1>
+<p class="tool-desc">Generate white, pink, or brown noise, and ambient sounds (rain, ocean, wind, forest) using the Web Audio API. Mix sounds, set a sleep timer, and adjust volume. All client-side — no audio files, everything synthesized in real time.</p>
+
+<div class="master-vol">
+<label>Master Volume: <span id="volLabel">50%</span></label>
+<input type="range" id="masterVol" min="0" max="100" value="50" oninput="setMasterVol(this.value)">
+</div>
+
+<div class="noise-grid" id="noiseGrid"></div>
+
+<div class="timer-row">
+<label>Sleep timer:</label>
+<select id="timerSelect" onchange="setSleepTimer()">
+<option value="0">Off</option>
+<option value="300">5 min</option>
+<option value="600">10 min</option>
+<option value="900">15 min</option>
+<option value="1800">30 min</option>
+<option value="3600">1 hour</option>
+</select>
+<button onclick="stopAll()">Stop All</button>
+</div>
+
+<div class="status" id="status"></div>
+
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+let audioCtx,masterGain,timerEnd=0,timerId=null;
+const sounds=[
+{id:'white',name:'White Noise',desc:'Equal energy across all frequencies',icon:'📊'},
+{id:'pink',name:'Pink Noise',desc:'Balanced, like steady rain',icon:'🌸'},
+{id:'brown',name:'Brown Noise',desc:'Deep, rumbling, like a waterfall',icon:'🐻'},
+{id:'rain',name:'Rain',desc:'Gentle rainfall on a tin roof',icon:'🌧️'},
+{id:'ocean',name:'Ocean Waves',desc:'Rhythmic waves on a beach',icon:'🌊'},
+{id:'wind',name:'Wind',desc:'Soft wind through trees',icon:'🍃'},
+{id:'forest',name:'Forest',desc:'Birds and rustling leaves',icon:'🌲'},
+{id:'thunder',name:'Thunder',desc:'Distant rumbling thunder',icon:'⛈️'},
+{id:'fan',name:'Fan',desc:'Steady mechanical fan hum',icon:'🌀'},
+{id:'stream',name:'Stream',desc:'Bubbling brook',icon:'💧'},
+];
+const active={};
+
+function init(){
+const grid=document.getElementById('noiseGrid');
+sounds.forEach(s=>{
+const c=document.createElement('div');
+c.className='noise-card';c.id='card-'+s.id;
+c.onclick=()=>toggle(s.id);
+c.innerHTML=`<div class="noise-icon">${s.icon}</div><h3>${s.name}</h3><p>${s.desc}</p>`;
+grid.appendChild(c);
+});
+}
+
+function ensureCtx(){
+if(!audioCtx){audioCtx=new(window.AudioContext||window.webkitAudioContext)();masterGain=audioCtx.createGain();masterGain.gain.value=0.5;masterGain.connect(audioCtx.destination);}
+}
+
+function toggle(id){
+if(active[id])stopSound(id);
+else playSound(id);
+}
+
+function playSound(id){
+ensureCtx();if(audioCtx.state==='suspended')audioCtx.resume();
+const g=audioCtx.createGain();g.gain.value=0;g.gain.linearRampToValueAtTime(0.3,audioCtx.currentTime+0.5);
+g.connect(masterGain);
+let node;
+switch(id){
+case'white':node=makeNoise('white');break;
+case'pink':node=makeNoise('pink');break;
+case'brown':node=makeNoise('brown');break;
+case'rain':node=makeRain();break;
+case'ocean':node=makeOcean();break;
+case'wind':node=makeWind();break;
+case'forest':node=makeForest();break;
+case'thunder':node=makeThunder();break;
+case'fan':node=makeFan();break;
+case'stream':node=makeStream();break;
+}
+if(node){node.connect(g);node.start();}
+active[id]={node,gain:g};
+document.getElementById('card-'+id).classList.add('active');
+updateStatus();
+}
+
+function stopSound(id){
+if(!active[id])return;
+const a=active[id];
+a.gain.gain.linearRampToValueAtTime(0,audioCtx.currentTime+0.3);
+setTimeout(()=>{try{a.node.stop();}catch(e){}},400);
+delete active[id];
+document.getElementById('card-'+id).classList.remove('active');
+updateStatus();
+}
+
+function stopAll(){Object.keys(active).forEach(stopSound);clearTimeout(timerId);document.getElementById('timerSelect').value='0';updateStatus();}
+
+function makeNoise(type){
+const bufSize=audioCtx.sampleRate*2;
+const buf=audioCtx.createBuffer(1,bufSize,audioCtx.sampleRate);
+const data=buf.getChannelData(0);
+if(type==='white'){for(let i=0;i<bufSize;i++)data[i]=Math.random()*2-1;}
+else if(type==='pink'){let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0;for(let i=0;i<bufSize;i++){const w=Math.random()*2-1;b0=0.99886*b0+w*0.0555179;b1=0.99332*b1+w*0.0750759;b2=0.96900*b2+w*0.1538520;b3=0.86650*b3+w*0.3104856;b4=0.55000*b4+w*0.5329522;b5=-0.7616*b5-w*0.0168980;data[i]=(b0+b1+b2+b3+b4+b5+b6+w*0.5362)*0.11;b6=w*0.115926;}}
+else if(type==='brown'){let last=0;for(let i=0;i<bufSize;i++){const w=Math.random()*2-1;last=(last+0.02*w)/1.02;data[i]=last*3.5;}}
+const src=audioCtx.createBufferSource();src.buffer=buf;src.loop=true;return src;
+}
+
+function makeRain(){
+const bufSize=audioCtx.sampleRate*2;
+const buf=audioCtx.createBuffer(1,bufSize,audioCtx.sampleRate);
+const data=buf.getChannelData(0);
+let b0=0,b1=0,b2=0;
+for(let i=0;i<bufSize;i++){
+const w=Math.random()*2-1;
+b0=0.99765*b0+w*0.0990460;
+b1=0.96300*b1+w*0.2965164;
+b2=0.57000*b2+w*0.4329522;
+data[i]=(b0+b1+b2)*0.13;
+}
+const src=audioCtx.createBufferSource();src.buffer=buf;src.loop=true;
+const filter=audioCtx.createBiquadFilter();filter.type='highpass';filter.frequency.value=400;
+src.connect(filter);const merger=audioCtx.createGain();
+filter.connect(merger);
+return{connect:(n)=>merger.connect(n),start:()=>src.start(),stop:()=>src.stop()};
+}
+
+function makeOcean(){
+const lfo=audioCtx.createOscillator();lfo.frequency.value=0.1;
+const lfoGain=audioCtx.createGain();lfoGain.gain.value=0.15;
+const noise=makeNoise('pink');
+const noiseGain=audioCtx.createGain();noiseGain.gain.value=0.2;
+lfo.connect(lfoGain);lfoGain.connect(noiseGain.gain);
+noise.connect(noiseGain);
+return{connect:(n)=>{noiseGain.connect(n);},start:()=>{noise.start();lfo.start();},stop:()=>{noise.stop();lfo.stop();}};
+}
+
+function makeWind(){
+const lfo=audioCtx.createOscillator();lfo.frequency.value=0.15;
+const lfoGain=audioCtx.createGain();lfoGain.gain.value=200;
+const noise=makeNoise('white');
+const filter=audioCtx.createBiquadFilter();filter.type='bandpass';filter.frequency.value=500;filter.Q.value=2;
+lfo.connect(lfoGain);lfoGain.connect(filter.frequency);
+noise.connect(filter);
+return{connect:(n)=>filter.connect(n),start:()=>{noise.start();lfo.start();},stop:()=>{noise.stop();lfo.stop();}};
+}
+
+function makeForest(){
+const noise=makeNoise('pink');
+const filter=audioCtx.createBiquadFilter();filter.type='lowpass';filter.frequency.value=800;
+noise.connect(filter);
+const merger=audioCtx.createGain();filter.connect(merger);
+let birdInterval=setInterval(()=>{
+if(!active['forest']){clearInterval(birdInterval);return;}
+const osc=audioCtx.createOscillator();const g=audioCtx.createGain();
+osc.frequency.value=2000+Math.random()*2000;osc.type='sine';
+g.gain.setValueAtTime(0.05,audioCtx.currentTime);
+g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+0.1);
+osc.connect(g);g.connect(merger);osc.start();osc.stop(audioCtx.currentTime+0.1);
+},2000+Math.random()*3000);
+return{connect:(n)=>merger.connect(n),start:()=>noise.start(),stop:()=>{noise.stop();clearInterval(birdInterval);}};
+}
+
+function makeThunder(){
+const noise=makeNoise('brown');
+const filter=audioCtx.createBiquadFilter();filter.type='lowpass';filter.frequency.value=100;
+noise.connect(filter);
+let rumbleInterval=setInterval(()=>{
+if(!active['thunder']){clearInterval(rumbleInterval);return;}
+const g=audioCtx.createGain();
+g.gain.setValueAtTime(0,audioCtx.currentTime);
+g.gain.linearRampToValueAtTime(0.3,audioCtx.currentTime+0.5);
+g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+3);
+filter.connect(g);g.connect(masterGain);
+},5000+Math.random()*10000);
+return{connect:(n)=>filter.connect(n),start:()=>noise.start(),stop:()=>{noise.stop();clearInterval(rumbleInterval);}};
+}
+
+function makeFan(){
+const noise=makeNoise('white');
+const filter=audioCtx.createBiquadFilter();filter.type='bandpass';filter.frequency.value=200;filter.Q.value=1;
+noise.connect(filter);
+const lfo=audioCtx.createOscillator();lfo.frequency.value=8;
+const lfoGain=audioCtx.createGain();lfoGain.gain.value=50;
+lfo.connect(lfoGain);lfoGain.connect(filter.frequency);
+return{connect:(n)=>filter.connect(n),start:()=>{noise.start();lfo.start();},stop:()=>{noise.stop();lfo.stop();}};
+}
+
+function makeStream(){
+const noise=makeNoise('pink');
+const filter=audioCtx.createBiquadFilter();filter.type='highpass';filter.frequency.value=600;
+noise.connect(filter);
+const lfo=audioCtx.createOscillator();lfo.frequency.value=2;
+const lfoGain=audioCtx.createGain();lfoGain.gain.value=300;
+lfo.connect(lfoGain);lfoGain.connect(filter.frequency);
+return{connect:(n)=>filter.connect(n),start:()=>{noise.start();lfo.start();},stop:()=>{noise.stop();lfo.stop();}};
+}
+
+function setMasterVol(v){if(masterGain)masterGain.gain.value=v/100;document.getElementById('volLabel').textContent=v+'%';}
+
+function setSleepTimer(){
+const min=parseInt(document.getElementById('timerSelect').value);
+clearTimeout(timerId);
+if(min>0){timerEnd=Date.now()+min*1000;
+timerId=setTimeout(()=>{stopAll();document.getElementById('timerSelect').value='0';},min*1000);
+updateStatus();}
+else{timerEnd=0;updateStatus();}
+}
+
+function updateStatus(){
+const count=Object.keys(active).length;
+let s=count===0?'No sounds playing':`${count} sound${count>1?'s':''} playing`;
+if(timerEnd>0){const left=Math.ceil((timerEnd-Date.now())/1000);if(left>0)s+=` · Sleep timer: ${Math.floor(left/60)}:${String(left%60).padStart(2,'0')}`;}
+document.getElementById('status').textContent=s;
+}
+
+VT.ready(init);
+</script>
+</body>
+</html>

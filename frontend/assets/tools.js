@@ -5210,4 +5210,12 @@ window.VIRTUAL_TOOLS = [
     icon: "⏱️",
     added: "2026-07-17T12:15:00Z",
   },
+  {
+    slug: "ambient-sound",
+    name: "White Noise & Ambient Sound Generator",
+    description: "Generate white, pink, and brown noise, plus ambient sounds (rain, ocean, wind, forest, thunder, fan, stream) using Web Audio API. Mix multiple sounds, sleep timer, volume control. All synthesized in real time — no audio files.",
+    category: "Audio",
+    icon: "🌧️",
+    added: "2026-07-17T12:30:00Z",
+  },
 ];
