@@ -5138,4 +5138,12 @@ window.VIRTUAL_TOOLS = [
     icon: "♟️",
     added: "2026-07-17T09:45:00Z",
   },
+  {
+    slug: "crossword",
+    name: "Crossword Puzzle",
+    description: "Auto-generated mini crosswords from a built-in word bank. Click cells to select, type to fill. Check answers, reveal letters or words. 3 grid sizes. Fully client-side.",
+    category: "Fun",
+    icon: "🔤",
+    added: "2026-07-17T10:00:00Z",
+  },
 ];
