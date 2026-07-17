@@ -5170,4 +5170,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🥁",
     added: "2026-07-17T11:00:00Z",
   },
+  {
+    slug: "guitar-tuner",
+    name: "Guitar Tuner",
+    description: "Tune your guitar using your device microphone. Auto-correlation pitch detection via Web Audio API. Standard, Drop D, and Open G tunings. Reference tone player. No audio recorded or transmitted.",
+    category: "Fun",
+    icon: "🎸",
+    added: "2026-07-17T11:15:00Z",
+  },
 ];

@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Guitar Tuner — Virtual Tools</title>
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.tool-wrap{max-width:600px;margin:0 auto;text-align:center;}
+.tool-desc{opacity:.7;font-size:14px;margin-bottom:8px;}
+#startBtn{padding:12px 32px;font-size:18px;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg-alt,#1a1f2e);color:var(--text,#e0e0e0);cursor:pointer;margin:10px 0;}
+.note-display{font-size:72px;font-weight:bold;margin:10px 0;}
+.freq-display{font-size:24px;opacity:.7;margin:5px 0;}
+.cents-display{font-size:36px;margin:10px 0;}
+.meter{width:300px;height:20px;margin:15px auto;position:relative;border:1px solid var(--border,#333);border-radius:10px;overflow:hidden;}
+.meter-bar{position:absolute;top:0;left:50%;height:100%;width:0;transition:width 0.1s,transform 0.1s;}
+.meter-center{position:absolute;top:0;left:50%;width:2px;height:100%;background:#888;z-index:2;}
+.strings{display:flex;justify-content:center;gap:8px;margin:15px 0;flex-wrap:wrap;}
+.string-btn{padding:6px 16px;border-radius:6px;border:1px solid var(--border,#333);background:var(--bg-alt,#1a1f2e);color:var(--text,#e0e0e0);cursor:pointer;font-size:14px;}
+.string-btn.active{background:#1565c0;color:#fff;}
+.in-tune{color:#4caf50;}
+.flat{color:#ff9800;}
+.sharp{color:#f44336;}
+</style>
+</head>
+<body>
+<header id="site-header"></header>
+<main>
+<div class="tool-wrap">
+<h1>Guitar Tuner</h1>
+<p class="tool-desc">Tune your guitar using your device microphone. Pitch detection via Web Audio API. Standard EADGBE tuning plus drop-D and open-G presets. No audio is recorded or sent anywhere.</p>
+<button id="startBtn" onclick="toggleTuner()">Start Tuner</button>
+<div class="note-display" id="note">—</div>
+<div class="freq-display" id="freq">—</div>
+<div class="cents-display" id="cents"></div>
+<div class="meter"><div class="meter-center"></div><div class="meter-bar" id="meterBar"></div></div>
+<div class="strings" id="strings"></div>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+const TUNINGS={
+'Standard (EADGBE)':[{'note':'E','freq':82.41},{'note':'A','freq':110},{'note':'D','freq':146.83},{'note':'G','freq':196},{'note':'B','freq':246.94},{'note':'E','freq':329.63}],
+'Drop D':[{'note':'D','freq':73.42},{'note':'A','freq':110},{'note':'D','freq':146.83},{'note':'G','freq':196},{'note':'B','freq':246.94},{'note':'E','freq':329.63}],
+'Open G':[{'note':'D','freq':73.42},{'note':'G','freq':98},{'note':'D','freq':146.83},{'note':'G','freq':196},{'note':'B','freq':246.94},{'note':'D','freq':293.66}],
+};
+let tuning=TUNINGS['Standard (EADGBE)'];
+let running=false,audioCtx,analyser,mediaStream,rafId;
+const NOTES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+
+function init(){
+const sel=document.createElement('select');
+sel.style.cssText='padding:6px;border-radius:6px;border:1px solid var(--border,#333);background:var(--bg-alt);color:var(--text);margin-bottom:10px;';
+Object.keys(TUNINGS).forEach(t=>{const o=document.createElement('option');o.value=t;o.textContent=t;sel.appendChild(o);});
+sel.onchange=()=>{tuning=TUNINGS[sel.value];renderStrings();};
+document.querySelector('.tool-desc').after(sel);
+renderStrings();
+}
+
+function renderStrings(){
+const c=document.getElementById('strings');c.innerHTML='';
+tuning.forEach((s,i)=>{
+const b=document.createElement('div');b.className='string-btn';b.textContent=`${i+1}: ${s.note}`;
+b.onclick=()=>{playRef(s.freq);b.classList.add('active');setTimeout(()=>b.classList.remove('active'),800);};
+c.appendChild(b);
+});
+}
+
+function playRef(freq){
+if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+o.frequency.value=freq;o.type='sine';
+g.gain.setValueAtTime(0,audioCtx.currentTime);
+g.gain.linearRampToValueAtTime(0.3,audioCtx.currentTime+0.05);
+g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+1);
+o.connect(g);g.connect(audioCtx.destination);o.start();o.stop(audioCtx.currentTime+1);
+}
+
+async function toggleTuner(){
+if(running){stop();return;}
+try{
+mediaStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
+audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+const source=audioCtx.createMediaStreamSource(mediaStream);
+analyser=audioCtx.createAnalyser();analyser.fftSize=4096;
+source.connect(analyser);
+running=true;document.getElementById('startBtn').textContent='Stop Tuner';
+detect();
+}catch(e){alert('Microphone access required for tuning.');}
+}
+
+function stop(){
+running=false;document.getElementById('startBtn').textContent='Start Tuner';
+if(rafId)cancelAnimationFrame(rafId);
+if(mediaStream)mediaStream.getTracks().forEach(t=>t.stop());
+if(audioCtx){audioCtx.close();audioCtx=null;}
+document.getElementById('note').textContent='—';
+document.getElementById('freq').textContent='—';
+document.getElementById('cents').textContent='';
+document.getElementById('meterBar').style.width='0';
+}
+
+function detect(){
+if(!running)return;
+const buf=new Float32Array(analyser.fftSize);
+analyser.getFloatTimeDomainData(buf);
+const freq=autoCorrelate(buf,audioCtx.sampleRate);
+if(freq>60&&freq<500){
+const noteNum=12*(Math.log2(freq/440))+69;
+const rounded=Math.round(noteNum);
+const cents=Math.round((noteNum-rounded)*100);
+const noteName=NOTES[((rounded%12)+12)%12];
+document.getElementById('note').textContent=noteName;
+document.getElementById('freq').textContent=freq.toFixed(1)+' Hz';
+const centsEl=document.getElementById('cents');
+centsEl.textContent=(cents>0?'+':'')+cents+' cents';
+centsEl.className=cents===0?'in-tune':(Math.abs(cents)<=5?'in-tune':(cents<0?'flat':'sharp'));
+const meterBar=document.getElementById('meterBar');
+const pct=Math.min(Math.abs(cents)/50,1)*150;
+meterBar.style.width=pct+'px';
+meterBar.style.transform=cents<0?`translateX(-${pct}px)`:'translateX(0)';
+meterBar.style.background=Math.abs(cents)<=5?'#4caf50':(Math.abs(cents)<=20?'#ff9800':'#f44336');
+}else{
+document.getElementById('note').textContent='—';
+document.getElementById('freq').textContent='—';
+document.getElementById('cents').textContent='';
+document.getElementById('meterBar').style.width='0';
+}
+rafId=requestAnimationFrame(detect);
+}
+
+function autoCorrelate(buf,sampleRate){
+let SIZE=buf.length,rms=0;
+for(let i=0;i<SIZE;i++)rms+=buf[i]*buf[i];
+rms=Math.sqrt(rms/SIZE);
+if(rms<0.01)return-1;
+let r1=0,r2=SIZE-1,threshold=0.2;
+for(let i=0;i<SIZE/2;i++){if(Math.abs(buf[i])<threshold){r1=i;break;}}
+for(let i=1;i<SIZE/2;i++){if(Math.abs(buf[SIZE-i])<threshold){r2=SIZE-i;break;}}
+buf=buf.slice(r1,r2);SIZE=buf.length;
+const c=new Array(SIZE).fill(0);
+for(let i=0;i<SIZE;i++)for(let j=0;j<SIZE-i;j+=4)c[i]+=buf[j]*buf[j+i];
+let d=0;while(d<SIZE-1&&c[d]>c[d+1])d++;
+let maxval=-1,maxpos=-1;
+for(let i=d;i<SIZE;i++){if(c[i]>maxval){maxval=c[i];maxpos=i;}}
+let T0=maxpos;
+const x1=c[T0-1],x2=c[T0],x3=c[T0+1];
+const a=(x1+x3-2*x2)/2,b=(x3-x1)/2;
+if(a)T0=T0-b/(2*a);
+return sampleRate/T0;
+}
+
+VT.ready(init);
+</script>
+</body>
+</html>
