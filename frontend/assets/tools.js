@@ -4858,4 +4858,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📝",
     added: "2026-07-17T01:40:00Z",
   },
+  {
+    slug: "name-picker",
+    name: "Random Name Picker",
+    description: "Spin the wheel to randomly pick a name or option from your list. Canvas-animated wheel, remove winner after spin, winner history. Fully client-side.",
+    category: "Fun",
+    icon: "🎲",
+    added: "2026-07-17T01:50:00Z",
+  },
 ];
