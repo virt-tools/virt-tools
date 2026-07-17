@@ -5226,4 +5226,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎱",
     added: "2026-07-17T12:45:00Z",
   },
+  {
+    slug: "synthesizer",
+    name: "Synthesizer",
+    description: "Playable polyphonic synth with 4 waveforms, ADSR envelope, lowpass filter, detune, octave shift, and presets. Click keys or use keyboard (A-K row). Web Audio API, fully client-side.",
+    category: "Audio",
+    icon: "🎹",
+    added: "2026-07-17T13:00:00Z",
+  },
 ];
