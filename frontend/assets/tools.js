@@ -4834,4 +4834,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔑",
     added: "2026-07-17T01:10:00Z",
   },
+  {
+    slug: "date-math",
+    name: "Date Math Calculator",
+    description: "Add or subtract time from a date, calculate differences between dates, count business days, and get day-of-week, ISO week number, leap year, and more. Fully client-side.",
+    category: "Time",
+    icon: "📅",
+    added: "2026-07-17T01:20:00Z",
+  },
 ];
