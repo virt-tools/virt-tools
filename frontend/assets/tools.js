@@ -5306,4 +5306,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎡",
     added: "2026-07-17T20:15:00Z",
   },
+  {
+    slug: "yahtzee",
+    name: "Yahtzee",
+    description: "Classic dice game. Roll 5 dice up to 3 times per turn, hold the ones you want, score in 13 categories. Upper bonus at 63+, Yahtzee = 50. Full game with live score preview.",
+    category: "Fun",
+    icon: "🎲",
+    added: "2026-07-17T20:45:00Z",
+  },
 ];
