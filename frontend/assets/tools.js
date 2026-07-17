@@ -4842,4 +4842,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📅",
     added: "2026-07-17T01:20:00Z",
   },
+  {
+    slug: "compression-tool",
+    name: "Compression Tool",
+    description: "Compress and decompress text using Gzip, Brotli, or Deflate with the browser's native Compression Streams API. Compare original vs compressed sizes, download compressed files. Fully client-side.",
+    category: "Text",
+    icon: "🗜️",
+    added: "2026-07-17T01:30:00Z",
+  },
 ];
