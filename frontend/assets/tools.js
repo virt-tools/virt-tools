@@ -4882,4 +4882,12 @@ window.VIRTUAL_TOOLS = [
     icon: "⌨️",
     added: "2026-07-17T02:10:00Z",
   },
+  {
+    slug: "css-grid-builder",
+    name: "CSS Grid Layout Builder",
+    description: "Visually build CSS Grid layouts with columns, rows, gaps, and placed items. Six presets (Holy Grail, Dashboard, Magazine, Gallery, Sidebar, Masonry). Copy generated CSS and HTML. Fully client-side.",
+    category: "Design",
+    icon: "▦",
+    added: "2026-07-17T02:20:00Z",
+  },
 ];
