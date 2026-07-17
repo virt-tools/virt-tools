@@ -5018,4 +5018,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎮",
     added: "2026-07-17T06:00:00Z",
   },
+  {
+    slug: "snake-game",
+    name: "Snake",
+    description: "Classic arcade Snake. Eat the food, grow longer, don't hit yourself or the walls. Speed increases as you grow. Arrow keys, WASD, touch swipe, or on-screen d-pad. Fully client-side.",
+    category: "Fun",
+    icon: "🐍",
+    added: "2026-07-17T06:15:00Z",
+  },
 ];
