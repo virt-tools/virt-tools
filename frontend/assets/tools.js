@@ -5146,4 +5146,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔤",
     added: "2026-07-17T10:00:00Z",
   },
+  {
+    slug: "drawing-pad",
+    name: "Drawing Pad",
+    description: "Canvas drawing pad with brush, eraser, line/rect/circle shapes, flood fill, color palette, adjustable brush size, undo, and PNG export. Fully client-side.",
+    category: "Fun",
+    icon: "🎨",
+    added: "2026-07-17T10:15:00Z",
+  },
 ];
