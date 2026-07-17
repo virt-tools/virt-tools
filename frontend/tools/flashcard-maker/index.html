@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Flashcard Maker — Virtual Tools</title>
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.tool-wrap{max-width:700px;margin:0 auto;}
+.card{width:100%;min-height:200px;border:1px solid var(--border,#333);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:24px;cursor:pointer;margin:15px 0;padding:20px;box-sizing:border-box;user-select:none;transition:transform 0.3s;position:relative;}
+.card.flipped{transform:rotateY(180deg);}
+.card-face{position:absolute;back:hidden;backface-visibility:hidden;-webkit-backface-visibility:hidden;width:100%;height:100%;display:flex;align-items:center;justify-content:center;text-align:center;padding:20px;box-sizing:border-box;}
+.card-back{transform:rotateY(180deg);}
+.controls{display:flex;gap:10px;justify-content:center;margin:15px 0;flex-wrap:wrap;}
+.controls button{padding:8px 20px;border-radius:8px;border:1px solid var(--border,#333);background:var(--bg-alt,#1a1f2e);color:var(--text,#e0e0e0);cursor:pointer;font-size:15px;}
+.controls button:hover{opacity:.8;}
+.deck-select{padding:6px;border-radius:6px;border:1px solid var(--border,#333);background:var(--bg-alt);color:var(--text);margin:5px;}
+.progress{font-size:14px;opacity:.7;text-align:center;}
+textarea,input[type=text]{width:100%;padding:8px;border-radius:6px;border:1px solid var(--border,#333);background:var(--bg-alt);color:var(--text);font-size:14px;box-sizing:border-box;margin:4px 0;}
+.manager{border:1px solid var(--border,#333);border-radius:8px;padding:15px;margin:15px 0;}
+.card-list-item{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border,#222);}
+.card-list-item button{padding:2px 10px;font-size:12px;border-radius:4px;}
+</style>
+</head>
+<body>
+<header id="site-header"></header>
+<main>
+<div class="tool-wrap">
+<h1>Flashcard Maker</h1>
+<p class="tool-desc">Create and study flashcards. Decks saved in your browser. Flip cards, shuffle, self-test with score tracking. No data leaves your device.</p>
+
+<div style="text-align:center;margin:10px 0;">
+<select class="deck-select" id="deckSelect" onchange="loadDeck()"></select>
+<button class="deck-select" onclick="newDeck()">New Deck</button>
+<button class="deck-select" onclick="deleteDeck()">Delete</button>
+</div>
+
+<div class="card" id="card" onclick="flipCard()">
+<div class="card-face card-front" id="cardFront">Create a deck to start</div>
+<div class="card-face card-back" id="cardBack"></div>
+</div>
+
+<div class="progress" id="progress"></div>
+
+<div class="controls" id="studyControls">
+<button onclick="prevCard()">◀ Prev</button>
+<button onclick="flipCard()">Flip</button>
+<button onclick="nextCard()">Next ▶</button>
+<button onclick="shuffleCards()">Shuffle</button>
+</div>
+
+<div class="controls" id="testControls" style="display:none;">
+<button onclick="markCorrect()">✓ Correct</button>
+<button onclick="markWrong()">✗ Wrong</button>
+</div>
+
+<div class="controls">
+<button onclick="toggleMode('study')" id="studyBtn">Study Mode</button>
+<button onclick="toggleMode('test')" id="testBtn">Test Mode</button>
+<button onclick="toggleManager()" id="mgrBtn">Manage Cards</button>
+</div>
+
+<div class="manager" id="manager" style="display:none;">
+<h3>Add Card</h3>
+<input type="text" id="newFront" placeholder="Front (question)">
+<textarea id="newBack" rows="2" placeholder="Back (answer)"></textarea>
+<button onclick="addCard()">Add Card</button>
+<h3>Cards (<span id="cardCount">0</span>)</h3>
+<div id="cardList"></div>
+</div>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+let decks={},currentDeck=null,cardIndex=0,mode='study',shuffled=[],testScore={correct:0,wrong:0};
+
+function load(){const s=localStorage.getItem('vt-flashcards');if(s)decks=JSON.parse(s);renderDeckSelect();}
+function save(){localStorage.setItem('vt-flashcards',JSON.stringify(decks));}
+
+function renderDeckSelect(){
+const sel=document.getElementById('deckSelect');sel.innerHTML='';
+Object.keys(decks).forEach(d=>{const o=document.createElement('option');o.value=d;o.textContent=d;sel.appendChild(o);});
+if(currentDeck)sel.value=currentDeck;
+}
+
+function newDeck(){
+const name=prompt('Deck name:');if(!name)return;
+decks[name]=[];save();currentDeck=name;renderDeckSelect();loadDeck();
+}
+
+function deleteDeck(){
+if(!currentDeck||!confirm('Delete deck "'+currentDeck+'"?'))return;
+delete decks[currentDeck];save();currentDeck=Object.keys(decks)[0]||null;renderDeckSelect();loadDeck();
+}
+
+function loadDeck(){
+currentDeck=document.getElementById('deckSelect').value;
+if(!currentDeck){document.getElementById('cardFront').textContent='Create a deck to start';document.getElementById('cardBack').textContent='';document.getElementById('progress').textContent='';return;}
+cardIndex=0;shuffled=decks[currentDeck].map((_,i)=>i);
+showCard();renderCardList();
+}
+
+function showCard(){
+if(!currentDeck||decks[currentDeck].length===0){document.getElementById('cardFront').textContent='No cards yet';document.getElementById('cardBack').textContent='';document.getElementById('progress').textContent='';return;}
+const idx=shuffled[cardIndex];const card=decks[currentDeck][idx];
+document.getElementById('cardFront').textContent=card.front;
+document.getElementById('cardBack').textContent=card.back;
+document.getElementById('card').classList.remove('flipped');
+if(mode==='study'){
+document.getElementById('progress').textContent=`Card ${cardIndex+1} of ${decks[currentDeck].length}`;
+}else{
+document.getElementById('progress').textContent=`Card ${cardIndex+1} of ${decks[currentDeck].length} | Score: ${testScore.correct}/${testScore.correct+testScore.wrong}`;
+}
+}
+
+function flipCard(){document.getElementById('card').classList.toggle('flipped');}
+function nextCard(){if(cardIndex<shuffled.length-1){cardIndex++;showCard();}}
+function prevCard(){if(cardIndex>0){cardIndex--;showCard();}}
+function shuffleCards(){if(!currentDeck)return;for(let i=shuffled.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[shuffled[i],shuffled[j]]=[shuffled[j],shuffled[i]];}cardIndex=0;showCard();}
+
+function toggleMode(m){
+mode=m;
+document.getElementById('studyControls').style.display=m==='study'?'flex':'none';
+document.getElementById('testControls').style.display=m==='test'?'flex':'none';
+document.getElementById('studyBtn').style.fontWeight=m==='study'?'bold':'normal';
+document.getElementById('testBtn').style.fontWeight=m==='test'?'bold':'normal';
+if(m==='test')testScore={correct:0,wrong:0};
+showCard();
+}
+
+function markCorrect(){testScore.correct++;nextCardOrEnd();}
+function markWrong(){testScore.wrong++;nextCardOrEnd();}
+function nextCardOrEnd(){
+if(cardIndex<shuffled.length-1){nextCard();}else{
+alert(`Test complete!\nCorrect: ${testScore.correct}\nWrong: ${testScore.wrong}\nScore: ${Math.round(testScore.correct/(testScore.correct+testScore.wrong)*100)}%`);
+testScore={correct:0,wrong:0};cardIndex=0;showCard();
+}
+}
+
+function toggleManager(){
+const m=document.getElementById('manager');m.style.display=m.style.display==='none'?'block':'none';
+}
+
+function addCard(){
+const f=document.getElementById('newFront').value.trim();const b=document.getElementById('newBack').value.trim();
+if(!f||!b||!currentDeck)return;
+decks[currentDeck].push({front:f,back:b});save();
+document.getElementById('newFront').value='';document.getElementById('newBack').value='';
+shuffled=decks[currentDeck].map((_,i)=>i);showCard();renderCardList();
+}
+
+function removeCard(i){if(!currentDeck)return;decks[currentDeck].splice(i,1);save();shuffled=decks[currentDeck].map((_,j)=>j);cardIndex=0;showCard();renderCardList();}
+
+function renderCardList(){
+if(!currentDeck)return;
+const list=document.getElementById('cardList');list.innerHTML='';
+decks[currentDeck].forEach((c,i)=>{
+const d=document.createElement('div');d.className='card-list-item';
+d.innerHTML=`<span>${c.front} → ${c.back}</span>`;
+const btn=document.createElement('button');btn.textContent='✕';btn.onclick=()=>removeCard(i);
+d.appendChild(btn);list.appendChild(d);
+});
+document.getElementById('cardCount').textContent=decks[currentDeck].length;
+}
+
+VT.ready(load);
+</script>
+</body>
+</html>

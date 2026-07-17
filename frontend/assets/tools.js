@@ -5178,4 +5178,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎸",
     added: "2026-07-17T11:15:00Z",
   },
+  {
+    slug: "flashcard-maker",
+    name: "Flashcard Maker",
+    description: "Create and study flashcards with multiple decks saved in your browser. Flip cards, shuffle, and self-test mode with score tracking. No data leaves your device.",
+    category: "Fun",
+    icon: "📇",
+    added: "2026-07-17T11:30:00Z",
+  },
 ];
