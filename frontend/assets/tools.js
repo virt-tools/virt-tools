@@ -4938,4 +4938,12 @@ window.VIRTUAL_TOOLS = [
     icon: "⚖️",
     added: "2026-07-17T03:30:00Z",
   },
+  {
+    slug: "hangman",
+    name: "Hangman",
+    description: "Classic word-guessing game. Pick letters to reveal the word before the hangman drawing completes. Three difficulty levels, keyboard support, win/loss tracking. Built-in word list, no network needed.",
+    category: "Fun",
+    icon: "🪢",
+    added: "2026-07-17T03:45:00Z",
+  },
 ];
