@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Minesweeper — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .ms-board { display: inline-grid; gap: 1px; background: var(--border,#2a2f3a); padding: 2px; border-radius: 6px; user-select: none; }
+    .ms-cell { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; cursor: pointer; background: var(--bg-panel,#11151c); border-radius: 3px; }
+    .ms-cell:hover { background: var(--bg-hover,#1a2030); }
+    .ms-cell.revealed { background: var(--bg,#0a0d14); cursor: default; }
+    .ms-cell.revealed:hover { background: var(--bg,#0a0d14); }
+    .ms-cell.flagged { color: #f59e0b; }
+    .ms-cell.mine { background: #7f1d1d; color: #fff; }
+    .ms-cell.detonated { background: #ef4444; color: #fff; }
+    .c1{color:#60a5fa}.c2{color:#4ade80}.c3{color:#f87171}.c4{color:#a78bfa}.c5{color:#fbbf24}.c6{color:#22d3ee}.c7{color:#fb923c}.c8{color:#e879f9}
+    .ms-controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 16px 0; }
+    .ms-status { font-size: 16px; font-weight: 700; display: flex; gap: 16px; align-items: center; }
+    select, button { background: var(--bg-panel,#11151c); border: 1px solid var(--border,#2a2f3a); border-radius: 6px; padding: 6px 12px; color: var(--text,#d4d9e0); font-size: 13px; cursor: pointer; }
+    button:hover { border-color: var(--accent,#6ea8fe); }
+    .ms-overlay { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,.7); z-index: 100; }
+    .ms-overlay.show { display: flex; }
+    .ms-overlay .box { background: var(--bg-panel,#11151c); border: 1px solid var(--border,#2a2f3a); border-radius: 12px; padding: 32px; text-align: center; }
+    .ms-overlay h2 { margin: 0 0 16px; }
+    .ms-overlay .btn { padding: 10px 24px; border-radius: 8px; border: 1px solid var(--accent,#6ea8fe); background: var(--accent,#6ea8fe); color: #08101f; cursor: pointer; font-weight: 700; font-size: 14px; }
+    .ms-flag-mode { background: var(--accent,#6ea8fe) !important; color: #08101f !important; }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Minesweeper</h1>
+      <p>Classic Minesweeper game. Reveal all safe cells without detonating a mine. Right-click or flag mode to mark mines. Three difficulty levels. Everything runs in your browser — no ads, no tracking.</p>
+    </div>
+    <div class="panel">
+      <div class="ms-controls">
+        <select id="difficulty">
+          <option value="easy">Easy (9×9, 10 mines)</option>
+          <option value="medium">Medium (16×16, 40 mines)</option>
+          <option value="hard">Hard (16×30, 99 mines)</option>
+        </select>
+        <button id="newGameBtn">New Game</button>
+        <button id="flagModeBtn">🚩 Flag Mode</button>
+        <div class="ms-status">
+          <span>💣 <span id="mineCount">10</span></span>
+          <span>⏱️ <span id="timer">0</span>s</span>
+          <span id="gameState">Playing</span>
+        </div>
+      </div>
+      <div id="board"></div>
+    </div>
+    <div class="ms-overlay" id="overlay">
+      <div class="box">
+        <h2 id="overlayTitle">Game Over</h2>
+        <p id="overlayMsg" style="margin:0 0 20px;opacity:.7;">You hit a mine!</p>
+        <button class="btn" id="overlayBtn">Play Again</button>
+      </div>
+    </div>
+  </main>
+  <script src="/assets/app.js"></script>
+  <script>
+  (function() {
+    const difficulties = {
+      easy: { rows: 9, cols: 9, mines: 10 },
+      medium: { rows: 16, cols: 16, mines: 40 },
+      hard: { rows: 16, cols: 30, mines: 99 },
+    };
+    let board = [], revealed = [], flagged = [], gameOver = false, won = false;
+    let rows, cols, mineCount, flagMode = false, firstClick = true;
+    let timerInterval = null, elapsed = 0;
+    const boardEl = document.getElementById('board');
+    const mineCountEl = document.getElementById('mineCount');
+    const timerEl = document.getElementById('timer');
+    const gameStateEl = document.getElementById('gameState');
+    const overlay = document.getElementById('overlay');
+    const overlayTitle = document.getElementById('overlayTitle');
+    const overlayMsg = document.getElementById('overlayMsg');
+    const overlayBtn = document.getElementById('overlayBtn');
+
+    function newGame() {
+      const diff = difficulties[document.getElementById('difficulty').value];
+      rows = diff.rows; cols = diff.cols; mineCount = diff.mines;
+      board = Array.from({length: rows}, () => Array(cols).fill(0));
+      revealed = Array.from({length: rows}, () => Array(cols).fill(false));
+      flagged = Array.from({length: rows}, () => Array(cols).fill(false));
+      gameOver = false; won = false; firstClick = true; elapsed = 0;
+      clearInterval(timerInterval); timerInterval = null;
+      mineCountEl.textContent = mineCount;
+      timerEl.textContent = '0';
+      gameStateEl.textContent = 'Playing';
+      overlay.classList.remove('show');
+      renderBoard();
+    }
+
+    function placeMines(safeR, safeC) {
+      let placed = 0;
+      while (placed < mineCount) {
+        const r = Math.floor(Math.random() * rows);
+        const c = Math.floor(Math.random() * cols);
+        if (board[r][c] === -1) continue;
+        if (Math.abs(r - safeR) <= 1 && Math.abs(c - safeC) <= 1) continue;
+        board[r][c] = -1; placed++;
+      }
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          if (board[r][c] === -1) continue;
+          let count = 0;
+          for (let dr = -1; dr <= 1; dr++) {
+            for (let dc = -1; dc <= 1; dc++) {
+              const nr = r + dr, nc = c + dc;
+              if (nr >= 0 && nr < rows && nc >= 0 && nc < cols && board[nr][nc] === -1) count++;
+            }
+          }
+          board[r][c] = count;
+        }
+      }
+    }
+
+    function renderBoard() {
+      boardEl.innerHTML = '';
+      boardEl.style.gridTemplateColumns = `repeat(${cols}, 30px)`;
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const cell = document.createElement('div');
+          cell.className = 'ms-cell';
+          cell.dataset.r = r; cell.dataset.c = c;
+          updateCell(cell, r, c);
+          boardEl.appendChild(cell);
+        }
+      }
+    }
+
+    function updateCell(cell, r, c) {
+      cell.className = 'ms-cell';
+      cell.textContent = '';
+      if (flagged[r][c]) {
+        cell.classList.add('flagged');
+        cell.textContent = '🚩';
+        return;
+      }
+      if (!revealed[r][c]) return;
+      cell.classList.add('revealed');
+      if (board[r][c] === -1) {
+        cell.classList.add('mine');
+        cell.textContent = '💣';
+      } else if (board[r][c] > 0) {
+        cell.textContent = board[r][c];
+        cell.classList.add('c' + board[r][c]);
+      }
+    }
+
+    function reveal(r, c) {
+      if (r < 0 || r >= rows || c < 0 || c >= cols) return;
+      if (revealed[r][c] || flagged[r][c]) return;
+      revealed[r][c] = true;
+      if (board[r][c] === 0) {
+        for (let dr = -1; dr <= 1; dr++)
+          for (let dc = -1; dc <= 1; dc++)
+            if (dr || dc) reveal(r + dr, c + dc);
+      }
+    }
+
+    function checkWin() {
+      let unrevealed = 0;
+      for (let r = 0; r < rows; r++)
+        for (let c = 0; c < cols; c++)
+          if (!revealed[r][c] && board[r][c] !== -1) unrevealed++;
+      return unrevealed === 0;
+    }
+
+    function endGame(detonatedR, detonatedC) {
+      gameOver = true;
+      clearInterval(timerInterval);
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          if (board[r][c] === -1) { revealed[r][c] = true; flagged[r][c] = false; }
+        }
+      }
+      const cells = boardEl.querySelectorAll('.ms-cell');
+      for (const cell of cells) {
+        updateCell(cell, parseInt(cell.dataset.r), parseInt(cell.dataset.c));
+      }
+      if (detonatedR !== undefined) {
+        const det = cells[detonatedR * cols + detonatedC];
+        if (det) det.classList.add('detonated');
+        gameStateEl.textContent = '💀 Lost';
+        overlayTitle.textContent = '💥 Boom!';
+        overlayMsg.textContent = 'You hit a mine! Time: ' + elapsed + 's';
+      } else {
+        won = true;
+        gameStateEl.textContent = '🎉 Won!';
+        overlayTitle.textContent = '🎉 You Win!';
+        overlayMsg.textContent = 'Cleared in ' + elapsed + 's';
+      }
+      overlay.classList.add('show');
+    }
+
+    boardEl.addEventListener('click', e => {
+      if (gameOver) return;
+      const cell = e.target.closest('.ms-cell');
+      if (!cell) return;
+      const r = parseInt(cell.dataset.r), c = parseInt(cell.dataset.c);
+      if (flagMode) {
+        if (revealed[r][c]) return;
+        flagged[r][c] = !flagged[r][c];
+        mineCountEl.textContent = mineCount - countFlags();
+        updateCell(cell, r, c);
+        return;
+      }
+      if (flagged[r][c] || revealed[r][c]) return;
+      if (firstClick) {
+        firstClick = false;
+        placeMines(r, c);
+        timerInterval = setInterval(() => { elapsed++; timerEl.textContent = elapsed; }, 1000);
+      }
+      if (board[r][c] === -1) {
+        endGame(r, c);
+        return;
+      }
+      reveal(r, c);
+      renderAll();
+      if (checkWin()) endGame();
+    });
+
+    boardEl.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      if (gameOver) return;
+      const cell = e.target.closest('.ms-cell');
+      if (!cell) return;
+      const r = parseInt(cell.dataset.r), c = parseInt(cell.dataset.c);
+      if (revealed[r][c]) return;
+      flagged[r][c] = !flagged[r][c];
+      mineCountEl.textContent = mineCount - countFlags();
+      updateCell(cell, r, c);
+    });
+
+    function countFlags() {
+      let n = 0;
+      for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) if (flagged[r][c]) n++;
+      return n;
+    }
+
+    function renderAll() {
+      const cells = boardEl.querySelectorAll('.ms-cell');
+      for (const cell of cells) updateCell(cell, parseInt(cell.dataset.r), parseInt(cell.dataset.c));
+    }
+
+    document.getElementById('newGameBtn').addEventListener('click', newGame);
+    document.getElementById('difficulty').addEventListener('change', newGame);
+    overlayBtn.addEventListener('click', newGame);
+    document.getElementById('flagModeBtn').addEventListener('click', e => {
+      flagMode = !flagMode;
+      e.target.classList.toggle('ms-flag-mode', flagMode);
+    });
+
+    newGame();
+  })();
+  </script>
+</body>
+</html>

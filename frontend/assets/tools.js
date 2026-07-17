@@ -4906,4 +4906,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎲",
     added: "2026-07-17T02:40:00Z",
   },
+  {
+    slug: "minesweeper",
+    name: "Minesweeper",
+    description: "Classic Minesweeper game. Reveal all safe cells without detonating a mine. Right-click or flag mode to mark mines. Three difficulty levels with timer. Fully client-side — no ads, no tracking.",
+    category: "Fun",
+    icon: "💣",
+    added: "2026-07-17T02:50:00Z",
+  },
 ];
