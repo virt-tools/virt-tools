@@ -5002,4 +5002,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🃏",
     added: "2026-07-17T05:30:00Z",
   },
+  {
+    slug: "reaction-time-test",
+    name: "Reaction Time Test",
+    description: "Test your reflexes — click when the box turns green. 5 rounds with average, best time, and color-coded history. Catches early clicks too. Fully client-side.",
+    category: "Fun",
+    icon: "⚡",
+    added: "2026-07-17T05:45:00Z",
+  },
 ];
