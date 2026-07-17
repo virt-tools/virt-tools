@@ -5258,4 +5258,12 @@ window.VIRTUAL_TOOLS = [
     icon: "❓",
     added: "2026-07-17T13:45:00Z",
   },
+  {
+    slug: "rock-paper-scissors",
+    name: "Rock Paper Scissors",
+    description: "Classic hand game vs AI. Animated reveal, score tracking, win/lose streaks, and recent round history. All client-side.",
+    category: "Fun",
+    icon: "✊",
+    added: "2026-07-17T14:00:00Z",
+  },
 ];
