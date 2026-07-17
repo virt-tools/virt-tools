@@ -4994,4 +4994,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔤",
     added: "2026-07-17T05:15:00Z",
   },
+  {
+    slug: "memory-match",
+    name: "Memory Match",
+    description: "Classic card-matching memory game. Choose grid size (4×4 to 8×8) and theme (emoji, letters, or colors). Move counter, timer, and win celebration. Fully client-side.",
+    category: "Fun",
+    icon: "🃏",
+    added: "2026-07-17T05:30:00Z",
+  },
 ];

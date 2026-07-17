@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Memory Match — Virtual Tools</title>
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.tool-wrap { max-width: 600px; margin: 0 auto; text-align:center; }
+.controls { display:flex; gap:12px; justify-content:center; align-items:center; flex-wrap:wrap; margin:16px 0; }
+.controls select, .controls button { padding:8px 14px; border:1px solid var(--border,#2a2f3a); border-radius:8px; background:var(--bg-panel,#11151c); color:var(--text); font-size:14px; cursor:pointer; }
+.controls select:focus { outline:none; border-color:var(--accent,#6ea8fe); }
+.btn { border:1px solid var(--border,#2a2f3a); border-radius:8px; padding:8px 18px; font-size:14px; cursor:pointer; background:var(--bg-panel,#11151c); color:var(--text); }
+.btn:hover { border-color:var(--accent,#6ea8fe); }
+#stats { display:flex; gap:24px; justify-content:center; margin:12px 0; font-size:15px; }
+#stats span { font-weight:700; }
+#grid { display:grid; gap:8px; margin:20px auto; width:fit-content; }
+.card { width:70px; height:70px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:32px; cursor:pointer; background:var(--bg-panel,#11151c); border:2px solid var(--border,#2a2f3a); transition:all .2s; user-select:none; }
+.card:hover:not(.flipped):not(.matched) { border-color:var(--accent,#6ea8fe); transform:scale(1.03); }
+.card.flipped { background:rgba(110,168,254,.15); border-color:var(--accent,#6ea8fe); }
+.card.matched { background:rgba(83,141,78,.2); border-color:#538d4e; opacity:.6; cursor:default; }
+.card.matched .emoji { opacity:.5; }
+#msg { font-size:16px; font-weight:700; margin:16px 0; min-height:24px; color:#538d4e; }
+.tool-desc { opacity:.7; font-size:14px; margin-bottom:8px; }
+</style>
+</head>
+<body>
+<header id="site-header"></header>
+<main>
+<div class="tool-wrap">
+<h1>Memory Match</h1>
+<p class="tool-desc">Classic card-matching memory game. Flip cards to find pairs — match all pairs to win. Choose grid size and theme. No tracking, no ads.</p>
+<div class="controls">
+<label>Grid:</label>
+<select id="size" onchange="newGame()">
+<option value="4">4×4 (16 cards)</option>
+<option value="6">6×6 (36 cards)</option>
+<option value="8">8×8 (64 cards)</option>
+</select>
+<label>Theme:</label>
+<select id="theme" onchange="newGame()">
+<option value="emoji">Emoji</option>
+<option value="letters">Letters</option>
+<option value="colors">Colors</option>
+</select>
+<button class="btn" onclick="newGame()">New Game</button>
+</div>
+<div id="stats">
+<div>Moves: <span id="moves">0</span></div>
+<div>Matches: <span id="matches">0</span></div>
+<div>Time: <span id="time">0:00</span></div>
+</div>
+<div id="grid"></div>
+<div id="msg"></div>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+const THEMES={
+emoji:['🐶','🐱','🦊','🐻','🐼','🐨','🦁','🐯','🦄','🐸','🐙','🦋','🌟','🌙','⚡','🔥','💧','🌈','🎵','🎮','🍕','🍔','🍰','🍒','⚽','🏀','🎯','🎨','🚀','🎸','💎','🎁'],
+letters:['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z','α','β','γ','δ','ε','ζ'],
+colors:['#e74c3c','#e67e22','#f1c40f','#2ecc71','#1abc9c','#3498db','#9b59b6','#e91e63','#00bcd4','#4caf50','#ff9800','#795548','#607d8b','#cddc39','#ff5722','#673ab7','#009688','#ffc107','#03a9f4','#8bc34a','#ffeb3b','#f44336','#9c27b0','#3f51b5','#00bcd4','#c0392b','#d35400','#16a085','#2980b9','#8e44ad','#27ae60','#f39c12']
+};
+
+let cards=[],flipped=[],matched=0,moves=0,timer=0,timerInt=null,lock=false;
+
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+
+function newGame(){
+  clearInterval(timerInt); timer=0; moves=0; matched=0; flipped=[]; lock=false;
+  document.getElementById('moves').textContent='0';
+  document.getElementById('matches').textContent='0';
+  document.getElementById('time').textContent='0:00';
+  document.getElementById('msg').textContent='';
+  const size=parseInt(document.getElementById('size').value);
+  const theme=document.getElementById('theme').value;
+  const pool=THEMES[theme];
+  const pairs=size*size/2;
+  const symbols=pool.slice(0,pairs);
+  cards=shuffle([...symbols,...symbols]);
+  const grid=document.getElementById('grid');
+  grid.style.gridTemplateColumns=`repeat(${size}, 70px)`;
+  grid.innerHTML='';
+  cards.forEach((sym,i)=>{
+    const card=document.createElement('div');
+    card.className='card'; card.dataset.idx=i; card.dataset.sym=sym;
+    if(theme==='colors'){
+      card.dataset.color=sym;
+      card.innerHTML='<span class="emoji" style="visibility:hidden">●</span>';
+    }else{
+      card.innerHTML='<span class="emoji" style="visibility:hidden">'+sym+'</span>';
+    }
+    card.onclick=()=>flip(card);
+    grid.appendChild(card);
+  });
+}
+
+function flip(card){
+  if(lock||card.classList.contains('flipped')||card.classList.contains('matched'))return;
+  if(!timerInt)startTimer();
+  card.classList.add('flipped');
+  if(card.dataset.color){
+    card.style.background=card.dataset.color;
+  }else{
+    card.querySelector('.emoji').style.visibility='visible';
+  }
+  flipped.push(card);
+  if(flipped.length===2){
+    moves++; document.getElementById('moves').textContent=moves;
+    lock=true;
+    const[a,b]=flipped;
+    if(a.dataset.sym===b.dataset.sym){
+      setTimeout(()=>{
+        a.classList.add('matched'); b.classList.add('matched');
+        matched++; document.getElementById('matches').textContent=matched;
+        flipped=[]; lock=false;
+        if(matched===cards.length/2)win();
+      },400);
+    }else{
+      setTimeout(()=>{
+        a.classList.remove('flipped'); b.classList.remove('flipped');
+        if(a.dataset.color){a.style.background='';}
+        else{a.querySelector('.emoji').style.visibility='hidden';}
+        if(b.dataset.color){b.style.background='';}
+        else{b.querySelector('.emoji').style.visibility='hidden';}
+        flipped=[]; lock=false;
+      },800);
+    }
+  }
+}
+
+function startTimer(){
+  timerInt=setInterval(()=>{
+    timer++; const m=Math.floor(timer/60),s=timer%60;
+    document.getElementById('time').textContent=m+':'+String(s).padStart(2,'0');
+  },1000);
+}
+
+function win(){
+  clearInterval(timerInt);
+  const m=Math.floor(timer/60),s=timer%60;
+  document.getElementById('msg').textContent='🎉 You won in '+moves+' moves and '+m+':'+String(s).padStart(2,'0')+'!';
+}
+
+newGame();
+</script>
+</body>
+</html>
