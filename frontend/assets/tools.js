@@ -5058,4 +5058,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🟦",
     added: "2026-07-17T07:15:00Z",
   },
+  {
+    slug: "sudoku-puzzle",
+    name: "Sudoku",
+    description: "Play Sudoku with freshly generated puzzles at easy, medium, or hard difficulty. Click cells and type 1–9 or use the numpad. Built-in check, hint, and solve features. Timer and mistake counter. Fully client-side.",
+    category: "Fun",
+    icon: "🔢",
+    added: "2026-07-17T07:30:00Z",
+  },
 ];
