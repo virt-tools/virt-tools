@@ -5066,4 +5066,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔢",
     added: "2026-07-17T07:30:00Z",
   },
+  {
+    slug: "nonogram",
+    name: "Nonogram",
+    description: "Logic puzzle (also known as Picross) — fill cells based on row and column number clues to reveal a hidden picture. 7 built-in puzzles, fill/mark modes, right-click support. Fully client-side.",
+    category: "Fun",
+    icon: "🔲",
+    added: "2026-07-17T07:45:00Z",
+  },
 ];
