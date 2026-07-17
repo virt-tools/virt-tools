@@ -4986,4 +4986,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🟩",
     added: "2026-07-17T05:00:00Z",
   },
+  {
+    slug: "anagram-solver",
+    name: "Anagram Solver",
+    description: "Enter letters to find all dictionary words that can be formed from them. Filter by length, sort by length/alphabetical/Scrabble points, and click to copy. ~1000-word built-in dictionary, fully client-side.",
+    category: "Text",
+    icon: "🔤",
+    added: "2026-07-17T05:15:00Z",
+  },
 ];
