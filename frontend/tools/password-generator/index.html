@@ -6,6 +6,30 @@
   <script src="/assets/theme-init.js"></script>
   <title>Password Generator — Virtual Tools</title>
   <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .tool-wrap { max-width: 580px; margin: 0 auto; }
+    .pwd-display { font-family:'SF Mono','Fira Code',monospace; font-size:22px; letter-spacing:2px; background:var(--bg-panel,#11151c); border:1px solid var(--border,#2a2f3a); border-radius:10px; padding:18px 20px; text-align:center; word-break:break-all; cursor:pointer; user-select:all; position:relative; }
+    .pwd-display:hover { border-color:var(--accent,#6ea8fe); }
+    .pwd-display .copy-hint { font-size:12px; opacity:.4; display:block; letter-spacing:0; margin-top:6px; }
+    .strength-bar { height:8px; border-radius:4px; background:var(--bg-panel,#11151c); border:1px solid var(--border,#2a2f3a); overflow:hidden; margin-top:8px; }
+    .strength-fill { height:100%; border-radius:4px; transition:width .3s, background .3s; }
+    .controls { background:var(--bg-panel,#11151c); border:1px solid var(--border,#2a2f3a); border-radius:12px; padding:20px; margin-top:16px; }
+    .row { display:flex; align-items:center; gap:12px; margin-bottom:14px; }
+    .row label { flex:0 0 120px; font-size:14px; font-weight:600; }
+    .row input[type=range] { flex:1; accent-color:var(--accent,#6ea8fe); }
+    .row .val { flex:0 0 40px; text-align:right; font-weight:700; font-size:16px; }
+    .checks { display:grid; grid-template-columns:1fr 1fr; gap:8px 16px; margin-bottom:14px; }
+    .checks label { display:flex; align-items:center; gap:8px; font-size:14px; cursor:pointer; }
+    .checks input[type=checkbox] { accent-color:var(--accent,#6ea8fe); width:18px; height:18px; }
+    .btn { background:var(--accent,#6ea8fe); color:#0a0e14; border:none; border-radius:8px; padding:12px 24px; font-size:15px; font-weight:700; cursor:pointer; width:100%; }
+    .btn:hover { opacity:.85; }
+    .btn:active { transform:scale(.98); }
+    .entropy { font-size:14px; margin-top:10px; opacity:.7; }
+    .history { margin-top:16px; }
+    .history h3 { font-size:14px; margin-bottom:8px; opacity:.7; }
+    .history .item { font-family:'SF Mono','Fira Code',monospace; font-size:13px; background:var(--bg-panel,#11151c); border:1px solid var(--border,#2a2f3a); border-radius:6px; padding:8px 12px; margin-bottom:6px; word-break:break-all; }
+    .charsets { font-size:12px; opacity:.5; margin-top:4px; }
+  </style>
 </head>
 <body>
   <div id="site-header"></div>
@@ -13,150 +37,127 @@
     <div class="tool-header">
       <a class="back" href="/">← All tools</a>
       <h1>Password Generator</h1>
-      <p>Generate strong, random passwords entirely in your browser using the Web Crypto API. Nothing is ever sent over the network.</p>
+      <p>Generate cryptographically secure passwords using the Web Crypto API. Customize length and character sets. Nothing is stored or transmitted — generated entirely in your browser.</p>
     </div>
-
-    <div class="panel">
-      <div class="field">
-        <label for="length">Length: <span id="length-val">20</span></label>
-        <input type="range" id="length" min="4" max="64" value="20">
+    <div class="panel tool-wrap">
+      <div class="pwd-display" id="pwd" title="Click to copy">
+        <span id="pwdText">Click Generate</span>
+        <span class="copy-hint">click to copy</span>
       </div>
-
-      <div class="row" style="flex-wrap:wrap; gap:14px;">
-        <label class="check"><input type="checkbox" id="opt-upper" checked> Uppercase (A–Z)</label>
-        <label class="check"><input type="checkbox" id="opt-lower" checked> Lowercase (a–z)</label>
-        <label class="check"><input type="checkbox" id="opt-digit" checked> Digits (0–9)</label>
-        <label class="check"><input type="checkbox" id="opt-symbol" checked> Symbols (!@#$…)</label>
-        <label class="check"><input type="checkbox" id="opt-noambiguous"> Exclude look-alikes (Il1O0)</label>
+      <div class="strength-bar"><div class="strength-fill" id="strengthFill" style="width:0"></div></div>
+      <div class="entropy" id="entropy"></div>
+      <div class="controls">
+        <div class="row">
+          <label for="len">Length</label>
+          <input type="range" id="len" min="4" max="128" value="20">
+          <span class="val" id="lenVal">20</span>
+        </div>
+        <div class="checks">
+          <label><input type="checkbox" id="lower" checked> a-z lowercase</label>
+          <label><input type="checkbox" id="upper" checked> A-Z uppercase</label>
+          <label><input type="checkbox" id="digits" checked> 0-9 digits</label>
+          <label><input type="checkbox" id="symbols" checked> !@#$ symbols</label>
+          <label><input type="checkbox" id="avoidAmbig"> Avoid ambiguous (l1IO0)</label>
+          <label><input type="checkbox" id="noRepeat"> No repeats</label>
+        </div>
+        <button class="btn" id="gen">Generate Password</button>
       </div>
-
-      <div class="spacer"></div>
-      <button id="generate">Generate</button>
-      <button id="copy" class="secondary">Copy</button>
-
-      <div class="spacer"></div>
-      <label for="out">Your password</label>
-      <div class="output" id="out" style="font-family:monospace; word-break:break-all;"></div>
-      <p class="note" id="strength"></p>
-      <p class="note">Generated with <code>crypto.getRandomValues()</code> — cryptographically secure, never transmitted.</p>
+      <div class="history" id="histWrap" style="display:none">
+        <h3>Recent (this session only)</h3>
+        <div id="hist"></div>
+      </div>
     </div>
   </main>
-
   <script src="/assets/app.js"></script>
   <script>
-  (function () {
-    var lengthInput = document.getElementById("length");
-    var lengthVal = document.getElementById("length-val");
-    var out = document.getElementById("out");
-    var strengthEl = document.getElementById("strength");
-    var lastPassword = "";
+  (function() {
+    const lower = 'abcdefghijklmnopqrstuvwxyz';
+    const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const digits = '0123456789';
+    const symbols = '!@#$%^&*()-_=+[]{}|;:,.<>?/~';
+    const ambig = 'l1IO0';
+    const pwdEl = document.getElementById('pwdText');
+    const pwdBox = document.getElementById('pwd');
+    const fill = document.getElementById('strengthFill');
+    const entEl = document.getElementById('entropy');
+    const len = document.getElementById('len');
+    const lenVal = document.getElementById('lenVal');
+    const hist = document.getElementById('hist');
+    const histWrap = document.getElementById('histWrap');
+    let history = [];
 
-    var SETS = {
-      upper: "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-      lower: "abcdefghijklmnopqrstuvwxyz",
-      digit: "0123456789",
-      symbol: "!@#$%^&*()-_=+[]{};:,.<>?/~"
-    };
-    var AMBIGUOUS = "Il1O0";
-
-    function buildPool() {
-      var opts = {
-        upper: document.getElementById("opt-upper").checked,
-        lower: document.getElementById("opt-lower").checked,
-        digit: document.getElementById("opt-digit").checked,
-        symbol: document.getElementById("opt-symbol").checked
-      };
-      var noAmbiguous = document.getElementById("opt-noambiguous").checked;
-      var pool = "";
-      var required = [];
-      Object.keys(SETS).forEach(function (k) {
-        if (!opts[k]) return;
-        var chars = SETS[k];
-        if (noAmbiguous) chars = chars.split("").filter(function (c) {
-          return AMBIGUOUS.indexOf(c) === -1;
-        }).join("");
-        pool += chars;
-        if (chars) required.push(chars);
-      });
-      return { pool: pool, required: required };
+    function getPool() {
+      let pool = '';
+      const sets = [];
+      if (document.getElementById('lower').checked) sets.push(lower);
+      if (document.getElementById('upper').checked) sets.push(upper);
+      if (document.getElementById('digits').checked) sets.push(digits);
+      if (document.getElementById('symbols').checked) sets.push(symbols);
+      pool = sets.join('');
+      if (document.getElementById('avoidAmbig').checked) {
+        pool = pool.split('').filter(c => !ambig.includes(c)).join('');
+      }
+      return pool;
     }
 
-    // Unbiased random index over [0, max) avoiding modulo bias.
-    function randomInt(max) {
-      if (max <= 0) return 0;
-      var maxUint32 = 0xFFFFFFFF;
-      var limit = maxUint32 - (maxUint32 % max);
-      var buf = new Uint32Array(1);
-      var x;
-      do {
-        crypto.getRandomValues(buf);
-        x = buf[0];
-      } while (x >= limit);
-      return x % max;
+    function secureRandom(max) {
+      const buf = new Uint32Array(1);
+      crypto.getRandomValues(buf);
+      return buf[0] % max;
     }
 
     function generate() {
-      var len = parseInt(lengthInput.value, 10) || 4;
-      var ref = buildPool();
-      if (!ref.pool) {
-        out.textContent = "";
-        strengthEl.textContent = "Select at least one character set.";
-        lastPassword = "";
-        return;
+      const pool = getPool();
+      if (!pool) { pwdEl.textContent = 'Select at least one character set'; return; }
+      const n = parseInt(len.value);
+      const noRepeat = document.getElementById('noRepeat').checked;
+      if (noRepeat && n > pool.length) { pwdEl.textContent = 'Too many chars for no-repeat'; return; }
+      let pwd = '';
+      const used = new Set();
+      while (pwd.length < n) {
+        const c = pool[secureRandom(pool.length)];
+        if (noRepeat && used.has(c)) continue;
+        used.add(c);
+        pwd += c;
       }
-      var chars = [];
-      // Guarantee at least one from each chosen set, then fill randomly.
-      ref.required.forEach(function (set) {
-        chars.push(set[randomInt(set.length)]);
+      pwdEl.textContent = pwd;
+      updateStrength(pwd, pool);
+      history.unshift(pwd);
+      if (history.length > 5) history.pop();
+      renderHistory();
+    }
+
+    function updateStrength(pwd, pool) {
+      const bits = Math.log2(pool.length) * pwd.length;
+      let pct, color, label;
+      if (bits < 28) { pct = 20; color = '#e74c3c'; label = 'Weak (' + Math.round(bits) + ' bits)'; }
+      else if (bits < 60) { pct = 50; color = '#f39c12'; label = 'Fair (' + Math.round(bits) + ' bits)'; }
+      else if (bits < 128) { pct = 80; color = '#27ae60'; label = 'Strong (' + Math.round(bits) + ' bits)'; }
+      else { pct = 100; color = '#2d7d46'; label = 'Excellent (' + Math.round(bits) + ' bits)'; }
+      fill.style.width = pct + '%';
+      fill.style.background = color;
+      entEl.textContent = 'Entropy: ' + label;
+    }
+
+    function renderHistory() {
+      if (history.length === 0) { histWrap.style.display = 'none'; return; }
+      histWrap.style.display = 'block';
+      hist.innerHTML = history.map(p => '<div class="item">' + p + '</div>').join('');
+    }
+
+    pwdBox.addEventListener('click', () => {
+      const txt = pwdEl.textContent;
+      if (!txt || txt.startsWith('Click') || txt.startsWith('Select') || txt.startsWith('Too ')) return;
+      navigator.clipboard.writeText(txt).then(() => {
+        const hint = pwdBox.querySelector('.copy-hint');
+        const orig = hint.textContent;
+        hint.textContent = 'copied!';
+        setTimeout(() => hint.textContent = orig, 1000);
       });
-      while (chars.length < len) chars.push(ref.pool[randomInt(ref.pool.length)]);
-      // Shuffle (Fisher–Yates) so the guaranteed chars aren't always first.
-      for (var i = chars.length - 1; i > 0; i--) {
-        var j = randomInt(i + 1);
-        var tmp = chars[i]; chars[i] = chars[j]; chars[j] = tmp;
-      }
-      lastPassword = chars.slice(0, len).join("");
-      out.textContent = lastPassword;
-      estimateStrength(lastPassword, ref.pool.length);
-    }
-
-    function estimateStrength(pw, poolSize) {
-      var entropy = pw.length * Math.log2(poolSize || 1);
-      var bits = entropy.toFixed(0);
-      var label, cls;
-      if (entropy < 40) { label = "Weak"; cls = "status-rejected"; }
-      else if (entropy < 60) { label = "Fair"; cls = "status-received"; }
-      else if (entropy < 80) { label = "Strong"; cls = "status-completed"; }
-      else { label = "Very strong"; cls = "status-completed"; }
-      strengthEl.innerHTML = "Entropy ≈ " + bits + " bits — <span class=\"status-badge " + cls + "\">" + label + "</span>";
-    }
-
-    document.getElementById("generate").addEventListener("click", generate);
-
-    document.getElementById("copy").addEventListener("click", function () {
-      if (!lastPassword) return;
-      var btn = this;
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(lastPassword).then(function () {
-          btn.textContent = "Copied!"; setTimeout(function () { btn.textContent = "Copy"; }, 1200);
-        });
-      } else {
-        var ta = document.createElement("textarea");
-        ta.value = lastPassword; document.body.appendChild(ta); ta.select();
-        try { document.execCommand("copy"); btn.textContent = "Copied!"; setTimeout(function () { btn.textContent = "Copy"; }, 1200); }
-        catch (e) {}
-        ta.remove();
-      }
     });
 
-    lengthInput.addEventListener("input", function () {
-      lengthVal.textContent = lengthInput.value;
-      generate();
-    });
-    ["opt-upper", "opt-lower", "opt-digit", "opt-symbol", "opt-noambiguous"].forEach(function (id) {
-      document.getElementById(id).addEventListener("change", generate);
-    });
-
+    len.addEventListener('input', () => lenVal.textContent = len.value);
+    document.getElementById('gen').addEventListener('click', generate);
     generate();
   })();
   </script>

@@ -4962,4 +4962,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔢",
     added: "2026-07-17T04:15:00Z",
   },
+  {
+    slug: "password-generator",
+    name: "Password Generator",
+    description: "Generate cryptographically secure passwords with Web Crypto API. Customizable length, character sets, exclude ambiguous chars, no-repeat mode, entropy meter, and click-to-copy.",
+    category: "Security",
+    icon: "🔐",
+    added: "2026-07-17T04:30:00Z",
+  },
 ];
