@@ -4874,4 +4874,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🍅",
     added: "2026-07-17T02:00:00Z",
   },
+  {
+    slug: "keyboard-tester",
+    name: "Keyboard Tester & Shortcut Visualizer",
+    description: "Test your keyboard, view key codes and event details, visualize modifier combos, and reference common shortcuts. Visual keyboard lights up on keypress. Fully client-side — no key data recorded.",
+    category: "Developer",
+    icon: "⌨️",
+    added: "2026-07-17T02:10:00Z",
+  },
 ];
