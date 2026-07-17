@@ -5106,4 +5106,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔢",
     added: "2026-07-17T08:45:00Z",
   },
+  {
+    slug: "gomoku",
+    name: "Gomoku",
+    description: "Classic five-in-a-row strategy game on a 15×15 board. Place stones to get 5 in a row horizontally, vertically, or diagonally. Play vs AI or 2-player local. Fully client-side.",
+    category: "Fun",
+    icon: "⚫",
+    added: "2026-07-17T09:00:00Z",
+  },
 ];
