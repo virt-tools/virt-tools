@@ -4898,4 +4898,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎮",
     added: "2026-07-17T02:30:00Z",
   },
+  {
+    slug: "mock-data-generator",
+    name: "Mock Data Generator",
+    description: "Generate realistic fake data for testing — names, emails, addresses, phone numbers, UUIDs, dates, prices, and 24+ field types. Export as JSON, CSV, or SQL INSERT statements. Fully client-side — no data leaves your browser.",
+    category: "Data",
+    icon: "🎲",
+    added: "2026-07-17T02:40:00Z",
+  },
 ];
