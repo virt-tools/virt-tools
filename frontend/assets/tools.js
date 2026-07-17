@@ -5074,4 +5074,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔲",
     added: "2026-07-17T07:45:00Z",
   },
+  {
+    slug: "mastermind",
+    name: "Mastermind",
+    description: "Classic code-breaking game. Guess the 4-color secret code in 10 tries. Black dots = right color & position, white dots = right color wrong position. Fully client-side.",
+    category: "Fun",
+    icon: "🎯",
+    added: "2026-07-17T08:00:00Z",
+  },
 ];
