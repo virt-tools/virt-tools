@@ -4850,4 +4850,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🗜️",
     added: "2026-07-17T01:30:00Z",
   },
+  {
+    slug: "code-snippet-manager",
+    name: "Code Snippet Manager",
+    description: "Save, organize, and search code snippets — stored entirely in your browser's localStorage. Tag, search, export/import as JSON. No data leaves your device.",
+    category: "Developer",
+    icon: "📝",
+    added: "2026-07-17T01:40:00Z",
+  },
 ];

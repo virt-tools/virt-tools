@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Code Snippet Manager — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .vt-layout{max-width:700px;margin:20px auto;}
+    .vt-card{background:var(--card-bg,#21212e);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:16px 20px;margin:10px 0;}
+    .vt-card h3{margin:0 0 12px;font-size:15px;}
+    label{font-size:13px;display:block;margin-bottom:4px;}
+    input[type=text],input[type=search],textarea,select{font-family:monospace;font-size:13px;padding:8px 12px;border:1px solid var(--border,#2a2f3a);border-radius:6px;background:var(--bg,#1a1a2e);color:var(--text,#e0e0e0);box-sizing:border-box;width:100%;}
+    textarea{min-height:140px;resize:vertical;}
+    button{padding:8px 18px;border-radius:8px;cursor:pointer;border:1px solid var(--border,#2a2f3a);background:var(--card-bg,#21212e);color:var(--text,#e0e0e0);font-size:14px;margin:4px 0;}
+    button:hover{opacity:.8;}
+    button.primary{background:#5b8af5;color:#fff;border-color:#5b8af5;}
+    button.danger{background:#ff5b5b;color:#fff;border-color:#ff5b5b;}
+    button.small{padding:4px 10px;font-size:12px;}
+    .row{display:flex;gap:12px;margin:8px 0;align-items:flex-end;}
+    .row>div{flex:1;}
+    .snippet-item{border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:12px 16px;margin:8px 0;cursor:pointer;}
+    .snippet-item:hover{border-color:#5b8af5;}
+    .snippet-item.active{border-color:#5b8af5;background:rgba(91,138,245,0.1);}
+    .snippet-title{font-weight:bold;font-size:15px;}
+    .snippet-meta{font-size:12px;opacity:.5;margin:4px 0;}
+    .snippet-lang{display:inline-block;padding:2px 8px;border-radius:4px;background:rgba(91,138,245,0.2);font-size:11px;color:#5b8af5;margin-right:6px;}
+    .snippet-tags span{display:inline-block;padding:2px 6px;border-radius:4px;background:var(--bg,#1a1a2e);font-size:11px;margin-right:4px;opacity:.7;}
+    .actions{margin:12px 0;}
+    .search-row{margin:12px 0;}
+    .hint{font-size:12px;opacity:.5;margin:4px 0 0;}
+    .empty{text-align:center;opacity:.4;padding:40px 0;}
+    pre{white-space:pre-wrap;word-break:break-word;font-family:monospace;font-size:13px;padding:12px;border:1px solid var(--border,#2a2f3a);border-radius:6px;background:var(--bg,#1a1a2e);overflow-x:auto;max-height:300px;overflow-y:auto;}
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Code Snippet Manager</h1>
+      <p>Save, organize, and search code snippets — stored entirely in your browser's localStorage. Tag, search, and export snippets as JSON. No data leaves your device.</p>
+    </div>
+
+    <div class="vt-layout">
+      <div class="search-row">
+        <input type="search" id="searchBox" placeholder="Search snippets by title, tag, or content...">
+      </div>
+
+      <div class="vt-card">
+        <h3 id="formTitle">Add New Snippet</h3>
+        <div class="row">
+          <div style="flex:2">
+            <label>Title</label>
+            <input type="text" id="title" placeholder="e.g. Debounce function">
+          </div>
+          <div style="flex:1">
+            <label>Language</label>
+            <select id="language">
+              <option value="">—</option>
+              <option>JavaScript</option><option>TypeScript</option><option>Python</option><option>HTML</option><option>CSS</option><option>JSON</option><option>Bash</option><option>SQL</option><option>Ruby</option><option>Go</option><option>Rust</option><option>Java</option><option>C</option><option>C++</option><option>C#</option><option>PHP</option><option>YAML</option><option>Markdown</option><option>Other</option>
+            </select>
+          </div>
+        </div>
+        <label>Tags (comma-separated)</label>
+        <input type="text" id="tags" placeholder="e.g. utility, frontend, async">
+        <label>Code</label>
+        <textarea id="code" placeholder="Paste your code here..."></textarea>
+        <div class="actions">
+          <button class="primary" id="saveBtn">Save Snippet</button>
+          <button id="clearBtn">Clear</button>
+          <button id="exportBtn">Export All (JSON)</button>
+          <button id="importBtn">Import (JSON)</button>
+          <input type="file" id="importFile" accept=".json" style="display:none">
+          <button class="danger" id="deleteAllBtn">Delete All</button>
+        </div>
+      </div>
+
+      <div id="snippetList"></div>
+    </div>
+  </main>
+
+  <script src="/assets/app.js"></script>
+  <script>
+  (function(){
+    var d=document;
+    var STORE_KEY="vt_snippet_manager";
+    var snippets=[];
+    var editId=null;
+
+    function load(){
+      try{snippets=JSON.parse(localStorage.getItem(STORE_KEY)||"[]");}catch(e){snippets=[];}
+    }
+    function save(){
+      localStorage.setItem(STORE_KEY,JSON.stringify(snippets));
+    }
+    function uid(){
+      return Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+    }
+
+    function escapeHtml(s){
+      return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+    }
+
+    function render(){
+      var list=d.getElementById("snippetList");
+      var q=d.getElementById("searchBox").value.toLowerCase().trim();
+      var filtered=snippets.filter(function(s){
+        if(!q)return true;
+        return(s.title||"").toLowerCase().includes(q)||
+               (s.language||"").toLowerCase().includes(q)||
+               (s.tags||"").toLowerCase().includes(q)||
+               (s.code||"").toLowerCase().includes(q);
+      });
+      if(filtered.length===0){
+        list.innerHTML='<div class="empty">'+(snippets.length===0?"No snippets yet. Add one above!":"No matching snippets.")+'</div>';
+        return;
+      }
+      list.innerHTML=filtered.map(function(s){
+        var tagsHtml=(s.tags||"").split(",").filter(function(t){return t.trim();}).map(function(t){
+          return '<span>#'+escapeHtml(t.trim())+'</span>';
+        }).join("");
+        return '<div class="snippet-item" data-id="'+s.id+'">'+
+          '<div class="snippet-title">'+escapeHtml(s.title||"Untitled")+'</div>'+
+          '<div class="snippet-meta">'+
+            (s.language?'<span class="snippet-lang">'+escapeHtml(s.language)+'</span>':'')+
+            'Added '+new Date(s.created).toLocaleDateString()+
+          '</div>'+
+          (tagsHtml?'<div class="snippet-tags">'+tagsHtml+'</div>':'')+
+          '<pre>'+escapeHtml((s.code||"").slice(0,200))+(s.code&&s.code.length>200?'...':'')+'</pre>'+
+          '<div style="margin:8px 0">'+
+            '<button class="small" data-act="edit" data-id="'+s.id+'">Edit</button>'+
+            '<button class="small" data-act="copy" data-id="'+s.id+'">Copy</button>'+
+            '<button class="small danger" data-act="del" data-id="'+s.id+'">Delete</button>'+
+          '</div>'+
+        '</div>';
+      }).join("");
+
+      list.querySelectorAll('[data-act]').forEach(function(btn){
+        btn.addEventListener("click",function(e){
+          e.stopPropagation();
+          var id=btn.dataset.id;
+          var act=btn.dataset.act;
+          if(act==="edit")editSnippet(id);
+          else if(act==="del")delSnippet(id);
+          else if(act==="copy")copySnippet(id);
+        });
+      });
+    }
+
+    function editSnippet(id){
+      var s=snippets.find(function(x){return x.id===id;});
+      if(!s)return;
+      editId=id;
+      d.getElementById("title").value=s.title||"";
+      d.getElementById("language").value=s.language||"";
+      d.getElementById("tags").value=s.tags||"";
+      d.getElementById("code").value=s.code||"";
+      d.getElementById("formTitle").textContent="Edit Snippet";
+      d.getElementById("saveBtn").textContent="Update Snippet";
+      window.scrollTo(0,0);
+    }
+
+    function delSnippet(id){
+      if(!confirm("Delete this snippet?"))return;
+      snippets=snippets.filter(function(x){return x.id!==id;});
+      if(editId===id){
+        editId=null;
+        clearForm();
+      }
+      save();render();
+    }
+
+    function copySnippet(id){
+      var s=snippets.find(function(x){return x.id===id;});
+      if(!s)return;
+      navigator.clipboard.writeText(s.code||"").then(function(){
+        var btn=document.querySelector('[data-act="copy"][data-id="'+id+'"]');
+        if(btn){btn.textContent="Copied!";setTimeout(function(){btn.textContent="Copy";},1500);}
+      });
+    }
+
+    function clearForm(){
+      editId=null;
+      d.getElementById("title").value="";
+      d.getElementById("language").value="";
+      d.getElementById("tags").value="";
+      d.getElementById("code").value="";
+      d.getElementById("formTitle").textContent="Add New Snippet";
+      d.getElementById("saveBtn").textContent="Save Snippet";
+    }
+
+    d.getElementById("saveBtn").addEventListener("click",function(){
+      var title=d.getElementById("title").value.trim();
+      var code=d.getElementById("code").value;
+      if(!title&&!code){return;}
+      if(editId){
+        var s=snippets.find(function(x){return x.id===editId;});
+        if(s){
+          s.title=title;s.language=d.getElementById("language").value;
+          s.tags=d.getElementById("tags").value.trim();
+          s.code=code;s.updated=Date.now();
+        }
+      }else{
+        snippets.unshift({
+          id:uid(),title:title,
+          language:d.getElementById("language").value,
+          tags:d.getElementById("tags").value.trim(),
+          code:code,created:Date.now(),updated:Date.now()
+        });
+      }
+      save();clearForm();render();
+    });
+
+    d.getElementById("clearBtn").addEventListener("click",clearForm);
+
+    d.getElementById("exportBtn").addEventListener("click",function(){
+      var blob=new Blob([JSON.stringify(snippets,null,2)],{type:"application/json"});
+      var a=document.createElement("a");
+      a.href=URL.createObjectURL(blob);
+      a.download="snippets-"+Date.now()+".json";
+      a.click();URL.revokeObjectURL(a.href);
+    });
+
+    d.getElementById("importBtn").addEventListener("click",function(){
+      d.getElementById("importFile").click();
+    });
+    d.getElementById("importFile").addEventListener("change",function(e){
+      var file=e.target.files[0];
+      if(!file)return;
+      var reader=new FileReader();
+      reader.onload=function(){
+        try{
+          var imported=JSON.parse(reader.result);
+          if(Array.isArray(imported)){
+            imported.forEach(function(s){
+              s.id=s.id||uid();
+              s.created=s.created||Date.now();
+              snippets.push(s);
+            });
+            save();render();
+          }
+        }catch(err){alert("Invalid JSON file");}
+      };
+      reader.readAsText(file);
+      e.target.value="";
+    });
+
+    d.getElementById("deleteAllBtn").addEventListener("click",function(){
+      if(!confirm("Delete ALL snippets? This cannot be undone."))return;
+      snippets=[];save();clearForm();render();
+    });
+
+    d.getElementById("searchBox").addEventListener("input",render);
+
+    load();render();
+  })();
+  </script>
+</body>
+</html>
