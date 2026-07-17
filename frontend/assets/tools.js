@@ -5194,4 +5194,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📊",
     added: "2026-07-17T11:45:00Z",
   },
+  {
+    slug: "music-theory-explorer",
+    name: "Music Scale & Chord Finder",
+    description: "Explore 13 musical scales and 16 chord types. See notes, intervals, and highlighted piano keys. Play chords with Web Audio API. Common chord progressions reference table.",
+    category: "Music",
+    icon: "🎹",
+    added: "2026-07-17T12:00:00Z",
+  },
 ];
