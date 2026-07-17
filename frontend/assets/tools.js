@@ -5082,4 +5082,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎯",
     added: "2026-07-17T08:00:00Z",
   },
+  {
+    slug: "reversi",
+    name: "Reversi (Othello)",
+    description: "Classic 8×8 strategy game. Place a piece to flank opponent's pieces and flip them. Most pieces wins. Play vs AI (greedy corner heuristic) or 2-player local. Fully client-side.",
+    category: "Fun",
+    icon: "⬤",
+    added: "2026-07-17T08:15:00Z",
+  },
 ];
