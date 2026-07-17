@@ -4970,4 +4970,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔐",
     added: "2026-07-17T04:30:00Z",
   },
+  {
+    slug: "color-vision-simulator",
+    name: "Color Vision Deficiency Simulator",
+    description: "See how colors appear to people with protanopia, deuteranopia, tritanopia, or achromatopsia. Test single colors, palettes, or uploaded images using the Brettel/Viénot-Mollon model.",
+    category: "Design",
+    icon: "👁️",
+    added: "2026-07-17T04:45:00Z",
+  },
 ];
