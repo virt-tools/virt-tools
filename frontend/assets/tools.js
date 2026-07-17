@@ -4978,4 +4978,12 @@ window.VIRTUAL_TOOLS = [
     icon: "👁️",
     added: "2026-07-17T04:45:00Z",
   },
+  {
+    slug: "wordle",
+    name: "Wordle",
+    description: "Guess the 5-letter word in 6 tries with color-coded feedback. Built-in 500+ word dictionary, on-screen keyboard, physical keyboard support, and win-rate tracking in localStorage. No daily limit, no tracking.",
+    category: "Fun",
+    icon: "🟩",
+    added: "2026-07-17T05:00:00Z",
+  },
 ];
