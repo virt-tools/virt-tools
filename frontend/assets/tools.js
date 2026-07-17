@@ -5274,4 +5274,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎰",
     added: "2026-07-17T14:15:00Z",
   },
+  {
+    slug: "fortune-cookie",
+    name: "Fortune Cookie",
+    description: "Crack open a virtual fortune cookie for a random fortune, lucky numbers, and a daily luck reading. 52 fortunes, crypto-secure randomness, recent fortune history.",
+    category: "Fun",
+    icon: "🥠",
+    added: "2026-07-17T14:30:00Z",
+  },
 ];
