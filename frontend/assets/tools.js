@@ -4890,4 +4890,12 @@ window.VIRTUAL_TOOLS = [
     icon: "▦",
     added: "2026-07-17T02:20:00Z",
   },
+  {
+    slug: "game-2048",
+    name: "2048 Game",
+    description: "Classic 2048 puzzle game. Combine matching tiles to reach 2048. Arrow keys or swipe on touch devices. Score tracking, best score saved locally, undo, and win/lose detection. Fully client-side — no ads, no tracking.",
+    category: "Fun",
+    icon: "🎮",
+    added: "2026-07-17T02:30:00Z",
+  },
 ];
