@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Tetris — Virtual Tools</title>
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.tool-wrap{max-width:420px;margin:0 auto;text-align:center;}
+canvas{border:1px solid var(--border,#2a2f3a);border-radius:8px;background:#0a0d12;display:block;margin:16px auto;touch-action:none;}
+#score{font-size:18px;font-weight:700;margin:8px 0;}
+#msg{font-size:14px;opacity:.6;margin:4px 0;min-height:20px;}
+.tool-desc{opacity:.7;font-size:14px;margin-bottom:8px;}
+.info{display:flex;gap:16px;justify-content:center;margin:4px 0;font-size:15px;}
+</style>
+</head>
+<body>
+<header id="site-header"></header>
+<main>
+<div class="tool-wrap">
+<h1>Tetris</h1>
+<p class="tool-desc">Classic falling-blocks puzzle. Arrow keys to move/rotate, Space to hard-drop, P to pause. Touch controls on mobile. Clear lines to score. Fully client-side.</p>
+<div id="score">Score: 0</div>
+<div class="info"><span>Lines: <b id="lines">0</b></span><span>Level: <b id="level">1</b></span></div>
+<div id="msg">Press Space to start</div>
+<canvas id="c" width="300" height="600"></canvas>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+const COLS=10,ROWS=20,CELL=30,W=COLS*CELL,H=ROWS*CELL;
+const PIECES={
+I:[[1,1,1,1]],O:[[1,1],[1,1]],T:[[0,1,0],[1,1,1]],
+S:[[0,1,1],[1,1,0]],Z:[[1,1,0],[0,1,1]],J:[[1,0,0],[1,1,1]],L:[[0,0,1],[1,1,1]]
+};
+const COLORS={I:'#00f0f0',O:'#f0f000',T:'#a000f0',S:'#00f000',Z:'#f00000',J:'#0000f0',L:'#f0a000'};
+const KEYS=Object.keys(PIECES);
+let board,cur,next,score,lines,level,px,py,running,paused,gameOver,dropTimer,lastTime,animId;
+
+function newBoard(){return Array.from({length:ROWS},()=>Array(COLS).fill(null));}
+function newPiece(){const k=KEYS[Math.floor(Math.random()*KEYS.length)];return{key:k,shape:PIECES[k].map(r=>[...r]),color:COLORS[k]};}
+function rotate(p){const s=p.shape,h=s.length,w=s[0].length;const n=Array.from({length:w},()=>Array(h).fill(0));for(let r=0;r<h;r++)for(let c=0;c<w;c++)n[c][h-1-r]=s[r][c];return{...p,shape:n};}
+function collide(b,p,x,y){for(let r=0;r<p.shape.length;r++)for(let c=0;c<p.shape[r].length;c++){if(!p.shape[r][c])continue;const nx=x+c,ny=y+r;if(nx<0||nx>=COLS||ny>=ROWS)return true;if(ny>=0&&b[ny][nx])return true;}return false;}
+function merge(b,p,x,y){for(let r=0;r<p.shape.length;r++)for(let c=0;c<p.shape[r].length;c++){if(p.shape[r][c]&&y+r>=0)b[y+r][x+c]=p.color;}}
+function clearLines(){let cleared=0;for(let r=ROWS-1;r>=0;r--){if(board[r].every(c=>c)){board.splice(r,1);board.unshift(Array(COLS).fill(null));cleared++;r++;}}if(cleared){lines+=cleared;score+=[0,100,300,500,800][cleared]*level;level=1+Math.floor(lines/10);updateUI();}}
+function updateUI(){document.getElementById('score').textContent='Score: '+score;document.getElementById('lines').textContent=lines;document.getElementById('level').textContent=level;}
+function spawn(){cur=next||newPiece();next=newPiece();px=Math.floor(COLS/2)-Math.floor(cur.shape[0].length/2);py=0;if(collide(board,cur,px,py)){gameOver=true;running=false;document.getElementById('msg').textContent='Game Over! Press Space to retry.';}}
+
+function update(dt){
+  if(!running||paused||gameOver)return;
+  dropTimer+=dt;
+  const interval=Math.max(100,800-(level-1)*60);
+  if(dropTimer>=interval){
+    dropTimer=0;
+    if(!collide(board,cur,px,py+1)){py++;}else{merge(board,cur,px,py);clearLines();spawn();}
+  }
+}
+
+function draw(){
+  ctx.fillStyle='#0a0d12';ctx.fillRect(0,0,W,H);
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){if(board[r][c]){ctx.fillStyle=board[r][c];ctx.fillRect(c*CELL,r*CELL,CELL-1,CELL-1);}}
+  if(cur&&!gameOver){for(let r=0;r<cur.shape.length;r++)for(let c=0;c<cur.shape[r].length;c++){if(cur.shape[r][c]){ctx.fillStyle=cur.color;ctx.fillRect((px+c)*CELL,(py+r)*CELL,CELL-1,CELL-1);}}}
+  ctx.strokeStyle='#11141a';ctx.lineWidth=1;for(let c=1;c<COLS;c++){ctx.beginPath();ctx.moveTo(c*CELL,0);ctx.lineTo(c*CELL,H);ctx.stroke();}for(let r=1;r<ROWS;r++){ctx.beginPath();ctx.moveTo(0,r*CELL);ctx.lineTo(W,r*CELL);ctx.stroke();}
+}
+
+function loop(t){const dt=t-(lastTime||t);lastTime=t;update(dt);draw();animId=requestAnimationFrame(loop);}
+
+function move(dx){if(!running||paused||gameOver)return;if(!collide(board,cur,px+dx,py))px+=dx;}
+function drop(){if(!running||paused||gameOver)return;if(!collide(board,cur,px,py+1)){py++;}else{merge(board,cur,px,py);clearLines();spawn();}}
+function hardDrop(){if(!running||paused||gameOver)return;while(!collide(board,cur,px,py+1))py++;merge(board,cur,px,py);clearLines();spawn();}
+function rot(){if(!running||paused||gameOver)return;const r=rotate(cur);if(!collide(board,r,px,py))cur=r;else if(!collide(board,r,px-1,py)){px--;cur=r;}else if(!collide(board,r,px+1,py)){px++;cur=r;}}
+
+function reset(){board=newBoard();score=0;lines=0;level=1;running=false;paused=false;gameOver=false;dropTimer=0;lastTime=0;next=newPiece();spawn();updateUI();document.getElementById('msg').textContent='Press Space to start';}
+function start(){if(gameOver)reset();if(!running){running=true;paused=false;document.getElementById('msg').textContent='';}}
+
+document.addEventListener('keydown',e=>{
+  if(e.key===' '){e.preventDefault();if(!running&&!gameOver){start();}else if(gameOver){reset();start();}return;}
+  if(e.key==='p'||e.key==='P'){if(running){paused=!paused;document.getElementById('msg').textContent=paused?'Paused':' ';}return;}
+  if(e.key==='ArrowLeft')move(-1);
+  if(e.key==='ArrowRight')move(1);
+  if(e.key==='ArrowDown')drop();
+  if(e.key==='ArrowUp')rot();
+  if(e.key==='Enter')hardDrop();
+});
+
+let touchSX,touchSY;
+cv.addEventListener('touchstart',e=>{e.preventDefault();touchSX=e.touches[0].clientX;touchSY=e.touches[0].clientY;if(!running&&!gameOver)start();},{passive:false});
+cv.addEventListener('touchend',e=>{e.preventDefault();const dx=e.changedTouches[0].clientX-touchSX,dy=e.changedTouches[0].clientY-touchSY;if(Math.abs(dx)>Math.abs(dy)){move(dx>0?1:-1);}else if(dy>30){hardDrop();}else if(dy<-30){rot();}},{passive:false});
+
+reset();loop(0);
+</script>
+</body>
+</html>

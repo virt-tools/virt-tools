@@ -5050,4 +5050,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔴",
     added: "2026-07-17T07:00:00Z",
   },
+  {
+    slug: "tetris",
+    name: "Tetris",
+    description: "Classic falling-blocks puzzle game. 7 tetromino pieces, line clearing, increasing speed by level. Arrow keys to move/rotate, Space to hard-drop, P to pause. Touch controls on mobile. Fully client-side.",
+    category: "Fun",
+    icon: "🟦",
+    added: "2026-07-17T07:15:00Z",
+  },
 ];
