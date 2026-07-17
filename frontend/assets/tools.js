@@ -5186,4 +5186,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📇",
     added: "2026-07-17T11:30:00Z",
   },
+  {
+    slug: "audio-analyzer",
+    name: "Audio Spectrum Analyzer",
+    description: "Visualize audio from microphone or file with real-time FFT spectrum bars, waveform, and scrolling spectrogram. Adjustable FFT size and smoothing. All processing is client-side.",
+    category: "Audio",
+    icon: "📊",
+    added: "2026-07-17T11:45:00Z",
+  },
 ];

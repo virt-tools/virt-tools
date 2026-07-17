@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Audio Spectrum Analyzer — Virtual Tools</title>
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.tool-wrap{max-width:800px;margin:0 auto;}
+canvas{display:block;width:100%;border:1px solid var(--border,#333);border-radius:8px;background:#0a0e14;margin:10px 0;}
+.controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:10px 0;}
+.controls button,.controls select,.controls input{padding:8px 16px;border-radius:6px;border:1px solid var(--border,#333);background:var(--bg-alt,#1a1f2e);color:var(--text,#e0e0e0);cursor:pointer;font-size:14px;}
+.mode-btn.active{background:#1565c0;color:#fff;}
+label{font-size:14px;opacity:.8;}
+</style>
+</head>
+<body>
+<header id="site-header"></header>
+<main>
+<div class="tool-wrap">
+<h1>Audio Spectrum Analyzer</h1>
+<p class="tool-desc">Visualize audio from your microphone or an audio file. Real-time FFT spectrum, waveform, and spectrogram views. All processing is client-side — no audio is recorded or transmitted.</p>
+<div class="controls">
+<button class="mode-btn active" onclick="setMode('mic')" id="micBtn">🎤 Microphone</button>
+<button class="mode-btn" onclick="setMode('file')" id="fileBtn">📁 Audio File</button>
+<button onclick="toggle()" id="playBtn">Start</button>
+<select id="viewSelect" onchange="changeView()">
+<option value="spectrum">Spectrum Bars</option>
+<option value="waveform">Waveform</option>
+<option value="spectrogram">Spectrogram</option>
+</select>
+</div>
+<div class="controls" id="fileControls" style="display:none;">
+<input type="file" accept="audio/*" id="fileInput" onchange="loadFile()">
+<button onclick="togglePlay()" id="filePlayBtn">Play/Pause</button>
+</div>
+<div class="controls">
+<label>FFT Size:</label>
+<select id="fftSelect" onchange="changeFFT()">
+<option value="256">256</option>
+<option value="512">512</option>
+<option value="1024" selected>1024</option>
+<option value="2048">2048</option>
+<option value="4096">4096</option>
+</select>
+<label>Smoothing:</label>
+<input type="range" id="smoothRange" min="0" max="0.99" step="0.01" value="0.8" oninput="changeSmooth()" style="width:120px;">
+<span id="smoothVal">0.80</span>
+</div>
+<canvas id="canvas" width="800" height="400"></canvas>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+let audioCtx,analyser,source,mediaStream,audioElement,rafId,running=false;
+let mode='mic',view='spectrum',fftSize=1024,smoothing=0.8;
+let canvas,ctx,w,h,spectroOffset=0;
+
+function init(){canvas=document.getElementById('canvas');ctx=canvas.getContext('2d');w=canvas.width;h=canvas.height;resize();}
+function resize(){w=canvas.width=canvas.offsetWidth;h=canvas.height=400;}
+
+function setMode(m){
+mode=m;
+document.getElementById('micBtn').classList.toggle('active',m==='mic');
+document.getElementById('fileBtn').classList.toggle('active',m==='file');
+document.getElementById('fileControls').style.display=m==='file'?'flex':'none';
+if(running)stop();
+}
+
+function changeView(){view=document.getElementById('viewSelect').value;clearCanvas();}
+function changeFFT(){fftSize=parseInt(document.getElementById('fftSelect').value);if(running){stop();start();}}
+function changeSmooth(){smoothing=parseFloat(document.getElementById('smoothRange').value);document.getElementById('smoothVal').textContent=smoothing.toFixed(2);if(analyser)analyser.smoothingTimeConstant=smoothing;}
+
+function clearCanvas(){ctx.fillStyle='#0a0e14';ctx.fillRect(0,0,w,h);spectroOffset=0;}
+
+async function toggle(){if(running){stop();}else{await start();}}
+
+async function start(){
+if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+analyser=audioCtx.createAnalyser();
+analyser.fftSize=fftSize;
+analyser.smoothingTimeConstant=smoothing;
+if(mode==='mic'){
+try{
+mediaStream=await navigator.mediaDevices.getUserMedia({audio:true});
+source=audioCtx.createMediaStreamSource(mediaStream);
+}catch(e){alert('Microphone access required.');return;}
+}else{
+if(!audioElement)return;
+audioElement.play();
+source=audioCtx.createMediaElementSource(audioElement);
+}
+source.connect(analyser);
+if(mode==='file')analyser.connect(audioCtx.destination);
+running=true;document.getElementById('playBtn').textContent='Stop';
+clearCanvas();draw();
+}
+
+function stop(){
+running=false;
+if(rafId)cancelAnimationFrame(rafId);
+if(mediaStream){mediaStream.getTracks().forEach(t=>t.stop());mediaStream=null;}
+if(audioElement){audioElement.pause();}
+if(source){try{source.disconnect();}catch(e){}source=null;}
+document.getElementById('playBtn').textContent='Start';
+}
+
+function loadFile(){
+const file=document.getElementById('fileInput').files[0];
+if(!file)return;
+if(audioElement){audioElement.pause();}
+audioElement=new Audio(URL.createObjectURL(file));
+audioElement.loop=true;
+}
+
+function togglePlay(){if(audioElement){if(audioElement.paused)audioElement.play();else audioElement.pause();}}
+
+function draw(){
+if(!running)return;
+if(view==='spectrum')drawSpectrum();
+else if(view==='waveform')drawWaveform();
+else if(view==='spectrogram')drawSpectrogram();
+rafId=requestAnimationFrame(draw);
+}
+
+function drawSpectrum(){
+const buf=new Uint8Array(analyser.frequencyBinCount);
+analyser.getByteFrequencyData(buf);
+ctx.fillStyle='rgba(10,14,20,0.3)';
+ctx.fillRect(0,0,w,h);
+const barCount=Math.min(buf.length,128);
+const barWidth=w/barCount;
+for(let i=0;i<barCount;i++){
+const v=buf[i]/255;
+const barH=v*h;
+const hue=i/barCount*270;
+ctx.fillStyle=`hsl(${hue},80%,${30+v*40}%)`;
+ctx.fillRect(i*barWidth,h-barH,barWidth-1,barH);
+}
+ctx.fillStyle='#888';ctx.font='11px monospace';
+ctx.fillText('0 Hz',5,h-3);
+ctx.fillText((audioCtx.sampleRate/2/1000).toFixed(0)+' kHz',w-40,h-3);
+}
+
+function drawWaveform(){
+const buf=new Float32Array(analyser.fftSize);
+analyser.getFloatTimeDomainData(buf);
+ctx.fillStyle='rgba(10,14,20,0.4)';
+ctx.fillRect(0,0,w,h);
+ctx.strokeStyle='#00e676';ctx.lineWidth=2;
+ctx.beginPath();
+for(let i=0;i<buf.length;i++){
+const x=i/buf.length*w;
+const y=h/2+buf[i]*h/2;
+if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+}
+ctx.stroke();
+ctx.strokeStyle='#333';ctx.beginPath();ctx.moveTo(0,h/2);ctx.lineTo(w,h/2);ctx.stroke();
+}
+
+function drawSpectrogram(){
+const buf=new Uint8Array(analyser.frequencyBinCount);
+analyser.getByteFrequencyData(buf);
+const rowH=2;
+const imgData=ctx.getImageData(0,spectroOffset,w,rowH);
+for(let x=0;x<w;x++){
+const idx=Math.floor(x/w*buf.length);
+const v=buf[idx]/255;
+const hue=280-v*280;
+imgData.data[(x*4)]=hsvR(hue,1,v);
+imgData.data[(x*4)+1]=hsvG(hue,1,v);
+imgData.data[(x*4)+2]=hsvB(hue,1,v);
+imgData.data[(x*4)+3]=255;
+}
+ctx.putImageData(imgData,0,spectroOffset);
+spectroOffset+=rowH;
+if(spectroOffset>=h){ctx.drawImage(canvas,0,-rowH,w,h);spectroOffset=h-rowH;}
+}
+
+function hsvR(h,s,v){const c=v*s;const x=c*(1-Math.abs((h/60)%2-1));const m=v-c;if(h<60)return c+m;if(h<120)return x+m;if(h<180)return m;return m;}
+function hsvG(h,s,v){const c=v*s;const x=c*(1-Math.abs((h/60)%2-1));const m=v-c;if(h<60)return x+m;if(h<120)return c+m;if(h<180)return x+m;return m;}
+function hsvB(h,s,v){const c=v*s;const x=c*(1-Math.abs((h/60)%2-1));const m=v-c;if(h<60)return m;if(h<120)return m;if(h<180)return c+m;return m;}
+
+window.addEventListener('resize',resize);
+VT.ready(init);
+</script>
+</body>
+</html>
