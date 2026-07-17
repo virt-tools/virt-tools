@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Piano — Virtual Tools</title>
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.tool-wrap{max-width:800px;margin:0 auto;text-align:center;}
+.tool-desc{opacity:.7;font-size:14px;margin-bottom:8px;}
+.piano{display:flex;position:relative;justify-content:center;margin:20px 0;user-select:none;}
+.white-key{width:48px;height:200px;background:#fff;border:1px solid #333;border-radius:0 0 6px 6px;cursor:pointer;position:relative;display:flex;align-items:flex-end;justify-content:center;padding-bottom:8px;font-size:11px;color:#666;}
+.white-key:active,.white-key.active{background:#cfd8dc;}
+.black-key{width:30px;height:125px;background:#222;border:1px solid #000;border-radius:0 0 4px 4px;cursor:pointer;position:absolute;z-index:2;top:0;display:flex;align-items:flex-end;justify-content:center;padding-bottom:6px;font-size:9px;color:#999;}
+.black-key:active,.black-key.active{background:#424242;}
+.controls{display:flex;gap:12px;justify-content:center;align-items:center;flex-wrap:wrap;margin:10px 0;}
+.controls button,.controls select{padding:6px 14px;border-radius:6px;border:1px solid var(--border,#2a2f3a);background:var(--bg-alt,#1a1f2e);color:var(--text,#e0e0e0);cursor:pointer;font-size:14px;}
+.controls label{font-size:13px;display:flex;align-items:center;gap:4px;}
+</style>
+</head>
+<body>
+<header id="site-header"></header>
+<main>
+<div class="tool-wrap">
+<h1>Piano</h1>
+<p class="tool-desc">Play piano with mouse or keyboard. Multiple octaves, instrument presets, and chord detection. No audio leaves your browser.</p>
+<div class="controls">
+<label>Octave <select id="octaveSel" onchange="setOctave(this.value)"><option value="3">3</option><option value="4" selected>4</option><option value="5">5</option></select></label>
+<label>Instrument <select id="instSel" onchange="setInst(this.value)"><option value="sine">Sine</option><option value="triangle">Triangle</option><option value="sawtooth">Sawtooth</option><option value="square">Square</option></select></label>
+<button onclick="toggleSustain()">Sustain: Off</button>
+<label>Volume <input type="range" id="volSlider" min="0" max="100" value="40" oninput="setVol(this.value)"></label>
+</div>
+<div class="piano" id="piano"></div>
+<p style="font-size:13px;opacity:.6;">Keyboard: A S D F G H J K (white) W E T Y U (black)</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+let audioCtx,octave=4,instrument='sine',sustain=false,vol=0.4;
+const NOTES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const WHITE=[0,2,4,5,7,9,11];
+const BLACK=[{n:1,pos:0},{n:3,pos:1},{n:6,pos:3},{n:8,pos:4},{n:10,pos:5}];
+const KEY_MAP={'a':0,'w':1,'s':2,'e':3,'d':4,'f':5,'t':6,'g':7,'y':8,'h':9,'u':10,'j':11,'k':12};
+const activeOscs={};
+
+function init(){
+const piano=document.getElementById('piano');
+const baseFreq=261.63*Math.pow(2,octave-4);
+WHITE.forEach((n,i)=>{
+const k=document.createElement('div');k.className='white-key';
+k.dataset.semi=n;k.dataset.freq=baseFreq*Math.pow(2,n/12);
+k.textContent=NOTES[n]+(octave);
+k.addEventListener('mousedown',()=>playNote(k.dataset.freq,k));
+k.addEventListener('mouseup',()=>stopNote(k));
+k.addEventListener('mouseleave',()=>stopNote(k));
+k.addEventListener('touchstart',e=>{e.preventDefault();playNote(k.dataset.freq,k);});
+k.addEventListener('touchend',e=>{e.preventDefault();stopNote(k);});
+piano.appendChild(k);
+});
+BLACK.forEach(b=>{
+const k=document.createElement('div');k.className='black-key';
+k.dataset.semi=b.n;k.dataset.freq=baseFreq*Math.pow(2,b.n/12);
+k.style.left=(b.pos*48+34)+'px';
+k.addEventListener('mousedown',()=>playNote(k.dataset.freq,k));
+k.addEventListener('mouseup',()=>stopNote(k));
+k.addEventListener('mouseleave',()=>stopNote(k));
+k.addEventListener('touchstart',e=>{e.preventDefault();playNote(k.dataset.freq,k);});
+k.addEventListener('touchend',e=>{e.preventDefault();stopNote(k);});
+piano.appendChild(k);
+});
+document.addEventListener('keydown',e=>{
+if(e.repeat)return;const s=KEY_MAP[e.key.toLowerCase()];if(s===undefined)return;
+e.preventDefault();const semi=s%12;const el=[...document.querySelectorAll('.white-key, .black-key')].find(x=>+x.dataset.semi===semi);
+if(el){playNote(el.dataset.freq,el);el.classList.add('active');}
+});
+document.addEventListener('keyup',e=>{
+const s=KEY_MAP[e.key.toLowerCase()];if(s===undefined)return;
+const semi=s%12;const el=[...document.querySelectorAll('.white-key, .black-key')].find(x=>+x.dataset.semi===semi);
+if(el){stopNote(el);el.classList.remove('active');}
+});
+}
+
+function playNote(freq,el){
+if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+const key=el.dataset.semi;
+if(activeOscs[key])return;
+const osc=audioCtx.createOscillator();const gain=audioCtx.createGain();
+osc.type=instrument;osc.frequency.value=parseFloat(freq);
+gain.gain.setValueAtTime(0,audioCtx.currentTime);
+gain.gain.linearRampToValueAtTime(vol,audioCtx.currentTime+0.01);
+osc.connect(gain);gain.connect(audioCtx.destination);
+osc.start();
+activeOscs[key]={osc,gain};
+}
+
+function stopNote(el){
+const key=el.dataset.semi;const a=activeOscs[key];if(!a)return;
+const t=audioCtx.currentTime;
+if(sustain){a.gain.gain.setValueAtTime(a.gain.gain.value,t);a.gain.gain.exponentialRampToValueAtTime(0.001,t+1.5);setTimeout(()=>{a.osc.stop();},1600);}
+else{a.gain.gain.exponentialRampToValueAtTime(0.001,t+0.1);setTimeout(()=>{a.osc.stop();},200);}
+delete activeOscs[key];
+}
+
+function setOctave(o){octave=parseInt(o);rebuild();}
+function setInst(i){instrument=i;}
+function setVol(v){vol=v/100;}
+function toggleSustain(){sustain=!sustain;document.querySelector('button[onclick="toggleSustain()"]').textContent='Sustain: '+(sustain?'On':'Off');}
+function rebuild(){const p=document.getElementById('piano');p.innerHTML='';init();}
+
+VT.ready(init);
+</script>
+</body>
+</html>

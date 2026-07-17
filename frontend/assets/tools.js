@@ -5152,6 +5152,14 @@ window.VIRTUAL_TOOLS = [
     description: "Canvas drawing pad with brush, eraser, line/rect/circle shapes, flood fill, color palette, adjustable brush size, undo, and PNG export. Fully client-side.",
     category: "Fun",
     icon: "🎨",
-    added: "2026-07-17T10:15:00Z",
+    added: "2026-07-17T10:30:00Z",
+  },
+  {
+    slug: "piano",
+    name: "Piano",
+    description: "Playable piano with mouse or keyboard input. Multiple octaves, 4 instrument presets (sine/triangle/sawtooth/square), sustain pedal, and volume control. Web Audio API, fully client-side.",
+    category: "Fun",
+    icon: "🎹",
+    added: "2026-07-17T10:45:00Z",
   },
 ];
