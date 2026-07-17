@@ -4930,4 +4930,12 @@ window.VIRTUAL_TOOLS = [
     icon: "⭕",
     added: "2026-07-17T03:15:00Z",
   },
+  {
+    slug: "bmi-calculator",
+    name: "BMI & Body Composition Calculator",
+    description: "Calculate BMI, BMR (basal metabolic rate), TDEE (total daily energy expenditure), body fat percentage (Navy method), and lean body mass. Metric or imperial.",
+    category: "Health",
+    icon: "⚖️",
+    added: "2026-07-17T03:30:00Z",
+  },
 ];
