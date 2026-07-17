@@ -5234,4 +5234,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎹",
     added: "2026-07-17T13:00:00Z",
   },
+  {
+    slug: "mad-libs",
+    name: "Mad Libs",
+    description: "Fill in blanks with words to create hilarious stories. 8 story templates (beach, haunted house, space, job interview, pet, cooking, superhero, bad date). Your words highlighted in results.",
+    category: "Fun",
+    icon: "📝",
+    added: "2026-07-17T13:15:00Z",
+  },
 ];
