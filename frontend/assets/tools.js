@@ -4922,4 +4922,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔐",
     added: "2026-07-17T03:00:00Z",
   },
+  {
+    slug: "tic-tac-toe",
+    name: "Tic-Tac-Toe",
+    description: "Classic 3×3 Tic-Tac-Toe with minimax AI (easy/medium/hard) or two-player mode. Score tracking and first-move alternation. Fully client-side.",
+    category: "Fun",
+    icon: "⭕",
+    added: "2026-07-17T03:15:00Z",
+  },
 ];
