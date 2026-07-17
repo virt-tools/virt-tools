@@ -5130,4 +5130,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔍",
     added: "2026-07-17T09:30:00Z",
   },
+  {
+    slug: "chess",
+    name: "Chess",
+    description: "Full chess with move validation, check/checkmate/stalemate detection, castling, pawn promotion, and AI opponent or 2-player mode. Fully client-side.",
+    category: "Fun",
+    icon: "♟️",
+    added: "2026-07-17T09:45:00Z",
+  },
 ];
