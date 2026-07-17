@@ -5266,4 +5266,12 @@ window.VIRTUAL_TOOLS = [
     icon: "✊",
     added: "2026-07-17T14:00:00Z",
   },
+  {
+    slug: "lottery-generator",
+    name: "Lottery Number Generator",
+    description: "Generate random lottery numbers for 8 popular formats (Powerball, Mega Millions, EuroMillions, etc.) using crypto-secure randomness. Multiple sets, copy, and history.",
+    category: "Fun",
+    icon: "🎰",
+    added: "2026-07-17T14:15:00Z",
+  },
 ];
