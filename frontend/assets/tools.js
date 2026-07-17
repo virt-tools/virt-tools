@@ -5034,4 +5034,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🏓",
     added: "2026-07-17T06:30:00Z",
   },
+  {
+    slug: "breakout",
+    name: "Breakout",
+    description: "Classic brick-breaking game. Move the paddle with mouse, arrow keys, or touch. 5 rows of colored bricks, 3 lives, ball speed control via paddle angle. Clear all bricks to win. Fully client-side.",
+    category: "Fun",
+    icon: "🧱",
+    added: "2026-07-17T06:45:00Z",
+  },
 ];
