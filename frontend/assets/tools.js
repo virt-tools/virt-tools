@@ -5042,4 +5042,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🧱",
     added: "2026-07-17T06:45:00Z",
   },
+  {
+    slug: "connect-four",
+    name: "Connect Four",
+    description: "Classic 4-in-a-row strategy game. Play vs a friend or vs AI (minimax with alpha-beta pruning, depth 5). Click columns or use number keys 1–7. Score tracking. Fully client-side.",
+    category: "Fun",
+    icon: "🔴",
+    added: "2026-07-17T07:00:00Z",
+  },
 ];
