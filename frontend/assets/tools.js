@@ -4946,4 +4946,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🪢",
     added: "2026-07-17T03:45:00Z",
   },
+  {
+    slug: "bill-splitter",
+    name: "Bill Splitter & Tip Calculator",
+    description: "Split a bill among any number of people with tip percentage, tax rate, and per-person breakdown. Preset and custom tip buttons. All client-side.",
+    category: "Finance",
+    icon: "🍽️",
+    added: "2026-07-17T04:00:00Z",
+  },
 ];
