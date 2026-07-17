@@ -5298,4 +5298,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔢",
     added: "2026-07-17T15:00:00Z",
   },
+  {
+    slug: "spinning-wheel",
+    name: "Spinning Wheel",
+    description: "Customizable spinning prize wheel. Add your own options with custom colors, spin for a random decision, and use built-in presets (Yes/No, food, tasks, coin flip, RPS, 1-10).",
+    category: "Fun",
+    icon: "🎡",
+    added: "2026-07-17T20:15:00Z",
+  },
 ];
