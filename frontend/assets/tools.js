@@ -5090,4 +5090,12 @@ window.VIRTUAL_TOOLS = [
     icon: "⬤",
     added: "2026-07-17T08:15:00Z",
   },
+  {
+    slug: "checkers",
+    name: "Checkers",
+    description: "Classic 8×8 draughts. Jump opponent pieces to capture, reach far row to become king. Mandatory captures, multi-jump chains. Play vs AI or 2-player local. Fully client-side.",
+    category: "Fun",
+    icon: "🔴",
+    added: "2026-07-17T08:30:00Z",
+  },
 ];
