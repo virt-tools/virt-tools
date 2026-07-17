@@ -5114,4 +5114,12 @@ window.VIRTUAL_TOOLS = [
     icon: "⚫",
     added: "2026-07-17T09:00:00Z",
   },
+  {
+    slug: "battleship",
+    name: "Battleship",
+    description: "Classic naval strategy game. Place your fleet of 5 ships, then trade fire with the AI. Hit all cells of a ship to sink it. First to sink the entire enemy fleet wins. Fully client-side.",
+    category: "Fun",
+    icon: "🚢",
+    added: "2026-07-17T09:15:00Z",
+  },
 ];
