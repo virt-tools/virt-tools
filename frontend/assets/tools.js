@@ -5122,4 +5122,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🚢",
     added: "2026-07-17T09:15:00Z",
   },
+  {
+    slug: "word-search",
+    name: "Word Search",
+    description: "Find hidden words in a letter grid. Click and drag across letters to select. Words go in any of 8 directions. 6 themes, 3 grid sizes. Fully client-side.",
+    category: "Fun",
+    icon: "🔍",
+    added: "2026-07-17T09:30:00Z",
+  },
 ];
