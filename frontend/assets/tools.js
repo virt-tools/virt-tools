@@ -4866,4 +4866,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎲",
     added: "2026-07-17T01:50:00Z",
   },
+  {
+    slug: "pomodoro-timer",
+    name: "Pomodoro Timer",
+    description: "Focus timer with customizable work/break intervals, session tracking, and gentle audio chimes. Progress ring, auto-transition between phases, localStorage stats. Fully client-side.",
+    category: "Productivity",
+    icon: "🍅",
+    added: "2026-07-17T02:00:00Z",
+  },
 ];
