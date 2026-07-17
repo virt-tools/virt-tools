@@ -5098,4 +5098,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔴",
     added: "2026-07-17T08:30:00Z",
   },
+  {
+    slug: "sliding-puzzle",
+    name: "Sliding Puzzle",
+    description: "Classic sliding tile puzzle (8, 15, or 24 puzzle). Arrange tiles in order by sliding them into the empty space. Move counter and timer. Fully client-side.",
+    category: "Fun",
+    icon: "🔢",
+    added: "2026-07-17T08:45:00Z",
+  },
 ];
