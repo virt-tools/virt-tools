@@ -5282,4 +5282,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🥠",
     added: "2026-07-17T14:30:00Z",
   },
+  {
+    slug: "slot-machine",
+    name: "Slot Machine",
+    description: "Classic 3-reel slot machine with 7 symbols, weighted odds, payout table, auto-spin, and credit tracking. Spin to match symbols and win. Fully client-side fun.",
+    category: "Fun",
+    icon: "🎰",
+    added: "2026-07-17T14:45:00Z",
+  },
 ];
