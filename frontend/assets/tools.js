@@ -5290,4 +5290,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎰",
     added: "2026-07-17T14:45:00Z",
   },
+  {
+    slug: "number-guess",
+    name: "Number Guessing Game",
+    description: "Guess the secret number with higher/lower hints. Three difficulty levels (1-50, 1-100, 1-500), limited attempts, guess history, and best-score tracking via localStorage.",
+    category: "Fun",
+    icon: "🔢",
+    added: "2026-07-17T15:00:00Z",
+  },
 ];
