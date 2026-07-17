@@ -5026,4 +5026,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🐍",
     added: "2026-07-17T06:15:00Z",
   },
+  {
+    slug: "pong",
+    name: "Pong",
+    description: "Classic arcade Pong. Play against AI or a friend. Player 1: W/S, Player 2: arrows or mouse. Ball speeds up on each paddle hit. First to 7 wins. Fully client-side.",
+    category: "Fun",
+    icon: "🏓",
+    added: "2026-07-17T06:30:00Z",
+  },
 ];
