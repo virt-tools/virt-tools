@@ -5378,4 +5378,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📦",
     added: "2026-07-20T04:30:00Z",
   },
+  {
+    slug: "wordle-helper",
+    name: "Wordle Helper",
+    description: "Filter possible Wordle answers from green (known position), yellow (wrong position), and gray (excluded) clues. Built-in ~2000 word dictionary. Client-side.",
+    category: "Fun",
+    icon: "🔍",
+    added: "2026-07-20T05:00:00Z",
+  },
 ];
