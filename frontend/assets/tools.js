@@ -5410,4 +5410,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎨",
     added: "2026-07-20T06:30:00Z",
   },
+  {
+    slug: "towers-of-hanoi",
+    name: "Towers of Hanoi",
+    description: "Classic disk-moving puzzle. Move all disks from left to right peg — one at a time, never larger on smaller. 3-8 disks, undo, auto-solve, move counter, timer.",
+    category: "Fun",
+    icon: "🗼",
+    added: "2026-07-20T07:00:00Z",
+  },
 ];
