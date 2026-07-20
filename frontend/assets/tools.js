@@ -5386,4 +5386,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔍",
     added: "2026-07-20T05:00:00Z",
   },
+  {
+    slug: "high-low",
+    name: "High or Low Card Game",
+    description: "Guess if the next card is higher or lower. Build a streak — one wrong guess ends the round. Aces low, Kings high. Best streak saved.",
+    category: "Fun",
+    icon: "🃏",
+    added: "2026-07-20T05:30:00Z",
+  },
 ];
