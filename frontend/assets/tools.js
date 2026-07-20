@@ -5490,4 +5490,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🐟",
     added: "2026-07-20T11:30:00Z",
   },
+  {
+    slug: "crazy-eights",
+    name: "Crazy Eights",
+    description: "Classic shedding card game. Match the top card by suit or rank. Eights are wild — play one to change the suit. First to empty their hand wins.",
+    category: "Fun",
+    icon: "🃏",
+    added: "2026-07-20T12:00:00Z",
+  },
 ];
