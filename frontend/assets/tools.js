@@ -5370,4 +5370,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎨",
     added: "2026-07-20T04:00:00Z",
   },
+  {
+    slug: "sokoban",
+    name: "Sokoban",
+    description: "Classic warehouse puzzle. Push all boxes onto the target spots — you can push but never pull. 5 levels, undo, reset, keyboard + touch controls.",
+    category: "Fun",
+    icon: "📦",
+    added: "2026-07-20T04:30:00Z",
+  },
 ];
