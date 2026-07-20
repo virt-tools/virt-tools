@@ -5466,4 +5466,12 @@ window.VIRTUAL_TOOLS = [
     icon: "♞",
     added: "2026-07-20T10:00:00Z",
   },
+  {
+    slug: "dominoes",
+    name: "Dominoes",
+    description: "Classic double-six dominoes. Match tiles end-to-end by pip count. Play vs AI, draw from boneyard when stuck. First to empty their hand wins.",
+    category: "Fun",
+    icon: "🁫",
+    added: "2026-07-20T10:30:00Z",
+  },
 ];
