@@ -5418,4 +5418,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🗼",
     added: "2026-07-20T07:00:00Z",
   },
+  {
+    slug: "peg-solitaire",
+    name: "Peg Solitaire",
+    description: "Classic single-player board game (Hi-Q). Jump pegs over each other to remove them. Goal: leave one peg. 3 board shapes (English, European, Diamond), undo.",
+    category: "Fun",
+    icon: "🔵",
+    added: "2026-07-20T07:30:00Z",
+  },
 ];
