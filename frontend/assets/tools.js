@@ -5578,4 +5578,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🏖️",
     added: "2026-07-20T17:00:00Z",
   },
+  {
+    slug: "mandala-maker",
+    name: "Mandala Maker",
+    description: "Create symmetric mandala art with 4-24 mirror segments. Choose colors, adjust brush size, save your creation as PNG.",
+    category: "Fun",
+    icon: "🪷",
+    added: "2026-07-20T17:30:00Z",
+  },
 ];
