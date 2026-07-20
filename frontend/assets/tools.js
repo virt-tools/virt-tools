@@ -5354,4 +5354,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔊",
     added: "2026-07-20T03:00:00Z",
   },
+  {
+    slug: "binaural-beats",
+    name: "Binaural Beats",
+    description: "Generate binaural beats for focus, relaxation, or sleep. 6 presets (Deep Sleep to Energized). Adjustable base frequency, beat frequency, and volume. Headphones required.",
+    category: "Audio",
+    icon: "🧠",
+    added: "2026-07-20T03:30:00Z",
+  },
 ];
