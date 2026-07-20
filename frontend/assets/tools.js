@@ -5402,4 +5402,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🧮",
     added: "2026-07-20T06:00:00Z",
   },
+  {
+    slug: "color-by-numbers",
+    name: "Color by Numbers",
+    description: "Paint numbered pixels with their matching colors. 3 built-in pictures (Heart, Smiley, House), color palette, progress tracking, reveal, and PNG export.",
+    category: "Fun",
+    icon: "🎨",
+    added: "2026-07-20T06:30:00Z",
+  },
 ];
