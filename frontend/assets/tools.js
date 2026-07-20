@@ -5330,4 +5330,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📅",
     added: "2026-07-20T01:30:00Z",
   },
+  {
+    slug: "tarot-reader",
+    name: "Tarot Card Reader",
+    description: "Draw Tarot cards from the 22 Major Arcana. Three spreads (single, past/present/future, Celtic Cross). Cards may appear reversed for alternate meanings. For entertainment and reflection.",
+    category: "Fun",
+    icon: "🔮",
+    added: "2026-07-20T02:00:00Z",
+  },
 ];
