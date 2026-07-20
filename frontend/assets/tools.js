@@ -5450,4 +5450,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔢",
     added: "2026-07-20T09:00:00Z",
   },
+  {
+    slug: "rubiks-cube",
+    name: "Rubik's Cube",
+    description: "Classic 3×3 Rubik's Cube simulator. Rotate faces (U/D/L/R/F/B with prime variants), scramble, undo, and solve. Move counter and solved detection.",
+    category: "Fun",
+    icon: "🟥",
+    added: "2026-07-20T09:30:00Z",
+  },
 ];
