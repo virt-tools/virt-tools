@@ -5442,4 +5442,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎲",
     added: "2026-07-20T08:30:00Z",
   },
+  {
+    slug: "killer-sudoku",
+    name: "Killer Sudoku",
+    description: "Sudoku with cage sum targets. Fill 1-9 per row, column, and 3×3 box — digits in each cage must sum to the target with no repeats. Check, solve, and keyboard support.",
+    category: "Fun",
+    icon: "🔢",
+    added: "2026-07-20T09:00:00Z",
+  },
 ];
