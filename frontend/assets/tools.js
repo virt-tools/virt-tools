@@ -5322,4 +5322,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🃏",
     added: "2026-07-17T21:15:00Z",
   },
+  {
+    slug: "biorhythm-calculator",
+    name: "Biorhythm Calculator",
+    description: "Calculate your physical (23-day), emotional (28-day), and intellectual (33-day) biorhythm cycles. See today's energy levels, a 30-day chart, and upcoming critical days.",
+    category: "Fun",
+    icon: "📅",
+    added: "2026-07-20T01:30:00Z",
+  },
 ];
