@@ -5530,4 +5530,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🥄",
     added: "2026-07-20T14:00:00Z",
   },
+  {
+    slug: "fidget-spinner",
+    name: "Fidget Spinner",
+    description: "Virtual fidget spinner with realistic spin physics. Click, drag, or swipe to spin. 5 color styles, boost button, spin counter.",
+    category: "Fun",
+    icon: "🌀",
+    added: "2026-07-20T14:30:00Z",
+  },
 ];
