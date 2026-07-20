@@ -5394,4 +5394,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🃏",
     added: "2026-07-20T05:30:00Z",
   },
+  {
+    slug: "kakuro",
+    name: "Kakuro Puzzle",
+    description: "Math crossword puzzle. Fill cells with digits 1-9 so each run sums to its clue, with no repeated digits. 4 puzzles, check, solve, keyboard support.",
+    category: "Fun",
+    icon: "🧮",
+    added: "2026-07-20T06:00:00Z",
+  },
 ];
