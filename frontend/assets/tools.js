@@ -5338,4 +5338,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔮",
     added: "2026-07-20T02:00:00Z",
   },
+  {
+    slug: "zodiac-calculator",
+    name: "Zodiac Sign Calculator",
+    description: "Discover your Western zodiac sign from your birthday. See personality traits, element, compatibility, and a daily horoscope reading. All 12 signs with detailed descriptions.",
+    category: "Fun",
+    icon: "♈",
+    added: "2026-07-20T02:30:00Z",
+  },
 ];
