@@ -5618,4 +5618,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎵",
     added: "2026-07-20T21:00:00Z",
   },
+  {
+    slug: "habit-tracker",
+    name: "Habit Tracker",
+    description: "Track daily habits, build streaks, and stay consistent. 6 habit colors, weekly view, streak/best/total stats, all data in localStorage.",
+    category: "Productivity",
+    icon: "✓",
+    added: "2026-07-20T21:30:00Z",
+  },
 ];
