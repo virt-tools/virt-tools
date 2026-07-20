@@ -5586,4 +5586,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🪷",
     added: "2026-07-20T17:30:00Z",
   },
+  {
+    slug: "stress-ball",
+    name: "Stress Ball",
+    description: "Virtual squeeze ball for stress relief. Click and hold to squeeze, release to let it bounce back. Tracks squeezes and time.",
+    category: "Fun",
+    icon: "🟢",
+    added: "2026-07-20T18:00:00Z",
+  },
 ];
