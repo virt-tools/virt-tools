@@ -5562,4 +5562,12 @@ window.VIRTUAL_TOOLS = [
     icon: "💎",
     added: "2026-07-20T16:00:00Z",
   },
+  {
+    slug: "kaleidoscope",
+    name: "Kaleidoscope",
+    description: "Draw symmetric patterns with 2-16 mirror segments. Adjustable brush size and color palette. Touch support, PNG export.",
+    category: "Fun",
+    icon: "🌀",
+    added: "2026-07-20T16:30:00Z",
+  },
 ];
