@@ -5594,4 +5594,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🟢",
     added: "2026-07-20T18:00:00Z",
   },
+  {
+    slug: "color-therapy",
+    name: "Color Therapy",
+    description: "Relax with soothing full-screen color transitions. 7 mood palettes (Rainbow, Warm, Cool, Ocean, Forest, Sunset, Calm). Adjustable speed, fullscreen mode.",
+    category: "Fun",
+    icon: "🌈",
+    added: "2026-07-20T20:00:00Z",
+  },
 ];
