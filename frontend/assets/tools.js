@@ -5458,4 +5458,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🟥",
     added: "2026-07-20T09:30:00Z",
   },
+  {
+    slug: "knights-tour",
+    name: "Knight's Tour",
+    description: "Classic chess puzzle. Move the knight to visit every square on the 8×8 board exactly once. Move hints, undo, dead-end detection, and progress tracking.",
+    category: "Fun",
+    icon: "♞",
+    added: "2026-07-20T10:00:00Z",
+  },
 ];
