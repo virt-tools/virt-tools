@@ -5498,4 +5498,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🃏",
     added: "2026-07-20T12:00:00Z",
   },
+  {
+    slug: "backgammon",
+    name: "Backgammon",
+    description: "Classic board game. Roll dice, move 15 checkers toward your home board, bear off to win. Hit opponent blots to send them to the bar. Play vs AI.",
+    category: "Fun",
+    icon: "🎲",
+    added: "2026-07-20T12:30:00Z",
+  },
 ];
