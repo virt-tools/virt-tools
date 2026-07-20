@@ -5482,4 +5482,12 @@ window.VIRTUAL_TOOLS = [
     icon: "⚔️",
     added: "2026-07-20T11:00:00Z",
   },
+  {
+    slug: "go-fish",
+    name: "Go Fish",
+    description: "Classic children's card game. Ask the AI for a rank — if they have it, they hand over all matching cards. If not, Go Fish! Collect 4 of a kind to make a book.",
+    category: "Fun",
+    icon: "🐟",
+    added: "2026-07-20T11:30:00Z",
+  },
 ];
