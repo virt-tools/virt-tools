@@ -5346,4 +5346,12 @@ window.VIRTUAL_TOOLS = [
     icon: "♈",
     added: "2026-07-20T02:30:00Z",
   },
+  {
+    slug: "soundboard",
+    name: "Soundboard",
+    description: "Tap pads to play 8 sound effects — clap, kick, snare, bell, laser, boom, chirp, siren. All synthesized live via Web Audio API, no audio files. Keyboard 1-8 support.",
+    category: "Audio",
+    icon: "🔊",
+    added: "2026-07-20T03:00:00Z",
+  },
 ];
