@@ -5426,4 +5426,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔵",
     added: "2026-07-20T07:30:00Z",
   },
+  {
+    slug: "farkle",
+    name: "Farkle",
+    description: "Classic dice game. Roll 6 dice, set aside scoring dice (1s, 5s, 3-of-a-kind, straight, three pairs), and bank points — or push your luck and risk a Farkle! Play vs AI.",
+    category: "Fun",
+    icon: "🎲",
+    added: "2026-07-20T08:00:00Z",
+  },
 ];

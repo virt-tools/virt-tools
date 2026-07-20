@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Farkle Dice Game — Virtual Tools</title>
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.tool-wrap{max-width:520px;margin:0 auto;text-align:center;}
+#dice-area{margin:16px 0;}
+.die{display:inline-block;width:54px;height:54px;line-height:48px;font-size:30px;margin:4px;border-radius:10px;border:2px solid var(--border,#444);background:var(--bg-alt,#1a1f2e);color:var(--text,#eee);cursor:pointer;transition:all .15s;position:relative;}
+.die.held{border-color:#f1c40f;background:rgba(241,196,15,.2);transform:scale(1.05);}
+.die.held::after{content:'✓';position:absolute;top:-6px;right:-6px;width:18px;height:18px;font-size:12px;line-height:18px;background:#f1c40f;color:#000;border-radius:50%;}
+.die.rolled{animation:shake .4s;}
+@keyframes shake{0%,100%{transform:rotate(0);}25%{transform:rotate(-10deg);}75%{transform:rotate(10deg);}}
+.score-display{font-size:18px;margin:8px 0;}
+.score-display span{color:var(--accent,#5b8def);font-weight:700;}
+.controls{margin:12px 0;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;}
+.controls button{padding:10px 20px;border-radius:8px;border:1px solid var(--border,#444);background:var(--bg-alt,#1a1f2e);color:var(--text,#eee);cursor:pointer;font-size:14px;font-weight:600;}
+.controls button:hover:not(:disabled){background:var(--accent,#5b8def);color:#fff;}
+.controls button:disabled{opacity:.4;cursor:default;}
+.stats{display:flex;gap:20px;justify-content:center;margin:12px 0;font-size:15px;}
+.stats span{color:var(--accent,#5b8def);font-weight:700;}
+#msg{font-size:16px;font-weight:600;margin:8px 0;min-height:24px;color:#f1c40f;}
+.scoring-table{margin:16px auto;text-align:left;font-size:13px;color:var(--text-secondary,#aaa);max-width:280px;border-collapse:collapse;}
+.scoring-table td{padding:2px 8px;}
+.scoring-table td:last-child{text-align:right;color:var(--accent,#5b8def);font-weight:600;}
+.tool-desc{font-size:14px;color:var(--text-secondary,#aaa);}
+.target{margin:8px 0;font-size:14px;}
+.target select{padding:4px 8px;border-radius:6px;background:var(--bg-alt,#1a1f2e);color:var(--text,#eee);border:1px solid var(--border,#444);}
+</style>
+</head>
+<body>
+<header id="site-header"></header>
+<main>
+<div class="tool-wrap">
+<h1>Farkle 🎲</h1>
+<p class="tool-desc">Roll 6 dice, set aside scoring dice, and bank points — or push your luck and risk losing it all to a Farkle!</p>
+<div class="target">First to <select id="target"><option>3000</option><option selected>5000</option><option>10000</option></select> points</div>
+<div class="stats"><div>You: <span id="p1">0</span></div><div>AI: <span id="p2">0</span></div><div>Turn: <span id="turn-score">0</span></div></div>
+<div id="dice-area"></div>
+<div class="score-display">Roll score: <span id="roll-score">—</span> | Bankable: <span id="bankable">0</span></div>
+<div id="msg"></div>
+<div class="controls">
+<button id="roll-btn" onclick="roll()">🎲 Roll</button>
+<button id="bank-btn" onclick="bank()" disabled>🏦 Bank <span id="bank-amt">0</span></button>
+<button onclick="newGame()">🔄 New Game</button>
+</div>
+<p class="info">Click dice to hold scoring ones (1s, 5s, 3-of-a-kind, straight).</p>
+<table class="scoring-table"><tr><td>Single 1</td><td>100</td></tr><tr><td>Single 5</td><td>50</td></tr><tr><td>3× 1s</td><td>1000</td></tr><tr><td>3× 2-6</td><td>face×100</td></tr><tr><td>4-of-a-kind</td><td>×2</td></tr><tr><td>5-of-a-kind</td><td>×4</td></tr><tr><td>6-of-a-kind</td><td>×8</td></tr><tr><td>1-6 straight</td><td>1500</td></tr><tr><td>Three pairs</td><td>750</td></tr></table>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+let dice=[],held=[],p1=0,p2=0,turnScore=0,rollScore=0,turn=1,hotDice=[];
+const F=[0,100,0,0,0,50,0];
+function newGame(){
+p1=0;p2=0;turnScore=0;rollScore=0;dice=[1,1,1,1,1,1];held=[false,false,false,false,false,false];hotDice=[];
+document.getElementById('msg').textContent='Your turn! Roll the dice.';
+update();render();
+}
+function render(){
+const a=document.getElementById('dice-area');a.innerHTML='';
+dice.forEach((v,i)=>{const d=document.createElement('div');d.className='die'+(held[i]?' held':'');d.textContent='⚀⚁⚂⚃⚄⚅'[v-1];d.onclick=()=>toggle(i);a.appendChild(d);});
+}
+function toggle(i){
+if(held[i]){held[i]=false;render();return;}
+const heldVals=dice.filter((_,j)=>held[j]);
+heldVals.push(dice[i]);
+if(scoreSet(heldVals)===null){document.getElementById('msg').textContent='That combination has no score!';return;}
+held[i]=true;render();updateBankable();
+}
+function scoreSet(vals){
+const counts=[0,0,0,0,0,0,0];vals.forEach(v=>counts[v]++);let s=0;
+if(vals.length===6&&counts.slice(1).every(c=>c===1))return 1500;
+if(counts.slice(1).filter(c=>c===2).length===3)return 750;
+for(let f=1;f<=6;f++){if(counts[f]===6)return s+=[3000,2000,1200,1600,2000,3000][f-1];
+if(counts[f]===5)return s+[2000,1500,1000,1000,1000,1200][f-1];
+if(counts[f]===4)return s+=[1000,800,600,800,1000,1200][f-1];
+if(counts[f]===3)return s+[1000,200,300,400,500,600][f-1];}
+let singles=0;for(let f=1;f<=6;f++){if(counts[f]<3)singles+=F[f]*counts[f];}
+return s+singles>0?s+singles:null;
+}
+function updateBankable(){
+const heldVals=dice.filter((_,j)=>held[j]);
+const sc=heldVals.length?scoreSet(heldVals)||0:0;
+document.getElementById('bankable').textContent=sc;
+document.getElementById('bank-amt').textContent=turnScore+sc;
+document.getElementById('bank-btn').disabled=sc===0;
+}
+function roll(){
+const active=dice.map((v,i)=>held[i]?null:v);
+const available=active.filter(v=>v!==null).length;
+if(available===0){document.getElementById('msg').textContent='All dice held! Bank or unhold some.';return;}
+for(let i=0;i<6;i++)if(!held[i]){dice[i]=Math.floor(Math.random()*6)+1;}
+held=[false,false,false,false,false,false,false];
+document.querySelectorAll('.die').forEach(d=>d.classList.add('rolled'));
+setTimeout(()=>{document.querySelectorAll('.die').forEach(d=>d.classList.remove('rolled'));render();checkRoll();},400);
+}
+function checkRoll(){
+const availableDice=dice.map((v,i)=>held[i]?null:v).filter(v=>v!==null);
+if(!hasScoring(availableDice)){
+rollScore=0;document.getElementById('roll-score').textContent='FARKLE! (0)';
+document.getElementById('msg').textContent=turn===1?'💥 FARKLE! You lose your turn score.':'💥 FARKLE! AI loses turn score.';
+turnScore=0;update();
+setTimeout(()=>{turn=turn===1?2:1;document.getElementById('msg').textContent=turn===1?'Your turn! Roll.':'AI thinking...';if(turn===2)setTimeout(aiTurn,800);},1500);
+return;}
+rollScore=scoreSet(availableDice)||0;
+document.getElementById('roll-score').textContent=rollScore;
+}
+function hasScoring(vals){if(!vals.length)return false;return scoreSet(vals)!==null;}
+function bank(){
+const heldVals=dice.filter((_,j)=>held[j]);
+const sc=scoreSet(heldVals)||0;if(sc===0)return;
+turnScore+=sc;
+if(turn===1){p1+=turnScore;document.getElementById('msg').textContent='✅ Banked '+turnScore+' points!';}
+else{p2+=turnScore;document.getElementById('msg').textContent='✅ AI banked '+turnScore+' points.';}
+turnScore=0;held=[false,false,false,false,false,false];dice=[1,1,1,1,1,1];
+update();render();
+const target=parseInt(document.getElementById('target').value);
+if(p1>=target){document.getElementById('msg').textContent='🎉 You win! '+p1+' vs '+p2;return;}
+if(p2>=target){document.getElementById('msg').textContent='🤖 AI wins! '+p2+' vs '+p1;return;}
+turn=turn===1?2:1;
+if(turn===2)setTimeout(aiTurn,800);
+}
+function update(){
+document.getElementById('p1').textContent=p1;
+document.getElementById('p2').textContent=p2;
+document.getElementById('turn-score').textContent=turnScore;
+}
+function aiTurn(){
+document.getElementById('msg').textContent='AI thinking...';held=[false,false,false,false,false,false];
+setTimeout(()=>aiRoll(6),800);
+}
+function aiRoll(n){
+for(let i=0;i<6;i++)if(!held[i])dice[i]=Math.floor(Math.random()*6)+1;
+render();
+const vals=dice.filter((_,j)=>!held[j]);
+if(!hasScoring(vals)){rollScore=0;turnScore=0;update();document.getElementById('msg').textContent='💥 AI FARKLED! Your turn.';turn=1;render();return;}
+const combos=bestHold(vals);
+const heldCopy=[...held];
+let bestSet=null,bestScore=0;
+for(const c of combos){const s=scoreSet(c);if(s!==null&&s>bestScore){bestScore=s;bestSet=c;}}
+if(bestSet){for(let i=0;i<6;i++)if(!held[i]&&bestSet.includes(dice[i])){held[i]=true;const idx=bestSet.indexOf(dice[i]);bestSet.splice(idx,1);}
+render();turnScore+=bestScore;update();
+const remaining=dice.filter((_,j)=>!held[j]).length;
+if(remaining===0){held=[false,false,false,false,false,false];dice=[1,1,1,1,1,1];render();}
+if(turnScore>=500||remaining===0){setTimeout(aiBank,600);return;}
+if(Math.random()<0.5){setTimeout(()=>aiRoll(remaining),600);return;}
+setTimeout(aiBank,600);
+}
+else{turnScore=0;update();document.getElementById('msg').textContent='💥 AI FARKLED! Your turn.';turn=1;render();}
+}
+function bestHold(vals){
+const result=[[]];const idx=vals.map((_,i)=>i);
+for(let n=1;n<=vals.length;n++){for(const c of comb(idx,n)){result.push(c.map(i=>vals[i]));}}
+return result.filter(c=>scoreSet(c)!==null);
+}
+function comb(arr,k){if(k===0)return [[]];if(arr.length<k)return[];const[r]=arr;const rest=arr.slice(1);return[...comb(rest,k-1).map(c=>[r,...c]),...comb(rest,k)];}
+function aiBank(){
+p2+=turnScore;document.getElementById('msg').textContent='✅ AI banked '+turnScore+'.';turnScore=0;held=[false,false,false,false,false,false];dice=[1,1,1,1,1,1];update();render();
+const target=parseInt(document.getElementById('target').value);
+if(p2>=target){document.getElementById('msg').textContent='🤖 AI wins! '+p2+' vs '+p1;return;}
+turn=1;document.getElementById('msg').textContent='Your turn! Roll.';
+}
+newGame();
+</script>
+</body>
+</html>
