@@ -5610,4 +5610,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔍",
     added: "2026-07-20T20:30:00Z",
   },
+  {
+    slug: "lofi-player",
+    name: "Lo-Fi Player",
+    description: "Relaxing lo-fi beats generated entirely in your browser. 8 tracks, 4 moods, volume control, spinning vinyl animation. Perfect for studying or unwinding.",
+    category: "Audio",
+    icon: "🎵",
+    added: "2026-07-20T21:00:00Z",
+  },
 ];
