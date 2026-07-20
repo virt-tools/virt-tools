@@ -5514,4 +5514,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🃏",
     added: "2026-07-20T13:00:00Z",
   },
+  {
+    slug: "slapjack",
+    name: "Slapjack",
+    description: "Fast-action card game. Flip cards one at a time — when a Jack appears, be the first to slap the pile! False slaps forfeit the pile.",
+    category: "Fun",
+    icon: "🃏",
+    added: "2026-07-20T13:30:00Z",
+  },
 ];
