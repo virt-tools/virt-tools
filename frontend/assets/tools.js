@@ -5434,4 +5434,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎲",
     added: "2026-07-20T08:00:00Z",
   },
+  {
+    slug: "craps",
+    name: "Craps",
+    description: "Classic casino dice game. Bet Pass Line, Don't Pass, or Field. Roll dice, establish a point, and make it to win. Animated rolling dice, bankroll tracking.",
+    category: "Fun",
+    icon: "🎲",
+    added: "2026-07-20T08:30:00Z",
+  },
 ];
