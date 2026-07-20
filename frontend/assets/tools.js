@@ -5570,4 +5570,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌀",
     added: "2026-07-20T16:30:00Z",
   },
+  {
+    slug: "zen-garden",
+    name: "Zen Garden",
+    description: "Rake meditative patterns in virtual sand. Place stones, drag to rake around them. Relaxing and calming.",
+    category: "Fun",
+    icon: "🏖️",
+    added: "2026-07-20T17:00:00Z",
+  },
 ];
