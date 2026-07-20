@@ -5362,4 +5362,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🧠",
     added: "2026-07-20T03:30:00Z",
   },
+  {
+    slug: "pixel-art-editor",
+    name: "Pixel Art Editor",
+    description: "Create pixel art on a grid canvas. Adjustable size (8×8 to 32×32), 16-color palette + custom colors, pencil, eraser, flood fill, undo, and PNG export. Touch support.",
+    category: "Image",
+    icon: "🎨",
+    added: "2026-07-20T04:00:00Z",
+  },
 ];
