@@ -5602,4 +5602,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌈",
     added: "2026-07-20T20:00:00Z",
   },
+  {
+    slug: "word-search-maker",
+    name: "Word Search Maker",
+    description: "Create custom word search puzzles from your own word list. 8 directions, reversed words, 4 themed presets, click-and-drag selection.",
+    category: "Fun",
+    icon: "🔍",
+    added: "2026-07-20T20:30:00Z",
+  },
 ];
