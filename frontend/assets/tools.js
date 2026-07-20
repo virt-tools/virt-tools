@@ -5538,4 +5538,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌀",
     added: "2026-07-20T14:30:00Z",
   },
+  {
+    slug: "bubble-wrap",
+    name: "Bubble Wrap Pop",
+    description: "Satisfying virtual bubble wrap popping simulator. Click or drag across bubbles to pop them. New sheet, pop all, sheet counter.",
+    category: "Fun",
+    icon: "🫧",
+    added: "2026-07-20T15:00:00Z",
+  },
 ];
