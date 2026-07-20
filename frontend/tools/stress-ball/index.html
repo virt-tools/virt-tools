@@ -9,13 +9,16 @@
 <style>
 .tool-wrap{max-width:500px;margin:0 auto;text-align:center;}
 .tool-desc{font-size:14px;color:var(--text-secondary,#aaa);margin:8px 0;}
-canvas{margin:12px auto;display:block;cursor:grab;touch-action:none;}
+canvas{margin:12px auto;display:block;cursor:grab;touch-action:none;border-radius:12px;}
 .controls{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:8px 0;align-items:center;}
 .controls button{padding:8px 16px;border-radius:6px;border:1px solid var(--border,#444);background:var(--bg-alt,#1a1f2e);color:var(--text,#eee);cursor:pointer;font-size:14px;}
 .controls button:hover{background:var(--accent,#5b8def);color:#fff;}
 label{font-size:13px;color:var(--text-secondary,#aaa);}
 input[type=color]{width:36px;height:28px;border:none;border-radius:4px;cursor:pointer;}
 .stats{font-size:13px;color:var(--text-secondary,#aaa);margin:8px 0;}
+.modes{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin:4px 0;}
+.modes button{padding:6px 12px;font-size:12px;border-radius:20px;border:2px solid transparent;background:var(--bg-alt,#1a1f2e);color:var(--text-secondary,#aaa);cursor:pointer;}
+.modes button.active{border-color:var(--accent,#5b8def);color:var(--accent,#5b8def);}
 </style>
 </head>
 <body>
@@ -23,11 +26,19 @@ input[type=color]{width:36px;height:28px;border:none;border-radius:4px;cursor:po
 <main>
 <div class="tool-wrap">
 <h1>Stress Ball 🟢</h1>
-<p class="tool-desc">Click and hold to squeeze. Release to let it bounce back. Track your squeezes for stress relief.</p>
-<canvas id="cv" width="320" height="320"></canvas>
-<div class="stats">Squeezes: <span id="cnt">0</span> | Time squeezed: <span id="tms">0.0s</span></div>
+<p class="tool-desc">Click and hold to squeeze. Release to let it bounce. Try different ball styles!</p>
+<canvas id="cv" width="360" height="360"></canvas>
+<div class="stats">Squeezes: <span id="cnt">0</span> | Time squeezed: <span id="tms">0.0s</span> | Max squeeze: <span id="mxs">0%</span></div>
+<div class="modes">
+<button class="active" data-mode="glow">✨ Glow</button>
+<button data-mode="gradient">🌈 Gradient</button>
+<button data-mode="fire">🔥 Fire</button>
+<button data-mode="water">💧 Water</button>
+<button data-mode="galaxy">🌌 Galaxy</button>
+</div>
 <div class="controls">
 <label>Color: <input type="color" id="color" value="#5cb85c"></label>
+<label><input type="checkbox" id="sound" checked> Sound</label>
 <button onclick="resetStats()">↺ Reset Stats</button>
 </div>
 </div>
@@ -35,17 +46,61 @@ input[type=color]{width:36px;height:28px;border:none;border-radius:4px;cursor:po
 <script src="/assets/app.js"></script>
 <script>
 const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
-let squeezing=false,squeeze=0,count=0,totalMs=0,startT=0;
-const ball={x:160,y:160,r:100};
+let squeezing=false,squeeze=0,count=0,totalMs=0,startT=0,maxSqueeze=0;
+let particles=[],ripples=[],mode='glow',hueShift=0;
+const ball={x:180,y:180,r:110};
+let audioCtx=null;
+function ensureAudio(){if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)();}
+function playSound(freq,dur,vol){if(!document.getElementById('sound').checked)return;ensureAudio();if(!audioCtx)return;const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.connect(g);g.connect(audioCtx.destination);o.frequency.value=freq;o.type='sine';g.gain.setValueAtTime(vol,audioCtx.currentTime);g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+dur);o.start();o.stop(audioCtx.currentTime+dur);}
 function getColor(){return document.getElementById('color').value;}
-function draw(){ctx.clearRect(0,0,cv.width,cv.height);const sq=squeeze*0.3;const rx=ball.r+sq*1.5;const ry=ball.r-sq*1.5;ctx.save();ctx.translate(ball.x,ball.y);ctx.fillStyle=getColor();ctx.beginPath();ctx.ellipse(0,0,rx,ry,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='rgba(255,255,255,0.25)';ctx.beginPath();ctx.ellipse(-rx*0.3,-ry*0.3,rx*0.3,ry*0.3,0,0,Math.PI*2);ctx.fill();ctx.restore();}
-function loop(){if(squeezing&&squeeze<1)squeeze+=0.04;if(!squeezing&&squeeze>0)squeeze-=0.08;if(squeeze<0)squeeze=0;draw();requestAnimationFrame(loop);}
-cv.addEventListener('mousedown',()=>{squeezing=true;startT=Date.now();count++;document.getElementById('cnt').textContent=count;});
-cv.addEventListener('mouseup',()=>{squeezing=false;if(startT){totalMs+=Date.now()-startT;document.getElementById('tms').textContent=(totalMs/1000).toFixed(1)+'s';}});
-cv.addEventListener('mouseleave',()=>{if(squeezing){squeezing=false;if(startT){totalMs+=Date.now()-startT;document.getElementById('tms').textContent=(totalMs/1000).toFixed(1)+'s';}}});
-cv.addEventListener('touchstart',e=>{e.preventDefault();squeezing=true;startT=Date.now();count++;document.getElementById('cnt').textContent=count;});
-cv.addEventListener('touchend',e=>{e.preventDefault();squeezing=false;if(startT){totalMs+=Date.now()-startT;document.getElementById('tms').textContent=(totalMs/1000).toFixed(1)+'s';}});
-function resetStats(){count=0;totalMs=0;startT=0;document.getElementById('cnt').textContent='0';document.getElementById('tms').textContent='0.0s';}
+function hexToRgb(h){const n=parseInt(h.slice(1),16);return[(n>>16)&255,(n>>8)&255,n&255];}
+function spawnParticles(n){const c=getColor();const[pr,pg,pb]=hexToRgb(c);for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2;const sp=1+Math.random()*4;particles.push({x:ball.x,y:ball.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-sp,life:1,r:2+Math.random()*4,color:`rgba(${pr},${pg},${pb},${1})`});}}
+function spawnRipple(){ripples.push({x:ball.x,y:ball.y,r:ball.r,life:1});}
+function drawBall(){
+  const sq=squeeze*0.35;
+  const rx=ball.r+sq*1.8,ry=ball.r-sq*1.8;
+  ctx.save();ctx.translate(ball.x,ball.y);
+  if(mode==='glow'){
+    const g=ctx.createRadialGradient(0,0,rx*0.3,0,0,rx*1.6);
+    const c=getColor();g.addColorStop(0,c);g.addColorStop(0.6,c+'88');g.addColorStop(1,'transparent');
+    ctx.fillStyle=g;ctx.beginPath();ctx.ellipse(0,0,rx*1.6,ry*1.6,0,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle=c;ctx.beginPath();ctx.ellipse(0,0,rx,ry,0,0,Math.PI*2);ctx.fill();
+  }else if(mode==='gradient'){
+    const g=ctx.createLinearGradient(-rx,-ry,rx,ry);
+    const h=hueShift;g.addColorStop(0,`hsl(${h%360},80%,60%)`);g.addColorStop(0.5,`hsl(${(h+60)%360},80%,55%)`);g.addColorStop(1,`hsl(${(h+120)%360},80%,50%)`);
+    ctx.fillStyle=g;ctx.beginPath();ctx.ellipse(0,0,rx,ry,0,0,Math.PI*2);ctx.fill();
+  }else if(mode==='fire'){
+    const g=ctx.createRadialGradient(0,ry*0.3,5,0,0,rx);
+    g.addColorStop(0,'#fff');g.addColorStop(0.2,'#ff0');g.addColorStop(0.5,'#f80');g.addColorStop(0.8,'#f00');g.addColorStop(1,'#400');
+    ctx.fillStyle=g;ctx.beginPath();ctx.ellipse(0,0,rx,ry,0,0,Math.PI*2);ctx.fill();
+    for(let i=0;i<3;i++){const fy=-ry*0.5+Math.sin(Date.now()/200+i)*10;ctx.fillStyle=`rgba(255,${100+i*30},0,0.5)`;ctx.beginPath();ctx.ellipse(Math.sin(Date.now()/300+i)*20,fy,rx*0.3,ry*0.15,0,0,Math.PI*2);ctx.fill();}
+  }else if(mode==='water'){
+    const g=ctx.createRadialGradient(-rx*0.2,-ry*0.2,5,0,0,rx);
+    g.addColorStop(0,'rgba(150,220,255,0.9)');g.addColorStop(0.5,'rgba(50,150,255,0.8)');g.addColorStop(1,'rgba(20,50,150,0.7)');
+    ctx.fillStyle=g;ctx.beginPath();ctx.ellipse(0,0,rx,ry,0,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,0.3)';ctx.lineWidth=1;
+    for(let i=0;i<3;i++){const wy=Math.sin(Date.now()/400+i*2)*ry*0.3;ctx.beginPath();ctx.ellipse(0,wy,rx*0.7,ry*0.05,0,0,Math.PI*2);ctx.stroke();}
+  }else if(mode==='galaxy'){
+    const g=ctx.createRadialGradient(0,0,5,0,0,rx);
+    g.addColorStop(0,'rgba(255,255,255,0.9)');g.addColorStop(0.2,'rgba(200,100,255,0.7)');g.addColorStop(0.5,'rgba(50,50,200,0.5)');g.addColorStop(1,'rgba(0,0,20,0.8)');
+    ctx.fillStyle=g;ctx.beginPath();ctx.ellipse(0,0,rx,ry,0,0,Math.PI*2);ctx.fill();
+    for(let i=0;i<20;i++){const a=(Date.now()/2000+i*Math.PI*2/20);const sx=Math.cos(a)*rx*0.6,sy=Math.sin(a)*ry*0.6;ctx.fillStyle=`rgba(255,255,255,${0.5+Math.random()*0.5})`;ctx.beginPath();ctx.arc(sx,sy,1+Math.random()*1.5,0,Math.PI*2);ctx.fill();}
+  }
+  ctx.fillStyle='rgba(255,255,255,0.3)';
+  ctx.beginPath();ctx.ellipse(-rx*0.3,-ry*0.3,rx*0.3,ry*0.25,0,0,Math.PI*2);ctx.fill();
+  ctx.restore();
+}
+function drawParticles(){particles=particles.filter(p=>p.life>0);particles.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=0.15;p.life-=0.02;ctx.globalAlpha=p.life;ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(p.x,p.y,p.r*p.life,0,Math.PI*2);ctx.fill();});ctx.globalAlpha=1;}
+function drawRipples(){ripples=ripples.filter(r=>r.life>0);ripples.forEach(r=>{r.r+=3;r.life-=0.03;ctx.globalAlpha=r.life*0.5;ctx.strokeStyle=getColor();ctx.lineWidth=2;ctx.beginPath();ctx.arc(r.x,r.y,r.r,0,Math.PI*2);ctx.stroke();});ctx.globalAlpha=1;}
+function draw(){ctx.clearRect(0,0,cv.width,cv.height);hueShift+=0.5;drawRipples();drawBall();drawParticles();const pct=Math.round(squeeze*100);document.getElementById('mxs').textContent=Math.max(maxSqueeze,pct)+'%';}
+function loop(){if(squeezing&&squeeze<1){squeeze+=0.03;if(squeeze*100>maxSqueeze)maxSqueeze=squeeze*100;}if(!squeezing&&squeeze>0){squeeze-=0.06;if(squeeze<0){squeeze=0;playSound(200,0.1,0.05);}}draw();requestAnimationFrame(loop);}
+cv.addEventListener('mousedown',()=>{squeezing=true;startT=Date.now();count++;document.getElementById('cnt').textContent=count;spawnRipple();playSound(400,0.1,0.08);});
+cv.addEventListener('mouseup',()=>{squeezing=false;if(startT){totalMs+=Date.now()-startT;document.getElementById('tms').textContent=(totalMs/1000).toFixed(1)+'s';}spawnParticles(Math.round(5+squeeze*15));playSound(300+squeeze*200,0.15,0.1);});
+cv.addEventListener('mouseleave',()=>{if(squeezing){squeezing=false;if(startT){totalMs+=Date.now()-startT;document.getElementById('tms').textContent=(totalMs/1000).toFixed(1)+'s';}spawnParticles(Math.round(5+squeeze*15));}});
+cv.addEventListener('touchstart',e=>{e.preventDefault();squeezing=true;startT=Date.now();count++;document.getElementById('cnt').textContent=count;spawnRipple();playSound(400,0.1,0.08);});
+cv.addEventListener('touchend',e=>{e.preventDefault();squeezing=false;if(startT){totalMs+=Date.now()-startT;document.getElementById('tms').textContent=(totalMs/1000).toFixed(1)+'s';}spawnParticles(Math.round(5+squeeze*15));playSound(300+squeeze*200,0.15,0.1);});
+document.querySelectorAll('.modes button').forEach(b=>{b.addEventListener('click',()=>{document.querySelectorAll('.modes button').forEach(x=>x.classList.remove('active'));b.classList.add('active');mode=b.dataset.mode;});});
+function resetStats(){count=0;totalMs=0;startT=0;maxSqueeze=0;document.getElementById('cnt').textContent='0';document.getElementById('tms').textContent='0.0s';document.getElementById('mxs').textContent='0%';}
 loop();
 </script>
 </body>
