@@ -5554,4 +5554,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🟢",
     added: "2026-07-20T15:30:00Z",
   },
+  {
+    slug: "match-3",
+    name: "Match-3 Game",
+    description: "Swap adjacent gems to match 3 or more. Cascading chains, bonus points, 30-move limit, 8x8 board, 6 gem types.",
+    category: "Fun",
+    icon: "💎",
+    added: "2026-07-20T16:00:00Z",
+  },
 ];
