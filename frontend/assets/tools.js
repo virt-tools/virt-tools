@@ -5546,4 +5546,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🫧",
     added: "2026-07-20T15:00:00Z",
   },
+  {
+    slug: "pop-it",
+    name: "Pop It Fidget Toy",
+    description: "Silicone pop-it fidget toy. Click bubbles to pop in and out. 3 shapes (square, heart, circle), 8 rainbow colors, round counter.",
+    category: "Fun",
+    icon: "🟢",
+    added: "2026-07-20T15:30:00Z",
+  },
 ];
