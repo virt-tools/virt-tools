@@ -5474,4 +5474,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🁫",
     added: "2026-07-20T10:30:00Z",
   },
+  {
+    slug: "war-card-game",
+    name: "War Card Game",
+    description: "The classic card game. Each player flips a card — higher wins both. Ties trigger WAR: 3 cards face down, 1 face up, winner takes all. Auto-play mode.",
+    category: "Fun",
+    icon: "⚔️",
+    added: "2026-07-20T11:00:00Z",
+  },
 ];
