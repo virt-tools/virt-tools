@@ -5506,4 +5506,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎲",
     added: "2026-07-20T12:30:00Z",
   },
+  {
+    slug: "old-maid",
+    name: "Old Maid",
+    description: "Classic card game. Pair up matching cards to discard them. Draw from opponent's hand — don't get stuck with the Old Maid (Queen)!",
+    category: "Fun",
+    icon: "🃏",
+    added: "2026-07-20T13:00:00Z",
+  },
 ];
