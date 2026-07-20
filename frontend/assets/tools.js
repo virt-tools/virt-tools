@@ -5522,4 +5522,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🃏",
     added: "2026-07-20T13:30:00Z",
   },
+  {
+    slug: "spoons",
+    name: "Spoons",
+    description: "Fast-pass card game. Get 4 of a kind and grab a spoon! Don't be the last one without a spoon. 4 players (you + 3 AI), 3 spoons.",
+    category: "Fun",
+    icon: "🥄",
+    added: "2026-07-20T14:00:00Z",
+  },
 ];
