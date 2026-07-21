@@ -5786,4 +5786,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔤",
     added: "2026-07-21T07:30:00Z",
   },
+  {
+    slug: "drum-pad",
+    name: "Drum Pad",
+    description: "16-pad drum machine with 4 kits (Acoustic, Electronic, Hip-Hop, Retro 808). All sounds synthesized live via Web Audio API — no audio files. Keyboard support.",
+    category: "Audio",
+    icon: "🥁",
+    added: "2026-07-21T08:00:00Z",
+  },
 ];
