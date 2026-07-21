@@ -5866,4 +5866,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🧊",
     added: "2026-07-21T12:30:00Z",
   },
+  {
+    slug: "clip-path",
+    name: "CSS Clip-Path Generator",
+    description: "Create CSS clip-path shapes: triangle, pentagon, hexagon, star, arrow, diamond, heart, cross, chevron, and more. Copy CSS.",
+    category: "Design",
+    icon: "✂️",
+    added: "2026-07-21T13:00:00Z",
+  },
 ];
