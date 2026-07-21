@@ -5874,4 +5874,12 @@ window.VIRTUAL_TOOLS = [
     icon: "✂️",
     added: "2026-07-21T13:00:00Z",
   },
+  {
+    slug: "css-transform",
+    name: "CSS Transform Generator",
+    description: "Create CSS transform with rotate, scale, skew, translate, and perspective. 10 sliders, live 3D preview, copy CSS.",
+    category: "Design",
+    icon: "🔄",
+    added: "2026-07-21T13:30:00Z",
+  },
 ];
