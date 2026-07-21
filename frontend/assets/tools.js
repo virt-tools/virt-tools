@@ -5810,4 +5810,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔤",
     added: "2026-07-21T09:00:00Z",
   },
+  {
+    slug: "gradient-text",
+    name: "Gradient Text Generator",
+    description: "Create CSS gradient text effects with live preview. Multi-color stops, linear/radial/conic gradients, adjustable angle. Copy CSS.",
+    category: "Design",
+    icon: "🌈",
+    added: "2026-07-21T09:30:00Z",
+  },
 ];
