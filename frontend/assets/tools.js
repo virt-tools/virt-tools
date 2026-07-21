@@ -5954,4 +5954,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🃏",
     added: "2026-07-21T18:00:00Z",
   },
+  {
+    slug: "css-navbar",
+    name: "CSS Navbar Generator",
+    description: "Create responsive CSS navbars with 4 hover styles (color/underline/background/border), sticky or fixed positioning, custom colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🧭",
+    added: "2026-07-21T18:30:00Z",
+  },
 ];
