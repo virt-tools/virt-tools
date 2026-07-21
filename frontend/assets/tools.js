@@ -5922,4 +5922,12 @@ window.VIRTUAL_TOOLS = [
     icon: "💬",
     added: "2026-07-21T16:00:00Z",
   },
+  {
+    slug: "css-tabs",
+    name: "CSS Tabs Generator",
+    description: "Create CSS-only tabbed interfaces with 3 animation styles (fade, slide, scale). 2-6 tabs, live preview, copy HTML+CSS.",
+    category: "Design",
+    icon: "📋",
+    added: "2026-07-21T16:30:00Z",
+  },
 ];
