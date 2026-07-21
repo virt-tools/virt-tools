@@ -5722,4 +5722,12 @@ window.VIRTUAL_TOOLS = [
     icon: "💪",
     added: "2026-07-21T03:30:00Z",
   },
+  {
+    slug: "plant-tracker",
+    name: "Plant Tracker",
+    description: "Track your houseplants with watering schedules, last-watered dates, and care notes. Get visual alerts when plants are due or overdue.",
+    category: "Productivity",
+    icon: "🌿",
+    added: "2026-07-21T04:00:00Z",
+  },
 ];
