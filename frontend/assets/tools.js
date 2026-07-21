@@ -5970,4 +5970,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🍞",
     added: "2026-07-21T19:00:00Z",
   },
+  {
+    slug: "css-checkbox",
+    name: "CSS Checkbox Generator",
+    description: "Create custom CSS checkboxes with 6 styles (classic, rounded, square, switch, pill, card). Custom colors, sizes, animations. Copy HTML+CSS.",
+    category: "Design",
+    icon: "☑️",
+    added: "2026-07-21T19:30:00Z",
+  },
 ];
