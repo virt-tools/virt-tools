@@ -5962,4 +5962,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🧭",
     added: "2026-07-21T18:30:00Z",
   },
+  {
+    slug: "css-breadcrumb",
+    name: "CSS Breadcrumb Generator",
+    description: "Create CSS breadcrumb navigation with 6 separator styles (/, >, ›, →, •, ❯), 3 item styles (plain/pill/arrow), custom colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🍞",
+    added: "2026-07-21T19:00:00Z",
+  },
 ];
