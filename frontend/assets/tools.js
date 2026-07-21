@@ -5826,4 +5826,12 @@ window.VIRTUAL_TOOLS = [
     icon: "💡",
     added: "2026-07-21T10:00:00Z",
   },
+  {
+    slug: "3d-text",
+    name: "3D Text Generator",
+    description: "Create CSS 3D extruded text with depth layers, perspective rotation, and color gradients. Adjustable depth, rotation, skeleton outline.",
+    category: "Design",
+    icon: "🧊",
+    added: "2026-07-21T10:30:00Z",
+  },
 ];
