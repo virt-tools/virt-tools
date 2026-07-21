@@ -5674,4 +5674,12 @@ window.VIRTUAL_TOOLS = [
     icon: "💧",
     added: "2026-07-21T00:30:00Z",
   },
+  {
+    slug: "monthly-calendar",
+    name: "Monthly Calendar",
+    description: "View any month and add notes to dates. Navigate months, track events, and keep a private calendar. All data stored locally.",
+    category: "Productivity",
+    icon: "📅",
+    added: "2026-07-21T01:00:00Z",
+  },
 ];
