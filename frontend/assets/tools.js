@@ -5978,4 +5978,12 @@ window.VIRTUAL_TOOLS = [
     icon: "☑️",
     added: "2026-07-21T19:30:00Z",
   },
+  {
+    slug: "pricing-table",
+    name: "CSS Pricing Table Generator",
+    description: "Create CSS pricing tables with 2-4 tiers, featured highlight, 3 styles, custom colors, hover effects. Copy HTML+CSS.",
+    category: "Design",
+    icon: "💳",
+    added: "2026-07-21T20:00:00Z",
+  },
 ];
