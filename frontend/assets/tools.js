@@ -5690,4 +5690,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🍳",
     added: "2026-07-21T01:30:00Z",
   },
+  {
+    slug: "reading-list",
+    name: "Reading List",
+    description: "Save articles and links to read later. Mark as read, add tags and notes, filter by status. All stored locally in your browser.",
+    category: "Productivity",
+    icon: "📚",
+    added: "2026-07-21T02:00:00Z",
+  },
 ];
