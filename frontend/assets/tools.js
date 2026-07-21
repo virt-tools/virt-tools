@@ -5730,4 +5730,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌿",
     added: "2026-07-21T04:00:00Z",
   },
+  {
+    slug: "book-tracker",
+    name: "Book Tracker",
+    description: "Track books you've read, are reading, or want to read. Add ratings and notes. Filter by status. All stored locally.",
+    category: "Productivity",
+    icon: "📖",
+    added: "2026-07-21T04:30:00Z",
+  },
 ];
