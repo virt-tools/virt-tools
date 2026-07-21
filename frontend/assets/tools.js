@@ -5706,4 +5706,12 @@ window.VIRTUAL_TOOLS = [
     icon: "😊",
     added: "2026-07-21T02:30:00Z",
   },
+  {
+    slug: "sleep-tracker",
+    name: "Sleep Tracker",
+    description: "Log sleep hours, quality, and notes each night. View averages, 14-night bar chart, and recent history. All stored locally.",
+    category: "Productivity",
+    icon: "😴",
+    added: "2026-07-21T03:00:00Z",
+  },
 ];
