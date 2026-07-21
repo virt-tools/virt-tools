@@ -5794,4 +5794,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🥁",
     added: "2026-07-21T08:00:00Z",
   },
+  {
+    slug: "sudoku-maker",
+    name: "Sudoku Maker",
+    description: "Generate custom Sudoku puzzles with 4 difficulty levels (Easy to Expert). Interactive solving with numpad, keyboard, error tracking, timer, and print.",
+    category: "Fun",
+    icon: "🔢",
+    added: "2026-07-21T08:30:00Z",
+  },
 ];
