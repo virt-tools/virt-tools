@@ -5682,4 +5682,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📅",
     added: "2026-07-21T01:00:00Z",
   },
+  {
+    slug: "recipe-keeper",
+    name: "Recipe Keeper",
+    description: "Save and organize your favorite recipes. Add ingredients, steps, tags, and notes. Search and filter by tag. All stored locally.",
+    category: "Productivity",
+    icon: "🍳",
+    added: "2026-07-21T01:30:00Z",
+  },
 ];
