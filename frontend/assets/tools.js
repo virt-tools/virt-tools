@@ -5770,4 +5770,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎯",
     added: "2026-07-21T06:30:00Z",
   },
+  {
+    slug: "diary-app",
+    name: "Diary",
+    description: "Private daily journal. Write entries by date, set mood emoji, search past entries. Everything stays in your browser.",
+    category: "Productivity",
+    icon: "📔",
+    added: "2026-07-21T07:00:00Z",
+  },
 ];
