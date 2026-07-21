@@ -5882,4 +5882,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔄",
     added: "2026-07-21T13:30:00Z",
   },
+  {
+    slug: "border-radius",
+    name: "CSS Border Radius Generator",
+    description: "Create complex border-radius shapes with individual corner control. 8 sliders for elliptical corners, 7 presets, copy CSS.",
+    category: "Design",
+    icon: "📐",
+    added: "2026-07-21T14:00:00Z",
+  },
 ];
