@@ -5858,4 +5858,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🪟",
     added: "2026-07-21T12:00:00Z",
   },
+  {
+    slug: "neumorphism",
+    name: "Neumorphism Generator",
+    description: "Create CSS neumorphism (soft UI) effects with dual shadows. Raised, inset, and flat modes. 5 presets, copy CSS.",
+    category: "Design",
+    icon: "🧊",
+    added: "2026-07-21T12:30:00Z",
+  },
 ];
