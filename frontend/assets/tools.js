@@ -5842,4 +5842,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📺",
     added: "2026-07-21T11:00:00Z",
   },
+  {
+    slug: "text-shadow",
+    name: "Text Shadow Generator",
+    description: "Create CSS text-shadow effects with multiple layers: glow, outline, 3D, retro, neon, fire. 7 presets, copy CSS.",
+    category: "Design",
+    icon: "🌑",
+    added: "2026-07-21T11:30:00Z",
+  },
 ];
