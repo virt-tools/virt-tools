@@ -5906,4 +5906,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📊",
     added: "2026-07-21T15:00:00Z",
   },
+  {
+    slug: "css-spinner",
+    name: "CSS Spinner Generator",
+    description: "12 animated CSS loading spinners: circle, ring, dots, bars, pulse, ripple, flip, bounce, wave, square, star, heart. Copy CSS.",
+    category: "Design",
+    icon: "🌀",
+    added: "2026-07-21T15:30:00Z",
+  },
 ];
