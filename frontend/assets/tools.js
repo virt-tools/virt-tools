@@ -5778,4 +5778,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📔",
     added: "2026-07-21T07:00:00Z",
   },
+  {
+    slug: "crossword-maker",
+    name: "Crossword Maker",
+    description: "Generate custom crossword puzzles from your own word/clue list. Auto-placement with intersections, numbered clues, interactive solving.",
+    category: "Fun",
+    icon: "🔤",
+    added: "2026-07-21T07:30:00Z",
+  },
 ];
