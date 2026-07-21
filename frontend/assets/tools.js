@@ -5650,4 +5650,12 @@ window.VIRTUAL_TOOLS = [
     icon: "✅",
     added: "2026-07-20T23:00:00Z",
   },
+  {
+    slug: "notes-app",
+    name: "Notes",
+    description: "Private note-taking app. Create, edit, search, and tag notes. Export to .txt. All stored locally — nothing leaves your device.",
+    category: "Productivity",
+    icon: "📝",
+    added: "2026-07-20T23:30:00Z",
+  },
 ];
