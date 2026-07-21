@@ -5914,4 +5914,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌀",
     added: "2026-07-21T15:30:00Z",
   },
+  {
+    slug: "css-tooltip",
+    name: "CSS Tooltip Generator",
+    description: "Create CSS tooltips with 6 styles, 4 positions (top/bottom/left/right), and 4 animations. Live hover preview, copy CSS.",
+    category: "Design",
+    icon: "💬",
+    added: "2026-07-21T16:00:00Z",
+  },
 ];
