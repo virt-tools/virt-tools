@@ -5850,4 +5850,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌑",
     added: "2026-07-21T11:30:00Z",
   },
+  {
+    slug: "glassmorphism",
+    name: "Glassmorphism Generator",
+    description: "Create CSS frosted glass effects with backdrop-blur, adjustable transparency, tint, border, radius, and shadow. 5 presets, copy CSS.",
+    category: "Design",
+    icon: "🪟",
+    added: "2026-07-21T12:00:00Z",
+  },
 ];
