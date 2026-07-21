@@ -5634,4 +5634,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🙏",
     added: "2026-07-20T22:00:00Z",
   },
+  {
+    slug: "expense-tracker",
+    name: "Expense Tracker",
+    description: "Track daily expenses by category. View today/month totals, category breakdown bars, and recent history. All stored locally.",
+    category: "Finance",
+    icon: "💰",
+    added: "2026-07-20T22:30:00Z",
+  },
 ];
