@@ -5698,4 +5698,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📚",
     added: "2026-07-21T02:00:00Z",
   },
+  {
+    slug: "mood-tracker",
+    name: "Mood Tracker",
+    description: "Track how you feel each day with emoji moods and notes. View averages, streaks, and recent history. All stored locally.",
+    category: "Productivity",
+    icon: "😊",
+    added: "2026-07-21T02:30:00Z",
+  },
 ];
