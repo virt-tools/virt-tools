@@ -5802,4 +5802,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔢",
     added: "2026-07-21T08:30:00Z",
   },
+  {
+    slug: "font-previewer",
+    name: "Font Previewer",
+    description: "Preview web-safe and system fonts with custom text, size, weight, style, letter spacing, and line height. Copy CSS with one click.",
+    category: "Design",
+    icon: "🔤",
+    added: "2026-07-21T09:00:00Z",
+  },
 ];
