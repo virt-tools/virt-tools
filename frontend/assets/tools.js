@@ -5890,4 +5890,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📐",
     added: "2026-07-21T14:00:00Z",
   },
+  {
+    slug: "placeholder-image",
+    name: "Placeholder Image Generator",
+    description: "Generate placeholder images with custom dimensions, colors, text, and format. Download as PNG, JPG, or SVG. All client-side.",
+    category: "Image",
+    icon: "🖼️",
+    added: "2026-07-21T14:30:00Z",
+  },
 ];
