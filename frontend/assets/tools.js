@@ -5626,4 +5626,12 @@ window.VIRTUAL_TOOLS = [
     icon: "✓",
     added: "2026-07-20T21:30:00Z",
   },
+  {
+    slug: "gratitude-journal",
+    name: "Gratitude Journal",
+    description: "Daily gratitude journal with 3 rotating prompts, streak tracking, and past entry review. All data stored locally in your browser.",
+    category: "Productivity",
+    icon: "🙏",
+    added: "2026-07-20T22:00:00Z",
+  },
 ];
