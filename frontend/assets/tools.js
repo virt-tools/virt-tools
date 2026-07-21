@@ -5738,4 +5738,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📖",
     added: "2026-07-21T04:30:00Z",
   },
+  {
+    slug: "movie-tracker",
+    name: "Movie Tracker",
+    description: "Track films you've watched, are watching, or want to watch. Add ratings, genres, and reviews. Filter by status. All stored locally.",
+    category: "Productivity",
+    icon: "🎬",
+    added: "2026-07-21T05:00:00Z",
+  },
 ];
