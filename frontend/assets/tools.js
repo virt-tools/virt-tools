@@ -5642,4 +5642,12 @@ window.VIRTUAL_TOOLS = [
     icon: "💰",
     added: "2026-07-20T22:30:00Z",
   },
+  {
+    slug: "todo-list",
+    name: "To-Do List",
+    description: "Manage tasks with priorities, due dates, and notes. Filter by status, priority, or due date. Tracks overdue items. All stored locally.",
+    category: "Productivity",
+    icon: "✅",
+    added: "2026-07-20T23:00:00Z",
+  },
 ];
