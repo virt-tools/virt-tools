@@ -5938,4 +5938,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📂",
     added: "2026-07-21T17:00:00Z",
   },
+  {
+    slug: "css-toggle",
+    name: "CSS Toggle Switch Generator",
+    description: "Create iOS/Android/square-style CSS toggle switches. Custom colors, sizes, on/off labels. Live interactive preview, copy CSS.",
+    category: "Design",
+    icon: "🎛️",
+    added: "2026-07-21T17:30:00Z",
+  },
 ];
