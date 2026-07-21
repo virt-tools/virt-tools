@@ -5754,4 +5754,12 @@ window.VIRTUAL_TOOLS = [
     icon: "⏳",
     added: "2026-07-21T05:30:00Z",
   },
+  {
+    slug: "daily-planner",
+    name: "Daily Planner",
+    description: "Plan your day hour-by-hour with time blocks. Add tasks, mark them done, navigate between dates. All stored locally.",
+    category: "Productivity",
+    icon: "🗓️",
+    added: "2026-07-21T06:00:00Z",
+  },
 ];
