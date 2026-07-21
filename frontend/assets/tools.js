@@ -5898,4 +5898,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🖼️",
     added: "2026-07-21T14:30:00Z",
   },
+  {
+    slug: "progress-bar",
+    name: "CSS Progress Bar Generator",
+    description: "Create animated CSS progress bars with gradients, stripes, glow, and pulse effects. 6 styles, live preview, copy CSS.",
+    category: "Design",
+    icon: "📊",
+    added: "2026-07-21T15:00:00Z",
+  },
 ];
