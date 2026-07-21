@@ -5946,4 +5946,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎛️",
     added: "2026-07-21T17:30:00Z",
   },
+  {
+    slug: "css-card",
+    name: "CSS Card Generator",
+    description: "Create CSS card components with custom shadows, borders, hover effects, and gradients. 5 shadow levels, 4 hover animations. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🃏",
+    added: "2026-07-21T18:00:00Z",
+  },
 ];
