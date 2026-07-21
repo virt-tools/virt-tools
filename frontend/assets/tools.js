@@ -5762,4 +5762,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🗓️",
     added: "2026-07-21T06:00:00Z",
   },
+  {
+    slug: "focus-timer",
+    name: "Focus Timer",
+    description: "Distraction-free focus timer with 25/50/90/5-min presets, circular progress ring, session tracking, and ambient sound (rain, white/brown noise).",
+    category: "Productivity",
+    icon: "🎯",
+    added: "2026-07-21T06:30:00Z",
+  },
 ];
