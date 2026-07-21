@@ -5714,4 +5714,12 @@ window.VIRTUAL_TOOLS = [
     icon: "😴",
     added: "2026-07-21T03:00:00Z",
   },
+  {
+    slug: "workout-tracker",
+    name: "Workout Tracker",
+    description: "Log exercises with sets, reps, and weights. Track workout history, total sets, and exercises over time. All stored locally.",
+    category: "Productivity",
+    icon: "💪",
+    added: "2026-07-21T03:30:00Z",
+  },
 ];
