@@ -5930,4 +5930,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📋",
     added: "2026-07-21T16:30:00Z",
   },
+  {
+    slug: "css-accordion",
+    name: "CSS Accordion Generator",
+    description: "Create CSS-only accordion/FAQ components with smooth expand/collapse animations. 4 styles (filled, bordered, shadow, minimal). Copy HTML+CSS.",
+    category: "Design",
+    icon: "📂",
+    added: "2026-07-21T17:00:00Z",
+  },
 ];
