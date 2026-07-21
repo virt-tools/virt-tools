@@ -5818,4 +5818,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌈",
     added: "2026-07-21T09:30:00Z",
   },
+  {
+    slug: "neon-text",
+    name: "Neon Text Generator",
+    description: "Create glowing neon sign text effects with CSS. Pick colors, glow intensity, flicker animation. 7 presets, copy CSS.",
+    category: "Design",
+    icon: "💡",
+    added: "2026-07-21T10:00:00Z",
+  },
 ];
