@@ -5666,4 +5666,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🧘",
     added: "2026-07-21T00:00:00Z",
   },
+  {
+    slug: "water-tracker",
+    name: "Water Intake Tracker",
+    description: "Track daily water consumption. Set a goal, log glasses, view 7-day history, and build a hydration streak. All stored locally.",
+    category: "Productivity",
+    icon: "💧",
+    added: "2026-07-21T00:30:00Z",
+  },
 ];
