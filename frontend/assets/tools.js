@@ -5658,4 +5658,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📝",
     added: "2026-07-20T23:30:00Z",
   },
+  {
+    slug: "meditation-timer",
+    name: "Meditation Timer",
+    description: "Silent meditation timer with configurable session length, interval bells, and 3 bell sounds. No distractions, just you and your breath.",
+    category: "Productivity",
+    icon: "🧘",
+    added: "2026-07-21T00:00:00Z",
+  },
 ];
