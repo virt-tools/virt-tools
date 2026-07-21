@@ -5834,4 +5834,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🧊",
     added: "2026-07-21T10:30:00Z",
   },
+  {
+    slug: "glitch-text",
+    name: "Glitch Text Generator",
+    description: "Create CSS glitch/distorted text effects with RGB split, scanlines, and animated distortion. 6 color presets, copy CSS.",
+    category: "Design",
+    icon: "📺",
+    added: "2026-07-21T11:00:00Z",
+  },
 ];
