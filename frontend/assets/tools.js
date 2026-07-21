@@ -5746,4 +5746,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎬",
     added: "2026-07-21T05:00:00Z",
   },
+  {
+    slug: "hourglass",
+    name: "Hourglass Timer",
+    description: "Visual sand timer with animated falling sand particles. Set minutes, start, and watch the sand flow. Bell sound when done.",
+    category: "Time",
+    icon: "⏳",
+    added: "2026-07-21T05:30:00Z",
+  },
 ];
