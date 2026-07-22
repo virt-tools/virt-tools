@@ -6202,4 +6202,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🖼️",
     added: "2026-07-22T09:30:00Z",
   },
+  {
+    slug: "css-flip-card",
+    name: "CSS Flip Card Generator",
+    description: "Create CSS 3D flip cards that rotate on hover or click. Front and back content, custom colors, 3 sizes. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🔄",
+    added: "2026-07-22T10:00:00Z",
+  },
 ];
