@@ -6226,4 +6226,12 @@ window.VIRTUAL_TOOLS = [
     icon: "💬",
     added: "2026-07-22T11:00:00Z",
   },
+  {
+    slug: "css-coupon",
+    name: "CSS Coupon Generator",
+    description: "Create coupon/promo box components with 5 styles (classic, modern, ticket, glass, dark). Discount text, code, description. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🏷️",
+    added: "2026-07-22T11:30:00Z",
+  },
 ];
