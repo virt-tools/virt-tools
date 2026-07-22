@@ -6146,4 +6146,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📊",
     added: "2026-07-22T06:00:00Z",
   },
+  {
+    slug: "css-search-bar",
+    name: "CSS Search Bar Generator",
+    description: "Create styled CSS search bars with 6 styles, search icon, custom colors, sizes, and focus glow. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🔍",
+    added: "2026-07-22T06:30:00Z",
+  },
 ];
