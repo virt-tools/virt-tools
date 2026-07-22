@@ -6138,4 +6138,12 @@ window.VIRTUAL_TOOLS = [
     icon: "⏳",
     added: "2026-07-22T05:30:00Z",
   },
+  {
+    slug: "css-table",
+    name: "CSS Table Generator",
+    description: "Create styled CSS data tables with 5 styles, striped rows, hover effects, and custom colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "📊",
+    added: "2026-07-22T06:00:00Z",
+  },
 ];
