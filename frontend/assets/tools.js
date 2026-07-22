@@ -6106,4 +6106,12 @@ window.VIRTUAL_TOOLS = [
     icon: "✨",
     added: "2026-07-22T03:30:00Z",
   },
+  {
+    slug: "css-cta",
+    name: "CSS CTA Section Generator",
+    description: "Create call-to-action sections with heading, subtext, button, and 4 background styles (solid, gradient, outline, glass). Copy HTML+CSS.",
+    category: "Design",
+    icon: "📣",
+    added: "2026-07-22T04:00:00Z",
+  },
 ];
