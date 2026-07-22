@@ -6178,4 +6178,12 @@ window.VIRTUAL_TOOLS = [
     icon: "➗",
     added: "2026-07-22T08:00:00Z",
   },
+  {
+    slug: "css-step-progress",
+    name: "CSS Step Progress Generator",
+    description: "Create step progress / stepper indicators for multi-step flows. 3 styles, 2-6 steps, custom colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "📊",
+    added: "2026-07-22T08:30:00Z",
+  },
 ];
