@@ -6234,4 +6234,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🏷️",
     added: "2026-07-22T11:30:00Z",
   },
+  {
+    slug: "css-faq",
+    name: "CSS FAQ Accordion Generator",
+    description: "Create FAQ accordion components with expand/collapse. 4 styles (simple, card, line, gradient). Copy HTML+CSS+JS.",
+    category: "Design",
+    icon: "❓",
+    added: "2026-07-22T12:00:00Z",
+  },
 ];
