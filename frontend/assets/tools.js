@@ -6282,4 +6282,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🍪",
     added: "2026-07-22T14:30:00Z",
   },
+  {
+    slug: "css-login-form",
+    name: "CSS Login Form Generator",
+    description: "Create styled CSS login forms with 4 styles (card/minimal/split/glass), social buttons, custom branding. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🔐",
+    added: "2026-07-22T15:00:00Z",
+  },
 ];
