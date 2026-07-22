@@ -6002,4 +6002,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔔",
     added: "2026-07-21T21:00:00Z",
   },
+  {
+    slug: "css-modal",
+    name: "CSS Modal Generator",
+    description: "Create CSS modal/dialog components with overlay, 5 animations (scale, slide, fade, bounce), and 3 overlay types (dark, light, blur). Copy HTML+CSS.",
+    category: "Design",
+    icon: "🪟",
+    added: "2026-07-21T21:30:00Z",
+  },
 ];
