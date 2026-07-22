@@ -6026,4 +6026,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🦶",
     added: "2026-07-21T22:30:00Z",
   },
+  {
+    slug: "css-pagination",
+    name: "CSS Pagination Generator",
+    description: "Create CSS pagination with 6 styles (classic, rounded, pill, flat, outline, gradient), prev/next, active page. Copy HTML.",
+    category: "Design",
+    icon: "📄",
+    added: "2026-07-21T23:00:00Z",
+  },
 ];
