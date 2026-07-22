@@ -6010,4 +6010,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🪟",
     added: "2026-07-21T21:30:00Z",
   },
+  {
+    slug: "css-avatar",
+    name: "CSS Avatar Generator",
+    description: "Create CSS avatars with initials, 8 gradient presets, 3 shapes (circle, rounded, square), custom sizes and colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "👤",
+    added: "2026-07-21T22:00:00Z",
+  },
 ];
