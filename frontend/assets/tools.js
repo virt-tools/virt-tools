@@ -6210,4 +6210,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔄",
     added: "2026-07-22T10:00:00Z",
   },
+  {
+    slug: "css-snackbar",
+    name: "CSS Snackbar Generator",
+    description: "Create CSS snackbar/toast notifications with 4 types (success/error/warning/info), 6 positions, and auto-dismiss. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🍿",
+    added: "2026-07-22T10:30:00Z",
+  },
 ];
