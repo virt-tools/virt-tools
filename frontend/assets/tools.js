@@ -6170,4 +6170,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🏷️",
     added: "2026-07-22T07:30:00Z",
   },
+  {
+    slug: "css-divider",
+    name: "CSS Divider Generator",
+    description: "Create CSS section dividers with 8 styles: gradient line, dotted, dashed, double, shadow, wave, zigzag, and center icon. Copy CSS.",
+    category: "Design",
+    icon: "➗",
+    added: "2026-07-22T08:00:00Z",
+  },
 ];
