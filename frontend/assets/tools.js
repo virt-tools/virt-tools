@@ -6122,4 +6122,12 @@ window.VIRTUAL_TOOLS = [
     icon: "👤",
     added: "2026-07-22T04:30:00Z",
   },
+  {
+    slug: "css-404",
+    name: "CSS 404 Page Generator",
+    description: "Create custom 404 error page templates with 5 styles (simple, gradient, glitch, space, retro), custom messages, and CTA button. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🚫",
+    added: "2026-07-22T05:00:00Z",
+  },
 ];
