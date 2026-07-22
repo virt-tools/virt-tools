@@ -6066,4 +6066,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📝",
     added: "2026-07-22T01:00:00Z",
   },
+  {
+    slug: "css-hero",
+    name: "CSS Hero Section Generator",
+    description: "Create hero sections with heading, subheading, CTA button, and 5 layout styles. Custom colors and sizes. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🦸",
+    added: "2026-07-22T01:30:00Z",
+  },
 ];
