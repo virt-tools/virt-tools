@@ -6242,4 +6242,12 @@ window.VIRTUAL_TOOLS = [
     icon: "❓",
     added: "2026-07-22T12:00:00Z",
   },
+  {
+    slug: "css-notification-bar",
+    name: "CSS Notification Bar Generator",
+    description: "Create top or bottom notification bars with 5 styles, 5 types (info/success/warning/error/promo), close button, icon. Copy HTML+CSS.",
+    category: "Design",
+    icon: "📢",
+    added: "2026-07-22T12:30:00Z",
+  },
 ];
