@@ -6298,4 +6298,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📝",
     added: "2026-07-22T15:30:00Z",
   },
+  {
+    slug: "css-hamburger-menu",
+    name: "CSS Hamburger Menu Generator",
+    description: "Create animated CSS hamburger menu toggles with 6 animation styles (spin, collapse, arrow, minus, 3D rotate, elastic). Copy HTML+CSS.",
+    category: "Design",
+    icon: "☰",
+    added: "2026-07-22T16:00:00Z",
+  },
 ];
