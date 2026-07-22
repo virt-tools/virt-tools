@@ -6218,4 +6218,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🍿",
     added: "2026-07-22T10:30:00Z",
   },
+  {
+    slug: "css-blockquote",
+    name: "CSS Blockquote Generator",
+    description: "Create styled blockquote components with 6 styles (classic, modern, giant quote, gradient border, card, dark). Author attribution. Copy HTML+CSS.",
+    category: "Design",
+    icon: "💬",
+    added: "2026-07-22T11:00:00Z",
+  },
 ];
