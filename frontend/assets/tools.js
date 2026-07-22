@@ -6250,4 +6250,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📢",
     added: "2026-07-22T12:30:00Z",
   },
+  {
+    slug: "css-chat-bubble",
+    name: "CSS Chat Bubble Generator",
+    description: "Create chat message bubbles for messaging UI. 4 styles (rounded/square/tail/gradient), sent/received sides, custom colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "💬",
+    added: "2026-07-22T13:00:00Z",
+  },
 ];
