@@ -6162,4 +6162,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📎",
     added: "2026-07-22T07:00:00Z",
   },
+  {
+    slug: "css-tag",
+    name: "CSS Tag/Pill Generator",
+    description: "Create CSS tag/pill components with 6 styles (solid, outline, soft, gradient, glass, neon), removable X, custom colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🏷️",
+    added: "2026-07-22T07:30:00Z",
+  },
 ];
