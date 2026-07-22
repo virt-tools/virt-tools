@@ -6314,4 +6314,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📐",
     added: "2026-07-22T16:30:00Z",
   },
+  {
+    slug: "css-masonry",
+    name: "CSS Masonry Layout Generator",
+    description: "Create CSS masonry/Pinterest-style grid layouts using CSS columns. 2-6 columns, responsive breakpoints. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🧱",
+    added: "2026-07-22T17:00:00Z",
+  },
 ];
