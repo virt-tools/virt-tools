@@ -5994,4 +5994,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📅",
     added: "2026-07-21T20:30:00Z",
   },
+  {
+    slug: "css-alert",
+    name: "CSS Alert Generator",
+    description: "Create CSS alert/notification banners with 4 types (success, warning, error, info), 3 styles, dismiss button, and animations. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🔔",
+    added: "2026-07-21T21:00:00Z",
+  },
 ];
