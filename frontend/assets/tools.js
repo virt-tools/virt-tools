@@ -6114,4 +6114,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📣",
     added: "2026-07-22T04:00:00Z",
   },
+  {
+    slug: "css-profile-card",
+    name: "CSS Profile Card Generator",
+    description: "Create profile cards with avatar, name, role, bio, stats, and social links. 3 styles, custom colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "👤",
+    added: "2026-07-22T04:30:00Z",
+  },
 ];
