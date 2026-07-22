@@ -6034,4 +6034,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📄",
     added: "2026-07-21T23:00:00Z",
   },
+  {
+    slug: "css-skeleton",
+    name: "CSS Skeleton Loader Generator",
+    description: "Create CSS skeleton/shimmer loading placeholders. 4 layouts (card, article, profile, list), custom colors and sizes. Copy CSS.",
+    category: "Design",
+    icon: "💀",
+    added: "2026-07-21T23:30:00Z",
+  },
 ];
