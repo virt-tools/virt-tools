@@ -6266,4 +6266,12 @@ window.VIRTUAL_TOOLS = [
     icon: "💭",
     added: "2026-07-22T13:30:00Z",
   },
+  {
+    slug: "css-empty-state",
+    name: "CSS Empty State Generator",
+    description: "Create empty state / no-data placeholder components. 8 icons, 4 styles, custom title/description, optional CTA. Copy HTML+CSS.",
+    category: "Design",
+    icon: "📭",
+    added: "2026-07-22T14:00:00Z",
+  },
 ];
