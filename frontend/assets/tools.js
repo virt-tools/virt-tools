@@ -6306,4 +6306,12 @@ window.VIRTUAL_TOOLS = [
     icon: "☰",
     added: "2026-07-22T16:00:00Z",
   },
+  {
+    slug: "css-offcanvas",
+    name: "CSS Off-Canvas Sidebar Generator",
+    description: "Create CSS off-canvas sidebar navigation that slides in from left or right. 4 animations (slide, push, reveal, scale). Copy HTML+CSS.",
+    category: "Design",
+    icon: "📐",
+    added: "2026-07-22T16:30:00Z",
+  },
 ];
