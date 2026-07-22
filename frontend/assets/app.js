@@ -116,7 +116,9 @@
     // the homepage lists just icon + name (+ "added X ago" in the recent view)
     // for less clutter and quicker navigation.
     if (t.added) {
-      var added = el("div", { class: "tool-card-added", title: t.added }, ["Added " + formatAdded(t.added)]);
+      var addedDate = new Date(t.added);
+    var addedTitle = isNaN(addedDate.getTime()) ? t.added : addedDate.toLocaleString(undefined, { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    var added = el("div", { class: "tool-card-added", title: addedTitle }, ["Added " + formatAdded(t.added)]);
       card.appendChild(added);
     }
     return card;
