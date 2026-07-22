@@ -6018,4 +6018,12 @@ window.VIRTUAL_TOOLS = [
     icon: "👤",
     added: "2026-07-21T22:00:00Z",
   },
+  {
+    slug: "css-footer",
+    name: "CSS Footer Generator",
+    description: "Create CSS footer components with 1-4 columns, links, copyright. 3 styles (dark, light, gradient), custom colors. Copy HTML.",
+    category: "Design",
+    icon: "🦶",
+    added: "2026-07-21T22:30:00Z",
+  },
 ];
