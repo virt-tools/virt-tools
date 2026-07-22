@@ -6186,4 +6186,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📊",
     added: "2026-07-22T08:30:00Z",
   },
+  {
+    slug: "css-dropdown",
+    name: "CSS Dropdown Generator",
+    description: "Create CSS-only dropdown menus with 4 styles, hover trigger, custom colors, 2-8 items. Copy HTML+CSS.",
+    category: "Design",
+    icon: "📂",
+    added: "2026-07-22T09:00:00Z",
+  },
 ];
