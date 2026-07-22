@@ -6258,4 +6258,12 @@ window.VIRTUAL_TOOLS = [
     icon: "💬",
     added: "2026-07-22T13:00:00Z",
   },
+  {
+    slug: "css-comment-box",
+    name: "CSS Comment Box Generator",
+    description: "Create styled comment box components for blogs/forums. 3 styles, avatars, timestamps, nested replies, actions. Copy HTML+CSS.",
+    category: "Design",
+    icon: "💭",
+    added: "2026-07-22T13:30:00Z",
+  },
 ];
