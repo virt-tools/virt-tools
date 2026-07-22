@@ -5986,4 +5986,12 @@ window.VIRTUAL_TOOLS = [
     icon: "💳",
     added: "2026-07-21T20:00:00Z",
   },
+  {
+    slug: "css-timeline",
+    name: "CSS Timeline Generator",
+    description: "Create vertical CSS timelines with 3 dot styles (circle, square, diamond), custom colors, slide-in/fade animations. Copy HTML+CSS.",
+    category: "Design",
+    icon: "📅",
+    added: "2026-07-21T20:30:00Z",
+  },
 ];
