@@ -6042,4 +6042,12 @@ window.VIRTUAL_TOOLS = [
     icon: "💀",
     added: "2026-07-21T23:30:00Z",
   },
+  {
+    slug: "css-social-icons",
+    name: "CSS Social Icons Generator",
+    description: "Create CSS social media icon buttons. 10 platforms, 4 styles (filled/outline/gradient/glass), 4 hover effects. Copy HTML+CSS.",
+    category: "Design",
+    icon: "📱",
+    added: "2026-07-21T24:00:00Z",
+  },
 ];
