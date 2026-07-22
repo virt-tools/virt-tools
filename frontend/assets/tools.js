@@ -6090,4 +6090,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📊",
     added: "2026-07-22T02:30:00Z",
   },
+  {
+    slug: "css-testimonial",
+    name: "CSS Testimonial Generator",
+    description: "Create testimonial/review cards with avatar, name, role, quote, and star rating. 4 styles, custom colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "💬",
+    added: "2026-07-22T03:00:00Z",
+  },
 ];
