@@ -6274,4 +6274,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📭",
     added: "2026-07-22T14:00:00Z",
   },
+  {
+    slug: "css-cookie-banner",
+    name: "CSS Cookie Banner Generator",
+    description: "Create cookie consent / GDPR banner components. 4 styles, 3 themes, custom message and buttons. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🍪",
+    added: "2026-07-22T14:30:00Z",
+  },
 ];
