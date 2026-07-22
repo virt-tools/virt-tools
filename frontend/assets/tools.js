@@ -6082,4 +6082,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📧",
     added: "2026-07-22T02:00:00Z",
   },
+  {
+    slug: "css-stats-card",
+    name: "CSS Stats Card Generator",
+    description: "Create statistics card components with icons, numbers, and labels. 4 styles (solid, outline, gradient, minimal), custom colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "📊",
+    added: "2026-07-22T02:30:00Z",
+  },
 ];
