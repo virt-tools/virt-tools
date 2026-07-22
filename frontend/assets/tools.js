@@ -6154,4 +6154,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔍",
     added: "2026-07-22T06:30:00Z",
   },
+  {
+    slug: "css-file-upload",
+    name: "CSS File Upload Button Generator",
+    description: "Create styled CSS file upload buttons with 6 styles (button, dropzone, inline, card, glass, neon). Custom colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "📎",
+    added: "2026-07-22T07:00:00Z",
+  },
 ];
