@@ -6058,4 +6058,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔘",
     added: "2026-07-22T00:30:00Z",
   },
+  {
+    slug: "css-input",
+    name: "CSS Input Generator",
+    description: "Create styled CSS input fields with 6 styles, floating labels, icons, custom colors. Live preview, copy HTML+CSS.",
+    category: "Design",
+    icon: "📝",
+    added: "2026-07-22T01:00:00Z",
+  },
 ];
