@@ -6098,4 +6098,12 @@ window.VIRTUAL_TOOLS = [
     icon: "💬",
     added: "2026-07-22T03:00:00Z",
   },
+  {
+    slug: "css-feature-grid",
+    name: "CSS Feature Grid Generator",
+    description: "Create feature grid sections with icons, titles, and descriptions. 3 styles, 2-6 items, custom colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "✨",
+    added: "2026-07-22T03:30:00Z",
+  },
 ];
