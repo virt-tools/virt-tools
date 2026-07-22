@@ -6130,4 +6130,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🚫",
     added: "2026-07-22T05:00:00Z",
   },
+  {
+    slug: "css-coming-soon",
+    name: "CSS Coming Soon Page Generator",
+    description: "Create coming soon / under construction page templates with countdown timer, email notify form, and 4 styles. Copy HTML+CSS.",
+    category: "Design",
+    icon: "⏳",
+    added: "2026-07-22T05:30:00Z",
+  },
 ];
