@@ -6074,4 +6074,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🦸",
     added: "2026-07-22T01:30:00Z",
   },
+  {
+    slug: "css-newsletter",
+    name: "CSS Newsletter Signup Generator",
+    description: "Create newsletter signup forms with 5 styles (card, banner, inline, gradient, minimal). Custom heading, colors, copy HTML+CSS.",
+    category: "Design",
+    icon: "📧",
+    added: "2026-07-22T02:00:00Z",
+  },
 ];
