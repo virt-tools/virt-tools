@@ -6322,4 +6322,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🧱",
     added: "2026-07-22T17:00:00Z",
   },
+  {
+    slug: "css-parallax",
+    name: "CSS Parallax Generator",
+    description: "Create CSS parallax scrolling effects with 2-5 layered backgrounds, adjustable depth/speed, custom colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🏔️",
+    added: "2026-07-22T17:30:00Z",
+  },
 ];
