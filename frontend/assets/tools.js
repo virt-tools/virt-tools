@@ -6050,4 +6050,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📱",
     added: "2026-07-21T24:00:00Z",
   },
+  {
+    slug: "css-button",
+    name: "CSS Button Generator",
+    description: "Create CSS buttons with 8 styles, 6 hover effects, custom colors, sizes, and border radius. Live preview, copy HTML+CSS.",
+    category: "Design",
+    icon: "🔘",
+    added: "2026-07-22T00:30:00Z",
+  },
 ];
