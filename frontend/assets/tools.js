@@ -6194,4 +6194,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📂",
     added: "2026-07-22T09:00:00Z",
   },
+  {
+    slug: "css-image-hover",
+    name: "CSS Image Hover Effects Generator",
+    description: "Create CSS image hover effects: zoom, blur, grayscale, overlay, slide, rotate, brightness. 8 effects, copy HTML+CSS.",
+    category: "Design",
+    icon: "🖼️",
+    added: "2026-07-22T09:30:00Z",
+  },
 ];
