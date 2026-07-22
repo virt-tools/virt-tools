@@ -6290,4 +6290,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔐",
     added: "2026-07-22T15:00:00Z",
   },
+  {
+    slug: "css-register-form",
+    name: "CSS Register Form Generator",
+    description: "Create styled CSS signup/registration forms with 4 styles, password confirmation, terms checkbox. Copy HTML+CSS.",
+    category: "Design",
+    icon: "📝",
+    added: "2026-07-22T15:30:00Z",
+  },
 ];
