@@ -6474,4 +6474,12 @@ window.VIRTUAL_TOOLS = [
     icon: "💧",
     added: "2026-07-23T02:30:00Z",
   },
+  {
+    slug: "css-confetti",
+    name: "CSS Confetti Effect Generator",
+    description: "Create CSS confetti and particle celebration effects. 3 types (burst/rain/cannon), adjustable count/speed/colors/shape. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🎉",
+    added: "2026-07-23T03:00:00Z",
+  },
 ];
