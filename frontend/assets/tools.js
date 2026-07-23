@@ -6618,4 +6618,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🖱️",
     added: "2026-07-23T11:30:00Z",
   },
+  {
+    slug: "css-popover",
+    name: "CSS Popover Generator",
+    description: "Create CSS popover components with 4 positions, 3 themes (dark/light/glass), rich content, arrow. Hover to reveal. Copy HTML+CSS.",
+    category: "Design",
+    icon: "💭",
+    added: "2026-07-23T12:00:00Z",
+  },
 ];
