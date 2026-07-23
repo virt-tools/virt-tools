@@ -6666,4 +6666,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📊",
     added: "2026-07-23T14:30:00Z",
   },
+  {
+    slug: "css-star-rating",
+    name: "CSS Star Rating Generator",
+    description: "Create CSS star rating display/input components. 4 styles, fractional support, custom colors/sizes. Copy HTML+CSS.",
+    category: "Design",
+    icon: "⭐",
+    added: "2026-07-23T15:00:00Z",
+  },
 ];
