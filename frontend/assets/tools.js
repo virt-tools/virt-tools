@@ -6578,4 +6578,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🧲",
     added: "2026-07-23T09:00:00Z",
   },
+  {
+    slug: "css-horizontal-scroll",
+    name: "CSS Horizontal Scroll Cards Generator",
+    description: "Create horizontally scrolling card carousels with scroll-snap. Adjustable card count, sizes, colors, scrollbar styles. Copy HTML+CSS.",
+    category: "Design",
+    icon: "↔️",
+    added: "2026-07-23T09:30:00Z",
+  },
 ];
