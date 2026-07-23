@@ -6554,4 +6554,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📋",
     added: "2026-07-23T07:30:00Z",
   },
+  {
+    slug: "css-image-compare",
+    name: "CSS Image Compare Slider Generator",
+    description: "Create before/after image comparison sliders. Drag handle to reveal. Custom labels, colors, sizes. Copy HTML+CSS+JS.",
+    category: "Design",
+    icon: "🔍",
+    added: "2026-07-23T08:00:00Z",
+  },
 ];
