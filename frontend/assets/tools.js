@@ -6706,4 +6706,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎀",
     added: "2026-07-23T17:00:00Z",
   },
+  {
+    slug: "css-vtabs",
+    name: "CSS Vertical Tabs Generator",
+    description: "Create CSS vertical tab navigation with 3 styles, custom colors, 3-6 tabs. Copy HTML+CSS.",
+    category: "Design",
+    icon: "📋",
+    added: "2026-07-23T17:30:00Z",
+  },
 ];
