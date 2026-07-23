@@ -6458,4 +6458,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🏷️",
     added: "2026-07-23T01:30:00Z",
   },
+  {
+    slug: "css-spotlight",
+    name: "CSS Spotlight Effect Generator",
+    description: "Create CSS spotlight and attention effects. Mouse-follow spotlight, pulse rings, glow highlight, dim-others. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🔦",
+    added: "2026-07-23T02:00:00Z",
+  },
 ];
