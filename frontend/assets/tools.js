@@ -6586,4 +6586,12 @@ window.VIRTUAL_TOOLS = [
     icon: "↔️",
     added: "2026-07-23T09:30:00Z",
   },
+  {
+    slug: "css-stepper",
+    name: "CSS Stepper Generator",
+    description: "Create CSS step/progress steppers for multi-step forms. 3 styles (circle/square/numbered), 2-8 steps, custom colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "📏",
+    added: "2026-07-23T10:00:00Z",
+  },
 ];
