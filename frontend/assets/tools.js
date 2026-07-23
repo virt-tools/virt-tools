@@ -6650,4 +6650,12 @@ window.VIRTUAL_TOOLS = [
     icon: "👥",
     added: "2026-07-23T13:30:00Z",
   },
+  {
+    slug: "css-author-card",
+    name: "CSS Author Card Generator",
+    description: "Create CSS author bio / user profile card components. 4 styles (standard/compact/cover/glass), social icons. Copy HTML+CSS.",
+    category: "Design",
+    icon: "👤",
+    added: "2026-07-23T14:00:00Z",
+  },
 ];
