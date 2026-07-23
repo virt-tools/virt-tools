@@ -6338,4 +6338,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📊",
     added: "2026-07-22T18:00:00Z",
   },
+  {
+    slug: "css-bento",
+    name: "CSS Bento Grid Generator",
+    description: "Create modern bento-style grid layouts with varied cell sizes. 3 themes (light/dark/colorful), responsive. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🍱",
+    added: "2026-07-22T18:30:00Z",
+  },
 ];
