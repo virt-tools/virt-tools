@@ -6370,4 +6370,12 @@ window.VIRTUAL_TOOLS = [
     icon: "⏰",
     added: "2026-07-22T20:00:00Z",
   },
+  {
+    slug: "css-counter-animation",
+    name: "CSS Animated Counter Generator",
+    description: "Create animated number counters that count up from 0 to target. 4 styles (card/plain/circle/badge), easing, custom colors. Copy HTML+CSS+JS.",
+    category: "Design",
+    icon: "🔢",
+    added: "2026-07-22T20:30:00Z",
+  },
 ];
