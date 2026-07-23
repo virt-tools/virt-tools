@@ -6522,4 +6522,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎵",
     added: "2026-07-23T05:30:00Z",
   },
+  {
+    slug: "css-loading-bar",
+    name: "CSS Loading Bar Generator",
+    description: "Create CSS animated loading/progress bars. 5 styles (determinate/indeterminate/striped/gradient/pulse). Copy HTML+CSS.",
+    category: "Design",
+    icon: "⏳",
+    added: "2026-07-23T06:00:00Z",
+  },
 ];
