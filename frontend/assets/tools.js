@@ -6346,4 +6346,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🍱",
     added: "2026-07-22T18:30:00Z",
   },
+  {
+    slug: "css-marquee",
+    name: "CSS Marquee Generator",
+    description: "Create CSS marquee/ticker scrolling text. 4 directions, adjustable speed, pause-on-hover, seamless loop. Copy HTML+CSS.",
+    category: "Design",
+    icon: "📢",
+    added: "2026-07-22T19:00:00Z",
+  },
 ];
