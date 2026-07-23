@@ -6658,4 +6658,12 @@ window.VIRTUAL_TOOLS = [
     icon: "👤",
     added: "2026-07-23T14:00:00Z",
   },
+  {
+    slug: "css-kpi-card",
+    name: "CSS KPI Card Generator",
+    description: "Create CSS KPI/metric/stat cards with trend indicators. 4 styles, trend arrows, 5 icons. Copy HTML+CSS.",
+    category: "Design",
+    icon: "📊",
+    added: "2026-07-23T14:30:00Z",
+  },
 ];
