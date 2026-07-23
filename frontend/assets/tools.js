@@ -6418,4 +6418,12 @@ window.VIRTUAL_TOOLS = [
     icon: "✨",
     added: "2026-07-22T23:00:00Z",
   },
+  {
+    slug: "css-shimmer",
+    name: "CSS Shimmer Effect Generator",
+    description: "Create CSS shimmer/skeleton loading placeholder effects. 5 presets (card/text/profile/article/grid), adjustable speed/colors. Copy CSS+HTML.",
+    category: "Design",
+    icon: "🌌",
+    added: "2026-07-22T23:30:00Z",
+  },
 ];
