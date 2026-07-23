@@ -6714,4 +6714,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📋",
     added: "2026-07-23T17:30:00Z",
   },
+  {
+    slug: "css-file-tree",
+    name: "CSS File Tree Generator",
+    description: "Create CSS file tree/directory viewer components. 3 themes, 5-12 items, custom icons. Copy HTML+CSS.",
+    category: "Design",
+    icon: "📂",
+    added: "2026-07-23T18:00:00Z",
+  },
 ];
