@@ -6330,4 +6330,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🏔️",
     added: "2026-07-22T17:30:00Z",
   },
+  {
+    slug: "css-scroll-progress",
+    name: "CSS Scroll Progress Generator",
+    description: "Create scroll progress indicators: top bar, bottom bar, or radial circle. Gradient options, custom colors. Copy HTML+CSS+JS.",
+    category: "Design",
+    icon: "📊",
+    added: "2026-07-22T18:00:00Z",
+  },
 ];
