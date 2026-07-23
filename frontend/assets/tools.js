@@ -6482,4 +6482,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎉",
     added: "2026-07-23T03:00:00Z",
   },
+  {
+    slug: "css-snowfireworks",
+    name: "CSS Snow & Fireworks Generator",
+    description: "Create CSS snowfall and fireworks particle effects. 2 types, adjustable count/speed/size/colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🌨️",
+    added: "2026-07-23T03:30:00Z",
+  },
 ];
