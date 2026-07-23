@@ -6386,4 +6386,12 @@ window.VIRTUAL_TOOLS = [
     icon: "👁️",
     added: "2026-07-22T21:00:00Z",
   },
+  {
+    slug: "css-float-animation",
+    name: "CSS Floating Animation Generator",
+    description: "Create CSS floating/bobbing/levitating animations. 6 presets, adjustable distance/speed/easing, 8 icons. Copy CSS.",
+    category: "Design",
+    icon: "🎈",
+    added: "2026-07-22T21:30:00Z",
+  },
 ];
