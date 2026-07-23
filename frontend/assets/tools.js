@@ -6514,4 +6514,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🪐",
     added: "2026-07-23T05:00:00Z",
   },
+  {
+    slug: "css-music-visualizer",
+    name: "CSS Music Visualizer Generator",
+    description: "Create CSS animated music visualizer bars. 4 styles (bars/mirror/wave/circle), adjustable count/speed/colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🎵",
+    added: "2026-07-23T05:30:00Z",
+  },
 ];
