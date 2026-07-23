@@ -6450,4 +6450,12 @@ window.VIRTUAL_TOOLS = [
     icon: "⭕",
     added: "2026-07-23T01:00:00Z",
   },
+  {
+    slug: "css-badge",
+    name: "CSS Badge Generator",
+    description: "Create CSS badges, pills, and stamps. 6 styles (solid/outline/pill/stamp/ribbon/dot), custom colors and sizes. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🏷️",
+    added: "2026-07-23T01:30:00Z",
+  },
 ];
