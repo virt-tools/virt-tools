@@ -6682,4 +6682,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📰",
     added: "2026-07-23T15:30:00Z",
   },
+  {
+    slug: "css-alert-box",
+    name: "CSS Alert Box Generator",
+    description: "Create CSS alert/notification boxes (info/success/warning/error). 4 styles, close button, custom title/message. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🚨",
+    added: "2026-07-23T16:00:00Z",
+  },
 ];
