@@ -6378,4 +6378,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔢",
     added: "2026-07-22T20:30:00Z",
   },
+  {
+    slug: "css-scroll-reveal",
+    name: "CSS Scroll Reveal Generator",
+    description: "Create scroll-triggered reveal animations. 7 types (fade/slide/zoom/flip), stagger, easing, IntersectionObserver. Copy HTML+CSS+JS.",
+    category: "Design",
+    icon: "👁️",
+    added: "2026-07-22T21:00:00Z",
+  },
 ];
