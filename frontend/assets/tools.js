@@ -6530,4 +6530,12 @@ window.VIRTUAL_TOOLS = [
     icon: "⏳",
     added: "2026-07-23T06:00:00Z",
   },
+  {
+    slug: "css-3d-cube",
+    name: "CSS 3D Cube Generator",
+    description: "Create CSS 3D rotating cubes with 6 customizable faces, colors, and animation. 4 animation types. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🎲",
+    added: "2026-07-23T06:30:00Z",
+  },
 ];
