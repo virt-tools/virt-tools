@@ -6498,4 +6498,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌌",
     added: "2026-07-23T04:00:00Z",
   },
+  {
+    slug: "css-blob",
+    name: "CSS Blob & Morphing Shape Generator",
+    description: "Create animated CSS blob/morphing shapes. 5 presets, custom border-radius keyframes, adjustable size/speed/colors. Copy CSS.",
+    category: "Design",
+    icon: "🫧",
+    added: "2026-07-23T04:30:00Z",
+  },
 ];
