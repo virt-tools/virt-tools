@@ -6690,4 +6690,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🚨",
     added: "2026-07-23T16:00:00Z",
   },
+  {
+    slug: "css-announcement",
+    name: "CSS Announcement Banner Generator",
+    description: "Create CSS announcement/promo banners. 4 styles, CTA button, close button, 5 themes. Copy HTML+CSS.",
+    category: "Design",
+    icon: "📢",
+    added: "2026-07-23T16:30:00Z",
+  },
 ];
