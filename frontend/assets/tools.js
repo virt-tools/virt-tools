@@ -6354,4 +6354,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📢",
     added: "2026-07-22T19:00:00Z",
   },
+  {
+    slug: "css-read-more",
+    name: "CSS Read More Generator",
+    description: "Create CSS text truncation with expandable read more toggle. Pure CSS checkbox hack, 3 styles, configurable line limit. Copy HTML+CSS.",
+    category: "Design",
+    icon: "📖",
+    added: "2026-07-22T19:30:00Z",
+  },
 ];
