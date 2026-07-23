@@ -6394,4 +6394,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎈",
     added: "2026-07-22T21:30:00Z",
   },
+  {
+    slug: "css-shake",
+    name: "CSS Shake Animation Generator",
+    description: "Create CSS shake/wiggle/vibrate/jello/wobble/swing/tada animations. 7 presets, adjustable intensity/speed. Copy CSS.",
+    category: "Design",
+    icon: "🤪",
+    added: "2026-07-22T22:00:00Z",
+  },
 ];
