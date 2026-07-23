@@ -6410,4 +6410,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📐",
     added: "2026-07-22T22:30:00Z",
   },
+  {
+    slug: "css-glow",
+    name: "CSS Glow Effect Generator",
+    description: "Create CSS glow effects for text, boxes, and buttons. Adjustable color, blur, spread, intensity. Pulse/breath animation. Copy CSS.",
+    category: "Design",
+    icon: "✨",
+    added: "2026-07-22T23:00:00Z",
+  },
 ];
