@@ -6466,4 +6466,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔦",
     added: "2026-07-23T02:00:00Z",
   },
+  {
+    slug: "css-ripple",
+    name: "CSS Ripple Effect Generator",
+    description: "Create CSS water ripple, wave, and click-ripple effects. 4 types (click/wave/pulse/rain), adjustable speed/size/colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "💧",
+    added: "2026-07-23T02:30:00Z",
+  },
 ];
