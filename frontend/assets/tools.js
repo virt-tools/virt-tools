@@ -6602,4 +6602,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌓",
     added: "2026-07-23T10:30:00Z",
   },
+  {
+    slug: "css-command-palette",
+    name: "CSS Command Palette Generator",
+    description: "Create CSS command palette / quick action menu (Cmd+K style). 3 themes, search input, keyboard hints. Copy HTML+CSS.",
+    category: "Design",
+    icon: "⌘",
+    added: "2026-07-23T11:00:00Z",
+  },
 ];
