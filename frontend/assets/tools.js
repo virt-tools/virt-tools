@@ -6642,4 +6642,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔎",
     added: "2026-07-23T13:00:00Z",
   },
+  {
+    slug: "css-avatar-stack",
+    name: "CSS Avatar Stack Generator",
+    description: "Create CSS avatar group/stack components with overlapping user avatars. 3 layouts (stack/grid/ring), custom count/size/overlap. Copy HTML+CSS.",
+    category: "Design",
+    icon: "👥",
+    added: "2026-07-23T13:30:00Z",
+  },
 ];
