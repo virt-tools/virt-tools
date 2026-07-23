@@ -6610,4 +6610,12 @@ window.VIRTUAL_TOOLS = [
     icon: "⌘",
     added: "2026-07-23T11:00:00Z",
   },
+  {
+    slug: "css-context-menu",
+    name: "CSS Context Menu Generator",
+    description: "Create CSS right-click context menu components. 3 themes (dark/light/glass), dividers, shortcuts, submenu. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🖱️",
+    added: "2026-07-23T11:30:00Z",
+  },
 ];
