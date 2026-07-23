@@ -6402,4 +6402,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🤪",
     added: "2026-07-22T22:00:00Z",
   },
+  {
+    slug: "css-tilt",
+    name: "CSS 3D Tilt Card Generator",
+    description: "Create CSS 3D tilt-on-hover card effects. Adjustable angle, perspective, scale, glare. 5 themes. Copy HTML+CSS+JS.",
+    category: "Design",
+    icon: "📐",
+    added: "2026-07-22T22:30:00Z",
+  },
 ];
