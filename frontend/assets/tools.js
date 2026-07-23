@@ -6698,4 +6698,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📢",
     added: "2026-07-23T16:30:00Z",
   },
+  {
+    slug: "css-corner-ribbon",
+    name: "CSS Corner Ribbon Generator",
+    description: "Create CSS corner ribbon/banner overlays for cards. 4 corners, 4 styles, custom text/colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🎀",
+    added: "2026-07-23T17:00:00Z",
+  },
 ];
