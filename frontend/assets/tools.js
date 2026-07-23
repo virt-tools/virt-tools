@@ -6546,4 +6546,12 @@ window.VIRTUAL_TOOLS = [
     icon: "💬",
     added: "2026-07-23T07:00:00Z",
   },
+  {
+    slug: "css-copy-button",
+    name: "CSS Copy Button Generator",
+    description: "Create CSS copy-to-clipboard buttons with click feedback. 5 styles (solid/outline/gradient/ghost/pill), custom colors. Copy HTML+CSS+JS.",
+    category: "Design",
+    icon: "📋",
+    added: "2026-07-23T07:30:00Z",
+  },
 ];
