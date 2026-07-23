@@ -6626,4 +6626,12 @@ window.VIRTUAL_TOOLS = [
     icon: "💭",
     added: "2026-07-23T12:00:00Z",
   },
+  {
+    slug: "css-expand-card",
+    name: "CSS Expandable Card Generator",
+    description: "Create CSS cards that expand on hover/focus/click to reveal more content. 3 expand modes (height/width/scale), 4 themes. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🎴",
+    added: "2026-07-23T12:30:00Z",
+  },
 ];
