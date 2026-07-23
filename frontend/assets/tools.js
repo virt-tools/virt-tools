@@ -6490,4 +6490,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌨️",
     added: "2026-07-23T03:30:00Z",
   },
+  {
+    slug: "css-aurora",
+    name: "CSS Aurora Background Generator",
+    description: "Create animated aurora borealis gradient backgrounds. 5 presets, adjustable colors/speed/blur/opacity. Copy CSS.",
+    category: "Design",
+    icon: "🌌",
+    added: "2026-07-23T04:00:00Z",
+  },
 ];
