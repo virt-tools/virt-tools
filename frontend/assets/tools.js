@@ -6506,4 +6506,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🫧",
     added: "2026-07-23T04:30:00Z",
   },
+  {
+    slug: "css-orbit",
+    name: "CSS Orbit Animation Generator",
+    description: "Create CSS orbiting element animations. 4 presets (solar/loader/atoms/rings), adjustable orbits/speed/colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🪐",
+    added: "2026-07-23T05:00:00Z",
+  },
 ];
