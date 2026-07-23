@@ -6442,4 +6442,12 @@ window.VIRTUAL_TOOLS = [
     icon: "✏️",
     added: "2026-07-23T00:30:00Z",
   },
+  {
+    slug: "css-progress-ring",
+    name: "CSS Progress Ring Generator",
+    description: "Create CSS circular/ring progress indicators using SVG. 4 styles (flat/rounded/gradient/glow). Copy HTML+CSS.",
+    category: "Design",
+    icon: "⭕",
+    added: "2026-07-23T01:00:00Z",
+  },
 ];
