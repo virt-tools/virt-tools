@@ -6594,4 +6594,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📏",
     added: "2026-07-23T10:00:00Z",
   },
+  {
+    slug: "css-theme-toggle",
+    name: "CSS Theme Toggle Generator",
+    description: "Create CSS dark/light mode toggle switches with sun/moon icons. 5 styles, 3 sizes, custom colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🌓",
+    added: "2026-07-23T10:30:00Z",
+  },
 ];
