@@ -6674,4 +6674,12 @@ window.VIRTUAL_TOOLS = [
     icon: "⭐",
     added: "2026-07-23T15:00:00Z",
   },
+  {
+    slug: "css-activity-feed",
+    name: "CSS Activity Feed Generator",
+    description: "Create CSS activity feed/timeline list components. 3 styles, avatars, timestamps, 8 item types. Copy HTML+CSS.",
+    category: "Design",
+    icon: "📰",
+    added: "2026-07-23T15:30:00Z",
+  },
 ];
