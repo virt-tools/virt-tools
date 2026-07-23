@@ -6434,4 +6434,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌈",
     added: "2026-07-23T00:00:00Z",
   },
+  {
+    slug: "css-text-stroke",
+    name: "CSS Text Stroke Generator",
+    description: "Create CSS text stroke/outline effects with -webkit-text-stroke. Adjustable width, color, fill, paint order. Copy CSS.",
+    category: "Design",
+    icon: "✏️",
+    added: "2026-07-23T00:30:00Z",
+  },
 ];
