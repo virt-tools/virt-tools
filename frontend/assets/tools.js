@@ -6634,4 +6634,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎴",
     added: "2026-07-23T12:30:00Z",
   },
+  {
+    slug: "css-live-search",
+    name: "CSS Live Search Bar Generator",
+    description: "Create CSS search bar components with live filter results. 3 styles (simple/rounded/underline), 4 themes. Copy HTML+CSS+JS.",
+    category: "Design",
+    icon: "🔎",
+    added: "2026-07-23T13:00:00Z",
+  },
 ];
