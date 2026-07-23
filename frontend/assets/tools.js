@@ -6362,4 +6362,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📖",
     added: "2026-07-22T19:30:00Z",
   },
+  {
+    slug: "css-countdown-component",
+    name: "CSS Countdown Component Generator",
+    description: "Create CSS countdown timer UI components. 4 styles (card/block/circle/flip), 3 themes, toggle units. Copy HTML+CSS.",
+    category: "Design",
+    icon: "⏰",
+    added: "2026-07-22T20:00:00Z",
+  },
 ];
