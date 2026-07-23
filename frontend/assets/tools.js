@@ -6562,4 +6562,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔍",
     added: "2026-07-23T08:00:00Z",
   },
+  {
+    slug: "css-custom-cursor",
+    name: "CSS Custom Cursor Generator",
+    description: "Create custom cursor effects: dot, ring, dot+ring, glow, crosshair. Adjustable size, color, lag, blend mode. Copy HTML+CSS+JS.",
+    category: "Design",
+    icon: "🖱️",
+    added: "2026-07-23T08:30:00Z",
+  },
 ];
