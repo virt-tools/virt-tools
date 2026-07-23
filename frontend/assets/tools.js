@@ -6570,4 +6570,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🖱️",
     added: "2026-07-23T08:30:00Z",
   },
+  {
+    slug: "css-magnetic",
+    name: "CSS Magnetic Button Generator",
+    description: "Create magnetic buttons that attract toward the cursor on hover. 4 styles, adjustable strength/smoothing/colors. Copy HTML+CSS+JS.",
+    category: "Design",
+    icon: "🧲",
+    added: "2026-07-23T09:00:00Z",
+  },
 ];
