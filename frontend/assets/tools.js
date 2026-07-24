@@ -7034,4 +7034,12 @@ window.VIRTUAL_TOOLS = [
     icon: "💬",
     added: "2026-07-24T13:30:00Z",
   },
+  {
+    slug: "css-skeleton-card",
+    name: "CSS Skeleton Card Generator",
+    description: "Create CSS skeleton loading placeholder cards with shimmer animation. 4 layouts, 3 themes, adjustable speed. Copy HTML+CSS.",
+    category: "Design",
+    icon: "💀",
+    added: "2026-07-24T14:00:00Z",
+  },
 ];
