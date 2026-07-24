@@ -7122,4 +7122,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔦",
     added: "2026-07-24T19:00:00Z",
   },
+  {
+    slug: "css-letter-pop",
+    name: "CSS Letter Pop Generator",
+    description: "Create CSS letter-by-letter stagger animations on hover. 6 directions, adjustable delay/scale/color. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🔤",
+    added: "2026-07-24T19:30:00Z",
+  },
 ];
