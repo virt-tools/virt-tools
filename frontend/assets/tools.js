@@ -7306,4 +7306,12 @@ window.VIRTUAL_TOOLS = [
     icon: "⚡",
     added: "2026-07-25T06:30:00Z",
   },
+  {
+    slug: "css-vortex",
+    name: "CSS Vortex Generator",
+    description: "Create CSS vortex/tunnel spinning animation effects. 4 presets, adjustable rings/speed/colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🌀",
+    added: "2026-07-25T07:00:00Z",
+  },
 ];
