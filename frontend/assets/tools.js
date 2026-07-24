@@ -7498,4 +7498,12 @@ window.VIRTUAL_TOOLS = [
     icon: "💧",
     added: "2026-07-25T18:30:00Z",
   },
+  {
+    slug: "css-split-flap",
+    name: "CSS Split-Flap Display Generator",
+    description: "Create CSS split-flap/departure board display. Adjustable text, colors, size, flip speed. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🛄",
+    added: "2026-07-25T19:00:00Z",
+  },
 ];
