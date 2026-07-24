@@ -7066,4 +7066,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎭",
     added: "2026-07-24T15:30:00Z",
   },
+  {
+    slug: "css-mesh-gradient",
+    name: "CSS Mesh Gradient Generator",
+    description: "Create CSS mesh gradient backgrounds using layered radial gradients. 2-6 colors, 5 presets, adjustable blur. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🌈",
+    added: "2026-07-24T16:00:00Z",
+  },
 ];
