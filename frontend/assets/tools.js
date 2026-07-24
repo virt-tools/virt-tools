@@ -6994,4 +6994,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📌",
     added: "2026-07-24T11:00:00Z",
   },
+  {
+    slug: "css-scrollspy",
+    name: "CSS Scrollspy Navigation Generator",
+    description: "Create CSS scrollspy section navigation with active section highlighting. 3 styles, 3 themes. Copy HTML+CSS+JS.",
+    category: "Design",
+    icon: "🔍",
+    added: "2026-07-24T11:30:00Z",
+  },
 ];
