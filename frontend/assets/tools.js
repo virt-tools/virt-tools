@@ -7314,4 +7314,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌀",
     added: "2026-07-25T07:00:00Z",
   },
+  {
+    slug: "css-solar-system",
+    name: "CSS Solar System Generator",
+    description: "Create CSS animated solar system with orbiting planets. Adjustable planets/speed/sizes. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🌍",
+    added: "2026-07-25T07:30:00Z",
+  },
 ];
