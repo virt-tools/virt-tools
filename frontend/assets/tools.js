@@ -6866,4 +6866,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📊",
     added: "2026-07-24T03:00:00Z",
   },
+  {
+    slug: "css-wizard",
+    name: "CSS Progress Steps / Wizard Generator",
+    description: "Create CSS multi-step progress / wizard form components. 3 styles, 4 themes, 3-6 steps. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🧙",
+    added: "2026-07-24T03:30:00Z",
+  },
 ];
