@@ -7322,4 +7322,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌍",
     added: "2026-07-25T07:30:00Z",
   },
+  {
+    slug: "css-ripple-pond",
+    name: "CSS Ripple Pond Generator",
+    description: "Create CSS water ripple/pond drop animation effects. 4 presets, adjustable ripples/speed/colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "💧",
+    added: "2026-07-25T08:00:00Z",
+  },
 ];
