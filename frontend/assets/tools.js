@@ -7010,4 +7010,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📋",
     added: "2026-07-24T12:00:00Z",
   },
+  {
+    slug: "css-error-page",
+    name: "CSS Error Page Generator",
+    description: "Create CSS error pages (500/502/503/504). 4 styles, 3 themes, custom title/message. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🚫",
+    added: "2026-07-24T12:30:00Z",
+  },
 ];
