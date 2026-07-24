@@ -6882,4 +6882,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📡",
     added: "2026-07-24T04:00:00Z",
   },
+  {
+    slug: "css-pie-chart",
+    name: "CSS Pie Chart Generator",
+    description: "Create CSS pie chart components using conic-gradient. 2-8 segments, custom labels and colors, legend. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🥧",
+    added: "2026-07-24T04:30:00Z",
+  },
 ];
