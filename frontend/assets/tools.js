@@ -7130,4 +7130,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔤",
     added: "2026-07-24T19:30:00Z",
   },
+  {
+    slug: "css-shine-sweep",
+    name: "CSS Shine Sweep Generator",
+    description: "Create CSS shine/sweep overlay effects for buttons and cards. 4 styles, adjustable color/opacity/speed/radius. Copy HTML+CSS.",
+    category: "Design",
+    icon: "✨",
+    added: "2026-07-24T20:00:00Z",
+  },
 ];
