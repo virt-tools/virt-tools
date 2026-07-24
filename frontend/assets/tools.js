@@ -7250,4 +7250,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔆",
     added: "2026-07-25T03:00:00Z",
   },
+  {
+    slug: "css-fire-text",
+    name: "CSS Fire Text Effect Generator",
+    description: "Create CSS fire/flame text animation effects. 4 presets, adjustable intensity/speed. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🔥",
+    added: "2026-07-25T03:30:00Z",
+  },
 ];
