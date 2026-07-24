@@ -7434,4 +7434,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🏃",
     added: "2026-07-25T14:30:00Z",
   },
+  {
+    slug: "css-thermometer",
+    name: "CSS Thermometer Generator",
+    description: "Create CSS thermometer/temperature gauge components. 4 styles, adjustable value/min/max/unit. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🌡️",
+    added: "2026-07-25T15:00:00Z",
+  },
 ];
