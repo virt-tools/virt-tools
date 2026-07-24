@@ -6930,4 +6930,12 @@ window.VIRTUAL_TOOLS = [
     icon: "⚖️",
     added: "2026-07-24T07:00:00Z",
   },
+  {
+    slug: "css-feature-list",
+    name: "CSS Feature List Generator",
+    description: "Create CSS feature list components with check/cross icons. 4 styles, 3 themes, 5-10 items. Copy HTML+CSS.",
+    category: "Design",
+    icon: "✅",
+    added: "2026-07-24T07:30:00Z",
+  },
 ];
