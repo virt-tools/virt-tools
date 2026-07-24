@@ -6874,4 +6874,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🧙",
     added: "2026-07-24T03:30:00Z",
   },
+  {
+    slug: "css-gauge",
+    name: "CSS Gauge Meter Generator",
+    description: "Create CSS gauge/speedometer-style meter components. Half/full circle, 5 themes, 3 sizes, adjustable value. Copy HTML+CSS.",
+    category: "Design",
+    icon: "📡",
+    added: "2026-07-24T04:00:00Z",
+  },
 ];
