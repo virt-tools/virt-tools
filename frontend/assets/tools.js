@@ -6922,4 +6922,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📈",
     added: "2026-07-24T06:30:00Z",
   },
+  {
+    slug: "css-comparison-table",
+    name: "CSS Comparison Table Generator",
+    description: "Create CSS feature comparison/pricing table components. 3 styles, 3 themes, 3-5 plans, 5-8 rows. Copy HTML+CSS.",
+    category: "Design",
+    icon: "⚖️",
+    added: "2026-07-24T07:00:00Z",
+  },
 ];
