@@ -7338,4 +7338,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🚶",
     added: "2026-07-25T08:30:00Z",
   },
+  {
+    slug: "css-emboss-text",
+    name: "CSS Emboss/3D Layer Text Generator",
+    description: "Create CSS embossed/3D layered text effects with depth. 6 presets, adjustable depth/color/size. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🧱",
+    added: "2026-07-25T09:00:00Z",
+  },
 ];
