@@ -7490,4 +7490,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📼",
     added: "2026-07-25T18:00:00Z",
   },
+  {
+    slug: "css-liquid-fill",
+    name: "CSS Liquid Fill Text Generator",
+    description: "Create CSS liquid/water fill text animation. Adjustable fill color, level, wave speed, text. Copy HTML+CSS.",
+    category: "Design",
+    icon: "💧",
+    added: "2026-07-25T18:30:00Z",
+  },
 ];
