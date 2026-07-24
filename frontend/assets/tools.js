@@ -7282,4 +7282,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🫧",
     added: "2026-07-25T05:00:00Z",
   },
+  {
+    slug: "css-petals",
+    name: "CSS Falling Petals Generator",
+    description: "Create CSS falling petal animation effects. 4 presets (sakura/rose/autumn/spring), adjustable count/speed/size. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🌸",
+    added: "2026-07-25T05:30:00Z",
+  },
 ];
