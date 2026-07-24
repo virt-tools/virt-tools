@@ -7394,4 +7394,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔋",
     added: "2026-07-25T12:00:00Z",
   },
+  {
+    slug: "css-signal-bars",
+    name: "CSS Signal/WiFi Strength Indicator Generator",
+    description: "Create CSS signal strength bars and WiFi indicators. 4 styles, adjustable strength/size/colors, optional pulse animation. Copy HTML+CSS.",
+    category: "Design",
+    icon: "📡",
+    added: "2026-07-25T12:30:00Z",
+  },
 ];
