@@ -7002,4 +7002,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔍",
     added: "2026-07-24T11:30:00Z",
   },
+  {
+    slug: "css-toc",
+    name: "CSS Table of Contents Generator",
+    description: "Create CSS table of contents / sidebar navigation components. 3 styles, 3 themes, nested headings. Copy HTML+CSS.",
+    category: "Design",
+    icon: "📋",
+    added: "2026-07-24T12:00:00Z",
+  },
 ];
