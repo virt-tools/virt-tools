@@ -7362,4 +7362,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔺",
     added: "2026-07-25T10:00:00Z",
   },
+  {
+    slug: "css-loading-stripes",
+    name: "CSS Loading Stripes Generator",
+    description: "Create CSS animated striped/bar loading indicators. 6 styles, adjustable colors/speed/width. Copy HTML+CSS.",
+    category: "Design",
+    icon: "📊",
+    added: "2026-07-25T10:30:00Z",
+  },
 ];
