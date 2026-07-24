@@ -6762,4 +6762,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔧",
     added: "2026-07-23T20:30:00Z",
   },
+  {
+    slug: "css-scroll-indicator",
+    name: "CSS Scroll Indicator Generator",
+    description: "Create CSS scroll-down indicator arrows for hero sections. 4 styles, 3 themes, custom text. Copy HTML+CSS.",
+    category: "Design",
+    icon: "⬇️",
+    added: "2026-07-23T21:00:00Z",
+  },
 ];
