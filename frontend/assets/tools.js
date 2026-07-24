@@ -6794,4 +6794,12 @@ window.VIRTUAL_TOOLS = [
     icon: "👥",
     added: "2026-07-23T22:30:00Z",
   },
+  {
+    slug: "css-newsletter-popup",
+    name: "CSS Newsletter Popup Generator",
+    description: "Create CSS newsletter signup popup/modal components. 4 styles, 3 themes, close button. Copy HTML+CSS.",
+    category: "Design",
+    icon: "📧",
+    added: "2026-07-23T23:00:00Z",
+  },
 ];
