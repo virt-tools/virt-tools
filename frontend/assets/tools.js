@@ -7578,4 +7578,12 @@ window.VIRTUAL_TOOLS = [
     icon: "⌨️",
     added: "2026-07-25T23:30:00Z",
   },
+  {
+    slug: "css-rotating-text",
+    name: "CSS Rotating Text Generator",
+    description: "Create CSS rotating/cycling text animations. 4 styles (slide/fade/flip/typewriter), adjustable speed/colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🔄",
+    added: "2026-07-26T00:00:00Z",
+  },
 ];
