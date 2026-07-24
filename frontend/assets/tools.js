@@ -7290,4 +7290,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌸",
     added: "2026-07-25T05:30:00Z",
   },
+  {
+    slug: "css-starfield",
+    name: "CSS Starfield Generator",
+    description: "Create CSS twinkling starfield background animation. 4 presets (night/galaxy/aurora/warp), adjustable count/speed. Copy HTML+CSS.",
+    category: "Design",
+    icon: "✨",
+    added: "2026-07-25T06:00:00Z",
+  },
 ];
