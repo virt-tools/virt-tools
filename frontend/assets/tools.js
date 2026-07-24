@@ -7370,4 +7370,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📊",
     added: "2026-07-25T10:30:00Z",
   },
+  {
+    slug: "css-card-fan",
+    name: "CSS Card Fan/Spread Generator",
+    description: "Create CSS card fan/spread/arc/stack layouts. Adjustable cards/angle/size, hover lift. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🃏",
+    added: "2026-07-25T11:00:00Z",
+  },
 ];
