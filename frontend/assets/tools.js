@@ -7546,4 +7546,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🏀",
     added: "2026-07-25T21:30:00Z",
   },
+  {
+    slug: "css-rotate-3d",
+    name: "CSS 3D Rotation Generator",
+    description: "Create CSS 3D rotation animations for text and elements. 6 axes, adjustable speed/perspective. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🎲",
+    added: "2026-07-25T22:00:00Z",
+  },
 ];
