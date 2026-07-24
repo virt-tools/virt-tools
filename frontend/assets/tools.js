@@ -7234,4 +7234,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎵",
     added: "2026-07-25T02:00:00Z",
   },
+  {
+    slug: "css-goo-loader",
+    name: "CSS Liquid/Goo Loader Generator",
+    description: "Create CSS liquid goo/blob loading animations using SVG filters. 4 styles, adjustable colors/speed/size. Copy HTML+CSS.",
+    category: "Design",
+    icon: "💧",
+    added: "2026-07-25T02:30:00Z",
+  },
 ];
