@@ -7410,4 +7410,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🏷️",
     added: "2026-07-25T13:00:00Z",
   },
+  {
+    slug: "css-volume-slider",
+    name: "CSS Volume Slider Generator",
+    description: "Create CSS custom volume control sliders. 4 styles, adjustable colors/size/value, mute toggle, waveform animation. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🔊",
+    added: "2026-07-25T13:30:00Z",
+  },
 ];
