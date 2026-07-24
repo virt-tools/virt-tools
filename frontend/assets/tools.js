@@ -6986,4 +6986,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔍",
     added: "2026-07-24T10:30:00Z",
   },
+  {
+    slug: "css-sticky-header",
+    name: "CSS Sticky Header Generator",
+    description: "Create CSS sticky/fixed header navigation components. 4 styles, 3 themes, scroll-aware shrink, shadow. Copy HTML+CSS.",
+    category: "Design",
+    icon: "📌",
+    added: "2026-07-24T11:00:00Z",
+  },
 ];
