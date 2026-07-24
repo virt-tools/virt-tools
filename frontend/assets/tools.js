@@ -6730,4 +6730,12 @@ window.VIRTUAL_TOOLS = [
     icon: "💬",
     added: "2026-07-23T18:30:00Z",
   },
+  {
+    slug: "css-changelog",
+    name: "CSS Changelog Generator",
+    description: "Create CSS changelog/release notes components. 3 styles, 4 item types (added/fixed/changed/removed). Copy HTML+CSS.",
+    category: "Design",
+    icon: "📋",
+    added: "2026-07-23T19:00:00Z",
+  },
 ];
