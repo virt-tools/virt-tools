@@ -6738,4 +6738,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📋",
     added: "2026-07-23T19:00:00Z",
   },
+  {
+    slug: "css-data-table",
+    name: "CSS Data Table Generator",
+    description: "Create styled CSS data table components with sorting indicators. 4 styles, 3 themes, striped rows, status badges. Copy HTML+CSS.",
+    category: "Design",
+    icon: "📊",
+    added: "2026-07-23T19:30:00Z",
+  },
 ];
