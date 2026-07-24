@@ -7018,4 +7018,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🚫",
     added: "2026-07-24T12:30:00Z",
   },
+  {
+    slug: "css-status-indicator",
+    name: "CSS Status Indicator Generator",
+    description: "Create CSS status indicator dot badges (online/offline/busy/away). 4 styles, pulse animation, custom colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🟢",
+    added: "2026-07-24T13:00:00Z",
+  },
 ];
