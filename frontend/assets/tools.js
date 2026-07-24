@@ -7050,4 +7050,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🚩",
     added: "2026-07-24T14:30:00Z",
   },
+  {
+    slug: "css-image-accordion",
+    name: "CSS Image Accordion Generator",
+    description: "Create CSS accordion image galleries that expand on hover or click. 3-6 panels, 4 heights, gradient fills. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🖼️",
+    added: "2026-07-24T15:00:00Z",
+  },
 ];
