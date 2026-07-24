@@ -7554,4 +7554,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎲",
     added: "2026-07-25T22:00:00Z",
   },
+  {
+    slug: "css-text-zoom",
+    name: "CSS Text Zoom on Hover Generator",
+    description: "Create CSS text zoom/scale animations on hover. 6 styles, per-letter stagger, adjustable scale/duration. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🔍",
+    added: "2026-07-25T22:30:00Z",
+  },
 ];
