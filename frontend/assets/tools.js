@@ -6890,4 +6890,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🥧",
     added: "2026-07-24T04:30:00Z",
   },
+  {
+    slug: "css-line-chart",
+    name: "CSS Line Chart Generator",
+    description: "Create CSS/SVG line chart components. Smooth/straight/stepped curves, 2-12 points, custom color, fill, dots, grid. Copy HTML+CSS.",
+    category: "Design",
+    icon: "📈",
+    added: "2026-07-24T05:00:00Z",
+  },
 ];
