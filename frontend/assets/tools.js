@@ -7522,4 +7522,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔢",
     added: "2026-07-25T20:00:00Z",
   },
+  {
+    slug: "css-sound-wave",
+    name: "CSS Sound Wave Animation Generator",
+    description: "Create CSS animated sound wave visualizations. 4 styles, adjustable colors, speed, bar count. Copy HTML+CSS.",
+    category: "Design",
+    icon: "📈",
+    added: "2026-07-25T20:30:00Z",
+  },
 ];
