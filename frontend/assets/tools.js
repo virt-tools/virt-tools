@@ -7386,4 +7386,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🪟",
     added: "2026-07-25T11:30:00Z",
   },
+  {
+    slug: "css-battery",
+    name: "CSS Battery Indicator Generator",
+    description: "Create CSS battery level/charging indicators. 4 styles, 4 sizes, color-coded levels, charging animation. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🔋",
+    added: "2026-07-25T12:00:00Z",
+  },
 ];
