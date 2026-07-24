@@ -6906,4 +6906,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎯",
     added: "2026-07-24T05:30:00Z",
   },
+  {
+    slug: "css-animated-counter",
+    name: "CSS Animated Counter Generator",
+    description: "Create CSS animated number counter components. 4 animations, 3 themes, 3 sizes, thousands separator. Copy HTML+CSS+JS.",
+    category: "Design",
+    icon: "🔢",
+    added: "2026-07-24T06:00:00Z",
+  },
 ];
