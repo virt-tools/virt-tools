@@ -7402,4 +7402,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📡",
     added: "2026-07-25T12:30:00Z",
   },
+  {
+    slug: "css-price-tag",
+    name: "CSS Price Tag/Sale Badge Generator",
+    description: "Create CSS price tags and sale/discount badges. 6 styles, adjustable colors/size/text/rotation. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🏷️",
+    added: "2026-07-25T13:00:00Z",
+  },
 ];
