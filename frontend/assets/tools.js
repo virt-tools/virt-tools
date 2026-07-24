@@ -7090,4 +7090,12 @@ window.VIRTUAL_TOOLS = [
     icon: "✨",
     added: "2026-07-24T17:00:00Z",
   },
+  {
+    slug: "css-noise-overlay",
+    name: "CSS Noise/Grain Texture Generator",
+    description: "Create CSS noise/grain overlay effects using inline SVG. 4 styles, adjustable opacity/size/blend. Copy HTML+CSS.",
+    category: "Design",
+    icon: "📺",
+    added: "2026-07-24T17:30:00Z",
+  },
 ];
