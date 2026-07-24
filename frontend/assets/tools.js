@@ -7194,4 +7194,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔢",
     added: "2026-07-24T23:30:00Z",
   },
+  {
+    slug: "css-card-swap",
+    name: "CSS Card Swap on Hover Generator",
+    description: "Create CSS card content swap/reveal on hover. 6 directions, adjustable size/colors/duration. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🔄",
+    added: "2026-07-25T00:00:00Z",
+  },
 ];
