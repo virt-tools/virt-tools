@@ -7442,4 +7442,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌡️",
     added: "2026-07-25T15:00:00Z",
   },
+  {
+    slug: "css-weather-widget",
+    name: "CSS Weather Widget Generator",
+    description: "Create CSS weather card/widget components. 4 styles, 8 conditions, adjustable temp/city. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🌤️",
+    added: "2026-07-25T15:30:00Z",
+  },
 ];
