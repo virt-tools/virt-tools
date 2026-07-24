@@ -7154,4 +7154,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🏷️",
     added: "2026-07-24T21:00:00Z",
   },
+  {
+    slug: "css-stagger-reveal",
+    name: "CSS Stagger Card Reveal Generator",
+    description: "Create CSS staggered card reveal animations on scroll. 6 directions, adjustable delay/count/duration. Copy HTML+CSS+JS.",
+    category: "Design",
+    icon: "🎴",
+    added: "2026-07-24T21:30:00Z",
+  },
 ];
