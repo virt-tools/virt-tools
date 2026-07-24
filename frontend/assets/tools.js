@@ -6970,4 +6970,12 @@ window.VIRTUAL_TOOLS = [
     icon: "⬆️",
     added: "2026-07-24T09:30:00Z",
   },
+  {
+    slug: "css-text-truncate",
+    name: "CSS Text Truncate Generator",
+    description: "Create CSS text truncation components. Single-line ellipsis, multi-line clamp, custom width. Copy HTML+CSS.",
+    category: "Design",
+    icon: "✂️",
+    added: "2026-07-24T10:00:00Z",
+  },
 ];
