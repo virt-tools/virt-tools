@@ -7346,4 +7346,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🧱",
     added: "2026-07-25T09:00:00Z",
   },
+  {
+    slug: "css-heatmap",
+    name: "CSS Heatmap/Activity Grid Generator",
+    description: "Create CSS heatmap grid (like GitHub contribution graph). 5 color schemes, adjustable weeks/size. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🗺️",
+    added: "2026-07-25T09:30:00Z",
+  },
 ];
