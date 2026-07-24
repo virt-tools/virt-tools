@@ -6722,4 +6722,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📂",
     added: "2026-07-23T18:00:00Z",
   },
+  {
+    slug: "css-review-card",
+    name: "CSS Review Card Generator",
+    description: "Create CSS review/testimonial cards with star ratings. 4 styles, 3 themes, custom name/role/rating. Copy HTML+CSS.",
+    category: "Design",
+    icon: "💬",
+    added: "2026-07-23T18:30:00Z",
+  },
 ];
