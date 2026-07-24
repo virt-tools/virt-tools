@@ -7042,4 +7042,12 @@ window.VIRTUAL_TOOLS = [
     icon: "💀",
     added: "2026-07-24T14:00:00Z",
   },
+  {
+    slug: "css-flag-badge",
+    name: "CSS Flag Badge Generator",
+    description: "Create CSS country flag badge components using pure CSS gradients. 10 countries, 6 styles, 3 sizes. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🚩",
+    added: "2026-07-24T14:30:00Z",
+  },
 ];
