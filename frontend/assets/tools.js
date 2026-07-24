@@ -7562,4 +7562,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔍",
     added: "2026-07-25T22:30:00Z",
   },
+  {
+    slug: "css-swing",
+    name: "CSS Swing/Pendulum Generator",
+    description: "Create CSS swing/pendulum/floating animations. 6 styles, adjustable amplitude/speed/origin. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🎢",
+    added: "2026-07-25T23:00:00Z",
+  },
 ];
