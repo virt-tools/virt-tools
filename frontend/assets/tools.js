@@ -7266,4 +7266,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌋",
     added: "2026-07-25T04:00:00Z",
   },
+  {
+    slug: "css-rain",
+    name: "CSS Rain Animation Generator",
+    description: "Create CSS rain/rainfall animation effects. 4 presets (rain/storm/snow/code-rain), adjustable density/speed. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🌧️",
+    added: "2026-07-25T04:30:00Z",
+  },
 ];
