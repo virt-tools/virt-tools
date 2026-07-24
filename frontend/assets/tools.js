@@ -7514,4 +7514,12 @@ window.VIRTUAL_TOOLS = [
     icon: "⚫",
     added: "2026-07-25T19:30:00Z",
   },
+  {
+    slug: "css-seven-segment",
+    name: "CSS Seven-Segment Display Generator",
+    description: "Create CSS seven-segment LED digit display. Adjustable digits, on/off colors, size, glow. Copy HTML+CSS+JS.",
+    category: "Design",
+    icon: "🔢",
+    added: "2026-07-25T20:00:00Z",
+  },
 ];
