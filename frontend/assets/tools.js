@@ -7202,4 +7202,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔄",
     added: "2026-07-25T00:00:00Z",
   },
+  {
+    slug: "css-link-underline",
+    name: "CSS Animated Link Underline Generator",
+    description: "Create CSS animated link hover underline effects. 8 styles, adjustable color/thickness/duration. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🔗",
+    added: "2026-07-25T00:30:00Z",
+  },
 ];
