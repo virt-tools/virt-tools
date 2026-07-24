@@ -6898,4 +6898,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📈",
     added: "2026-07-24T05:00:00Z",
   },
+  {
+    slug: "css-radial-progress",
+    name: "CSS Radial Progress Generator",
+    description: "Create CSS radial/circular progress ring components. Conic-gradient based, 3 sizes, solid/gradient fill, custom colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🎯",
+    added: "2026-07-24T05:30:00Z",
+  },
 ];
