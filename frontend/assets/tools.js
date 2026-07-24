@@ -7378,4 +7378,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🃏",
     added: "2026-07-25T11:00:00Z",
   },
+  {
+    slug: "css-curtain",
+    name: "CSS Curtain/Blinds Reveal Generator",
+    description: "Create CSS curtain/blinds/doors/shutter open-reveal animations. 4 styles, hover to reveal. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🪟",
+    added: "2026-07-25T11:30:00Z",
+  },
 ];
