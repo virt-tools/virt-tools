@@ -7146,4 +7146,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌈",
     added: "2026-07-24T20:30:00Z",
   },
+  {
+    slug: "css-float-label",
+    name: "CSS Floating Label Generator",
+    description: "Create CSS floating label form inputs. 4 styles, 3 themes, adjustable colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🏷️",
+    added: "2026-07-24T21:00:00Z",
+  },
 ];
