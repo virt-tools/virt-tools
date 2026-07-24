@@ -7458,4 +7458,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🕐",
     added: "2026-07-25T16:00:00Z",
   },
+  {
+    slug: "css-knob-control",
+    name: "CSS Knob/Dial Control Generator",
+    description: "Create CSS rotary knob/dial control components. 4 styles, adjustable value/angle/color. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🎛️",
+    added: "2026-07-25T16:30:00Z",
+  },
 ];
