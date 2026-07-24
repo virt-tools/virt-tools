@@ -7506,4 +7506,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🛄",
     added: "2026-07-25T19:00:00Z",
   },
+  {
+    slug: "css-dot-matrix",
+    name: "CSS Dot Matrix Display Generator",
+    description: "Create CSS dot matrix LED text display. 5x7 font, adjustable dot size, colors, glow. Copy HTML+CSS+JS.",
+    category: "Design",
+    icon: "⚫",
+    added: "2026-07-25T19:30:00Z",
+  },
 ];
