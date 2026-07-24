@@ -7354,4 +7354,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🗺️",
     added: "2026-07-25T09:30:00Z",
   },
+  {
+    slug: "css-pyramid",
+    name: "CSS 3D Pyramid Generator",
+    description: "Create CSS 3D pyramid with rotation animation. 4 styles, 3-6 sides, adjustable size/speed. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🔺",
+    added: "2026-07-25T10:00:00Z",
+  },
 ];
