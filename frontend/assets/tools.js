@@ -7058,4 +7058,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🖼️",
     added: "2026-07-24T15:00:00Z",
   },
+  {
+    slug: "css-text-reveal",
+    name: "CSS Text Reveal Animation Generator",
+    description: "Create CSS text reveal animations. 6 styles (fade/slide/clip/blur/split/typewriter), custom text, colors, speed. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🎭",
+    added: "2026-07-24T15:30:00Z",
+  },
 ];
