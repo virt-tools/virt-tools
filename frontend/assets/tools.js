@@ -6826,4 +6826,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔢",
     added: "2026-07-24T00:30:00Z",
   },
+  {
+    slug: "css-range-slider",
+    name: "CSS Custom Range Slider Generator",
+    description: "Create CSS styled range input/sliders. 4 styles, 3 themes, 3 sizes, custom colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🎚️",
+    added: "2026-07-24T01:00:00Z",
+  },
 ];
