@@ -6962,4 +6962,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌐",
     added: "2026-07-24T09:00:00Z",
   },
+  {
+    slug: "css-back-to-top",
+    name: "CSS Back to Top Button Generator",
+    description: "Create CSS scroll-to-top button components. 4 styles, 4 positions, 3 themes, show-on-scroll. Copy HTML+CSS.",
+    category: "Design",
+    icon: "⬆️",
+    added: "2026-07-24T09:30:00Z",
+  },
 ];
