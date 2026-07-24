@@ -7186,4 +7186,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📚",
     added: "2026-07-24T23:00:00Z",
   },
+  {
+    slug: "css-odometer",
+    name: "CSS Odometer/Number Roll Generator",
+    description: "Create CSS animated odometer/rolling number counter. 4 styles, adjustable digits/speed/color. Copy HTML+CSS+JS.",
+    category: "Design",
+    icon: "🔢",
+    added: "2026-07-24T23:30:00Z",
+  },
 ];
