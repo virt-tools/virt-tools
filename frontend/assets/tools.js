@@ -7074,4 +7074,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌈",
     added: "2026-07-24T16:00:00Z",
   },
+  {
+    slug: "css-holographic",
+    name: "CSS Holographic Card Generator",
+    description: "Create CSS holographic/iridescent card effects with conic-gradient shimmer. 4 presets, animated hue rotation. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🪞",
+    added: "2026-07-24T16:30:00Z",
+  },
 ];
