@@ -7330,4 +7330,12 @@ window.VIRTUAL_TOOLS = [
     icon: "💧",
     added: "2026-07-25T08:00:00Z",
   },
+  {
+    slug: "css-dot-walker",
+    name: "CSS Dot Walker Loader Generator",
+    description: "Create CSS animated dot walker/progress loader. 5 styles, adjustable dots/speed/colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🚶",
+    added: "2026-07-25T08:30:00Z",
+  },
 ];
