@@ -7466,4 +7466,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎛️",
     added: "2026-07-25T16:30:00Z",
   },
+  {
+    slug: "css-radial-equalizer",
+    name: "CSS Radial Equalizer Generator",
+    description: "Create CSS circular audio equalizer / radial bar chart. 4 color schemes, 8-64 bars. Copy HTML+CSS.",
+    category: "Design",
+    icon: "⭕",
+    added: "2026-07-25T17:00:00Z",
+  },
 ];
