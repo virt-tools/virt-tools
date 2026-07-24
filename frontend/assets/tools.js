@@ -6850,4 +6850,12 @@ window.VIRTUAL_TOOLS = [
     icon: "💳",
     added: "2026-07-24T02:00:00Z",
   },
+  {
+    slug: "css-donut-chart",
+    name: "CSS Donut Chart Generator",
+    description: "Create CSS donut/ring chart components with conic-gradient. 2-5 segments, adjustable colors/sizes/thickness. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🍩",
+    added: "2026-07-24T02:30:00Z",
+  },
 ];
