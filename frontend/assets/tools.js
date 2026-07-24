@@ -7474,4 +7474,12 @@ window.VIRTUAL_TOOLS = [
     icon: "⭕",
     added: "2026-07-25T17:00:00Z",
   },
+  {
+    slug: "css-turntable",
+    name: "CSS Vinyl Turntable Generator",
+    description: "Create CSS animated vinyl record turntable. Adjustable size/color/speed, tonearm, grooves. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🎵",
+    added: "2026-07-25T17:30:00Z",
+  },
 ];
