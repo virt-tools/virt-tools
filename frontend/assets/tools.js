@@ -6746,4 +6746,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📊",
     added: "2026-07-23T19:30:00Z",
   },
+  {
+    slug: "css-loading-screen",
+    name: "CSS Loading Screen Generator",
+    description: "Create CSS loading screen / preloader components. 6 animation types, 3 themes, custom text. Copy HTML+CSS.",
+    category: "Design",
+    icon: "⏳",
+    added: "2026-07-23T20:00:00Z",
+  },
 ];
