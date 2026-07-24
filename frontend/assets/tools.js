@@ -7106,4 +7106,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌊",
     added: "2026-07-24T18:00:00Z",
   },
+  {
+    slug: "css-tilt-hover",
+    name: "CSS 3D Tilt on Hover Generator",
+    description: "Create CSS 3D card tilt effects following mouse cursor. Adjustable intensity, glare, shadow. Copy HTML+CSS+JS.",
+    category: "Design",
+    icon: "🎯",
+    added: "2026-07-24T18:30:00Z",
+  },
 ];
