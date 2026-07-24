@@ -7162,4 +7162,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎴",
     added: "2026-07-24T21:30:00Z",
   },
+  {
+    slug: "css-clip-text",
+    name: "CSS Clip-Path Text Reveal Generator",
+    description: "Create CSS clip-path text reveal/mask animations. 6 reveal directions, adjustable duration/font/color. Copy HTML+CSS.",
+    category: "Design",
+    icon: "✂️",
+    added: "2026-07-24T22:00:00Z",
+  },
 ];
