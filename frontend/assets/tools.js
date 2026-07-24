@@ -7138,4 +7138,12 @@ window.VIRTUAL_TOOLS = [
     icon: "✨",
     added: "2026-07-24T20:00:00Z",
   },
+  {
+    slug: "css-animated-gradient",
+    name: "CSS Animated Gradient Generator",
+    description: "Create CSS animated moving gradient backgrounds. 5 presets, 3 gradient types, adjustable angle/speed/colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🌈",
+    added: "2026-07-24T20:30:00Z",
+  },
 ];
