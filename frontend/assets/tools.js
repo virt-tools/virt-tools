@@ -6778,4 +6778,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📄",
     added: "2026-07-23T21:30:00Z",
   },
+  {
+    slug: "css-privacy-page",
+    name: "CSS Privacy Policy Page Generator",
+    description: "Create CSS privacy policy page components. 3 styles, 3 themes, custom sections. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🔒",
+    added: "2026-07-23T22:00:00Z",
+  },
 ];
