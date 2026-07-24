@@ -7482,4 +7482,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎵",
     added: "2026-07-25T17:30:00Z",
   },
+  {
+    slug: "css-cassette",
+    name: "CSS Cassette Tape Generator",
+    description: "Create CSS animated retro cassette tape. Adjustable body/label/reel colors, spinning reels, tape text. Copy HTML+CSS.",
+    category: "Design",
+    icon: "📼",
+    added: "2026-07-25T18:00:00Z",
+  },
 ];
