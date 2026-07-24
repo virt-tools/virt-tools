@@ -6786,4 +6786,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔒",
     added: "2026-07-23T22:00:00Z",
   },
+  {
+    slug: "css-team-grid",
+    name: "CSS Team Grid Generator",
+    description: "Create CSS team member grid card components. 3 styles, 3-8 members, social icons. Copy HTML+CSS.",
+    category: "Design",
+    icon: "👥",
+    added: "2026-07-23T22:30:00Z",
+  },
 ];
