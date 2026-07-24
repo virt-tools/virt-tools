@@ -6834,4 +6834,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎚️",
     added: "2026-07-24T01:00:00Z",
   },
+  {
+    slug: "css-segmented",
+    name: "CSS Segmented Control Generator",
+    description: "Create CSS segmented control / toggle button groups. 3 styles, 3 themes, 3-6 segments. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🎚️",
+    added: "2026-07-24T01:30:00Z",
+  },
 ];
