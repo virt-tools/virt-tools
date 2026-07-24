@@ -6770,4 +6770,12 @@ window.VIRTUAL_TOOLS = [
     icon: "⬇️",
     added: "2026-07-23T21:00:00Z",
   },
+  {
+    slug: "css-terms-page",
+    name: "CSS Terms of Service Page Generator",
+    description: "Create CSS terms of service / legal page components. 3 styles, 3 themes, custom sections. Copy HTML+CSS.",
+    category: "Design",
+    icon: "📄",
+    added: "2026-07-23T21:30:00Z",
+  },
 ];
