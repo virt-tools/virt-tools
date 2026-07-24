@@ -7026,4 +7026,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🟢",
     added: "2026-07-24T13:00:00Z",
   },
+  {
+    slug: "css-typing-indicator",
+    name: "CSS Typing Indicator Generator",
+    description: "Create CSS chat typing indicator dot animations. 5 styles, 3 sizes, custom colors and speed. Copy HTML+CSS.",
+    category: "Design",
+    icon: "💬",
+    added: "2026-07-24T13:30:00Z",
+  },
 ];
