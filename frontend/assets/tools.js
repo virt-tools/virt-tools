@@ -6978,4 +6978,12 @@ window.VIRTUAL_TOOLS = [
     icon: "✂️",
     added: "2026-07-24T10:00:00Z",
   },
+  {
+    slug: "css-image-zoom",
+    name: "CSS Image Zoom on Hover Generator",
+    description: "Create CSS image zoom/magnify on hover effects. 5 zoom styles, adjustable scale/speed/radius/overlay. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🔍",
+    added: "2026-07-24T10:30:00Z",
+  },
 ];
