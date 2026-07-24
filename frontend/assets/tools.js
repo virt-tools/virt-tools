@@ -7530,4 +7530,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📈",
     added: "2026-07-25T20:30:00Z",
   },
+  {
+    slug: "css-heartbeat",
+    name: "CSS Heartbeat Pulse Generator",
+    description: "Create CSS heartbeat pulse / ECG animation. 4 styles, adjustable speed, color, size, glow. Copy HTML+CSS.",
+    category: "Design",
+    icon: "💓",
+    added: "2026-07-25T21:00:00Z",
+  },
 ];
