@@ -7098,4 +7098,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📺",
     added: "2026-07-24T17:30:00Z",
   },
+  {
+    slug: "css-click-ripple",
+    name: "CSS Click Ripple Effect Generator",
+    description: "Create CSS ripple effects on button click. 5 styles, adjustable color/duration/size. Copy HTML+CSS+JS.",
+    category: "Design",
+    icon: "🌊",
+    added: "2026-07-24T18:00:00Z",
+  },
 ];
