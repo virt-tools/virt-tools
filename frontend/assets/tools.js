@@ -6818,4 +6818,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🏷️",
     added: "2026-07-23T23:59:00Z",
   },
+  {
+    slug: "css-count-badge",
+    name: "CSS Count/Notification Badge Generator",
+    description: "Create CSS count/notification badges for icons and nav. 4 styles, 4 positions, 3 sizes, custom colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🔢",
+    added: "2026-07-24T00:30:00Z",
+  },
 ];
