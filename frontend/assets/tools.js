@@ -7114,4 +7114,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎯",
     added: "2026-07-24T18:30:00Z",
   },
+  {
+    slug: "css-cursor-glow",
+    name: "CSS Cursor Glow Generator",
+    description: "Create CSS cursor-following glow/spotlight effects. Adjustable color, size, blur, blend mode. Copy HTML+CSS+JS.",
+    category: "Design",
+    icon: "🔦",
+    added: "2026-07-24T19:00:00Z",
+  },
 ];
