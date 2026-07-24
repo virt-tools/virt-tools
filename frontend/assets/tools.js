@@ -6842,4 +6842,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎚️",
     added: "2026-07-24T01:30:00Z",
   },
+  {
+    slug: "css-radio-cards",
+    name: "CSS Radio Card Selector Generator",
+    description: "Create CSS radio button card/select option components. 3 styles, 3 themes, 2-5 cards. Copy HTML+CSS.",
+    category: "Design",
+    icon: "💳",
+    added: "2026-07-24T02:00:00Z",
+  },
 ];
