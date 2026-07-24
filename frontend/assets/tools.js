@@ -7210,4 +7210,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔗",
     added: "2026-07-25T00:30:00Z",
   },
+  {
+    slug: "css-text-scramble",
+    name: "CSS Text Decode/Scramble Generator",
+    description: "Create CSS text scramble/decode animation effects. 3 modes (hover/load/loop), adjustable speed/charset. Copy HTML+CSS+JS.",
+    category: "Design",
+    icon: "🔢",
+    added: "2026-07-25T01:00:00Z",
+  },
 ];
