@@ -6810,4 +6810,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔔",
     added: "2026-07-23T23:30:00Z",
   },
+  {
+    slug: "css-tag-input",
+    name: "CSS Tag Input/Chips Generator",
+    description: "Create CSS tag input/chips components. 4 styles, 3 themes, 3 sizes, removable tags. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🏷️",
+    added: "2026-07-23T23:59:00Z",
+  },
 ];
