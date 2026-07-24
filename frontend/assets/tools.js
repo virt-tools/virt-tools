@@ -7538,4 +7538,12 @@ window.VIRTUAL_TOOLS = [
     icon: "💓",
     added: "2026-07-25T21:00:00Z",
   },
+  {
+    slug: "css-bounce",
+    name: "CSS Bounce Animation Generator",
+    description: "Create CSS bounce, jello, wobble, elastic, rubber, pendulum animations. 6 presets, adjustable speed/distance. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🏀",
+    added: "2026-07-25T21:30:00Z",
+  },
 ];
