@@ -6754,4 +6754,12 @@ window.VIRTUAL_TOOLS = [
     icon: "⏳",
     added: "2026-07-23T20:00:00Z",
   },
+  {
+    slug: "css-maintenance",
+    name: "CSS Maintenance Page Generator",
+    description: "Create CSS maintenance / under construction page components. 4 styles, 3 themes, custom text. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🔧",
+    added: "2026-07-23T20:30:00Z",
+  },
 ];
