@@ -7178,4 +7178,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎠",
     added: "2026-07-24T22:30:00Z",
   },
+  {
+    slug: "css-read-progress",
+    name: "CSS Read Progress Bar Generator",
+    description: "Create CSS scroll/read progress bar at top of page. 4 styles, adjustable height/color/position. Copy HTML+CSS+JS.",
+    category: "Design",
+    icon: "📚",
+    added: "2026-07-24T23:00:00Z",
+  },
 ];
