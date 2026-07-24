@@ -7258,4 +7258,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔥",
     added: "2026-07-25T03:30:00Z",
   },
+  {
+    slug: "css-lava-lamp",
+    name: "CSS Lava Lamp Generator",
+    description: "Create CSS lava lamp animation effects. 5 color presets, adjustable blob count/speed/size. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🌋",
+    added: "2026-07-25T04:00:00Z",
+  },
 ];
