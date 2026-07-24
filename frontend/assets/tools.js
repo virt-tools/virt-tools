@@ -7170,4 +7170,12 @@ window.VIRTUAL_TOOLS = [
     icon: "✂️",
     added: "2026-07-24T22:00:00Z",
   },
+  {
+    slug: "css-3d-carousel",
+    name: "CSS 3D Carousel Generator",
+    description: "Create CSS 3D rotating carousel components. 4-10 panels, adjustable radius/speed, auto-rotate. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🎠",
+    added: "2026-07-24T22:30:00Z",
+  },
 ];
