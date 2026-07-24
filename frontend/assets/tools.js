@@ -7298,4 +7298,12 @@ window.VIRTUAL_TOOLS = [
     icon: "✨",
     added: "2026-07-25T06:00:00Z",
   },
+  {
+    slug: "css-lightning",
+    name: "CSS Lightning Effect Generator",
+    description: "Create CSS lightning bolt and electric flash animations. 4 presets, adjustable color/speed/intensity. Copy HTML+CSS.",
+    category: "Design",
+    icon: "⚡",
+    added: "2026-07-25T06:30:00Z",
+  },
 ];
