@@ -6858,4 +6858,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🍩",
     added: "2026-07-24T02:30:00Z",
   },
+  {
+    slug: "css-bar-chart",
+    name: "CSS Bar Chart Generator",
+    description: "Create CSS bar chart components using pure CSS. Vertical/horizontal, 3-10 bars, gradient/flat/rounded styles. Copy HTML+CSS.",
+    category: "Design",
+    icon: "📊",
+    added: "2026-07-24T03:00:00Z",
+  },
 ];
