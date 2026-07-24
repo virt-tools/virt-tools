@@ -7242,4 +7242,12 @@ window.VIRTUAL_TOOLS = [
     icon: "💧",
     added: "2026-07-25T02:30:00Z",
   },
+  {
+    slug: "css-neon-flicker",
+    name: "CSS Neon Flicker Generator",
+    description: "Create CSS neon sign flicker animation effects. 5 presets, adjustable color/intensity/speed. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🔆",
+    added: "2026-07-25T03:00:00Z",
+  },
 ];
