@@ -7218,4 +7218,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔢",
     added: "2026-07-25T01:00:00Z",
   },
+  {
+    slug: "css-wave-divider",
+    name: "CSS Wave Divider Generator",
+    description: "Create CSS wave/liquid SVG divider sections. 5 wave types, adjustable height/color/flip/animation. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🌊",
+    added: "2026-07-25T01:30:00Z",
+  },
 ];
