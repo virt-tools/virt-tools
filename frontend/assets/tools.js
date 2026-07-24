@@ -7570,4 +7570,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎢",
     added: "2026-07-25T23:00:00Z",
   },
+  {
+    slug: "css-typewriter",
+    name: "CSS Typewriter & Cursor Blink Generator",
+    description: "Create CSS typewriter text and blinking cursor animations. 5 styles, 3 cursor types, adjustable speed/colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "⌨️",
+    added: "2026-07-25T23:30:00Z",
+  },
 ];
