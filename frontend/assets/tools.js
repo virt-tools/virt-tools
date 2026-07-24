@@ -6938,4 +6938,12 @@ window.VIRTUAL_TOOLS = [
     icon: "✅",
     added: "2026-07-24T07:30:00Z",
   },
+  {
+    slug: "css-social-share",
+    name: "CSS Social Share Buttons Generator",
+    description: "Create CSS social media share button bar components. 4 styles, 3 sizes, brand/mono/dark themes. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🔗",
+    added: "2026-07-24T08:00:00Z",
+  },
 ];
