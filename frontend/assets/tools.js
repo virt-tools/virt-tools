@@ -7082,4 +7082,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🪞",
     added: "2026-07-24T16:30:00Z",
   },
+  {
+    slug: "css-animated-border",
+    name: "CSS Animated Border Generator",
+    description: "Create CSS animated gradient border effects. 5 styles, adjustable speed/width/colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "✨",
+    added: "2026-07-24T17:00:00Z",
+  },
 ];
