@@ -7226,4 +7226,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌊",
     added: "2026-07-25T01:30:00Z",
   },
+  {
+    slug: "css-equalizer-bars",
+    name: "CSS Audio Equalizer Bars Generator",
+    description: "Create CSS animated audio equalizer bar visualizations. 4 styles, adjustable bar count/colors/speed. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🎵",
+    added: "2026-07-25T02:00:00Z",
+  },
 ];
