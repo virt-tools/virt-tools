@@ -6954,4 +6954,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🍪",
     added: "2026-07-24T08:30:00Z",
   },
+  {
+    slug: "css-language-switch",
+    name: "CSS Language Switcher Generator",
+    description: "Create CSS language selector / i18n switch components. 4 styles, 3 themes, flags or codes. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🌐",
+    added: "2026-07-24T09:00:00Z",
+  },
 ];
