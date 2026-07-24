@@ -7426,4 +7426,12 @@ window.VIRTUAL_TOOLS = [
     icon: "😌",
     added: "2026-07-25T14:00:00Z",
   },
+  {
+    slug: "css-speedometer",
+    name: "CSS Speedometer Gauge Generator",
+    description: "Create CSS speedometer dashboard gauges. 4 styles, adjustable value/max/size/colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🏃",
+    added: "2026-07-25T14:30:00Z",
+  },
 ];
