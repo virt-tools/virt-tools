@@ -7850,4 +7850,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🍔",
     added: "2026-07-26T02:58:00Z",
   },
+  {
+    slug: "css-pizza",
+    name: "CSS Pizza Generator",
+    description: "Create CSS pizza with toppings (pepperoni, olives, peppers, mushrooms), optional slice lines. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🍕",
+    added: "2026-07-26T03:00:00Z",
+  },
 ];
