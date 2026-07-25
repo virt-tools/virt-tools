@@ -7834,4 +7834,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🍦",
     added: "2026-07-26T02:54:00Z",
   },
+  {
+    slug: "css-donut",
+    name: "CSS Donut Generator",
+    description: "Create CSS donut with frosting, sprinkles, 4 glaze flavors, adjustable size/hole. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🍩",
+    added: "2026-07-26T02:56:00Z",
+  },
 ];
