@@ -7802,4 +7802,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📖",
     added: "2026-07-26T02:46:00Z",
   },
+  {
+    slug: "css-shield",
+    name: "CSS Shield Generator",
+    description: "Create CSS heraldic shield with 4 shapes, 3 charges (cross/star/eagle), adjustable field/border colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🛡️",
+    added: "2026-07-26T02:48:00Z",
+  },
 ];
