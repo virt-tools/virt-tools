@@ -7970,4 +7970,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔥",
     added: "2026-07-26T03:28:00Z",
   },
+  {
+    slug: "css-mermaid",
+    name: "CSS Mermaid Generator",
+    description: "Create CSS mermaid with upper body, flowing hair, scaled tail with fins. 4 tail colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🧜",
+    added: "2026-07-26T03:30:00Z",
+  },
 ];
