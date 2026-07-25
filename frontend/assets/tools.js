@@ -7874,4 +7874,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎂",
     added: "2026-07-26T03:04:00Z",
   },
+  {
+    slug: "css-cocktail",
+    name: "CSS Cocktail Generator",
+    description: "Create CSS cocktail glass (martini/hurricane/highball) with liquid, garnish, straw. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🍹",
+    added: "2026-07-26T03:06:00Z",
+  },
 ];
