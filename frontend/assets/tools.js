@@ -7618,4 +7618,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌀",
     added: "2026-07-26T02:00:00Z",
   },
+  {
+    slug: "css-compass-rose",
+    name: "CSS Compass Rose Generator",
+    description: "Create CSS compass rose / wind rose with cardinal points and rotating needle. 4 styles, adjustable colors/speed. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🧭",
+    added: "2026-07-26T02:02:00Z",
+  },
 ];
