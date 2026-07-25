@@ -7586,4 +7586,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔄",
     added: "2026-07-26T00:00:00Z",
   },
+  {
+    slug: "css-ticker",
+    name: "CSS News Ticker Generator",
+    description: "Create CSS news ticker / scrolling text bar. 4 styles (breaking/simple/boxed/dual), adjustable speed/direction/colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "📰",
+    added: "2026-07-26T00:30:00Z",
+  },
 ];
