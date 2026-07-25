@@ -7642,4 +7642,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🕳️",
     added: "2026-07-26T02:06:00Z",
   },
+  {
+    slug: "css-hologram",
+    name: "CSS Hologram Text Generator",
+    description: "Create CSS holographic text with scan lines, glow, chromatic aberration. 4 presets, adjustable size/speed/color. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🔮",
+    added: "2026-07-26T02:08:00Z",
+  },
 ];
