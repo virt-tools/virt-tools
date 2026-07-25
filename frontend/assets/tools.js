@@ -7826,4 +7826,12 @@ window.VIRTUAL_TOOLS = [
     icon: "☕",
     added: "2026-07-26T02:52:00Z",
   },
+  {
+    slug: "css-ice-cream",
+    name: "CSS Ice Cream Generator",
+    description: "Create CSS ice cream cone with 1-4 scoops, 3 cone styles (waffle/sugar/cup), adjustable flavors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🍦",
+    added: "2026-07-26T02:54:00Z",
+  },
 ];
