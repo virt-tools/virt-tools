@@ -7634,4 +7634,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌌",
     added: "2026-07-26T02:04:00Z",
   },
+  {
+    slug: "css-wormhole",
+    name: "CSS Wormhole/Portal Generator",
+    description: "Create CSS animated wormhole/portal tunnel effects with perspective depth. 4 presets, adjustable rings/speed/colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🕳️",
+    added: "2026-07-26T02:06:00Z",
+  },
 ];
