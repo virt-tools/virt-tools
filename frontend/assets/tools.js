@@ -7602,4 +7602,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌌",
     added: "2026-07-26T01:00:00Z",
   },
+  {
+    slug: "css-spirograph",
+    name: "CSS Spirograph Generator",
+    description: "Create CSS spirograph / geometric rotating pattern animations. 3-24 petals, adjustable colors/speed/size. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🌀",
+    added: "2026-07-26T01:30:00Z",
+  },
 ];
