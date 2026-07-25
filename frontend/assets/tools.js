@@ -7890,4 +7890,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🕯️",
     added: "2026-07-26T03:08:00Z",
   },
+  {
+    slug: "css-flower",
+    name: "CSS Flower Generator",
+    description: "Create CSS flower with 3-16 petals, adjustable petal/center colors, optional stem and leaf. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🌸",
+    added: "2026-07-26T03:10:00Z",
+  },
 ];
