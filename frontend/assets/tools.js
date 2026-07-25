@@ -7930,4 +7930,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🏰",
     added: "2026-07-26T03:18:00Z",
   },
+  {
+    slug: "css-robot",
+    name: "CSS Robot Generator",
+    description: "Create CSS robot with head, glowing eyes, antenna, body, arms. 3 styles. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🤖",
+    added: "2026-07-26T03:20:00Z",
+  },
 ];
