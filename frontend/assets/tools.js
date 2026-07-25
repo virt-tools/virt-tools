@@ -7690,4 +7690,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎞️",
     added: "2026-07-26T02:18:00Z",
   },
+  {
+    slug: "css-postage-stamp",
+    name: "CSS Postage Stamp Generator",
+    description: "Create CSS postage stamp with perforated edges, denomination, country label. 4 styles (classic/vintage/modern/airmail). Copy HTML+CSS.",
+    category: "Design",
+    icon: "📮",
+    added: "2026-07-26T02:20:00Z",
+  },
 ];
