@@ -7778,4 +7778,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎃",
     added: "2026-07-26T02:40:00Z",
   },
+  {
+    slug: "css-fireworks",
+    name: "CSS Fireworks Generator",
+    description: "Create CSS animated fireworks explosion. 4 color schemes, adjustable particles/speed/size. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🎆",
+    added: "2026-07-26T02:42:00Z",
+  },
 ];
