@@ -7882,4 +7882,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🍹",
     added: "2026-07-26T03:06:00Z",
   },
+  {
+    slug: "css-candle",
+    name: "CSS Candle Generator",
+    description: "Create CSS candle with wax, wick, flame, and optional glow flicker animation. Adjustable size/color. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🕯️",
+    added: "2026-07-26T03:08:00Z",
+  },
 ];
