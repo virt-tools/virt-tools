@@ -7738,4 +7738,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔴",
     added: "2026-07-26T02:30:00Z",
   },
+  {
+    slug: "css-envelope",
+    name: "CSS Envelope Generator",
+    description: "Create CSS letter envelope with flap, stamp, 3 styles (open/closed/airmail). Adjustable colors/size. Copy HTML+CSS.",
+    category: "Design",
+    icon: "✉️",
+    added: "2026-07-26T02:32:00Z",
+  },
 ];
