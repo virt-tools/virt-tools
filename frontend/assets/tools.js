@@ -7906,4 +7906,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌲",
     added: "2026-07-26T03:12:00Z",
   },
+  {
+    slug: "css-mountain",
+    name: "CSS Mountain Generator",
+    description: "Create CSS mountain landscape with snow caps, sun, 4 scenes (day/sunset/night/winter). Copy HTML+CSS.",
+    category: "Design",
+    icon: "🏔️",
+    added: "2026-07-26T03:14:00Z",
+  },
 ];
