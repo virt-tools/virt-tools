@@ -7610,4 +7610,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌀",
     added: "2026-07-26T01:30:00Z",
   },
+  {
+    slug: "css-mandala",
+    name: "CSS Mandala Generator",
+    description: "Create CSS mandala / radial symmetric geometric patterns. 3-16 symmetry, 1-5 layers, adjustable colors/speed. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🌀",
+    added: "2026-07-26T02:00:00Z",
+  },
 ];
