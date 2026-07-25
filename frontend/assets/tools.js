@@ -7962,4 +7962,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🦄",
     added: "2026-07-26T03:26:00Z",
   },
+  {
+    slug: "css-phoenix",
+    name: "CSS Phoenix Generator",
+    description: "Create CSS phoenix with body, wings, crest, tail feathers, optional flame glow. 3 poses. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🔥",
+    added: "2026-07-26T03:28:00Z",
+  },
 ];
