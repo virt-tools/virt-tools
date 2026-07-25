@@ -7770,4 +7770,12 @@ window.VIRTUAL_TOOLS = [
     icon: "⛄",
     added: "2026-07-26T02:38:00Z",
   },
+  {
+    slug: "css-jack-o-lantern",
+    name: "CSS Jack-o-Lantern Generator",
+    description: "Create CSS Jack-o-Lantern with 4 face styles, glow color, flicker animation. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🎃",
+    added: "2026-07-26T02:40:00Z",
+  },
 ];
