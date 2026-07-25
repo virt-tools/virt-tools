@@ -7714,4 +7714,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📌",
     added: "2026-07-26T02:24:00Z",
   },
+  {
+    slug: "css-torn-paper",
+    name: "CSS Torn Paper Generator",
+    description: "Create CSS torn/ripped paper edge effect using clip-path. Top/bottom/both edges, adjustable severity. Copy HTML+CSS.",
+    category: "Design",
+    icon: "📄",
+    added: "2026-07-26T02:26:00Z",
+  },
 ];
