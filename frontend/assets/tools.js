@@ -7666,4 +7666,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📺",
     added: "2026-07-26T02:12:00Z",
   },
+  {
+    slug: "css-gameboy",
+    name: "CSS Retro Game Boy Generator",
+    description: "Create CSS retro Game Boy / handheld console frame. 4 styles, customizable colors, blinking screen text. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🎮",
+    added: "2026-07-26T02:14:00Z",
+  },
 ];
