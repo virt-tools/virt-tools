@@ -7994,4 +7994,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🧙",
     added: "2026-07-26T03:34:00Z",
   },
+  {
+    slug: "css-ninja",
+    name: "CSS Ninja Character Generator",
+    description: "Create CSS ninja character with mask, headband, body, sword, optional eye glow. 4 suit colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🥷",
+    added: "2026-07-26T03:36:00Z",
+  },
 ];
