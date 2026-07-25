@@ -7946,4 +7946,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🛸",
     added: "2026-07-26T03:22:00Z",
   },
+  {
+    slug: "css-dragon",
+    name: "CSS Dragon Generator",
+    description: "Create CSS dragon with body, head, wings, horns, tail. 3 types (western/eastern/wyvern). Copy HTML+CSS.",
+    category: "Design",
+    icon: "🐉",
+    added: "2026-07-26T03:24:00Z",
+  },
 ];
