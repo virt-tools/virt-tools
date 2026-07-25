@@ -7722,4 +7722,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📄",
     added: "2026-07-26T02:26:00Z",
   },
+  {
+    slug: "css-notebook-page",
+    name: "CSS Notebook Page Generator",
+    description: "Create CSS lined/grid/dot notebook page with red margin line and 3-hole punch. 4 styles. Copy HTML+CSS.",
+    category: "Design",
+    icon: "📓",
+    added: "2026-07-26T02:28:00Z",
+  },
 ];
