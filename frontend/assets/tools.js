@@ -7986,4 +7986,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🧚",
     added: "2026-07-26T03:32:00Z",
   },
+  {
+    slug: "css-wizard-character",
+    name: "CSS Wizard Character Generator",
+    description: "Create CSS wizard character with pointy hat, robe, staff with glowing orb, optional beard. 4 hat colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🧙",
+    added: "2026-07-26T03:34:00Z",
+  },
 ];
