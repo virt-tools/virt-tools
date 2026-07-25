@@ -7866,4 +7866,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🍣",
     added: "2026-07-26T03:02:00Z",
   },
+  {
+    slug: "css-cake",
+    name: "CSS Cake Generator",
+    description: "Create CSS birthday cake with layers, frosting, candles, and animated flames. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🎂",
+    added: "2026-07-26T03:04:00Z",
+  },
 ];
