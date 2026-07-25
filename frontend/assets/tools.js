@@ -7786,4 +7786,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎆",
     added: "2026-07-26T02:42:00Z",
   },
+  {
+    slug: "css-crystal",
+    name: "CSS Crystal Generator",
+    description: "Create CSS animated crystal/gemstone with facets, glow, rotation. 4 gem types. Copy HTML+CSS.",
+    category: "Design",
+    icon: "💎",
+    added: "2026-07-26T02:44:00Z",
+  },
 ];
