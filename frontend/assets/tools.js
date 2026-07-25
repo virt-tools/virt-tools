@@ -7706,4 +7706,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🪞",
     added: "2026-07-26T02:22:00Z",
   },
+  {
+    slug: "css-sticky-note",
+    name: "CSS Sticky Note Generator",
+    description: "Create CSS sticky note with realistic shadow, push pin, tape, rotation. Adjustable size/color/font. Copy HTML+CSS.",
+    category: "Design",
+    icon: "📌",
+    added: "2026-07-26T02:24:00Z",
+  },
 ];
