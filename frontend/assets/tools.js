@@ -7682,4 +7682,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📸",
     added: "2026-07-26T02:16:00Z",
   },
+  {
+    slug: "css-film-strip",
+    name: "CSS Film Strip Generator",
+    description: "Create CSS vintage film strip with perforations, frames, scroll/flicker animation, sepia/B&W/vintage filters. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🎞️",
+    added: "2026-07-26T02:18:00Z",
+  },
 ];
