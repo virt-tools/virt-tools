@@ -7626,4 +7626,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🧭",
     added: "2026-07-26T02:02:00Z",
   },
+  {
+    slug: "css-galaxy",
+    name: "CSS Galaxy Generator",
+    description: "Create CSS animated galaxy / spiral nebula background. 4 presets, adjustable stars/arms/speed/colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🌌",
+    added: "2026-07-26T02:04:00Z",
+  },
 ];
