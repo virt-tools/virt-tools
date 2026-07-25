@@ -7746,4 +7746,12 @@ window.VIRTUAL_TOOLS = [
     icon: "✉️",
     added: "2026-07-26T02:32:00Z",
   },
+  {
+    slug: "css-trophy",
+    name: "CSS Trophy Generator",
+    description: "Create CSS trophy/cup/medal with engraving, 3 styles, adjustable color/size. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🏆",
+    added: "2026-07-26T02:34:00Z",
+  },
 ];
