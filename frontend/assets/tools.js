@@ -8002,4 +8002,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🥷",
     added: "2026-07-26T03:36:00Z",
   },
+  {
+    slug: "css-knight",
+    name: "CSS Knight Character Generator",
+    description: "Create CSS knight with helmet, visor, plume, armor, shield with emblem, sword. 4 armor colors. Copy HTML+CSS.",
+    category: "Design",
+    icon: "⚔️",
+    added: "2026-07-26T03:38:00Z",
+  },
 ];
