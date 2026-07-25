@@ -7858,4 +7858,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🍕",
     added: "2026-07-26T03:00:00Z",
   },
+  {
+    slug: "css-sushi",
+    name: "CSS Sushi Generator",
+    description: "Create CSS sushi nigiri or maki rolls with adjustable topping color and count. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🍣",
+    added: "2026-07-26T03:02:00Z",
+  },
 ];
