@@ -7762,4 +7762,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎀",
     added: "2026-07-26T02:36:00Z",
   },
+  {
+    slug: "css-snow-globe",
+    name: "CSS Snow Globe Generator",
+    description: "Create CSS animated snow globe with falling snow and 4 scenes. Adjustable dome/base colors, snow count. Copy HTML+CSS.",
+    category: "Design",
+    icon: "⛄",
+    added: "2026-07-26T02:38:00Z",
+  },
 ];
