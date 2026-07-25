@@ -7730,4 +7730,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📓",
     added: "2026-07-26T02:28:00Z",
   },
+  {
+    slug: "css-wax-seal",
+    name: "CSS Wax Seal Generator",
+    description: "Create CSS wax seal stamp with initials, 3 shapes (circle/octagon/star), adjustable color/size/depth. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🔴",
+    added: "2026-07-26T02:30:00Z",
+  },
 ];
