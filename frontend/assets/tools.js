@@ -7954,4 +7954,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🐉",
     added: "2026-07-26T03:24:00Z",
   },
+  {
+    slug: "css-unicorn",
+    name: "CSS Unicorn Generator",
+    description: "Create CSS unicorn with body, golden horn, rainbow mane, tail. Adjustable colors/size. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🦄",
+    added: "2026-07-26T03:26:00Z",
+  },
 ];
