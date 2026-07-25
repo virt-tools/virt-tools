@@ -7914,4 +7914,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🏔️",
     added: "2026-07-26T03:14:00Z",
   },
+  {
+    slug: "css-house",
+    name: "CSS House Generator",
+    description: "Create CSS house with roof, door, windows, chimney, smoke animation. 4 styles. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🏠",
+    added: "2026-07-26T03:16:00Z",
+  },
 ];
