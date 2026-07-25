@@ -7594,4 +7594,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📰",
     added: "2026-07-26T00:30:00Z",
   },
+  {
+    slug: "css-aurora",
+    name: "CSS Aurora Generator",
+    description: "Create CSS aurora borealis / northern lights animated background. 5 presets, adjustable colors/speed/blobs/blur, optional starfield. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🌌",
+    added: "2026-07-26T01:00:00Z",
+  },
 ];
