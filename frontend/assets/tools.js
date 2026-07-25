@@ -7794,4 +7794,12 @@ window.VIRTUAL_TOOLS = [
     icon: "💎",
     added: "2026-07-26T02:44:00Z",
   },
+  {
+    slug: "css-book",
+    name: "CSS Book Cover Generator",
+    description: "Create CSS book cover with spine, title, author, 4 themes (classic/vintage/modern/fantasy). Copy HTML+CSS.",
+    category: "Design",
+    icon: "📖",
+    added: "2026-07-26T02:46:00Z",
+  },
 ];
