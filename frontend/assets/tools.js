@@ -7658,4 +7658,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🟢",
     added: "2026-07-26T02:10:00Z",
   },
+  {
+    slug: "css-crt-screen",
+    name: "CSS CRT Screen Generator",
+    description: "Create CSS retro CRT TV screen effect with scanlines, flicker, screen curvature. 4 presets. Copy HTML+CSS.",
+    category: "Design",
+    icon: "📺",
+    added: "2026-07-26T02:12:00Z",
+  },
 ];
