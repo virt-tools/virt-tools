@@ -7754,4 +7754,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🏆",
     added: "2026-07-26T02:34:00Z",
   },
+  {
+    slug: "css-ribbon-award",
+    name: "CSS Ribbon Award Generator",
+    description: "Create CSS award ribbon/medal with tails, 3 positions (1st/2nd/3rd), adjustable color/size. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🎀",
+    added: "2026-07-26T02:36:00Z",
+  },
 ];
