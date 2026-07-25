@@ -7698,4 +7698,12 @@ window.VIRTUAL_TOOLS = [
     icon: "📮",
     added: "2026-07-26T02:20:00Z",
   },
+  {
+    slug: "css-mirror-text",
+    name: "CSS Mirror/Reflect Text Generator",
+    description: "Create CSS mirrored text with reflection, flip, or water ripple effect. 4 modes, adjustable opacity/distance/size. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🪞",
+    added: "2026-07-26T02:22:00Z",
+  },
 ];
