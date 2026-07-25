@@ -7842,4 +7842,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🍩",
     added: "2026-07-26T02:56:00Z",
   },
+  {
+    slug: "css-burger",
+    name: "CSS Burger Generator",
+    description: "Create CSS burger with customizable layers: bun, lettuce, tomato, cheese, 1-3 patties. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🍔",
+    added: "2026-07-26T02:58:00Z",
+  },
 ];
