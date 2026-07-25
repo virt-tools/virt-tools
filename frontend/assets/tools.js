@@ -7810,4 +7810,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🛡️",
     added: "2026-07-26T02:48:00Z",
   },
+  {
+    slug: "css-crown",
+    name: "CSS Crown Generator",
+    description: "Create CSS royal crown with gems, 3 styles (classic/queen/simple), adjustable color/size/gem count. Copy HTML+CSS.",
+    category: "Design",
+    icon: "👑",
+    added: "2026-07-26T02:50:00Z",
+  },
 ];
