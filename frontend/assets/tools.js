@@ -7818,4 +7818,12 @@ window.VIRTUAL_TOOLS = [
     icon: "👑",
     added: "2026-07-26T02:50:00Z",
   },
+  {
+    slug: "css-coffee-cup",
+    name: "CSS Coffee Cup Generator",
+    description: "Create CSS coffee cup with steam animation, 3 styles (mug/espresso/to-go), adjustable color/size. Copy HTML+CSS.",
+    category: "Design",
+    icon: "☕",
+    added: "2026-07-26T02:52:00Z",
+  },
 ];
