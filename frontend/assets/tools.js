@@ -7978,4 +7978,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🧜",
     added: "2026-07-26T03:30:00Z",
   },
+  {
+    slug: "css-fairy",
+    name: "CSS Fairy Generator",
+    description: "Create CSS fairy with body, 3 wing styles (butterfly/dragonfly/round), wand, optional sparkles. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🧚",
+    added: "2026-07-26T03:32:00Z",
+  },
 ];
