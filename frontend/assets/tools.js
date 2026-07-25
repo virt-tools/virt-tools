@@ -8010,4 +8010,12 @@ window.VIRTUAL_TOOLS = [
     icon: "⚔️",
     added: "2026-07-26T03:38:00Z",
   },
+  {
+    slug: "css-viking",
+    name: "CSS Viking Character Generator",
+    description: "Create CSS viking with horned helmet, beard, shield, axe. 4 helmet colors, adjustable beard/horns. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🪓",
+    added: "2026-07-26T03:40:00Z",
+  },
 ];
