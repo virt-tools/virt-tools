@@ -7674,4 +7674,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🎮",
     added: "2026-07-26T02:14:00Z",
   },
+  {
+    slug: "css-polaroid",
+    name: "CSS Polaroid Photo Frame Generator",
+    description: "Create CSS polaroid photo frame with caption, rotation, tape effects, vintage filters. Copy HTML+CSS.",
+    category: "Design",
+    icon: "📸",
+    added: "2026-07-26T02:16:00Z",
+  },
 ];
