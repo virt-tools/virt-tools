@@ -7922,4 +7922,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🏠",
     added: "2026-07-26T03:16:00Z",
   },
+  {
+    slug: "css-castle",
+    name: "CSS Castle Generator",
+    description: "Create CSS castle with towers, walls, gate, and flags. 3 styles (medieval/fantasy/sand). Copy HTML+CSS.",
+    category: "Design",
+    icon: "🏰",
+    added: "2026-07-26T03:18:00Z",
+  },
 ];
