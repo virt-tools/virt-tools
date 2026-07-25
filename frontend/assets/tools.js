@@ -7898,4 +7898,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🌸",
     added: "2026-07-26T03:10:00Z",
   },
+  {
+    slug: "css-tree",
+    name: "CSS Tree Generator",
+    description: "Create CSS tree (pine/oak/palm/christmas) with adjustable leaf/trunk colors and size. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🌲",
+    added: "2026-07-26T03:12:00Z",
+  },
 ];
