@@ -7650,4 +7650,12 @@ window.VIRTUAL_TOOLS = [
     icon: "🔮",
     added: "2026-07-26T02:08:00Z",
   },
+  {
+    slug: "css-matrix-rain",
+    name: "CSS Matrix Rain Generator",
+    description: "Create CSS Matrix digital rain animation. 4 char sets, adjustable columns/speed/color. Copy HTML+CSS.",
+    category: "Design",
+    icon: "🟢",
+    added: "2026-07-26T02:10:00Z",
+  },
 ];
