@@ -10,7 +10,7 @@ def main():
  registered=set(SLUG_RE.findall((frontend/'assets/tools.js').read_text(encoding='utf-8')))
  if len(tools)!=37 or manifest.get('count')!=37: issues.append(f"expected 37 consolidated tools, found {len(tools)}")
  if len(redirects)!=1047 or manifest.get('legacy_count')!=1047: issues.append(f"expected 1047 legacy redirects, found {len(redirects)}")
- if len(registered)<1195: issues.append(f"expected at least 1195 registered tools after consolidation and approved additions, found {len(registered)}")
+ if len(registered)<1199: issues.append(f"expected at least 1199 registered tools after consolidation and approved additions, found {len(registered)}")
  targets={t['slug'] for t in tools}
  if len(targets)!=37 or not targets<=registered: issues.append('consolidated targets are missing or duplicated')
  if set(redirects.values())!=targets: issues.append('legacy redirects do not cover every consolidated target')
