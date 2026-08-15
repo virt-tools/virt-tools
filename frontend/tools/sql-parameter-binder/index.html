@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>SQL Parameter Binder — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .binder-grid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(280px,.8fr);gap:18px}.controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.warning{border-left:4px solid #d97706;padding:12px 14px;background:color-mix(in srgb,#d97706 12%,transparent);border-radius:6px}.parameter-table{width:100%;border-collapse:collapse}.parameter-table th,.parameter-table td{padding:7px 5px;text-align:left;vertical-align:top}.parameter-table input,.parameter-table select{width:100%;min-width:0}.parameter-table .remove{padding:7px 9px}.output-code{white-space:pre-wrap;overflow-wrap:anywhere;min-height:150px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}.hidden{display:none!important}.status-error{color:#b42318}.status-ok{color:#137333}@media(max-width:760px){.binder-grid{grid-template-columns:1fr}.controls{grid-template-columns:1fr}.parameter-table{display:block;overflow-x:auto}.parameter-table input{min-width:110px}}
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>SQL Parameter Binder</h1>
+      <p>Preview a parameterized query with readable literals inserted locally. Placeholders inside SQL strings, comments, and quoted identifiers are ignored.</p>
+    </div>
+
+    <div class="panel warning" role="note">
+      <strong>Debug preview only.</strong> This output is not safe query execution and is not a substitute for prepared statements. Never execute the generated SQL with untrusted data; let your database driver bind parameters.
+    </div>
+
+    <div class="binder-grid">
+      <section class="panel" aria-labelledby="query-heading">
+        <h2 id="query-heading">Query</h2>
+        <div class="controls">
+          <div class="field"><label for="dialect">SQL dialect</label><select id="dialect"><option value="postgres">PostgreSQL</option><option value="mysql">MySQL / MariaDB</option><option value="sqlite">SQLite</option><option value="sqlserver">SQL Server</option></select></div>
+          <div class="field"><label for="syntax">Placeholder syntax</label><select id="syntax"><option value="auto">Auto-detect</option><option value="question">Positional ?</option><option value="dollar">Positional $1, $2…</option><option value="colon">Named :name</option><option value="at">Named @name</option></select></div>
+        </div>
+        <div class="field">
+          <label for="query">Parameterized SQL</label>
+          <textarea id="query" spellcheck="false" style="min-height:260px" maxlength="100000">SELECT *
+FROM users
+WHERE email = :email
+  AND created_at &gt;= :since
+  AND note = 'literal :ignored'; -- :also_ignored</textarea>
+        </div>
+        <div class="row"><button id="bind" type="button">Build preview</button><button id="example" class="secondary" type="button">Load example</button><button id="clear" class="secondary" type="button">Clear</button></div>
+      </section>
+
+      <section class="panel" aria-labelledby="params-heading">
+        <h2 id="params-heading">Parameters</h2>
+        <div class="row" role="group" aria-label="Parameter input format"><button id="table-tab" type="button">Table</button><button id="json-tab" class="secondary" type="button">JSON</button></div>
+        <div id="table-pane">
+          <div style="overflow-x:auto"><table class="parameter-table"><thead><tr><th scope="col">Name / position</th><th scope="col">Type</th><th scope="col">Value</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody id="rows"></tbody></table></div>
+          <button id="add" class="secondary" type="button">Add parameter</button>
+        </div>
+        <div id="json-pane" class="hidden">
+          <div class="field"><label for="json">JSON array or object</label><textarea id="json" spellcheck="false" style="min-height:230px" maxlength="100000">{"email":"person@example.com","since":{"type":"date","value":"2025-01-01"}}</textarea></div>
+          <p class="note">Use ordinary JSON values, or <code>{"type":"bytes|date|number|string|boolean|null|array", "value":…}</code>.</p>
+        </div>
+      </section>
+    </div>
+
+    <section class="panel" aria-labelledby="result-heading">
+      <div class="row" style="justify-content:space-between"><h2 id="result-heading">Bound preview</h2><button id="copy" class="secondary" type="button">Copy preview</button></div>
+      <div id="output" class="output output-code" role="region" aria-label="Bound SQL preview" tabindex="0"></div>
+      <p id="status" class="note" role="status" aria-live="polite"></p>
+    </section>
+  </main>
+  <script src="/assets/app.js"></script>
+  <script>
+  (function(){
+    "use strict";
+    var rows=document.getElementById("rows"), tablePane=document.getElementById("table-pane"), jsonPane=document.getElementById("json-pane"), output=document.getElementById("output"), status=document.getElementById("status");
+    var useJson=false, MAX_PARAMS=500, MAX_VALUE=10000;
+    function el(tag,attrs,text){var n=document.createElement(tag);Object.keys(attrs||{}).forEach(function(k){n.setAttribute(k,attrs[k]);});if(text!==undefined)n.textContent=text;return n;}
+    function addRow(name,type,value){
+      if(rows.children.length>=MAX_PARAMS){setStatus("Maximum 500 parameters.",true);return;}
+      var tr=el("tr"), tdName=el("td"),tdType=el("td"),tdValue=el("td"),tdRemove=el("td");
+      var nameIn=el("input",{"aria-label":"Parameter name or position","maxlength":"100","value":name||""});
+      var select=el("select",{"aria-label":"Parameter type"});["infer","string","number","boolean","null","date","bytes","array"].forEach(function(t){var o=el("option",{value:t},t);if(t===(type||"infer"))o.selected=true;select.appendChild(o);});
+      var valueIn=el("input",{"aria-label":"Parameter value","maxlength":String(MAX_VALUE),"value":value===undefined?"":String(value)});
+      var remove=el("button",{"type":"button","class":"secondary remove","aria-label":"Remove parameter"},"×");remove.addEventListener("click",function(){tr.remove();});
+      tdName.appendChild(nameIn);tdType.appendChild(select);tdValue.appendChild(valueIn);tdRemove.appendChild(remove);tr.append(tdName,tdType,tdValue,tdRemove);rows.appendChild(tr);
+    }
+    function setMode(json){useJson=json;tablePane.classList.toggle("hidden",json);jsonPane.classList.toggle("hidden",!json);document.getElementById("table-tab").className=json?"secondary":"";document.getElementById("json-tab").className=json?"":"secondary";}
+    function setStatus(msg,error){status.textContent=msg;status.className="note "+(error?"status-error":"status-ok");}
+    function typed(type,value){
+      if(type==="null")return null;if(type==="string"||type==="date"||type==="bytes")return {type:type,value:String(value)};
+      if(type==="number"){if(value.trim()===""||!Number.isFinite(Number(value)))throw new Error("Invalid number: "+value);return {type:type,value:Number(value)};}
+      if(type==="boolean"){var v=String(value).toLowerCase();if(v!=="true"&&v!=="false"&&v!=="1"&&v!=="0")throw new Error("Boolean must be true, false, 1, or 0");return {type:type,value:v==="true"||v==="1"};}
+      if(type==="array"){var a=JSON.parse(value);if(!Array.isArray(a))throw new Error("Array values must be JSON arrays");return {type:type,value:a};}
+      if(value==="null")return null;if(value==="true"||value==="false")return value==="true";if(value.trim()!==""&&Number.isFinite(Number(value)))return Number(value);return String(value);
+    }
+    function parameters(){
+      if(useJson){var raw=document.getElementById("json").value;if(raw.length>100000)throw new Error("Parameter JSON is too large");var parsed=JSON.parse(raw);if(!Array.isArray(parsed)&&(parsed===null||typeof parsed!=="object"))throw new Error("JSON must be an array or object");if(Object.keys(parsed).length>MAX_PARAMS)throw new Error("Maximum 500 parameters");return parsed;}
+      var positional=[],named={};Array.prototype.forEach.call(rows.children,function(tr,i){var inputs=tr.querySelectorAll("input"),type=tr.querySelector("select").value,name=inputs[0].value.trim(),value=typed(type,inputs[1].value);positional.push(value);if(name)named[name]=value;named[String(i+1)]=value;});return {positional:positional,named:named};
+    }
+    function normalize(v){if(v&&typeof v==="object"&&!Array.isArray(v)&&Object.prototype.hasOwnProperty.call(v,"type")){var t=String(v.type).toLowerCase();if(["string","number","boolean","null","date","bytes","array"].indexOf(t)<0)throw new Error("Unsupported type: "+t);return typed(t,t==="null"?"":(typeof v.value==="string"?v.value:JSON.stringify(v.value)));}return v;}
+    function quoteString(s){return "'"+String(s).replace(/'/g,"''").replace(/\u0000/g,"\\0")+"'";}
+    function literal(raw,dialect){
+      var v=normalize(raw);if(v===null)return "NULL";if(Array.isArray(v)){if(v.length>200)throw new Error("Arrays are limited to 200 items");var body=v.map(function(x){return literal(x,dialect);}).join(", ");return dialect==="postgres"?"ARRAY["+body+"]":"("+body+")";}
+      if(typeof v==="boolean")return dialect==="postgres"?(v?"TRUE":"FALSE"):(v?"1":"0");if(typeof v==="number"){if(!Number.isFinite(v))throw new Error("Numbers must be finite");return String(v);}
+      if(v&&v.type){if(v.type==="date"){var q=quoteString(v.value);return dialect==="sqlserver"?"CAST("+q+" AS datetime2)":dialect==="sqlite"?q:"DATE "+q;}if(v.type==="bytes"){var hex=String(v.value).replace(/^0x|\s+/gi,"");if(!/^(?:[0-9a-f]{2})*$/i.test(hex))throw new Error("Bytes must contain an even number of hexadecimal digits");return dialect==="postgres"?quoteString("\\x"+hex)+"::bytea":dialect==="sqlserver"?"0x"+hex:"X'"+hex+"'";}if(v.type==="array")return literal(v.value,dialect);return literal(v.value,dialect);}
+      if(typeof v==="object")throw new Error("Object values need a supported type wrapper");
+      return quoteString(v);
+    }
+    function getValue(params,kind,key,index){
+      if(Array.isArray(params)){var idx=kind==="dollar"?Number(key)-1:index;if(idx<0||idx>=params.length)throw new Error("Missing positional parameter "+(idx+1));return params[idx];}
+      if(params.positional){if(kind==="colon"||kind==="at"){if(!Object.prototype.hasOwnProperty.call(params.named,key))throw new Error("Missing named parameter "+key);return params.named[key];}var pi=kind==="dollar"?Number(key)-1:index;if(pi<0||pi>=params.positional.length)throw new Error("Missing positional parameter "+(pi+1));return params.positional[pi];}
+      var objectKey=(kind==="dollar"||kind==="question")?String(kind==="dollar"?key:index+1):key;if(!Object.prototype.hasOwnProperty.call(params,objectKey))throw new Error("Missing parameter "+objectKey);return params[objectKey];
+    }
+    function bind(sql,params,dialect,syntax){
+      var out="",i=0,pos=0,count=0,state="code",dollarEnd="";
+      function allowed(k){return syntax==="auto"||syntax===k;}
+      while(i<sql.length){var c=sql[i],n=sql[i+1];
+        if(state==="single"){out+=c;i++;if(c==="\\"&&(dialect==="mysql"||dialect==="sqlite")&&i<sql.length){out+=sql[i];i++;}else if(c==="'"&&n==="'"){out+=n;i++;}else if(c==="'")state="code";continue;}
+        if(state==="double"){out+=c;i++;if(c==='"'&&n==='"'){out+=n;i++;}else if(c==='"')state="code";continue;}
+        if(state==="backtick"){out+=c;i++;if(c==="`"&&n==="`"){out+=n;i++;}else if(c==="`")state="code";continue;}
+        if(state==="bracket"){out+=c;i++;if(c==="]"&&n==="]"){out+=n;i++;}else if(c==="]")state="code";continue;}
+        if(state==="line"){out+=c;i++;if(c==="\n")state="code";continue;}
+        if(state==="block"){out+=c;i++;if(c==="*"&&n==="/"){out+=n;i++;state="code";}continue;}
+        if(state==="dollarquote"){if(sql.slice(i,i+dollarEnd.length)===dollarEnd){out+=dollarEnd;i+=dollarEnd.length;state="code";}else{out+=c;i++;}continue;}
+        if(c==="'"){state="single";out+=c;i++;continue;}if(c==='"'){state="double";out+=c;i++;continue;}if(c==="`"){state="backtick";out+=c;i++;continue;}if(c==="["){state="bracket";out+=c;i++;continue;}if(c==="-"&&n==="-"){state="line";out+=c+n;i+=2;continue;}if(c==="#"&&dialect==="mysql"){state="line";out+=c;i++;continue;}if(c==="/"&&n==="*"){state="block";out+=c+n;i+=2;continue;}
+        if(c==="$"&&dialect==="postgres"){var dq=sql.slice(i).match(/^\$[A-Za-z_][A-Za-z0-9_]*\$|^\$\$/);if(dq){dollarEnd=dq[0];state="dollarquote";out+=dollarEnd;i+=dollarEnd.length;continue;}}
+        var kind="",key="",end=i+1;if(c==="?"&&allowed("question")){kind="question";}else if(c==="$"&&allowed("dollar")){var dm=sql.slice(i).match(/^\$(\d+)/);if(dm){kind="dollar";key=dm[1];end=i+dm[0].length;}}else if(c===":"&&n!==":"&&allowed("colon")){var cm=sql.slice(i).match(/^:([A-Za-z_][A-Za-z0-9_]*)/);if(cm){kind="colon";key=cm[1];end=i+cm[0].length;}}else if(c==="@"&&n!=="@"&&allowed("at")){var am=sql.slice(i).match(/^@([A-Za-z_][A-Za-z0-9_]*)/);if(am){kind="at";key=am[1];end=i+am[0].length;}}
+        if(kind){out+=literal(getValue(params,kind,key,pos),dialect);if(kind==="question")pos++;count++;i=end;}else{out+=c;i++;}
+      }
+      if(state==="single"||state==="double"||state==="backtick"||state==="bracket"||state==="block"||state==="dollarquote")throw new Error("The SQL contains an unterminated quote or block comment");return {sql:out,count:count};
+    }
+    function run(){try{var sql=document.getElementById("query").value;if(!sql.trim())throw new Error("Enter a SQL query");var result=bind(sql,parameters(),document.getElementById("dialect").value,document.getElementById("syntax").value);output.textContent=result.sql;setStatus(result.count?"Preview built with "+result.count+" replacement"+(result.count===1?"":"s")+". Debug only—use prepared statements for execution.":"No matching placeholders found.",!result.count);}catch(e){output.textContent="";setStatus(e instanceof SyntaxError?"Invalid parameter JSON: "+e.message:e.message,true);}}
+    document.getElementById("add").addEventListener("click",function(){addRow(String(rows.children.length+1),"infer","");});document.getElementById("table-tab").addEventListener("click",function(){setMode(false);});document.getElementById("json-tab").addEventListener("click",function(){setMode(true);});document.getElementById("bind").addEventListener("click",run);
+    document.getElementById("example").addEventListener("click",function(){document.getElementById("query").value="SELECT * FROM users\nWHERE email = :email\n  AND created_at >= :since\n  AND note = 'literal :ignored'; -- :also_ignored";document.getElementById("syntax").value="colon";document.getElementById("json").value='{"email":"person@example.com","since":{"type":"date","value":"2025-01-01"}}';setMode(true);run();});
+    document.getElementById("clear").addEventListener("click",function(){document.getElementById("query").value="";output.textContent="";setStatus("",false);});document.getElementById("copy").addEventListener("click",function(){if(!output.textContent){setStatus("Build a preview before copying.",true);return;}var b=this,text=output.textContent;function copied(){b.textContent="Copied";setTimeout(function(){b.textContent="Copy preview";},1200);}if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(copied,function(){setStatus("Copy failed. Select the preview and copy it manually.",true);});}else{var ta=el("textarea",{"aria-hidden":"true"});ta.value=text;document.body.appendChild(ta);ta.select();try{document.execCommand("copy");copied();}catch(e){setStatus("Copy failed. Select the preview and copy it manually.",true);}ta.remove();}});
+    addRow("email","string","person@example.com");addRow("since","date","2025-01-01");setMode(true);
+  })();
+  </script>
+</body>
+</html>

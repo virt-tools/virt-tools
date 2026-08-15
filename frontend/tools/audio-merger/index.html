@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Audio Merger — virt.tools</title>
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<header id="site-header"></header>
+<main class="tool-container">
+<h1>Audio Merger</h1>
+<p class="subtitle">Merge multiple audio files into one. Concatenates in order, exports as WAV. 100% client-side.</p>
+<div class="input-section">
+<input type="file" id="files" accept="audio/*" multiple aria-label="Files">
+<button id="merge" class="primary-btn" style="margin-top:8px;" type="button">Merge & Download</button>
+<p id="status" style="margin-top:8px;font-style:italic;"></p>
+<audio id="player" controls style="display:none;margin-top:1em;width:100%;"></audio>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded',()=>{
+document.getElementById('merge').addEventListener('click',async()=>{
+const files=Array.from(document.getElementById('files').files);
+if(files.length<2){alert('Please select at least 2 audio files.');return;}
+const status=document.getElementById('status');
+const player=document.getElementById('player');
+status.textContent='Processing...';
+const ctx=new AudioContext();
+const buffers=[];
+for(const file of files){
+const arr=await file.arrayBuffer();
+const audio=await ctx.decodeAudioData(arr);
+buffers.push(audio);
+}
+const numCh=Math.max(...buffers.map(b=>b.numberOfChannels));
+const sr=buffers[0].sampleRate;
+const totalLen=buffers.reduce((s,b)=>s+b.length,0);
+const offline=new OfflineAudioContext(numCh,totalLen,sr);
+let offset=0;
+for(const buf of buffers){
+const src=offline.createBufferSource();
+src.buffer=buf;
+const gain=offline.createGain();
+src.connect(gain);gain.connect(offline.destination);
+src.start(offset/sr);
+offset+=buf.length;
+}
+const rendered=await offline.startRendering();
+const wav=audioBufferToWav(rendered);
+const blob=new Blob([wav],{type:'audio/wav'});
+const url=URL.createObjectURL(blob);
+player.src=url;player.style.display='block';
+const a=document.createElement('a');a.href=url;a.download='merged.wav';a.click();
+status.textContent='Done! Merged audio downloaded.';
+});
+function audioBufferToWav(buffer){
+const numCh=buffer.numberOfChannels;
+const len=buffer.length*numCh*2+44;
+const arr=new ArrayBuffer(len);
+const view=new DataView(arr);
+const chs=[];for(let i=0;i<numCh;i++)chs.push(buffer.getChannelData(i));
+let off=0;
+const writeStr=s=>{for(let j=0;j<s.length;j++)view.setUint8(off++,s.charCodeAt(j));};
+writeStr('RIFF');view.setUint32(off,36+len-44,true);off+=4;writeStr('WAVE');
+writeStr('fmt ');view.setUint32(off,16,true);off+=4;
+view.setUint16(off,1,true);off+=2;view.setUint16(off,numCh,true);off+=2;
+view.setUint32(off,buffer.sampleRate,true);off+=4;
+view.setUint32(off,buffer.sampleRate*numCh*2,true);off+=4;
+view.setUint16(off,numCh*2,true);off+=2;view.setUint16(off,16,true);off+=2;
+writeStr('data');view.setUint32(off,len-44,true);off+=4;
+for(let i=0;i<buffer.length;i++){
+for(let c=0;c<numCh;c++){
+let s=Math.max(-1,Math.min(1,chs[c][i]||0));
+view.setInt16(off,s<0?s*0x8000:s*0x7FFF,true);off+=2;
+}
+}
+return arr;
+}
+});
+</script>
+</main>
+<script src="/assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,1016 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Dependency Lockfile Auditor — Virtual Tools</title>
+  <meta name="description" content="Inspect supported dependency lockfiles locally without registry lookups.">
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .layout{display:grid;grid-template-columns:minmax(300px,.75fr) minmax(0,1.25fr);gap:14px}
+    .field label{display:block;font-weight:700;margin-bottom:5px}
+    .field textarea,.field input,.field select{width:100%;box-sizing:border-box}
+    textarea{min-height:390px;font:12px/1.5 ui-monospace,monospace}
+    .grid{display:grid;grid-template-columns:2fr repeat(2,1fr);gap:8px}
+    .actions,.metrics{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+    .metric{border:1px solid var(--border);border-radius:8px;padding:8px;min-width:95px}
+    .metric strong{display:block;font-size:1.2rem;overflow-wrap:anywhere}
+    .notice{padding:10px;border-left:4px solid #d69200;background:rgba(214,146,0,.12);background:color-mix(in srgb,#d69200 12%,transparent)}
+    .status{white-space:pre-wrap;min-height:1.4em}
+    .error{color:var(--danger,#c33)}
+    .scroll{overflow:auto;max-height:620px}
+    table{border-collapse:collapse;width:100%;min-width:900px}
+    caption{text-align:left;font-weight:700;padding:7px}
+    th,td{padding:7px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top;white-space:pre-wrap;overflow-wrap:anywhere}
+    .pager{display:flex;align-items:center;gap:9px;margin:9px 0}
+    .muted{opacity:.75}
+    @media(max-width:850px){.layout{grid-template-columns:1fr}.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Dependency Lockfile Auditor</h1>
+      <p>Inspect dependency structure and provenance locally without contacting package registries.</p>
+    </div>
+    <p class="notice"><strong>Structural inspection only:</strong> this tool does not determine vulnerabilities, licenses, package authenticity, freshness, installability, or whether a recorded checksum is correct. Supported inputs: npm package-lock v2/v3, Yarn classic v1, pnpm lockfile 5.4/6/9 subset, and Poetry lock metadata 1.1/2.0/2.1 subset.</p>
+    <div class="layout">
+      <section class="panel" aria-label="Lockfile input">
+        <div class="field">
+          <label for="format">Lockfile format</label>
+          <select id="format">
+            <option value="auto">Auto detect</option>
+            <option value="npm">npm package-lock v2/v3</option>
+            <option value="yarn">Yarn classic v1</option>
+            <option value="pnpm">pnpm lockfile 5.4/6/9</option>
+            <option value="poetry">Poetry lock 1.1/2.0/2.1</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="input">Lockfile text</label>
+          <textarea id="input" spellcheck="false">{
+  "name": "example",
+  "lockfileVersion": 3,
+  "packages": {
+    "": { "dependencies": { "alpha": "^1.0.0" } },
+    "node_modules/alpha": { "version": "1.2.0", "resolved": "https://registry.example/alpha.tgz", "integrity": "sha512-example", "dependencies": { "shared": "^2" } },
+    "node_modules/shared": { "version": "2.1.0", "integrity": "sha512-example" }
+  }
+}</textarea>
+        </div>
+        <p class="muted">Limits: 2 MiB, 50,000 lines, 25,000 package records, 100,000 dependency edges. Credentials in common URL locations are masked before display or export.</p>
+        <div class="actions">
+          <button id="audit" type="button">Audit lockfile</button>
+          <button id="clear" type="button" class="secondary">Clear</button>
+          <button id="json" type="button" class="secondary" disabled>Export JSON</button>
+          <button id="csv" type="button" class="secondary" disabled>Export CSV</button>
+        </div>
+        <p id="status" class="status" role="status" aria-live="polite"></p>
+      </section>
+      <section class="panel" aria-label="Audit results">
+        <div id="metrics" class="metrics"></div>
+        <div class="grid">
+          <div class="field">
+            <label for="search">Filter packages</label>
+            <input id="search" type="search" maxlength="100" placeholder="name, alias, or version">
+          </div>
+          <div class="field">
+            <label for="source">Source</label>
+            <select id="source"><option value="all">All sources</option></select>
+          </div>
+          <div class="field">
+            <label for="scope">Scope</label>
+            <select id="scope">
+              <option value="all">Direct and transitive</option>
+              <option value="direct">Direct only</option>
+              <option value="transitive">Transitive only</option>
+              <option value="unknown">Unknown only</option>
+            </select>
+          </div>
+        </div>
+        <div class="pager">
+          <button id="prev" type="button" class="secondary" disabled>Previous</button>
+          <span id="page" aria-live="polite">Page 0 of 0</span>
+          <button id="next" type="button" class="secondary" disabled>Next</button>
+        </div>
+        <div class="scroll" role="region" aria-label="Audited package records" tabindex="0">
+          <table>
+            <caption>Audited package records</caption>
+            <thead>
+              <tr>
+                <th scope="col">Package</th>
+                <th scope="col">Version</th>
+                <th scope="col">Scope / flags</th>
+                <th scope="col">Source</th>
+                <th scope="col">Integrity</th>
+                <th scope="col">Inbound declarations</th>
+              </tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+        <h2>Duplicate-version families</h2>
+        <div id="duplicates" class="muted">Run an audit.</div>
+        <h2>Highest inbound dependency declarations</h2>
+        <div id="dependents" class="muted">Run an audit.</div>
+      </section>
+    </div>
+  </main>
+  <script src="/assets/app.js"></script>
+  <script>
+  (function(){
+    "use strict";
+
+    var $=function(id){return document.getElementById(id)};
+    var LIMIT={bytes:2097152,lines:50000,packages:25000,edges:100000};
+    var PAGE=200;
+    var report=null;
+    var page=0;
+
+    function el(tag,attributes,text){
+      var node=document.createElement(tag);
+      Object.keys(attributes||{}).forEach(function(key){node.setAttribute(key,attributes[key])});
+      if(text!==undefined)node.textContent=text;
+      return node;
+    }
+
+    function isMap(value){
+      return !!value&&typeof value==="object"&&!Array.isArray(value);
+    }
+
+    function mappingKeys(value,label){
+      if(value===undefined||value===null)return [];
+      if(!isMap(value))throw new Error(label+" must be a mapping.");
+      return Object.keys(value);
+    }
+
+    function optionalString(value,label){
+      if(value===undefined||value===null)return "";
+      if(typeof value!=="string")throw new Error(label+" must be a string.");
+      return value;
+    }
+
+    function unquote(value){
+      var text=String(value===undefined?"":value).trim();
+      if(text.length>=2&&((text[0]==='"'&&text[text.length-1]==='"')||(text[0]==="'"&&text[text.length-1]==="'"))){
+        return text.slice(1,-1);
+      }
+      return text;
+    }
+
+    function maskSecretParameters(value){
+      return value.replace(/([?&#;](?:access[_-]?token|auth(?:orization)?|api[_-]?key|apikey|key|pass(?:word|wd)?|sig(?:nature)?|token|x-amz-credential|x-amz-security-token)=)[^&#;\s]*/ig,"$1***");
+    }
+
+    function safeSource(raw){
+      if(!raw)return "";
+      var source=maskSecretParameters(String(raw).trim());
+      try{
+        var url=new URL(source);
+        if(url.username||url.password){
+          url.username="***";
+          url.password="***";
+        }
+        return maskSecretParameters(url.toString());
+      }catch(error){
+        return maskSecretParameters(source.replace(/:\/\/[^/@\s]+@/g,"://***@"));
+      }
+    }
+
+    function sourceType(source,workspace){
+      var value=String(source||"").toLowerCase();
+      if(workspace||/^(?:workspace|link):/.test(value))return "workspace/link";
+      if(/^file:|^\.\.?[\\/]|^[\\/]/.test(value))return "file/link";
+      if(/^(?:git(?:\+|:)|ssh:)|github|gitlab|\.git(?:#|$)/.test(value))return "git";
+      if(/^https?:/.test(value))return "http";
+      return "registry/unspecified";
+    }
+
+    function packageRecord(name,version,extra){
+      var record={
+        name:name,
+        version:version,
+        alias:"",
+        direct:null,
+        dev:false,
+        optional:false,
+        workspace:false,
+        integrity:false,
+        source:"",
+        sourceType:"registry/unspecified",
+        dependencies:[]
+      };
+      Object.assign(record,extra||{});
+      return record;
+    }
+
+    function canonicalName(name,ecosystem){
+      var normalized=String(name||"").trim().toLowerCase();
+      return ecosystem==="poetry"?normalized.replace(/[-_.]+/g,"-"):normalized;
+    }
+
+    function finishRecord(record,ecosystem,label){
+      if(typeof record.name!=="string"||!record.name.trim())throw new Error(label+" has no package name.");
+      if(typeof record.version!=="string"||!record.version.trim())throw new Error(label+" has no package version.");
+      record.name=record.name.trim();
+      record.version=record.version.trim();
+      record.alias=String(record.alias||"").trim();
+      record.identity=canonicalName(record.name,ecosystem);
+      record.dependencies=Array.from(new Set((record.dependencies||[]).filter(Boolean).map(function(name){return String(name).trim()}).filter(Boolean)));
+      record.source=safeSource(record.source);
+      record.sourceType=sourceType(record.source,record.workspace);
+      record.integrity=Boolean(record.integrity);
+      record.dev=Boolean(record.dev);
+      record.optional=Boolean(record.optional);
+      record.workspace=Boolean(record.workspace);
+      return record;
+    }
+
+    function checkRecordCap(count){
+      if(count>LIMIT.packages)throw new Error("Input exceeds 25,000 package records.");
+    }
+
+    function checkCaps(raw,recordCount){
+      if(new TextEncoder().encode(raw).length>LIMIT.bytes)throw new Error("Input exceeds 2 MiB.");
+      if(raw.split(/\r\n?|\n/).length>LIMIT.lines)throw new Error("Input exceeds 50,000 lines.");
+      if(recordCount!==undefined)checkRecordCap(recordCount);
+    }
+
+    function npm(raw){
+      var root;
+      try{
+        root=JSON.parse(raw);
+      }catch(error){
+        throw new Error("Invalid package-lock JSON: "+error.message);
+      }
+      if(!isMap(root))throw new Error("package-lock root must be an object.");
+      if(root.lockfileVersion!==2&&root.lockfileVersion!==3)throw new Error("Only package-lock lockfileVersion 2 or 3 is supported.");
+      if(!isMap(root.packages))throw new Error("package-lock packages map is required.");
+
+      var paths=Object.keys(root.packages);
+      checkRecordCap(paths.filter(function(path){return path!==""}).length);
+      var base=root.packages[""]||{};
+      if(!isMap(base))throw new Error('package-lock packages[""] must be an object.');
+      var prod=new Set(mappingKeys(base.dependencies,'packages[""].dependencies'));
+      var dev=new Set(mappingKeys(base.devDependencies,'packages[""].devDependencies'));
+      var optional=new Set(mappingKeys(base.optionalDependencies,'packages[""].optionalDependencies'));
+      var direct=new Set(Array.from(prod).concat(Array.from(dev),Array.from(optional)));
+      var workspacePaths=new Map();
+
+      paths.forEach(function(path){
+        if(!path||path.indexOf("node_modules/")>=0)return;
+        var value=root.packages[path];
+        if(isMap(value)&&typeof value.name==="string"&&value.name.trim())workspacePaths.set(path,value.name.trim());
+      });
+
+      var out=[];
+      paths.forEach(function(path){
+        if(!path)return;
+        var value=root.packages[path];
+        if(!isMap(value))throw new Error('package-lock package record "'+path+'" must be an object.');
+        var marker=path.lastIndexOf("node_modules/");
+        var installName=marker>=0?path.slice(marker+13):(typeof value.name==="string"?value.name.trim():path);
+        if(!installName)throw new Error('package-lock package record "'+path+'" has no install name.');
+        var isLink=value.link===true;
+        var resolved=optionalString(value.resolved,'package-lock resolved value for "'+path+'"');
+        if(isLink&&resolved&&workspacePaths.has(resolved))return;
+        var name=value.name===undefined?installName:optionalString(value.name,'package-lock name for "'+path+'"').trim();
+        var version=value.version===undefined&&isLink?"workspace/link":optionalString(value.version,'package-lock version for "'+path+'"');
+        var isWorkspace=marker<0||isLink;
+        var topLevel=path==="node_modules/"+installName;
+        var dependencyNames=mappingKeys(value.dependencies,'dependencies for "'+path+'"')
+          .concat(mappingKeys(value.optionalDependencies,'optionalDependencies for "'+path+'"'));
+        out.push(packageRecord(name,version,{
+          alias:name!==installName?installName:"",
+          direct:direct.has(installName)&&(topLevel||isWorkspace),
+          dev:value.dev===true||dev.has(installName),
+          optional:value.optional===true||optional.has(installName),
+          workspace:isWorkspace,
+          integrity:typeof value.integrity==="string"&&Boolean(value.integrity.trim()),
+          source:resolved||(isWorkspace?path:""),
+          dependencies:dependencyNames
+        }));
+      });
+
+      return {
+        ecosystem:"npm",
+        format:"npm package-lock",
+        version:String(root.lockfileVersion),
+        workspaceCount:workspacePaths.size,
+        packages:out.map(function(record,index){return finishRecord(record,"npm","package-lock record "+(index+1))})
+      };
+    }
+
+    function splitYarnSelectors(value){
+      var selectors=[];
+      var current="";
+      var quote="";
+      var escaped=false;
+      for(var index=0;index<value.length;index++){
+        var character=value[index];
+        if(escaped){
+          current+=character;
+          escaped=false;
+        }else if(character==="\\"){
+          current+=character;
+          escaped=true;
+        }else if(quote){
+          current+=character;
+          if(character===quote)quote="";
+        }else if(character==='"'||character==="'"){
+          current+=character;
+          quote=character;
+        }else if(character===","){
+          if(current.trim())selectors.push(current.trim());
+          current="";
+        }else{
+          current+=character;
+        }
+      }
+      if(quote)throw new Error("Unterminated quote in Yarn selector header.");
+      if(current.trim())selectors.push(current.trim());
+      return selectors;
+    }
+
+    function yarnName(selector){
+      var value=unquote(selector);
+      if(value[0]==="@"){
+        var slash=value.indexOf("/");
+        var scopedAt=slash<0?-1:value.indexOf("@",slash);
+        return scopedAt<0?value:value.slice(0,scopedAt);
+      }
+      var at=value.indexOf("@");
+      return at<0?value:value.slice(0,at);
+    }
+
+    function yarnRange(selector,name){
+      var value=unquote(selector);
+      return value.slice(name.length+1);
+    }
+
+    function yarn(raw){
+      if(!/^# yarn lockfile v1\b/m.test(raw))throw new Error("Only Yarn classic lockfile v1 is supported.");
+      var lines=raw.replace(/\r/g,"").split("\n");
+      var out=[];
+      var current=null;
+      var inDependencies=false;
+
+      lines.forEach(function(line,index){
+        if(!line.trim()||/^\s*#/.test(line))return;
+        if(!/^\s/.test(line)&&/:\s*$/.test(line)){
+          var selectors=splitYarnSelectors(line.slice(0,-1));
+          if(!selectors.length)throw new Error("Empty Yarn selector at line "+(index+1)+".");
+          var name=yarnName(selectors[0]);
+          if(!name||selectors.some(function(selector){return yarnName(selector)!==name})){
+            throw new Error("Yarn selector family is inconsistent at line "+(index+1)+".");
+          }
+          current=packageRecord(name,"");
+          var range=yarnRange(selectors[0],name);
+          if(sourceType(range,false)!=="registry/unspecified")current.source=range;
+          out.push(current);
+          checkRecordCap(out.length);
+          inDependencies=false;
+          return;
+        }
+        if(!current)throw new Error("Unexpected Yarn content at line "+(index+1)+".");
+        var field=line.match(/^\s{2}([A-Za-z][\w-]*)\s*(.*)$/);
+        if(field){
+          inDependencies=field[1]==="dependencies"||field[1]==="optionalDependencies";
+          if(field[1]==="version")current.version=unquote(field[2]);
+          if(field[1]==="resolved"){
+            current.source=unquote(field[2]);
+            if(/#[0-9a-f]{40,128}$/i.test(current.source))current.integrity=true;
+          }
+          if(field[1]==="integrity")current.integrity=Boolean(field[2].trim());
+          return;
+        }
+        if(inDependencies){
+          var dependency=line.match(/^\s{4}("(?:\\.|[^"])*"|'(?:\\.|[^'])*'|[^\s]+)\s+.+$/);
+          if(!dependency)throw new Error("Malformed Yarn dependency at line "+(index+1)+".");
+          current.dependencies.push(unquote(dependency[1]));
+          return;
+        }
+        if(!/^\s{4}/.test(line))throw new Error("Unexpected Yarn content at line "+(index+1)+".");
+      });
+
+      return {
+        ecosystem:"yarn",
+        format:"Yarn classic",
+        version:"1",
+        workspaceCount:0,
+        packages:out.map(function(record,index){return finishRecord(record,"yarn","Yarn record "+(index+1))})
+      };
+    }
+
+    function pnpmKey(raw,lockVersion){
+      var locator=unquote(raw).replace(/^\//,"");
+      var base=locator.split("(")[0];
+      if(/^(?:workspace|link|file):/.test(base)){
+        var localName=base.replace(/^(?:workspace|link|file):/,"").replace(/[\\/]+$/,"").split(/[\\/]/).pop();
+        return {locator:locator,name:localName||base,version:"workspace/link",source:base,workspace:/^(?:workspace|link):/.test(base)};
+      }
+      var name="";
+      var version="";
+      var reference="";
+      if(lockVersion==="5.4"){
+        var parts=base.split("/");
+        if(parts[0]&&parts[0][0]==="@"&&parts.length>=3){
+          name=parts[0]+"/"+parts[1];
+          reference=parts.slice(2).join("/");
+        }else if(parts.length>=2){
+          name=parts[0];
+          reference=parts.slice(1).join("/");
+        }
+        version=reference.split("_")[0];
+      }else{
+        var separator=base[0]==="@"?base.indexOf("@",base.indexOf("/")+1):base.lastIndexOf("@");
+        if(separator>0){
+          name=base.slice(0,separator);
+          version=base.slice(separator+1);
+          reference=locator.slice(separator+1);
+        }
+      }
+      if(!name||!version)throw new Error('Unsupported pnpm package locator "'+locator+'".');
+      return {locator:locator,name:name,version:version,reference:reference,source:"",workspace:false};
+    }
+
+    function inlineYamlField(value,key){
+      var match=String(value||"").match(new RegExp("(?:^|[,{]\\s*)"+key+"\\s*:\\s*([^,}]+)","i"));
+      return match?unquote(match[1]):"";
+    }
+
+    function pnpmReference(value){
+      var reference=unquote(value).trim();
+      if(!reference||reference==="null"||reference==="{}"||reference==="[]")return "";
+      if(reference[0]==="{")reference=inlineYamlField(reference,"version");
+      if(/^(?:workspace|link|file):/.test(reference))return "workspace/link";
+      if(/^npm:/.test(reference)){
+        var aliasAt=reference.lastIndexOf("@");
+        return aliasAt>4?reference.slice(aliasAt+1):"";
+      }
+      return reference;
+    }
+
+    function cleanPnpmReference(value,lockVersion){
+      var reference=pnpmReference(value);
+      return lockVersion==="5.4"?reference.split("_")[0]:reference.split("(")[0];
+    }
+
+    function pnpm(raw){
+      var versionMatch=raw.match(/^lockfileVersion:\s*['"]?([^'"\s]+)['"]?\s*$/m);
+      if(!versionMatch||!["5.4","6.0","6","9.0","9"].includes(versionMatch[1])){
+        throw new Error("Only pnpm lockfileVersion 5.4, 6, or 9 is supported.");
+      }
+      if(/^\s*\t/m.test(raw))throw new Error("Tabbed pnpm YAML indentation is not supported.");
+
+      var lockVersion=versionMatch[1]==="6"?"6.0":versionMatch[1]==="9"?"9.0":versionMatch[1];
+      var lines=raw.replace(/\r/g,"").split("\n");
+      var section="";
+      var importer="";
+      var importerNames=new Set();
+      var directMode="";
+      var currentDirect=null;
+      var directReferences=[];
+      var records=new Map();
+      var current=null;
+      var packageMode="";
+      var resolutionMode=false;
+
+      function addDirect(name,kind,owner,reference){
+        var item={name:unquote(name),kind:kind,importer:owner,reference:pnpmReference(reference),version:cleanPnpmReference(reference,lockVersion)};
+        if(!item.name)throw new Error("Empty pnpm dependency name.");
+        directReferences.push(item);
+        return item;
+      }
+
+      function getRecord(key,lineNumber){
+        var locator=unquote(key).replace(/^\//,"");
+        if(records.has(locator))return records.get(locator);
+        var parsedKey;
+        try{
+          parsedKey=pnpmKey(key,lockVersion);
+        }catch(error){
+          throw new Error(error.message+" (line "+lineNumber+").");
+        }
+        var record=packageRecord(parsedKey.name,parsedKey.version,{
+          locator:parsedKey.locator,
+          lockReference:parsedKey.reference,
+          source:parsedKey.source,
+          workspace:parsedKey.workspace
+        });
+        records.set(locator,record);
+        checkRecordCap(records.size);
+        return record;
+      }
+
+      lines.forEach(function(line,index){
+        var lineNumber=index+1;
+        var top=line.match(/^([A-Za-z][\w-]*):\s*$/);
+        if(top){
+          section=top[1];
+          importer="";
+          directMode="";
+          currentDirect=null;
+          current=null;
+          packageMode="";
+          resolutionMode=false;
+          return;
+        }
+
+        if(section==="importers"){
+          var importerMatch=line.match(/^ {2}(\S.*):\s*$/);
+          if(importerMatch){
+            importer=unquote(importerMatch[1]);
+            importerNames.add(importer);
+            directMode="";
+            currentDirect=null;
+            return;
+          }
+          var importerHeading=line.match(/^\s{4}(dependencies|devDependencies|optionalDependencies):\s*$/);
+          if(importerHeading){
+            directMode=importerHeading[1];
+            currentDirect=null;
+            return;
+          }
+          if(/^\s{4}\S/.test(line)){
+            directMode="";
+            currentDirect=null;
+          }
+          if(directMode){
+            var importerDependency=line.match(/^\s{6}("(?:\\.|[^"])*"|'(?:\\.|[^'])*'|[^\s:#][^:]*):\s*(.*)$/);
+            if(importerDependency){
+              currentDirect=addDirect(importerDependency[1],directMode,importer,importerDependency[2]);
+              return;
+            }
+            var importerVersion=line.match(/^\s{8}version:\s*(.+)$/);
+            if(importerVersion&&currentDirect){
+              currentDirect.reference=pnpmReference(importerVersion[1]);
+              currentDirect.version=cleanPnpmReference(importerVersion[1],lockVersion);
+            }
+          }
+          return;
+        }
+
+        if(section==="dependencies"||section==="devDependencies"||section==="optionalDependencies"){
+          var rootDependency=line.match(/^\s{2}("(?:\\.|[^"])*"|'(?:\\.|[^'])*'|[^\s:#][^:]*):\s*(.*)$/);
+          if(rootDependency){
+            currentDirect=addDirect(rootDependency[1],section,".",rootDependency[2]);
+            return;
+          }
+          var rootVersion=line.match(/^\s{4}version:\s*(.+)$/);
+          if(rootVersion&&currentDirect){
+            currentDirect.reference=pnpmReference(rootVersion[1]);
+            currentDirect.version=cleanPnpmReference(rootVersion[1],lockVersion);
+          }
+          return;
+        }
+
+        if(section!=="packages"&&section!=="snapshots")return;
+        var keyMatch=line.match(/^ {2}(\S.*):\s*$/);
+        if(keyMatch){
+          current=getRecord(keyMatch[1],lineNumber);
+          packageMode="";
+          resolutionMode=false;
+          return;
+        }
+        if(!current)return;
+
+        var nestedHeading=line.match(/^\s{4}(dependencies|optionalDependencies|resolution):\s*$/);
+        if(nestedHeading){
+          packageMode=nestedHeading[1];
+          resolutionMode=packageMode==="resolution";
+          return;
+        }
+        if(/^\s{4}\S/.test(line)){
+          packageMode="";
+          resolutionMode=false;
+        }
+
+        if(packageMode==="dependencies"||packageMode==="optionalDependencies"){
+          var packageDependency=line.match(/^\s{6}("(?:\\.|[^"])*"|'(?:\\.|[^'])*'|[^\s:#][^:]*):/);
+          if(packageDependency)current.dependencies.push(unquote(packageDependency[1]));
+          return;
+        }
+
+        var resolution=line.match(/^\s{4}resolution:\s*(.+)$/);
+        if(resolution){
+          var inlineIntegrity=inlineYamlField(resolution[1],"integrity");
+          var inlineTarball=inlineYamlField(resolution[1],"tarball");
+          var inlineRepo=inlineYamlField(resolution[1],"repo");
+          if(inlineIntegrity)current.integrity=true;
+          if(inlineTarball||inlineRepo)current.source=inlineTarball||inlineRepo;
+          return;
+        }
+        if(resolutionMode){
+          var resolutionField=line.match(/^\s{6}(integrity|tarball|repo):\s*(.+)$/);
+          if(resolutionField){
+            if(resolutionField[1]==="integrity")current.integrity=Boolean(unquote(resolutionField[2]));
+            else current.source=unquote(resolutionField[2]);
+          }
+          return;
+        }
+        var standaloneIntegrity=line.match(/^\s{4}integrity:\s*(.+)$/);
+        if(standaloneIntegrity)current.integrity=Boolean(unquote(standaloneIntegrity[1]));
+        var source=line.match(/^\s{4}(?:tarball|repo):\s*(.+)$/);
+        if(source)current.source=unquote(source[1]);
+        var flag=line.match(/^\s{4}(dev|optional):\s*(true|false)\s*$/);
+        if(flag)current[flag[1]]=flag[2]==="true";
+      });
+
+      var out=Array.from(records.values());
+      var packagesByName=new Map();
+      out.forEach(function(record){
+        var key=canonicalName(record.name,"pnpm");
+        var values=packagesByName.get(key)||[];
+        values.push(record);
+        packagesByName.set(key,values);
+      });
+      var hasDirectInformation=directReferences.length>0;
+      out.forEach(function(record){
+        var key=canonicalName(record.name,"pnpm");
+        var candidates=packagesByName.get(key)||[];
+        var references=directReferences.filter(function(item){return canonicalName(item.name,"pnpm")===key});
+        var exact=references.filter(function(item){return item.reference&&item.reference===record.lockReference});
+        var versionMatches=references.filter(function(item){return item.version&&item.version===record.version});
+        var sameVersion=candidates.filter(function(item){return item.version===record.version});
+        if(!exact.length&&sameVersion.length===1)exact=versionMatches;
+        var unresolved=references.filter(function(item){return !item.version});
+        var located=references.some(function(item){return candidates.some(function(candidate){return item.reference&&item.reference===candidate.lockReference})});
+        var ambiguous=versionMatches.length>0&&sameVersion.length>1&&exact.length===0&&!located;
+        record.direct=hasDirectInformation?(exact.length>0||(unresolved.length>0&&candidates.length===1)?true:(unresolved.length>0||ambiguous?null:false)):null;
+        var applicable=exact.length?exact:(unresolved.length&&candidates.length===1?unresolved:[]);
+        if(applicable.some(function(item){return item.kind==="devDependencies"}))record.dev=true;
+        if(applicable.some(function(item){return item.kind==="optionalDependencies"}))record.optional=true;
+      });
+
+      return {
+        ecosystem:"pnpm",
+        format:"pnpm lock",
+        version:lockVersion,
+        workspaceCount:Array.from(importerNames).filter(function(name){return name!=="."}).length,
+        packages:out.map(function(record,index){return finishRecord(record,"pnpm","pnpm record "+(index+1))})
+      };
+    }
+
+    function tomlValue(value){
+      var text=String(value||"").trim();
+      if(text==="true")return true;
+      if(text==="false")return false;
+      return unquote(text);
+    }
+
+    function tomlKey(value){
+      return unquote(value);
+    }
+
+    function poetryMetadataHashes(raw){
+      var result=new Map();
+      var start=raw.search(/^\[metadata\.files\]\s*$/m);
+      if(start<0)return result;
+      var lines=raw.slice(start).split(/\r?\n/).slice(1);
+      var current="";
+      lines.some(function(line){
+        if(/^\[[^\]]+\]\s*$/.test(line))return true;
+        var entry=line.match(/^("[^"]+"|'[^']+'|[A-Za-z0-9_.-]+)\s*=\s*(.*)$/);
+        if(entry){
+          current=canonicalName(tomlKey(entry[1]),"poetry");
+          if(/\bhash\s*=\s*["'][^"']+["']/.test(entry[2]))result.set(current,true);
+          else if(!result.has(current))result.set(current,false);
+        }else if(current&&/\bhash\s*=\s*["'][^"']+["']/.test(line)){
+          result.set(current,true);
+        }
+        return false;
+      });
+      return result;
+    }
+
+    function poetry(raw){
+      var versionMatch=raw.match(/^lock-version\s*=\s*["']([^"']+)["']\s*$/m);
+      if(!versionMatch||!["1.1","2.0","2.1"].includes(versionMatch[1])){
+        throw new Error("Only Poetry lock metadata lock-version 1.1, 2.0, or 2.1 is supported.");
+      }
+      var metadataStart=raw.search(/^\[metadata(?:\.|\])/m);
+      var packageArea=metadataStart>=0?raw.slice(0,metadataStart):raw;
+      var blocks=packageArea.split(/^\[\[package\]\]\s*$/m).slice(1);
+      checkRecordCap(blocks.length);
+      var metadataHashes=poetryMetadataHashes(raw);
+
+      var out=blocks.map(function(block,blockIndex){
+        var fields={};
+        var dependencies=[];
+        var source="";
+        var sourceKind="";
+        var integrity=false;
+        var section="";
+        var filesOpen=false;
+
+        block.split(/\r?\n/).forEach(function(line){
+          var sectionMatch=line.match(/^\[package(?:\.([^\]]+))\]\s*$/);
+          if(sectionMatch){
+            section=sectionMatch[1]||"";
+            filesOpen=false;
+            return;
+          }
+          var field=line.match(/^([\w-]+)\s*=\s*(.+)$/);
+          if(field){
+            if(!section){
+              fields[field[1]]=tomlValue(field[2]);
+              if(field[1]==="files"){
+                filesOpen=!/\]\s*$/.test(field[2]);
+                if(/\bhash\s*=\s*["'][^"']+["']/.test(field[2]))integrity=true;
+              }else{
+                filesOpen=false;
+              }
+            }
+            if(section==="dependencies")dependencies.push(field[1]);
+            if(section==="source"){
+              if(field[1]==="type")sourceKind=String(tomlValue(field[2]));
+              if(field[1]==="url"||field[1]==="reference"){
+                source+=(source?"#":"")+tomlValue(field[2]);
+              }
+            }
+          }else if(filesOpen){
+            if(/\bhash\s*=\s*["'][^"']+["']/.test(line))integrity=true;
+            if(/\]\s*,?\s*$/.test(line))filesOpen=false;
+          }
+        });
+
+        var name=typeof fields.name==="string"?fields.name:"";
+        if(metadataHashes.get(canonicalName(name,"poetry"))===true)integrity=true;
+        var localSource=/^(?:directory|file)$/i.test(sourceKind);
+        return packageRecord(name,typeof fields.version==="string"?fields.version:"",{
+          direct:null,
+          dev:fields.category==="dev"||String(fields.groups||"").indexOf("dev")>=0,
+          optional:fields.optional===true,
+          workspace:false,
+          integrity:integrity,
+          source:source||(localSource?"file:"+String(fields.name||""):""),
+          dependencies:dependencies,
+          blockIndex:blockIndex
+        });
+      });
+
+      return {
+        ecosystem:"poetry",
+        format:"Poetry lock",
+        version:versionMatch[1],
+        workspaceCount:0,
+        packages:out.map(function(record,index){return finishRecord(record,"poetry","Poetry package block "+(index+1))})
+      };
+    }
+
+    function parse(raw,mode){
+      checkCaps(raw);
+      var trimmed=raw.trim();
+      if(!trimmed)throw new Error("Paste a lockfile.");
+      if(mode==="auto"){
+        if(trimmed[0]==="{")mode="npm";
+        else if(/^# yarn lockfile v1\b/m.test(raw))mode="yarn";
+        else if(/^lockfileVersion:/m.test(raw))mode="pnpm";
+        else if(/^\[\[package\]\]/m.test(raw)||/^lock-version\s*=/m.test(raw))mode="poetry";
+        else throw new Error("Could not detect a supported lockfile format.");
+      }
+      var parsed=mode==="npm"?npm(raw):mode==="yarn"?yarn(raw):mode==="pnpm"?pnpm(raw):poetry(raw);
+      checkCaps(raw,parsed.packages.length);
+      return parsed;
+    }
+
+    function analyze(parsed){
+      var edgeCount=parsed.packages.reduce(function(total,record){return total+record.dependencies.length},0);
+      if(edgeCount>LIMIT.edges)throw new Error("Input exceeds 100,000 dependency edges.");
+
+      var versions=new Map();
+      var dependentCounts=new Map();
+      var displayNames=new Map();
+      parsed.packages.forEach(function(record){
+        var family=versions.get(record.identity)||new Set();
+        family.add(record.version);
+        versions.set(record.identity,family);
+        if(!displayNames.has(record.identity))displayNames.set(record.identity,record.name);
+        record.dependencies.forEach(function(dependency){
+          var key=canonicalName(dependency,parsed.ecosystem);
+          dependentCounts.set(key,(dependentCounts.get(key)||0)+1);
+          if(!displayNames.has(key))displayNames.set(key,dependency);
+        });
+      });
+      parsed.packages.forEach(function(record){record.dependentCount=dependentCounts.get(record.identity)||0});
+
+      var duplicateFamilies=Array.from(versions).filter(function(item){return item[1].size>1}).map(function(item){
+        return {
+          identity:item[0],
+          name:displayNames.get(item[0])||item[0],
+          versions:Array.from(item[1]).sort(function(a,b){return a.localeCompare(b,undefined,{numeric:true})})
+        };
+      }).sort(function(a,b){return b.versions.length-a.versions.length||a.name.localeCompare(b.name)});
+
+      var concentration=Array.from(dependentCounts).map(function(item){
+        return {identity:item[0],name:displayNames.get(item[0])||item[0],count:item[1]};
+      }).sort(function(a,b){return b.count-a.count||a.name.localeCompare(b.name)});
+
+      var missingIntegrity=parsed.packages.filter(function(record){return !record.integrity}).length;
+      var sources={};
+      parsed.packages.forEach(function(record){sources[record.sourceType]=(sources[record.sourceType]||0)+1});
+
+      return {
+        version:1,
+        format:parsed.format,
+        lockfileVersion:parsed.version,
+        networkLookups:false,
+        limitations:[
+          "Structural lockfile inspection only.",
+          "No vulnerability, license, authenticity, freshness, installability, or checksum verification."
+        ],
+        packageCount:parsed.packages.length,
+        workspaceCount:parsed.workspaceCount||0,
+        dependencyEdges:edgeCount,
+        missingIntegrity:missingIntegrity,
+        sourceCounts:sources,
+        duplicateVersionFamilies:duplicateFamilies,
+        dependencyConcentration:concentration,
+        packages:parsed.packages
+      };
+    }
+
+    function metric(label,value){
+      var container=el("div",{class:"metric"});
+      container.append(el("span",{},label),el("strong",{},String(value)));
+      return container;
+    }
+
+    function render(){
+      var metrics=$("metrics");
+      metrics.replaceChildren(
+        metric("Format",report.format+" "+report.lockfileVersion),
+        metric("Packages",report.packageCount),
+        metric("Edges",report.dependencyEdges),
+        metric("Workspaces",report.workspaceCount),
+        metric("Version families",report.duplicateVersionFamilies.length),
+        metric("No integrity",report.missingIntegrity)
+      );
+
+      var sourceSelect=$("source");
+      sourceSelect.replaceChildren(el("option",{value:"all"},"All sources"));
+      Object.keys(report.sourceCounts).sort().forEach(function(source){
+        sourceSelect.appendChild(el("option",{value:source},source+" ("+report.sourceCounts[source]+")"));
+      });
+
+      if(report.duplicateVersionFamilies.length){
+        var shown=report.duplicateVersionFamilies.slice(0,100).map(function(family){
+          return family.name+": "+family.versions.join(", ");
+        }).join(" · ");
+        var remaining=report.duplicateVersionFamilies.length-100;
+        $("duplicates").textContent=shown+(remaining>0?" · … "+remaining+" more families not shown":"");
+      }else{
+        $("duplicates").textContent="No package identity has multiple locked versions.";
+      }
+
+      $("dependents").textContent=report.dependencyConcentration.slice(0,20).map(function(item){
+        return item.name+" ("+item.count+")";
+      }).join(" · ")||"No inbound dependency declarations were recorded.";
+      filter();
+    }
+
+    function filtered(){
+      var query=$("search").value.trim().toLowerCase();
+      var source=$("source").value;
+      var scope=$("scope").value;
+      return report.packages.filter(function(record){
+        var searchable=(record.name+" "+record.alias+" "+record.version).toLowerCase();
+        return (!query||searchable.includes(query))&&
+          (source==="all"||record.sourceType===source)&&
+          (scope==="all"||
+            (scope==="direct"&&record.direct===true)||
+            (scope==="transitive"&&record.direct===false)||
+            (scope==="unknown"&&record.direct===null));
+      });
+    }
+
+    function filter(){
+      if(!report)return;
+      var list=filtered();
+      var pages=Math.ceil(list.length/PAGE);
+      page=Math.max(0,Math.min(page,Math.max(0,pages-1)));
+      var body=$("rows");
+      body.replaceChildren();
+      list.slice(page*PAGE,(page+1)*PAGE).forEach(function(record){
+        var row=el("tr");
+        var flags=[record.direct===true?"direct":record.direct===false?"transitive":"scope unknown"];
+        if(record.dev)flags.push("dev");
+        if(record.optional)flags.push("optional");
+        if(record.workspace)flags.push("workspace/link");
+        var packageName=record.alias?record.alias+" → "+record.name:record.name;
+        [
+          packageName,
+          record.version,
+          flags.join(" · "),
+          record.sourceType+(record.source?"\n"+record.source:""),
+          record.integrity?"recorded (not verified)":"not recorded",
+          String(record.dependentCount)
+        ].forEach(function(value){row.appendChild(el("td",{},value))});
+        body.appendChild(row);
+      });
+      $("page").textContent="Page "+(pages?page+1:0)+" of "+pages+" · "+list.length+" packages";
+      $("prev").disabled=page===0;
+      $("next").disabled=page>=pages-1;
+    }
+
+    function resetResults(){
+      report=null;
+      page=0;
+      $("metrics").replaceChildren();
+      $("source").replaceChildren(el("option",{value:"all"},"All sources"));
+      $("rows").replaceChildren();
+      $("duplicates").textContent="Run an audit.";
+      $("dependents").textContent="Run an audit.";
+      $("page").textContent="Page 0 of 0";
+      $("prev").disabled=true;
+      $("next").disabled=true;
+      $("json").disabled=true;
+      $("csv").disabled=true;
+    }
+
+    function run(){
+      var status=$("status");
+      try{
+        var nextReport=analyze(parse($("input").value,$("format").value));
+        report=nextReport;
+        page=0;
+        render();
+        $("json").disabled=false;
+        $("csv").disabled=false;
+        status.className="status";
+        status.textContent="Audited locally: "+report.packageCount+" package records. No registry or network lookup was performed.";
+      }catch(error){
+        resetResults();
+        status.className="status error";
+        status.textContent=error&&error.message?error.message:String(error);
+      }
+    }
+
+    function download(name,type,data){
+      var url=URL.createObjectURL(new Blob([data],{type:type}));
+      var anchor=el("a",{href:url,download:name});
+      anchor.hidden=true;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      setTimeout(function(){URL.revokeObjectURL(url)},1000);
+    }
+
+    function csvCell(value){
+      var text=String(value===undefined||value===null?"":value);
+      if(/^[=+\-@\t\r]/.test(text))text="'"+text;
+      return /[",\n\r]/.test(text)?'"'+text.replace(/"/g,'""')+'"':text;
+    }
+
+    $("audit").addEventListener("click",run);
+    $("clear").addEventListener("click",function(){
+      $("input").value="";
+      $("search").value="";
+      $("scope").value="all";
+      resetResults();
+      $("status").className="status";
+      $("status").textContent="";
+      $("input").focus();
+    });
+    ["search","source","scope"].forEach(function(id){
+      $(id).addEventListener("input",function(){page=0;filter()});
+      $(id).addEventListener("change",function(){page=0;filter()});
+    });
+    $("prev").addEventListener("click",function(){if(page){page--;filter()}});
+    $("next").addEventListener("click",function(){page++;filter()});
+    $("json").addEventListener("click",function(){
+      if(report)download("dependency-lockfile-audit.json","application/json",JSON.stringify(report,null,2));
+    });
+    $("csv").addEventListener("click",function(){
+      if(!report)return;
+      var rows=[["name","alias","identity","version","direct","dev","optional","workspace","source_type","source","integrity_recorded","inbound_declaration_count"]];
+      report.packages.forEach(function(record){
+        rows.push([
+          record.name,
+          record.alias,
+          record.identity,
+          record.version,
+          record.direct,
+          record.dev,
+          record.optional,
+          record.workspace,
+          record.sourceType,
+          record.source,
+          record.integrity,
+          record.dependentCount
+        ]);
+      });
+      download("dependency-lockfile-packages.csv","text/csv;charset=utf-8",rows.map(function(row){
+        return row.map(csvCell).join(",");
+      }).join("\r\n"));
+    });
+
+    run();
+  })();
+  </script>
+</body>
+</html>

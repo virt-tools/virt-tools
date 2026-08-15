@@ -7,7 +7,8 @@
   <title>Amortization Schedule Calculator — Virtual Tools</title>
   <link rel="stylesheet" href="/assets/style.css">
   <style>
-    input.num { font-family: ui-monospace, monospace; font-size: 18px; width: 130px; }
+    input.num { font-family: ui-monospace, monospace; font-size: 18px; width: min(160px, 100%); }
+    input.num:focus-visible, .seg button:focus-visible { outline: 3px solid var(--accent,#ffd54a); outline-offset: 2px; }
     .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 8px; }
     .summary .stat { padding: 8px 10px; border: 1px solid var(--border,#444); border-radius: 6px; }
     .summary .stat-value { display:block; font-size: 17px; font-weight: 700; font-family: ui-monospace, monospace; word-break: break-all; }
@@ -18,9 +19,17 @@
     .table-wrap { max-height: 420px; overflow: auto; margin-top: 10px; border: 1px solid var(--border,#444); border-radius: 6px; }
     table.base-table { width: 100%; border-collapse: collapse; }
     table.base-table th, table.base-table td { padding: 5px 10px; text-align: right; white-space: nowrap; }
-    table.base-table th { position: sticky; top: 0; background: var(--bg,#222); opacity: .95; font-weight: 600; }
-    table.base-table tbody tr:nth-child(odd) td { background: rgba(127,127,127,0.06); }
-    table.base-table td.k { font-weight: 700; }
+    table.base-table thead th { position: sticky; top: 0; z-index: 1; background: var(--bg,#222); opacity: .95; font-weight: 600; }
+    table.base-table tbody tr:nth-child(odd) > * { background: rgba(127,127,127,0.06); }
+    table.base-table tbody th.k { font-weight: 700; }
+    .table-wrap:focus-visible { outline: 3px solid var(--accent,#ffd54a); outline-offset: 2px; }
+    @media (max-width: 560px) {
+      .panel .row > div { width: 100%; }
+      input.num { box-sizing: border-box; width: 100%; }
+      .seg { display: flex; }
+      .seg button { flex: 1; min-height: 44px; }
+      table.base-table th, table.base-table td { padding: 7px 9px; }
+    }
   </style>
 </head>
 <body>
@@ -48,25 +57,26 @@
         </div>
         <div>
           <label>View</label><br>
-          <span class="seg" id="view">
-            <button data-v="month" class="on">Monthly</button>
-            <button data-v="year">Yearly</button>
+          <span class="seg" id="view" role="group" aria-label="Schedule view">
+            <button data-v="month" class="on" type="button" aria-pressed="true">Monthly</button>
+            <button data-v="year" type="button" aria-pressed="false">Yearly</button>
           </span>
         </div>
       </div>
 
-      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+      <p class="note" id="err" role="alert" aria-live="assertive" hidden style="color:var(--bad);"></p>
 
       <div class="spacer"></div>
       <label>Summary</label>
-      <div class="summary" id="summary"></div>
-      <p class="note" id="note"></p>
+      <div class="summary" id="summary" aria-live="polite"></div>
+      <p class="note" id="note" aria-live="polite"></p>
 
       <div class="spacer"></div>
       <label id="schemelabel">Monthly schedule</label>
-      <div class="table-wrap">
+      <div class="table-wrap" tabindex="0" aria-label="Scrollable amortization schedule">
         <table class="base-table" id="table">
-          <thead><tr><th>#</th><th>Payment</th><th>Interest</th><th>Principal</th><th>Balance</th></tr></thead>
+          <caption class="sr-only">Loan amortization schedule</caption>
+          <thead><tr><th scope="col">Period</th><th scope="col">Payment</th><th scope="col">Interest</th><th scope="col">Principal</th><th scope="col">Balance</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
@@ -116,7 +126,9 @@
       if (n <= 0) return NaN;
       if (rate === 0) return P / n;
       var i = rate / 100 / 12;
-      return P * i / (1 - Math.pow(1 + i, -n));
+      // log1p/expm1 avoids cancellation for small non-zero rates.
+      var denominator = -Math.expm1(-n * Math.log1p(i));
+      return P * i / denominator;
     }
 
     function buildRows(P, rate, years) {
@@ -127,10 +139,17 @@
       var bal = P;
       for (var m = 1; m <= n; m++) {
         var interest = bal * i;
-        var principal = M - interest;
-        bal -= principal;
-        if (m === n && Math.abs(bal) < 1e-6 * Math.max(1, Math.abs(P))) bal = 0;
-        rows.push({ m: m, pay: M, int: interest, prin: principal, bal: bal });
+        var payment = M;
+        var principal = payment - interest;
+        if (m === n) {
+          // Eliminate floating-point residue while preserving an exact payoff.
+          principal = bal;
+          payment = principal + interest;
+          bal = 0;
+        } else {
+          bal -= principal;
+        }
+        rows.push({ m: m, pay: payment, int: interest, prin: principal, bal: bal });
       }
       return rows;
     }
@@ -153,24 +172,35 @@
       if (P <= 0) { showErr("Principal must be greater than 0."); return; }
       if (rate === null) { showErr("Enter a valid annual interest rate."); return; }
       if (rate < 0) { showErr("Annual rate must be at least 0."); return; }
+      if (rate > 10000) { showErr("Annual rate must be 10,000% or less."); return; }
       if (years === null) { showErr("Enter a valid term in years."); return; }
       if (years <= 0) { showErr("Term must be greater than 0 years."); return; }
       if (Math.round(years * 12) > 1200) { showErr("Term is too long (max 100 years)."); return; }
 
+      var paymentCount = Math.round(years * 12);
+      if (paymentCount < 1) { showErr("Term must be at least one month."); return; }
+
       var rows = buildRows(P, rate, years);
       var n = rows.length;
       var M = monthlyPayment(P, rate, years);
-      var totalPaid = M * n;
-      var totalInterest = totalPaid - P;
+      if (!isFinite(M) || rows.some(function (r) {
+        return !isFinite(r.pay) || !isFinite(r.int) || !isFinite(r.prin) || !isFinite(r.bal);
+      })) { showErr("These values are too large to calculate reliably. Reduce the principal, rate, or term."); return; }
+      var totalPaid = rows.reduce(function (sum, r) { return sum + r.pay; }, 0);
+      var totalInterest = rows.reduce(function (sum, r) { return sum + r.int; }, 0);
+      if (!isFinite(totalPaid) || !isFinite(totalInterest)) {
+        showErr("These values are too large to total reliably. Reduce the principal, rate, or term."); return;
+      }
 
       stat(summaryEl, money(M), "Monthly payment");
       stat(summaryEl, String(n), "Number of payments");
       stat(summaryEl, money(totalPaid), "Total paid");
       stat(summaryEl, money(totalInterest), "Total interest");
 
-      noteEl.textContent = "A " + money(P) + " loan at " + (rate === Math.round(rate) ? rate : rate) +
-        "% APR over " + years + " years costs " + money(M) + "/month; you pay " +
-        money(totalInterest) + " in interest (" + money(totalPaid) + " total).";
+      noteEl.textContent = "A " + money(P) + " loan at " + rate +
+        "% APR over " + n + " monthly payments costs " + money(M) + "/month; you pay " +
+        money(totalInterest) + " in interest (" + money(totalPaid) + " total)." +
+        (Math.abs(years * 12 - n) > 1e-9 ? " The entered term was rounded to the nearest whole month." : "");
 
       if (view === "month") {
         schemeLabel.textContent = "Monthly schedule";
@@ -178,7 +208,7 @@
           var r = rows[a];
           var row = document.createElement("tr");
           var c;
-          c = document.createElement("td"); c.className = "k"; c.textContent = String(r.m); row.appendChild(c);
+          c = document.createElement("th"); c.scope = "row"; c.className = "k"; c.textContent = String(r.m); row.appendChild(c);
           c = document.createElement("td"); c.textContent = money(r.pay); row.appendChild(c);
           c = document.createElement("td"); c.textContent = money(r.int); row.appendChild(c);
           c = document.createElement("td"); c.textContent = money(r.prin); row.appendChild(c);
@@ -195,7 +225,7 @@
           for (var b = lo; b < hi; b++) { sp += rows[b].prin; si += rows[b].int; sb = rows[b].bal; }
           var yr = document.createElement("tr");
           var c2;
-          c2 = document.createElement("td"); c2.className = "k"; c2.textContent = String(y); yr.appendChild(c2);
+          c2 = document.createElement("th"); c2.scope = "row"; c2.className = "k"; c2.textContent = String(y); yr.appendChild(c2);
           c2 = document.createElement("td"); c2.textContent = money(sp + si); yr.appendChild(c2);
           c2 = document.createElement("td"); c2.textContent = money(si); yr.appendChild(c2);
           c2 = document.createElement("td"); c2.textContent = money(sp); yr.appendChild(c2);
@@ -210,7 +240,11 @@
 
     function setView(v) {
       view = v;
-      viewEl.querySelectorAll("button").forEach(function (b) { b.classList.toggle("on", b.dataset.v === v); });
+      viewEl.querySelectorAll("button").forEach(function (b) {
+        var selected = b.dataset.v === v;
+        b.classList.toggle("on", selected);
+        b.setAttribute("aria-pressed", String(selected));
+      });
       compute();
     }
     viewEl.querySelectorAll("button").forEach(function (b) {

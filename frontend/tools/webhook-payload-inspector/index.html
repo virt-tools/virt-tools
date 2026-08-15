@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Webhook Payload Inspector — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1rem; }
+    .wide { grid-column:1/-1; }
+    .result-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:1rem; }
+    .output { min-height:4rem; white-space:pre-wrap; overflow-wrap:anywhere; }
+    .banner { padding:.8rem 1rem; border:1px solid var(--border); border-radius:.55rem; background:var(--surface); }
+    .banner.good { border-color:var(--good); color:var(--good); }
+    .banner.bad { border-color:var(--bad); color:var(--bad); }
+    .warning { border-left:4px solid #c88400; padding:.65rem .8rem; background:color-mix(in srgb,#c88400 10%,transparent); }
+    textarea { resize:vertical; }
+    code { overflow-wrap:anywhere; }
+    @media (max-width:720px) { .grid,.result-grid { grid-template-columns:1fr; } .wide { grid-column:auto; } }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Webhook Payload Inspector</h1>
+      <p>Parse a webhook, check timestamp freshness, verify an HMAC signature, and generate a replay snippet. Everything stays in this browser.</p>
+    </div>
+
+    <div class="panel">
+      <p class="warning"><strong>Secret safety:</strong> use a test signing secret when possible. This page makes no network requests and does not store inputs, but secrets remain visible to browser extensions and anyone with access to this tab.</p>
+      <div class="grid">
+        <div class="field">
+          <label for="method">HTTP method</label>
+          <select id="method"><option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option></select>
+        </div>
+        <div class="field">
+          <label for="url">Replay URL</label>
+          <input id="url" type="url" maxlength="2048" value="https://example.com/webhooks" spellcheck="false">
+        </div>
+        <div class="field wide">
+          <label for="headers">Headers <span class="muted">(one Name: value per line; max 100)</span></label>
+          <textarea id="headers" rows="5" maxlength="32768" spellcheck="false" placeholder="Content-Type: application/json&#10;X-Signature: sha256=…&#10;X-Timestamp: 1710000000"></textarea>
+        </div>
+        <div class="field wide">
+          <label for="payload">Raw payload <span class="muted">(maximum 1 MiB)</span></label>
+          <textarea id="payload" rows="10" spellcheck="false" placeholder='{"event":"invoice.paid","id":"evt_123"}'></textarea>
+        </div>
+        <div class="field">
+          <label for="format">Parse as</label>
+          <select id="format"><option value="auto">Auto-detect</option><option value="json">JSON</option><option value="form">Form URL encoded</option><option value="text">Plain text</option></select>
+        </div>
+        <div class="field">
+          <label for="tolerance">Freshness tolerance (seconds)</label>
+          <input id="tolerance" type="number" min="0" max="604800" step="1" value="300">
+        </div>
+      </div>
+      <div class="spacer"></div>
+      <h2>Signature verification</h2>
+      <div class="grid">
+        <div class="field">
+          <label for="algorithm">HMAC algorithm</label>
+          <select id="algorithm"><option value="SHA-256">SHA-256</option><option value="SHA-1">SHA-1 (legacy)</option><option value="SHA-512">SHA-512</option></select>
+        </div>
+        <div class="field">
+          <label for="encoding">Signature encoding</label>
+          <select id="encoding"><option value="hex">Hexadecimal</option><option value="base64">Base64</option><option value="base64url">Base64 URL-safe</option></select>
+        </div>
+        <div class="field">
+          <label for="signature">Received signature</label>
+          <input id="signature" type="text" maxlength="2048" autocomplete="off" spellcheck="false" placeholder="sha256=… or v1=…">
+        </div>
+        <div class="field">
+          <label for="secret">Signing secret</label>
+          <input id="secret" type="password" maxlength="8192" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="field">
+          <label for="timestamp">Timestamp <span class="muted">(Unix seconds or ISO 8601)</span></label>
+          <input id="timestamp" type="text" maxlength="128" spellcheck="false" placeholder="Auto-detect from headers/payload">
+        </div>
+        <div class="field">
+          <label for="signed">Signed content</label>
+          <select id="signed"><option value="payload">Raw payload</option><option value="dot">timestamp.raw payload</option><option value="concat">timestamp + raw payload</option></select>
+        </div>
+      </div>
+      <div class="spacer"></div>
+      <div class="row">
+        <button id="inspect" type="button">Inspect &amp; verify</button>
+        <button id="clear-secret" class="secondary" type="button">Clear secret</button>
+        <span id="status" class="note" role="status" aria-live="polite"></span>
+      </div>
+      <div id="error" class="note" role="alert" style="color:var(--bad)"></div>
+    </div>
+
+    <div class="panel" aria-labelledby="results-heading">
+      <h2 id="results-heading">Inspection results</h2>
+      <div id="verdict" class="banner" role="status" aria-live="polite">Enter a payload, then inspect it.</div>
+      <div class="spacer"></div>
+      <div class="result-grid">
+        <div><h3>Parsed payload</h3><div id="parsed" class="output" tabindex="0">—</div></div>
+        <div><h3>Request summary</h3><div id="summary" class="output" tabindex="0">—</div></div>
+      </div>
+      <div class="spacer"></div>
+      <label for="replay">Replay cURL</label>
+      <textarea id="replay" rows="7" readonly spellcheck="false"></textarea>
+      <div class="spacer"></div>
+      <label for="fetch-code">Replay Fetch snippet</label>
+      <textarea id="fetch-code" rows="9" readonly spellcheck="false"></textarea>
+      <div class="spacer"></div>
+      <div class="row"><button id="copy-curl" class="secondary" type="button">Copy cURL</button><button id="copy-fetch" class="secondary" type="button">Copy Fetch</button></div>
+      <p class="note">Replay code is generated only; this tool never sends the request. Review headers and remove production credentials before sharing or running it.</p>
+    </div>
+  </main>
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    "use strict";
+    var MAX_PAYLOAD = 1048576;
+    var $ = function (id) { return document.getElementById(id); };
+    var els = { method:$('method'), url:$('url'), headers:$('headers'), payload:$('payload'), format:$('format'), tolerance:$('tolerance'), algorithm:$('algorithm'), encoding:$('encoding'), signature:$('signature'), secret:$('secret'), timestamp:$('timestamp'), signed:$('signed'), error:$('error'), status:$('status'), verdict:$('verdict'), parsed:$('parsed'), summary:$('summary'), replay:$('replay'), fetch:$('fetch-code') };
+
+    function parseHeaders(raw) {
+      var out = {}, lines = raw ? raw.split(/\r?\n/) : [];
+      if (lines.length > 100) throw new Error('Headers are limited to 100 lines.');
+      lines.forEach(function (line, i) {
+        if (!line.trim()) return;
+        var p = line.indexOf(':');
+        if (p < 1) throw new Error('Header line ' + (i + 1) + ' must use Name: value.');
+        var name = line.slice(0,p).trim(), value = line.slice(p+1).trim();
+        if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(name)) throw new Error('Header line ' + (i + 1) + ' has an invalid name.');
+        if (/\r|\n/.test(value)) throw new Error('Header values cannot contain line breaks.');
+        out[name] = value;
+      });
+      return out;
+    }
+    function headerValue(headers, names) {
+      var keys = Object.keys(headers);
+      for (var n=0;n<names.length;n++) for (var i=0;i<keys.length;i++) if (keys[i].toLowerCase() === names[n]) return headers[keys[i]];
+      return '';
+    }
+    function parsePayload(raw, format, contentType) {
+      var chosen = format;
+      if (chosen === 'auto') {
+        if (/json/i.test(contentType) || /^[\s]*[\[{]/.test(raw)) chosen='json';
+        else if (/x-www-form-urlencoded/i.test(contentType) || (/^[^=\s]+=[^\n]*(&[^=\s]+=[^\n]*)*$/.test(raw) && raw.length)) chosen='form';
+        else chosen='text';
+      }
+      if (chosen === 'json') return { type:'JSON', value:JSON.parse(raw) };
+      if (chosen === 'form') {
+        var params = new URLSearchParams(raw), obj={};
+        params.forEach(function(v,k){ if (Object.prototype.hasOwnProperty.call(obj,k)) obj[k]=Array.isArray(obj[k])?obj[k].concat(v):[obj[k],v]; else obj[k]=v; });
+        return { type:'form data', value:obj };
+      }
+      return { type:'plain text', value:raw };
+    }
+    function timestampInfo(input, parsed) {
+      var candidate = input;
+      if (!candidate && parsed && parsed.value && typeof parsed.value === 'object') candidate = parsed.value.timestamp || parsed.value.created || parsed.value.ts || '';
+      if (!candidate) return null;
+      var numeric = Number(candidate), ms;
+      if (String(candidate).trim() !== '' && isFinite(numeric)) ms = numeric > 1e12 ? numeric : numeric * 1000;
+      else ms = Date.parse(candidate);
+      if (!isFinite(ms)) throw new Error('Timestamp must be Unix seconds, Unix milliseconds, or an ISO 8601 date.');
+      return { raw:String(candidate), ms:ms, age:(Date.now()-ms)/1000 };
+    }
+    function cleanSignature(value) {
+      var s=value.trim();
+      if (s.indexOf(',') >= 0) {
+        var pieces=s.split(',').map(function(x){return x.trim();});
+        s=pieces.find(function(x){return /^(?:v1|sha(?:1|256|512))=/i.test(x);}) || pieces[0];
+      }
+      return s.replace(/^(?:v1|sha(?:1|256|512))=/i,'').trim();
+    }
+    function encode(bytes, kind) {
+      if (kind === 'hex') return Array.from(bytes).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
+      var bin=''; bytes.forEach(function(b){bin+=String.fromCharCode(b);});
+      var b64=btoa(bin); return kind === 'base64url' ? b64.replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'') : b64;
+    }
+    function timingSafeEqual(a,b) {
+      var len=Math.max(a.length,b.length), diff=a.length^b.length;
+      for(var i=0;i<len;i++) diff |= (a.charCodeAt(i%Math.max(1,a.length))||0) ^ (b.charCodeAt(i%Math.max(1,b.length))||0);
+      return diff===0;
+    }
+    function shellQuote(s) { return "'" + String(s).replace(/'/g,"'\\''") + "'"; }
+    function buildReplay(headers, payload) {
+      var curl=['curl','-X',els.method.value,shellQuote(els.url.value)];
+      Object.keys(headers).forEach(function(k){curl.push('-H',shellQuote(k+': '+headers[k]));});
+      if (payload) curl.push('--data-raw',shellQuote(payload));
+      els.replay.value=curl.join(' \\\n  ');
+      els.fetch.value='fetch(' + JSON.stringify(els.url.value) + ', {\n  method: ' + JSON.stringify(els.method.value) + ',\n  headers: ' + JSON.stringify(headers,null,2).replace(/^/gm,'  ').trimStart() + (payload ? ',\n  body: ' + JSON.stringify(payload) : '') + '\n});';
+    }
+    async function inspect() {
+      els.error.textContent=''; els.status.textContent=''; els.verdict.className='banner';
+      try {
+        var raw=els.payload.value;
+        if (new Blob([raw]).size > MAX_PAYLOAD) throw new Error('Payload exceeds the 1 MiB local processing limit.');
+        if (!raw) throw new Error('Enter a raw payload to inspect.');
+        var url;
+        try { url=new URL(els.url.value); } catch (_) { throw new Error('Enter a valid replay URL.'); }
+        if (!/^https?:$/.test(url.protocol)) throw new Error('Replay URL must use HTTP or HTTPS.');
+        var headers=parseHeaders(els.headers.value);
+        var contentType=headerValue(headers,['content-type']);
+        var parsed=parsePayload(raw,els.format.value,contentType);
+        var headerSig=headerValue(headers,['x-signature','x-hub-signature-256','x-hub-signature','webhook-signature','stripe-signature']);
+        var signatureInput=els.signature.value || headerSig;
+        var signatureTimeMatch=headerSig.match(/(?:^|,)\s*t=([^,]+)/i);
+        var autoTime=els.timestamp.value || headerValue(headers,['x-timestamp','webhook-timestamp','stripe-timestamp']) || (signatureTimeMatch ? signatureTimeMatch[1] : '');
+        var ti=timestampInfo(autoTime,parsed);
+        var tolerance=Number(els.tolerance.value);
+        if (!Number.isInteger(tolerance)||tolerance<0||tolerance>604800) throw new Error('Freshness tolerance must be a whole number from 0 to 604800.');
+        els.parsed.textContent=parsed.type==='plain text' ? parsed.value : JSON.stringify(parsed.value,null,2);
+        var lines=['Method: '+els.method.value,'URL: '+url.href,'Payload: '+new Blob([raw]).size.toLocaleString()+' bytes','Detected format: '+parsed.type,'Headers: '+Object.keys(headers).length];
+        if (ti) lines.push('Timestamp: '+new Date(ti.ms).toISOString(),'Age: '+Math.round(ti.age)+' seconds','Fresh: '+(Math.abs(ti.age)<=tolerance?'yes':'NO'));
+        else lines.push('Timestamp: not found');
+        els.summary.textContent=lines.join('\n'); buildReplay(headers,raw);
+        var sig=cleanSignature(signatureInput), secret=els.secret.value;
+        if (sig || secret) {
+          if (!sig || !secret) throw new Error('Both a received signature and signing secret are required to verify.');
+          if (!window.crypto || !crypto.subtle) throw new Error('Web Crypto is unavailable; use a secure browser context.');
+          if (els.signed.value!=='payload' && !ti) throw new Error('The selected signed content requires a timestamp.');
+          var message=raw;
+          if(els.signed.value==='dot') message=ti.raw+'.'+raw;
+          if(els.signed.value==='concat') message=ti.raw+raw;
+          var enc=new TextEncoder(), key=await crypto.subtle.importKey('raw',enc.encode(secret),{name:'HMAC',hash:els.algorithm.value},false,['sign']);
+          var digest=new Uint8Array(await crypto.subtle.sign('HMAC',key,enc.encode(message)));
+          var expected=encode(digest,els.encoding.value);
+          var valid=els.encoding.value==='hex' ? timingSafeEqual(expected.toLowerCase(),sig.toLowerCase()) : timingSafeEqual(expected,sig);
+          var fresh=!ti || Math.abs(ti.age)<=tolerance;
+          els.verdict.textContent=valid ? (fresh?'✓ Signature is valid'+(ti?' and timestamp is fresh.':'.'):'⚠ Signature is valid, but timestamp is stale or too far in the future.') : '✕ Signature does not match.';
+          els.verdict.className='banner '+(valid&&fresh?'good':'bad');
+        } else {
+          var freshness=ti ? (Math.abs(ti.age)<=tolerance?' Timestamp is fresh.':' Timestamp is outside the tolerance.') : '';
+          els.verdict.textContent='Payload parsed successfully. Signature was not checked.'+freshness;
+          els.verdict.className='banner '+(ti&&Math.abs(ti.age)>tolerance?'bad':'good');
+        }
+        els.status.textContent='Inspection complete';
+      } catch(e) { els.error.textContent=e instanceof SyntaxError?'Payload is not valid JSON: '+e.message:e.message; els.verdict.textContent='Inspection could not be completed.'; els.verdict.className='banner bad'; }
+    }
+    async function copy(id,label) { var value=$(id).value; if(!value)return; try { await navigator.clipboard.writeText(value); els.status.textContent=label+' copied'; } catch(_) { els.status.textContent='Clipboard access was denied'; } }
+    $('inspect').addEventListener('click',inspect);
+    $('clear-secret').addEventListener('click',function(){els.secret.value='';els.status.textContent='Secret cleared';els.secret.focus();});
+    $('copy-curl').addEventListener('click',function(){copy('replay','cURL');});
+    $('copy-fetch').addEventListener('click',function(){copy('fetch-code','Fetch snippet');});
+  })();
+  </script>
+</body>
+</html>

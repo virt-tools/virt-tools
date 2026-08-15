@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Audio Distortion Effect — virt.tools</title>
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<header id="site-header"></header>
+<main class="tool-container">
+<h1>Audio Distortion Effect</h1>
+<p class="subtitle">Add distortion/overdrive to audio with adjustable drive and tone. Export as WAV. 100% client-side via Web Audio API.</p>
+<div class="input-section">
+<input type="file" id="file" accept="audio/*" aria-label="File">
+<button id="process" class="primary-btn" type="button">Process & Download</button>
+</div>
+<div class="controls">
+<label>Drive: <input type="range" id="drive" min="0" max="100" value="50"><span id="dv">50</span></label>
+<label>Tone: <input type="range" id="tone" min="0" max="1" value="0.5" step="0.05"><span id="tv">0.5</span></label>
+<label>Mix: <input type="range" id="mix" min="0" max="1" value="1" step="0.05"><span id="mv">1.0</span></label>
+</div>
+<div id="status"></div>
+<script>
+document.addEventListener('DOMContentLoaded',()=>{
+['drive','tone','mix'].forEach(id=>{
+const el=document.getElementById(id);
+const sp=document.getElementById(id[0]+'v');
+el.addEventListener('input',()=>sp.textContent=el.value);
+});
+document.getElementById('process').addEventListener('click',async()=>{
+const file=document.getElementById('file').files[0];
+if(!file){alert('Select a file first.');return;}
+const st=document.getElementById('status');st.textContent='Processing...';
+const audioCtx=new AudioContext();
+const buf=await audioCtx.decodeAudioData(await file.arrayBuffer());
+const sr=buf.sampleRate;
+const ch=buf.getChannelData(0);
+const drive=parseFloat(document.getElementById('drive').value)/100;
+const tone=parseFloat(document.getElementById('tone').value);
+const mix=parseFloat(document.getElementById('mix').value);
+const k=drive*50+1;
+const out=new Float32Array(ch.length);
+for(let i=0;i<ch.length;i++){
+const x=ch[i]*k;
+const wet=Math.tanh(x);
+out[i]=ch[i]*(1-mix)+wet*mix;
+}
+const off=new OfflineAudioContext(1,out.length,sr);
+const nb=off.createBuffer(1,out.length,sr);
+nb.copyToChannel(out,0);
+const src=off.createBufferSource();src.buffer=nb;
+const filter=off.createBiquadFilter();
+filter.type='lowpass';filter.frequency.value=200+tone*8000;
+src.connect(filter);filter.connect(off.destination);src.start();
+const rendered=await off.startRendering();
+const wav=audioBufferToWav(rendered);
+const blob=new Blob([wav],{type:'audio/wav'});
+const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='distortion.wav';a.click();
+st.textContent='Done! Downloaded as distortion.wav';
+audioCtx.close();
+});
+function audioBufferToWav(b){
+const n=b.length,sr=b.sampleRate;
+const data=b.getChannelData(0);
+const buf=new ArrayBuffer(44+n*2);
+const v=new DataView(buf);
+const ws=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i));};
+ws(0,'RIFF');v.setUint32(4,36+n*2,true);ws(8,'WAVE');ws(12,'fmt ');
+v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);
+v.setUint32(24,sr,true);v.setUint32(28,sr*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);
+ws(36,'data');v.setUint32(40,n*2,true);
+for(let i=0;i<n;i++)v.setInt16(44+i*2,Math.max(-32768,Math.min(32767,data[i]*32767)),true);
+return buf;
+}
+});
+</script>
+</main>
+<script src="/assets/app.js"></script>
+</body>
+</html>

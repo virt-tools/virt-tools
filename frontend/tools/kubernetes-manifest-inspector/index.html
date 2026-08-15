@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Kubernetes Manifest Inspector — Virtual Tools</title>
+  <meta name="description" content="Inspect bounded Kubernetes YAML or JSON manifests locally.">
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .layout{display:grid;grid-template-columns:minmax(300px,.8fr) minmax(0,1.2fr);gap:14px}
+    .field label{display:block;font-weight:700;margin-bottom:6px}
+    textarea{width:100%;box-sizing:border-box;min-height:520px;font:12px/1.5 ui-monospace,monospace}
+    .actions,.metrics{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+    .metric{border:1px solid var(--border);border-radius:8px;padding:9px;min-width:105px}
+    .metric strong{display:block;font-size:1.2rem}
+    .notice{padding:10px;border-left:4px solid #d69200;background:color-mix(in srgb,#d69200 12%,transparent)}
+    .status{white-space:pre-wrap;min-height:1.5em}
+    .error,.high{color:var(--danger,#c33)}
+    .medium{color:#b06d00}.info{color:var(--text-muted)}
+    .scroll{overflow:auto;max-height:520px}
+    table{border-collapse:collapse;width:100%;min-width:780px}
+    th,td{padding:7px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top}
+    td{white-space:pre-line}
+    .finding{padding:8px;border-bottom:1px solid var(--border)}
+    .finding strong{display:inline-block;min-width:70px}
+    .empty{opacity:.72}.tabs{display:flex;gap:6px;margin:10px 0}
+    .tabs button[aria-selected="true"]{outline:2px solid var(--accent);outline-offset:1px}
+    .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+    @media(max-width:850px){.layout{grid-template-columns:1fr}textarea{min-height:330px}}
+  </style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+  <div class="tool-header">
+    <a class="back" href="/">← All tools</a>
+    <h1>Kubernetes Manifest Inspector</h1>
+    <p>Summarize resources and cross-check common local references without uploading manifests.</p>
+  </div>
+  <p class="notice"><strong>Advisory subset inspector:</strong> this is not API-server dry-run, OpenAPI schema validation, policy admission, Helm/Kustomize rendering, or a security audit. YAML support is limited to indentation-based mappings/sequences and ordinary scalars; anchors, aliases, tags, directives, merge keys, block scalars, and flow-style YAML are rejected. Only selected built-in fields and common direct references are inspected. Secret payload values are never rendered or exported.</p>
+  <div class="layout">
+    <section class="panel">
+      <div class="field">
+        <label for="input">Kubernetes YAML or JSON</label>
+        <textarea id="input" spellcheck="false">apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: demo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+        - name: app
+          image: nginx:1.27
+          ports:
+            - containerPort: 80
+          resources:
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: demo
+spec:
+  selector:
+    app: web
+  ports:
+    - port: 80
+      targetPort: 80</textarea>
+      </div>
+      <p>Limits: 1 MiB UTF-8, 100 documents, 20,000 nonblank lines, nesting depth 30, and 100,000 parsed values.</p>
+      <div class="actions">
+        <button id="inspect" type="button">Inspect manifests</button>
+        <button id="clear" type="button" class="secondary">Clear</button>
+        <button id="json" type="button" class="secondary" disabled>Export report JSON</button>
+      </div>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+    </section>
+    <section class="panel">
+      <div id="metrics" class="metrics"></div>
+      <div class="tabs" role="tablist" aria-label="Inspection results">
+        <button id="summary-tab" type="button" role="tab" tabindex="0" aria-selected="true" aria-controls="summary-panel">Resources</button>
+        <button id="finding-tab" type="button" role="tab" tabindex="-1" aria-selected="false" aria-controls="finding-panel">Findings</button>
+      </div>
+      <div id="summary-panel" role="tabpanel" aria-labelledby="summary-tab">
+        <div class="scroll">
+          <table>
+            <caption class="sr-only">Inspected Kubernetes resources</caption>
+            <thead><tr><th>Identity</th><th>Summary</th><th>Pods / containers</th><th>References</th></tr></thead>
+            <tbody id="resources"></tbody>
+          </table>
+        </div>
+      </div>
+      <div id="finding-panel" role="tabpanel" aria-labelledby="finding-tab" hidden><div id="findings"></div></div>
+    </section>
+  </div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+(function(){
+  "use strict";
+  var $=function(id){return document.getElementById(id)};
+  var LIMIT={bytes:1048576,docs:100,lines:20000,depth:30,values:100000};
+  var report=null,valueCount=0;
+
+  function node(tag,attrs,text){
+    var element=document.createElement(tag);
+    Object.keys(attrs||{}).forEach(function(key){element.setAttribute(key,attrs[key])});
+    if(text!==undefined)element.textContent=text;
+    return element;
+  }
+  function scalar(source,line){
+    var s=source.trim();
+    if(!s)return null;
+    if(s[0]==="["||s[0]==="{")throw new Error("Flow-style YAML is unsupported at line "+line+"; use block indentation or JSON.");
+    if(/^(&|\*|!|<<\s*:)/.test(s))throw new Error("YAML anchors, aliases, tags, and merge keys are unsupported at line "+line+".");
+    if(s==="null"||s==="~")return null;
+    if(s==="true")return true;
+    if(s==="false")return false;
+    if(/^[-+]?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(s)){
+      var number=Number(s);
+      if(Number.isFinite(number))return number;
+    }
+    if(s[0]==='"'){
+      try{
+        var quoted=JSON.parse(s);
+        if(typeof quoted!=="string")throw new Error();
+        return quoted;
+      }catch(error){throw new Error("Invalid double-quoted scalar at line "+line+".")}
+    }
+    if(s[0]==="'"){
+      if(s[s.length-1]!=="'")throw new Error("Unclosed single-quoted scalar at line "+line+".");
+      return s.slice(1,-1).replace(/''/g,"'");
+    }
+    if(/[\[\]{}]/.test(s))throw new Error("Flow-style YAML is unsupported at line "+line+".");
+    return s;
+  }
+  function escapedAt(s,index){
+    var count=0;
+    for(var i=index-1;i>=0&&s[i]==="\\";i--)count++;
+    return count%2===1;
+  }
+  function uncomment(s){
+    var single=false,dbl=false;
+    for(var i=0;i<s.length;i++){
+      var c=s[i];
+      if(c==="'"&&!dbl){
+        if(single&&s[i+1]==="'"){i++;continue}
+        single=!single;
+      }else if(c==='"'&&!single&&!escapedAt(s,i))dbl=!dbl;
+      else if(c==="#"&&!single&&!dbl&&(i===0||/\s/.test(s[i-1])))return s.slice(0,i);
+    }
+    return s;
+  }
+  function keyValue(s,line){
+    var single=false,dbl=false;
+    for(var i=0;i<s.length;i++){
+      var c=s[i];
+      if(c==="'"&&!dbl){
+        if(single&&s[i+1]==="'"){i++;continue}
+        single=!single;
+      }else if(c==='"'&&!single&&!escapedAt(s,i))dbl=!dbl;
+      else if(c===":"&&!single&&!dbl&&(i===s.length-1||/\s/.test(s[i+1]))){
+        var key=s.slice(0,i).trim();
+        if(!key||!/^[-A-Za-z0-9_.$/]+$/.test(key))throw new Error("Unsupported or empty mapping key at line "+line+".");
+        return [key,s.slice(i+1).trim()];
+      }
+    }
+    return null;
+  }
+  function yamlDocument(text,offset){
+    var raw=text.split("\n"),tokens=[];
+    raw.forEach(function(original,index){
+      if(/\t/.test(original.match(/^\s*/)[0]))throw new Error("Tabs in indentation are unsupported at line "+(offset+index+1)+".");
+      var clean=uncomment(original).replace(/\s+$/,"");
+      if(!clean.trim())return;
+      if(/^\s*%/.test(clean))throw new Error("YAML directives are unsupported at line "+(offset+index+1)+".");
+      var indent=clean.length-clean.trimStart().length,body=clean.trimStart();
+      if(/^[|>]([+-]?\d*)?$/.test(body)||/:\s*[|>]([+-]?\d*)?$/.test(body))throw new Error("Block scalars are unsupported at line "+(offset+index+1)+".");
+      tokens.push({indent:indent,body:body,line:offset+index+1});
+    });
+    var at=0;
+    function bump(){if(++valueCount>LIMIT.values)throw new Error("Parsed value limit exceeded.")}
+    function block(indent,depth){
+      if(depth>LIMIT.depth)throw new Error("YAML nesting exceeds 30 levels.");
+      if(at>=tokens.length)return null;
+      if(tokens[at].indent!==indent)throw new Error("Unexpected indentation at line "+tokens[at].line+".");
+      return tokens[at].body.indexOf("- ")===0||tokens[at].body==="-"?sequence(indent,depth):mapping(indent,depth);
+    }
+    function child(parentIndent,depth){
+      if(at>=tokens.length||tokens[at].indent<=parentIndent)return null;
+      return block(tokens[at].indent,depth+1);
+    }
+    function mapping(indent,depth){
+      var out=Object.create(null);bump();
+      while(at<tokens.length&&tokens[at].indent===indent&&tokens[at].body!=="-"&&tokens[at].body.indexOf("- ")!==0){
+        var token=tokens[at++],pair=keyValue(token.body,token.line);
+        if(!pair)throw new Error("Expected key: value at line "+token.line+".");
+        if(Object.prototype.hasOwnProperty.call(out,pair[0]))throw new Error("Duplicate key '"+pair[0]+"' at line "+token.line+".");
+        if(pair[1]){out[pair[0]]=scalar(pair[1],token.line);bump()}
+        else out[pair[0]]=child(indent,depth);
+        if(at<tokens.length&&tokens[at].indent<indent)break;
+        if(at<tokens.length&&tokens[at].indent>indent)throw new Error("Unexpected indentation at line "+tokens[at].line+".");
+      }
+      return out;
+    }
+    function sequence(indent,depth){
+      var out=[];bump();
+      while(at<tokens.length&&tokens[at].indent===indent&&(tokens[at].body==="-"||tokens[at].body.indexOf("- ")===0)){
+        var token=tokens[at++],rest=token.body.slice(1).trim(),item;
+        if(!rest)item=child(indent,depth);
+        else{
+          var pair=keyValue(rest,token.line);
+          if(pair){
+            item=Object.create(null);bump();
+            item[pair[0]]=pair[1]?(bump(),scalar(pair[1],token.line)):child(indent,depth);
+            if(at<tokens.length&&tokens[at].indent>indent){
+              var more=block(tokens[at].indent,depth+1);
+              if(!more||Array.isArray(more)||typeof more!=="object")throw new Error("Expected mapping continuation at line "+tokens[at-1].line+".");
+              Object.keys(more).forEach(function(key){
+                if(Object.prototype.hasOwnProperty.call(item,key))throw new Error("Duplicate sequence mapping key '"+key+"'.");
+                item[key]=more[key];
+              });
+            }
+          }else{
+            item=scalar(rest,token.line);bump();
+            if(at<tokens.length&&tokens[at].indent>indent)throw new Error("Scalar sequence item cannot have nested content at line "+tokens[at].line+".");
+          }
+        }
+        out.push(item);
+        if(at<tokens.length&&tokens[at].indent<indent)break;
+      }
+      return out;
+    }
+    if(!tokens.length)return null;
+    var result=block(tokens[0].indent,0);
+    if(at!==tokens.length)throw new Error("Could not parse YAML near line "+tokens[at].line+".");
+    return result;
+  }
+  function checkJsonBounds(root){
+    var stack=[{value:root,depth:0}];
+    while(stack.length){
+      var current=stack.pop(),value=current.value;
+      if(current.depth>LIMIT.depth)throw new Error("JSON nesting exceeds 30 levels.");
+      if(++valueCount>LIMIT.values)throw new Error("Parsed value limit exceeded.");
+      if(value&&typeof value==="object"){
+        if(Array.isArray(value)){
+          for(var i=value.length-1;i>=0;i--)stack.push({value:value[i],depth:current.depth+1});
+        }else{
+          Object.keys(value).forEach(function(key){stack.push({value:value[key],depth:current.depth+1})});
+        }
+      }
+    }
+  }
+  function parse(raw){
+    valueCount=0;
+    var trimmed=raw.trim();
+    if(!trimmed)throw new Error("Paste at least one manifest.");
+    if(new TextEncoder().encode(raw).length>LIMIT.bytes)throw new Error("Input exceeds 1 MiB.");
+    var nonblank=raw.split(/\r?\n/).filter(function(line){return line.trim()}).length;
+    if(nonblank>LIMIT.lines)throw new Error("Input exceeds 20,000 nonblank lines.");
+    if(trimmed[0]==="["||trimmed[0]==="{"){
+      var parsed;
+      try{parsed=JSON.parse(trimmed)}catch(error){throw new Error("Invalid JSON: "+error.message)}
+      var jsonDocs=Array.isArray(parsed)?parsed:[parsed];
+      if(!jsonDocs.length)throw new Error("Input contains no manifest documents.");
+      if(jsonDocs.length>LIMIT.docs)throw new Error("Input exceeds 100 documents.");
+      jsonDocs.forEach(checkJsonBounds);
+      return jsonDocs;
+    }
+    var parts=[],lines=raw.replace(/\r/g,"").split("\n"),start=0,current=[];
+    lines.forEach(function(line,index){
+      if(/^(---|\.\.\.)\s*(?:#.*)?$/.test(line)){
+        if(current.some(function(item){return item.trim()}))parts.push({text:current.join("\n"),offset:start});
+        current=[];start=index+1;
+      }else current.push(line);
+    });
+    if(current.some(function(item){return item.trim()}))parts.push({text:current.join("\n"),offset:start});
+    if(!parts.length)throw new Error("Input contains no non-empty manifest documents.");
+    if(parts.length>LIMIT.docs)throw new Error("Input exceeds 100 documents.");
+    return parts.map(function(part){return yamlDocument(part.text,part.offset)});
+  }
+
+  function arr(value){return Array.isArray(value)?value:[]}
+  function obj(value){return value&&typeof value==="object"&&!Array.isArray(value)?value:{}}
+  function text(value){return typeof value==="string"?value:""}
+  function podSpec(resource){
+    var kind=resource.kind,spec=obj(resource.spec);
+    if(kind==="Pod")return spec;
+    if(["Deployment","StatefulSet","DaemonSet","ReplicaSet","Job"].indexOf(kind)>=0)return obj(obj(spec.template).spec);
+    if(kind==="CronJob")return obj(obj(obj(obj(spec.jobTemplate).spec).template).spec);
+    return null;
+  }
+  function podLabels(resource){
+    var kind=resource.kind,spec=obj(resource.spec);
+    return kind==="Pod"?obj(resource.metadata).labels:obj(obj(spec.template).metadata).labels;
+  }
+  function identity(resource){
+    var metadata=obj(resource.metadata);
+    return {apiVersion:text(resource.apiVersion),kind:text(resource.kind),name:text(metadata.name),namespace:text(metadata.namespace)||"default"};
+  }
+  function imageNeedsPin(image){
+    if(image.indexOf("@")>=0)return false;
+    var tail=image.slice(image.lastIndexOf("/")+1),colon=tail.lastIndexOf(":");
+    return colon<0||tail.slice(colon+1)==="latest";
+  }
+  function inspect(docs){
+    var findings=[],resources=[],ids=new Map(),byKind=new Map();
+    function finding(level,where,message){findings.push({level:level,where:where,message:message})}
+    docs.forEach(function(resource,index){
+      var where="Document "+(index+1);
+      if(!resource||typeof resource!=="object"||Array.isArray(resource)){
+        finding("high",where,"Document root must be a mapping/object.");return;
+      }
+      var id=identity(resource);
+      if(!id.apiVersion)finding("high",where,"Missing or non-string apiVersion.");
+      if(!id.kind)finding("high",where,"Missing or non-string kind.");
+      if(!id.name)finding("high",where,"Missing or non-string metadata.name.");
+      var label=(id.kind||"Unknown")+"/"+(id.name||"unnamed")+" ("+id.namespace+")";
+      var key=id.kind+"\u0000"+id.namespace+"\u0000"+id.name;
+      if(id.kind&&id.name){
+        if(ids.has(key))finding("high",label,"Duplicate kind/namespace/name identity; first seen in document "+ids.get(key)+".");
+        else ids.set(key,index+1);
+        var kindSet=byKind.get(id.kind)||new Set();
+        kindSet.add(id.namespace+"\u0000"+id.name);byKind.set(id.kind,kindSet);
+      }
+      var result={raw:resource,index:index+1,id:id,label:label,summary:[],containers:[],refs:[],labels:podLabels(resource)};
+      resources.push(result);
+      if(!id.apiVersion||!id.kind||!id.name)return;
+      var spec=podSpec(resource);
+      if(spec){
+        ["hostNetwork","hostPID","hostIPC"].forEach(function(field){
+          if(spec[field]===true)finding("high",label,field+" is enabled; verify host-level access is required.");
+        });
+        arr(spec.volumes).forEach(function(volume){
+          volume=obj(volume);
+          if(obj(volume).hostPath)finding("high",label,"Volume "+(text(volume.name)||"unnamed")+" uses hostPath.");
+          if(text(obj(volume.configMap).name))result.refs.push({kind:"ConfigMap",name:volume.configMap.name});
+          if(text(obj(volume.secret).secretName))result.refs.push({kind:"Secret",name:volume.secret.secretName});
+          if(text(obj(volume.persistentVolumeClaim).claimName))result.refs.push({kind:"PersistentVolumeClaim",name:volume.persistentVolumeClaim.claimName});
+        });
+        if(text(spec.serviceAccountName))result.refs.push({kind:"ServiceAccount",name:spec.serviceAccountName});
+        arr(spec.imagePullSecrets).forEach(function(secret){
+          if(text(obj(secret).name))result.refs.push({kind:"Secret",name:secret.name});
+        });
+        var containers=[];
+        arr(spec.initContainers).forEach(function(container){containers.push({phase:"init",value:container})});
+        arr(spec.containers).forEach(function(container){containers.push({phase:"app",value:container})});
+        if(!arr(spec.containers).length)finding("high",label,"Pod template has no containers.");
+        containers.forEach(function(entry,containerIndex){
+          if(!entry.value||typeof entry.value!=="object"||Array.isArray(entry.value)){
+            finding("high",label+" / "+entry.phase+" container "+(containerIndex+1),"Container entry must be a mapping/object.");
+            return;
+          }
+          var container=entry.value;
+          var containerName=text(container.name)||"container "+(containerIndex+1);
+          var image=text(container.image),securityContext=obj(container.securityContext),podSecurityContext=obj(spec.securityContext);
+          var limits=obj(obj(container.resources).limits);
+          result.containers.push({name:containerName,phase:entry.phase,image:image,cpuLimit:limits.cpu==null?null:String(limits.cpu),memoryLimit:limits.memory==null?null:String(limits.memory),readinessProbe:!!container.readinessProbe,livenessProbe:!!container.livenessProbe});
+          if(securityContext.privileged===true)finding("high",label+" / "+containerName,"privileged is true.");
+          if(securityContext.allowPrivilegeEscalation===true)finding("medium",label+" / "+containerName,"allowPrivilegeEscalation is explicitly true.");
+          if(securityContext.runAsUser===0||podSecurityContext.runAsUser===0||securityContext.runAsNonRoot===false||podSecurityContext.runAsNonRoot===false)finding("medium",label+" / "+containerName,"Configuration permits or explicitly selects UID 0; effective runtime identity depends on image and policy.");
+          if(!image)finding("high",label+" / "+containerName,"Missing image.");
+          else if(imageNeedsPin(image))finding("medium",label+" / "+containerName,"Image uses an omitted or latest tag; consider an immutable digest or version tag.");
+          if(limits.cpu==null||limits.memory==null)finding("info",label+" / "+containerName,"CPU and/or memory limit is absent; suitability depends on workload and cluster policy.");
+          if(entry.phase==="app"&&!container.readinessProbe)finding("info",label+" / "+containerName,"No readiness probe is declared; some workloads intentionally omit one.");
+          arr(container.envFrom).forEach(function(environment){
+            environment=obj(environment);
+            if(text(obj(environment.configMapRef).name))result.refs.push({kind:"ConfigMap",name:environment.configMapRef.name});
+            if(text(obj(environment.secretRef).name))result.refs.push({kind:"Secret",name:environment.secretRef.name});
+          });
+          arr(container.env).forEach(function(environment){
+            var valueFrom=obj(obj(environment).valueFrom);
+            if(text(obj(valueFrom.configMapKeyRef).name))result.refs.push({kind:"ConfigMap",name:valueFrom.configMapKeyRef.name});
+            if(text(obj(valueFrom.secretKeyRef).name))result.refs.push({kind:"Secret",name:valueFrom.secretKeyRef.name});
+          });
+        });
+        result.summary.push((obj(resource.spec).replicas==null?1:obj(resource.spec).replicas)+" desired pod(s)");
+      }
+      if(id.kind==="Service"){
+        var serviceSpec=obj(resource.spec),ports=arr(serviceSpec.ports),selector=obj(serviceSpec.selector);
+        result.summary.push(ports.length+" port(s), type "+(text(serviceSpec.type)||"ClusterIP"));
+        if(!Object.keys(selector).length)finding("info",label,"Service has no selector; this can be intentional for manually managed endpoints.");
+      }
+      if(id.kind==="PersistentVolumeClaim")result.summary.push("PVC request "+(obj(obj(resource.spec).resources).requests.storage||"unspecified"));
+      if(id.kind==="Ingress"){
+        arr(obj(resource.spec).rules).forEach(function(rule){
+          arr(obj(rule.http).paths).forEach(function(path){
+            var service=obj(obj(path.backend).service);
+            if(text(service.name))result.refs.push({kind:"Service",name:service.name});
+          });
+        });
+        var defaultService=obj(obj(resource.spec).defaultBackend).service;
+        if(text(defaultService.name))result.refs.push({kind:"Service",name:defaultService.name});
+      }
+    });
+    resources.forEach(function(resource){
+      resource.refs.forEach(function(reference){
+        var kindSet=byKind.get(reference.kind);
+        if(!kindSet||!kindSet.has(resource.id.namespace+"\u0000"+reference.name))finding("medium",resource.label,"Local "+reference.kind+" reference '"+reference.name+"' was not found in namespace "+resource.id.namespace+" (it may exist in the cluster or another input set).");
+      });
+      if(resource.id.kind==="Service"){
+        var selector=obj(obj(resource.raw).spec.selector);
+        if(Object.keys(selector).length){
+          var matches=resources.filter(function(workload){
+            if(workload.id.namespace!==resource.id.namespace||!podSpec(workload.raw))return false;
+            var labels=obj(workload.labels);
+            return Object.keys(selector).every(function(key){return String(labels[key])===String(selector[key])});
+          });
+          if(!matches.length)finding("medium",resource.label,"Selector matches no workload pod labels in this input set (matching pods may exist in the cluster).");
+          resource.summary.push("selector matches "+matches.length+" local workload(s)");
+        }
+      }
+    });
+    return {version:1,documents:docs.length,resources:resources.map(function(resource){return {document:resource.index,apiVersion:resource.id.apiVersion,kind:resource.id.kind,name:resource.id.name,namespace:resource.id.namespace,summary:resource.summary,containers:resource.containers,references:resource.refs}}),findings:findings};
+  }
+
+  function render(result){
+    var metrics=$("metrics");metrics.replaceChildren();
+    [["Documents",result.documents],["Resources",result.resources.length],["High",result.findings.filter(function(item){return item.level==="high"}).length],["Medium",result.findings.filter(function(item){return item.level==="medium"}).length],["Info",result.findings.filter(function(item){return item.level==="info"}).length]].forEach(function(item){
+      var metric=node("div",{class:"metric"});metric.append(node("span",{},item[0]),node("strong",{},String(item[1])));metrics.appendChild(metric);
+    });
+    var body=$("resources");body.replaceChildren();
+    result.resources.forEach(function(resource){
+      var row=node("tr");
+      var containers=resource.containers.length?resource.containers.map(function(container){return container.name+" ["+container.phase+"] "+(container.image||"no image")+"; limits "+(container.cpuLimit||"—")+" / "+(container.memoryLimit||"—")+"; probes R:"+(container.readinessProbe?"yes":"no")+" L:"+(container.livenessProbe?"yes":"no")}).join("\n"):"—";
+      var references=resource.references.length?resource.references.map(function(reference){return reference.kind+"/"+reference.name}).join("\n"):"—";
+      [resource.kind+"/"+(resource.name||"unnamed")+"\n"+resource.namespace,resource.summary.join("; ")||"—",containers,references].forEach(function(value){row.appendChild(node("td",{},value))});
+      body.appendChild(row);
+    });
+    var findingList=$("findings");findingList.replaceChildren();
+    if(!result.findings.length)findingList.appendChild(node("p",{class:"empty"},"No advisory findings for the implemented checks."));
+    result.findings.forEach(function(finding){
+      var item=node("div",{class:"finding "+finding.level});
+      item.append(node("strong",{},finding.level.toUpperCase()),document.createTextNode(finding.where+": "+finding.message));
+      findingList.appendChild(item);
+    });
+  }
+  function resetResults(){
+    report=null;$("json").disabled=true;
+    $("metrics").replaceChildren();$("resources").replaceChildren();$("findings").replaceChildren();
+  }
+  function run(){
+    var status=$("status");
+    try{
+      var docs=parse($("input").value);report=inspect(docs);render(report);$("json").disabled=false;
+      status.className="status";status.textContent="Parsed locally: "+report.documents+" document(s), "+report.findings.length+" advisory finding(s). Nothing was uploaded.";
+    }catch(error){
+      resetResults();status.className="status error";status.textContent=error.message;
+    }
+  }
+  function download(){
+    var url=URL.createObjectURL(new Blob([JSON.stringify(report,null,2)],{type:"application/json"}));
+    var link=node("a",{href:url,download:"kubernetes-manifest-inspection.json"});link.click();
+    setTimeout(function(){URL.revokeObjectURL(url)},0);
+  }
+  function tab(which,focus){
+    var summary=which==="summary",summaryTab=$("summary-tab"),findingTab=$("finding-tab");
+    $("summary-panel").hidden=!summary;$("finding-panel").hidden=summary;
+    summaryTab.setAttribute("aria-selected",String(summary));findingTab.setAttribute("aria-selected",String(!summary));
+    summaryTab.tabIndex=summary?0:-1;findingTab.tabIndex=summary?-1:0;
+    if(focus)(summary?summaryTab:findingTab).focus();
+  }
+  function tabKey(event){
+    var tabs=[$("summary-tab"),$("finding-tab")],index=tabs.indexOf(event.currentTarget),next=index;
+    if(event.key==="ArrowRight"||event.key==="ArrowDown")next=(index+1)%tabs.length;
+    else if(event.key==="ArrowLeft"||event.key==="ArrowUp")next=(index+tabs.length-1)%tabs.length;
+    else if(event.key==="Home")next=0;
+    else if(event.key==="End")next=tabs.length-1;
+    else return;
+    event.preventDefault();tab(next===0?"summary":"finding",true);
+  }
+  $("inspect").addEventListener("click",run);
+  $("clear").addEventListener("click",function(){
+    $("input").value="";$("status").className="status";$("status").textContent="";resetResults();$("input").focus();
+  });
+  $("json").addEventListener("click",function(){if(report)download()});
+  $("summary-tab").addEventListener("click",function(){tab("summary",false)});
+  $("finding-tab").addEventListener("click",function(){tab("finding",false)});
+  $("summary-tab").addEventListener("keydown",tabKey);
+  $("finding-tab").addEventListener("keydown",tabKey);
+  run();
+})();
+</script>
+</body>
+</html>

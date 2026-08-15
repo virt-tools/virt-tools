@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>OpenAPI Endpoint Explorer — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .oa-grid{display:grid;grid-template-columns:minmax(260px,35%) minmax(0,1fr);gap:1rem;align-items:start}.oa-input{min-height:13rem;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}.oa-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:.65rem;margin:1rem 0}.oa-stat,.oa-detail{padding:.85rem;border:1px solid var(--border);border-radius:8px;background:var(--surface)}.oa-stat strong{display:block;font-size:1.25rem}.oa-list{max-height:42rem;overflow:auto;border:1px solid var(--border);border-radius:8px}.oa-operation{display:block;width:100%;padding:.7rem;border:0;border-bottom:1px solid var(--border);border-radius:0;text-align:left;background:transparent;color:inherit}.oa-operation:last-child{border-bottom:0}.oa-operation:hover,.oa-operation[aria-current="true"]{background:var(--surface)}.oa-method{display:inline-block;min-width:4.4rem;font-weight:700;font-size:.78rem}.oa-path{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:anywhere}.oa-detail h2{margin-top:0}.oa-detail h3{margin-top:1.25rem}.oa-code{white-space:pre-wrap;overflow-wrap:anywhere;max-height:24rem;overflow:auto}.oa-table{width:100%;border-collapse:collapse}.oa-table th,.oa-table td{padding:.55rem;border-bottom:1px solid var(--border);text-align:left;vertical-align:top;overflow-wrap:anywhere}.oa-table th{font-size:.85rem}.oa-muted{color:var(--muted)}.oa-file{max-width:100%}@media(max-width:760px){.oa-grid{grid-template-columns:1fr}.oa-list{max-height:22rem}.oa-table{display:block;overflow-x:auto}.row>button{flex:1 1 auto}}
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>OpenAPI Endpoint Explorer</h1>
+      <p>Inspect operations, parameters, request examples, and responses from an OpenAPI JSON document. Everything stays in your browser.</p>
+    </div>
+
+    <section class="panel" aria-labelledby="input-heading">
+      <h2 id="input-heading">Load an API document</h2>
+      <div class="field">
+        <label for="source">OpenAPI JSON</label>
+        <textarea id="source" class="oa-input" spellcheck="false" placeholder='{"openapi":"3.0.3","info":{"title":"Example API","version":"1.0.0"},"paths":{}}'></textarea>
+      </div>
+      <div class="field">
+        <label for="file">Or choose a JSON file (maximum 5 MB)</label>
+        <input id="file" class="oa-file" type="file" accept=".json,application/json">
+      </div>
+      <div class="row">
+        <button id="explore" type="button">Explore API</button>
+        <button id="sample" class="secondary" type="button">Load sample</button>
+        <button id="clear" class="secondary" type="button">Clear</button>
+      </div>
+      <p id="status" class="note" role="status" aria-live="polite">JSON is supported. YAML is not parsed by this tool.</p>
+    </section>
+
+    <section id="workspace" hidden aria-labelledby="api-title">
+      <div class="oa-summary">
+        <div class="oa-stat"><span>API</span><strong id="api-title">—</strong><small id="api-version"></small></div>
+        <div class="oa-stat"><span>OpenAPI</span><strong id="spec-version">—</strong></div>
+        <div class="oa-stat"><span>Operations</span><strong id="operation-count">0</strong></div>
+        <div class="oa-stat"><span>Server</span><strong id="server" class="oa-path">—</strong></div>
+      </div>
+      <div class="oa-grid">
+        <section class="panel" aria-labelledby="operations-heading">
+          <h2 id="operations-heading">Operations</h2>
+          <div class="field">
+            <label for="filter">Filter by path, method, tag, or summary</label>
+            <input id="filter" type="search" autocomplete="off" placeholder="For example: GET users">
+          </div>
+          <p id="filter-count" class="note" aria-live="polite"></p>
+          <div id="operations" class="oa-list"></div>
+        </section>
+        <section id="detail" class="oa-detail" aria-live="polite" tabindex="-1">
+          <h2>Choose an operation</h2>
+          <p class="oa-muted">Select an endpoint to inspect its inputs and generated request example.</p>
+        </section>
+      </div>
+    </section>
+  </main>
+  <script src="/assets/app.js"></script>
+  <script>
+  (function(){
+    "use strict";
+    var MAX_BYTES=5*1024*1024, METHODS=["get","put","post","delete","options","head","patch","trace"];
+    var source=document.getElementById("source"), file=document.getElementById("file"), status=document.getElementById("status");
+    var workspace=document.getElementById("workspace"), list=document.getElementById("operations"), detail=document.getElementById("detail");
+    var filter=document.getElementById("filter"), filterCount=document.getElementById("filter-count"), documentData=null, operations=[];
+    function setStatus(message,error){status.textContent=message;status.style.color=error?"var(--danger)":"";}
+    function el(name,text,cls){var node=document.createElement(name);if(text!==undefined)node.textContent=text;if(cls)node.className=cls;return node;}
+    function resolve(value){
+      if(!value||typeof value!=="object"||!value.$ref)return value;
+      if(typeof value.$ref!=="string"||value.$ref.slice(0,2)!=="#/")return value;
+      var parts=value.$ref.slice(2).split("/"), current=documentData;
+      try{parts.forEach(function(part){part=part.replace(/~1/g,"/").replace(/~0/g,"~");current=current[part];});return current||value;}catch(e){return value;}
+    }
+    function schemaExample(schema,depth){
+      schema=resolve(schema)||{};depth=depth||0;if(depth>5)return null;
+      if(Object.prototype.hasOwnProperty.call(schema,"example"))return schema.example;
+      if(Object.prototype.hasOwnProperty.call(schema,"default"))return schema.default;
+      if(Array.isArray(schema.enum)&&schema.enum.length)return schema.enum[0];
+      if(schema.type==="array")return [schemaExample(schema.items,depth+1)];
+      if(schema.type==="object"||schema.properties){var object={};Object.keys(schema.properties||{}).slice(0,50).forEach(function(key){object[key]=schemaExample(schema.properties[key],depth+1);});return object;}
+      if(schema.type==="integer"||schema.type==="number")return schema.minimum!==undefined?schema.minimum:0;
+      if(schema.type==="boolean")return true;
+      if(schema.format==="date")return "2026-01-01";
+      if(schema.format==="date-time")return "2026-01-01T00:00:00Z";
+      return "string";
+    }
+    function operationParameters(item,op){return (item.parameters||[]).concat(op.parameters||[]).map(resolve);}
+    function collect(data){
+      var found=[];Object.keys(data.paths||{}).forEach(function(path){var item=resolve(data.paths[path])||{};METHODS.forEach(function(method){var op=resolve(item[method]);if(op&&typeof op==="object")found.push({path:path,method:method.toUpperCase(),op:op,item:item});});});return found;
+    }
+    function renderList(){
+      var query=filter.value.trim().toLowerCase(), shown=operations.filter(function(entry){return [entry.method,entry.path,entry.op.summary||"",(entry.op.tags||[]).join(" "),entry.op.operationId||""].join(" ").toLowerCase().indexOf(query)!==-1;});
+      list.replaceChildren();shown.forEach(function(entry){var button=el("button",undefined,"oa-operation");button.type="button";button.appendChild(el("span",entry.method,"oa-method"));button.appendChild(el("span",entry.path,"oa-path"));if(entry.op.summary)button.appendChild(el("small"," — "+entry.op.summary,"oa-muted"));button.addEventListener("click",function(){Array.prototype.forEach.call(list.children,function(n){n.removeAttribute("aria-current");});button.setAttribute("aria-current","true");renderDetail(entry);});list.appendChild(button);});
+      filterCount.textContent=shown.length+" of "+operations.length+" operations";if(!shown.length)list.appendChild(el("p","No matching operations.","note"));
+    }
+    function appendTable(parent,parameters){
+      var table=el("table",undefined,"oa-table"), head=el("thead"), hr=el("tr");["Name","Location","Required","Type","Description"].forEach(function(x){hr.appendChild(el("th",x));});head.appendChild(hr);table.appendChild(head);var body=el("tbody");parameters.forEach(function(p){var row=el("tr"), schema=resolve(p.schema)||{};[p.name||"—",p.in||"—",p.required?"Yes":"No",schema.type||schema.format||"—",p.description||"—"].forEach(function(x){row.appendChild(el("td",String(x)));});body.appendChild(row);});table.appendChild(body);parent.appendChild(table);
+    }
+    function requestExample(entry,parameters){
+      var base=(documentData.servers&&documentData.servers[0]&&documentData.servers[0].url)||"https://api.example.com", path=entry.path, query=[];
+      parameters.forEach(function(p){var schema=resolve(p.schema)||{}, value=p.example!==undefined?p.example:schemaExample(schema);value=typeof value==="object"?JSON.stringify(value):String(value);if(p.in==="path")path=path.replace("{"+p.name+"}",encodeURIComponent(value));if(p.in==="query")query.push(encodeURIComponent(p.name)+"="+encodeURIComponent(value));});
+      var lines=[entry.method+" "+base.replace(/\/$/,"")+path+(query.length?"?"+query.join("&"):"")];var content=entry.op.requestBody&&resolve(entry.op.requestBody).content, type=content&&Object.keys(content)[0];if(type){var media=content[type]||{}, example=media.example!==undefined?media.example:schemaExample(media.schema);lines.push("Content-Type: "+type,"",typeof example==="string"?example:JSON.stringify(example,null,2));}return lines.join("\n");
+    }
+    function renderDetail(entry){
+      detail.replaceChildren();detail.appendChild(el("h2",entry.method+" "+entry.path));if(entry.op.summary)detail.appendChild(el("p",entry.op.summary));if(entry.op.description)detail.appendChild(el("p",entry.op.description));
+      var meta=[];if(entry.op.operationId)meta.push("Operation ID: "+entry.op.operationId);if(entry.op.tags&&entry.op.tags.length)meta.push("Tags: "+entry.op.tags.join(", "));if(entry.op.deprecated)meta.push("Deprecated");if(meta.length)detail.appendChild(el("p",meta.join(" · "),"note"));
+      var parameters=operationParameters(entry.item,entry.op);detail.appendChild(el("h3","Parameters"));if(parameters.length)appendTable(detail,parameters);else detail.appendChild(el("p","This operation declares no parameters.","oa-muted"));
+      detail.appendChild(el("h3","Generated request example"));var pre=el("pre",requestExample(entry,parameters),"output oa-code");detail.appendChild(pre);
+      var responses=entry.op.responses||{};detail.appendChild(el("h3","Responses"));if(Object.keys(responses).length){var ul=el("ul");Object.keys(responses).forEach(function(code){var response=resolve(responses[code])||{};ul.appendChild(el("li",code+" — "+(response.description||"No description")));});detail.appendChild(ul);}else detail.appendChild(el("p","No responses declared.","oa-muted"));detail.focus();
+    }
+    function explore(){
+      var text=source.value.trim();workspace.hidden=true;if(!text){setStatus("Paste or choose an OpenAPI JSON document first.",true);return;}if(new Blob([text]).size>MAX_BYTES){setStatus("Document is larger than the 5 MB limit.",true);return;}
+      try{var data=JSON.parse(text);if(!data||typeof data!=="object"||Array.isArray(data))throw new Error("The root must be a JSON object.");if(typeof data.openapi!=="string"&&typeof data.swagger!=="string")throw new Error("Missing an openapi or swagger version field.");if(!data.paths||typeof data.paths!=="object"||Array.isArray(data.paths))throw new Error("Missing or invalid paths object.");documentData=data;operations=collect(data);document.getElementById("api-title").textContent=(data.info&&data.info.title)||"Untitled API";document.getElementById("api-version").textContent=(data.info&&data.info.version)?"Version "+data.info.version:"No API version";document.getElementById("spec-version").textContent=data.openapi||("Swagger "+data.swagger);document.getElementById("operation-count").textContent=String(operations.length);document.getElementById("server").textContent=(data.servers&&data.servers[0]&&data.servers[0].url)||"Not declared";filter.value="";workspace.hidden=false;renderList();setStatus("Loaded "+operations.length+" operations from valid JSON.",false);}catch(error){documentData=null;operations=[];setStatus("Could not load document: "+error.message+" JSON is required; YAML is not supported.",true);}
+    }
+    document.getElementById("explore").addEventListener("click",explore);filter.addEventListener("input",renderList);
+    file.addEventListener("change",function(){var selected=file.files&&file.files[0];if(!selected)return;if(selected.size>MAX_BYTES){setStatus("That file is larger than the 5 MB limit.",true);file.value="";return;}var reader=new FileReader();reader.onload=function(){source.value=String(reader.result||"");setStatus("File loaded. Select Explore API to inspect it.",false);};reader.onerror=function(){setStatus("The selected file could not be read.",true);};reader.readAsText(selected);});
+    document.getElementById("clear").addEventListener("click",function(){source.value="";file.value="";filter.value="";workspace.hidden=true;documentData=null;operations=[];setStatus("Cleared. JSON is supported; YAML is not parsed by this tool.",false);source.focus();});
+    document.getElementById("sample").addEventListener("click",function(){source.value=JSON.stringify({openapi:"3.0.3",info:{title:"Pet Notes API",version:"1.0.0"},servers:[{url:"https://api.example.com/v1"}],paths:{"/pets/{petId}":{get:{summary:"Get a pet",tags:["Pets"],parameters:[{name:"petId",in:"path",required:true,schema:{type:"integer",minimum:1}},{name:"includeNotes",in:"query",schema:{type:"boolean"}}],responses:{"200":{description:"Pet found"},"404":{description:"Pet not found"}}}},"/pets":{post:{summary:"Create a pet",tags:["Pets"],requestBody:{required:true,content:{"application/json":{schema:{type:"object",properties:{name:{type:"string",example:"Milo"},age:{type:"integer",minimum:0}}}}}},responses:{"201":{description:"Pet created"}}}}}},null,2);explore();});
+  })();
+  </script>
+</body>
+</html>

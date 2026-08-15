@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Crontab Generator — virt.tools</title>
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<header id="site-header"></header>
+<main>
+<h1>Crontab Generator</h1>
+<p class="subtitle">Build cron expressions visually and get a human-readable summary of when the job will run. Copy the crontab line directly.</p>
+<div style="display:flex;gap:1.5rem;flex-wrap:wrap;margin-top:1rem;">
+<div style="flex:1;min-width:350px;">
+<h3>Schedule</h3>
+<div style="display:grid;grid-template-columns:auto 1fr;gap:.5rem .75rem;align-items:center;">
+<label>Minute</label>
+<input type="text" id="minute" value="*" style="width:100%;font-family:monospace;padding:.4rem;border:1px solid #ddd;border-radius:6px;" aria-label="Minute">
+<label>Hour</label>
+<input type="text" id="hour" value="*" style="width:100%;font-family:monospace;padding:.4rem;border:1px solid #ddd;border-radius:6px;" aria-label="Hour">
+<label>Day of Month</label>
+<input type="text" id="dom" value="*" style="width:100%;font-family:monospace;padding:.4rem;border:1px solid #ddd;border-radius:6px;" aria-label="Dom">
+<label>Month</label>
+<input type="text" id="month" value="*" style="width:100%;font-family:monospace;padding:.4rem;border:1px solid #ddd;border-radius:6px;" aria-label="Month">
+<label>Day of Week</label>
+<input type="text" id="dow" value="*" style="width:100%;font-family:monospace;padding:.4rem;border:1px solid #ddd;border-radius:6px;" aria-label="Dow">
+</div>
+<h4 style="margin-top:1rem;">Quick Presets</h4>
+<div style="display:flex;flex-wrap:wrap;gap:.5rem;">
+<button class="btn" data-c="0 * * * *" type="button">Every hour</button>
+<button class="btn" data-c="*/15 * * * *" type="button">Every 15 min</button>
+<button class="btn" data-c="*/30 * * * *" type="button">Every 30 min</button>
+<button class="btn" data-c="0 0 * * *" type="button">Daily midnight</button>
+<button class="btn" data-c="0 9 * * *" type="button">Daily 9am</button>
+<button class="btn" data-c="0 0 * * 0" type="button">Weekly Sunday</button>
+<button class="btn" data-c="0 0 1 * *" type="button">Monthly 1st</button>
+<button class="btn" data-c="0 0 1 1 *" type="button">Yearly Jan 1</button>
+<button class="btn" data-c="0 */2 * * *" type="button">Every 2 hours</button>
+</div>
+</div>
+<div style="flex:1;min-width:350px;">
+<h3>Generated Crontab</h3>
+<div id="cronExpr" style="font-family:monospace;font-size:1.5rem;background:#1e1e1e;color:#00ff41;padding:1rem;border-radius:8px;text-align:center;">* * * * *</div>
+<h3 style="margin-top:1rem;">Human-readable</h3>
+<div id="humanRead" style="background:#f5f5f5;padding:1rem;border-radius:8px;">Every minute</div>
+<h3 style="margin-top:1rem;">Next 5 Runs (UTC)</h3>
+<ol id="nextRuns" style="background:#f5f5f5;padding:1rem 1rem 1rem 2.5rem;border-radius:8px;"></ol>
+<h3 style="margin-top:1rem;">Full Crontab Line</h3>
+<input type="text" id="command" placeholder="/path/to/script.sh" style="width:100%;font-family:monospace;padding:.4rem;border:1px solid #ddd;border-radius:6px;margin-bottom:.5rem;" aria-label="/Path/To/Script.Sh">
+<div style="display:flex;gap:.5rem;">
+<button class="btn" id="copyCron" type="button">Copy Crontab</button>
+<button class="btn" id="validate" type="button">Validate</button>
+</div>
+<div id="validMsg" style="margin-top:.5rem;font-weight:600;"></div>
+</div>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+(function(){
+const fields = ['minute','hour','dom','month','dow'].map(id => document.getElementById(id));
+const exprEl = document.getElementById('cronExpr');
+const humanEl = document.getElementById('humanRead');
+const nextEl = document.getElementById('nextRuns');
+const cmdEl = document.getElementById('command');
+const validEl = document.getElementById('validMsg');
+
+function getExpr(){
+  return fields.map(f => f.value.trim() || '*').join(' ');
+}
+
+function describe(){
+  const [mi,ho,dom,mo,dow] = fields.map(f => f.value.trim());
+  let parts = [];
+  if(mi === '*' && ho === '*' && dom === '*' && mo === '*' && dow === '*') return 'Every minute';
+  if(mi.startsWith('*/')) parts.push('every ' + mi.slice(2) + ' minutes');
+  else if(mi !== '*') parts.push('at minute ' + mi);
+  if(ho.startsWith('*/')) parts.push('every ' + ho.slice(2) + ' hours');
+  else if(ho !== '*') parts.push(p(parts.length? 'past ' : 'at ') + 'hour ' + ho);
+  if(dom !== '*') parts.push('on day ' + dom + ' of the month');
+  if(mo !== '*') parts.push('in month ' + mo);
+  if(dow !== '*') parts.push('on ' + ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][parseInt(dow) || 0]);
+  if(parts.length === 0) return 'Every minute';
+  return capitalize(parts.join(', '));
+}
+function capitalize(s){ return s.charAt(0).toUpperCase() + s.slice(1); }
+
+function computeNextRuns(expr, count){
+  const [mi,ho,dom,mo,dow] = expr.split(/\s+/);
+  const now = new Date();
+  const runs = [];
+  let d = new Date(now.getTime() + 60000);
+  d.setSeconds(0, 0);
+  let safety = 0;
+  while(runs.length < count && safety < 500000){
+    safety++;
+    if(matchesField(d.getUTCMinutes(), mi) && matchesField(d.getUTCHours(), ho) && matchesField(d.getUTCDate(), dom) && matchesField(d.getUTCMonth()+1, mo) && matchesField(d.getUTCDay(), dow)){
+      runs.push(d.toISOString().replace('T',' ').replace('.000Z',' UTC'));
+    }
+    d = new Date(d.getTime() + 60000);
+  }
+  return runs;
+}
+function matchesField(val, field){
+  if(field === '*') return true;
+  if(field.startsWith('*/')) return val % parseInt(field.slice(2)) === 0;
+  if(field.includes(',')) return field.split(',').some(p => matchesField(val, p));
+  if(field.includes('-')){
+    const [a,b] = field.split('-').map(Number); return val >= a && val <= b;
+  }
+  return parseInt(field) === val;
+}
+
+function validate(expr){
+  const parts = expr.split(/\s+/);
+  if(parts.length !== 5) return 'Invalid: must have exactly 5 fields';
+  const ranges = [[0,59],[0,23],[1,31],[1,12],[0,7]];
+  const names = ['minute','hour','day-of-month','month','day-of-week'];
+  for(let i=0;i<5;i++){
+    if(!/^[\d*/,\-]+$/.test(parts[i])) return 'Invalid ' + names[i] + ': ' + parts[i];
+    if(parts[i] !== '*'){
+      const v = parseInt(parts[i].replace(/[\*/,]/g,''));
+      if(!isNaN(v) && (v < ranges[i][0] || v > ranges[i][1])) return names[i] + ' out of range: ' + v;
+    }
+  }
+  return null;
+}
+
+function update(){
+  const expr = getExpr();
+  exprEl.textContent = expr;
+  const err = validate(expr);
+  if(err){
+    validEl.textContent = '⚠ ' + err;
+    validEl.style.color = '#e74c3c';
+    humanEl.textContent = '—';
+    nextEl.innerHTML = '';
+  } else {
+    validEl.textContent = '✓ Valid';
+    validEl.style.color = '#27ae60';
+    humanEl.textContent = describe();
+    const runs = computeNextRuns(expr, 5);
+    nextEl.innerHTML = runs.map(r => '<li>' + r + '</li>').join('') || '<li>No runs found in range</li>';
+  }
+}
+
+fields.forEach(f => f.addEventListener('input', update));
+document.querySelectorAll('[data-c]').forEach(btn => {
+  btn.onclick = () => {
+    const parts = btn.dataset.c.split(/\s+/);
+    fields.forEach((f,i) => f.value = parts[i] || '*');
+    update();
+  };
+});
+document.getElementById('copyCron').onclick = () => {
+  const line = getExpr() + ' ' + (cmdEl.value || '/path/to/script.sh');
+  navigator.clipboard.writeText(line).then(() => {
+    const b = document.getElementById('copyCron'); const o = b.textContent;
+    b.textContent = 'Copied!'; setTimeout(() => b.textContent = o, 1500);
+  });
+};
+document.getElementById('validate').onclick = update;
+update();
+})();
+</script>
+<style>
+.btn{padding:.4rem .8rem;border:1px solid #ddd;border-radius:6px;background:#f5f5f5;cursor:pointer;font-weight:600;font-size:.9rem;}
+.btn:hover{background:#00d4ff;color:#fff;border-color:#00d4ff;}
+</style>
+</body>
+</html>

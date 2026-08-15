@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JWT Builder — virt.tools</title>
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<header id="site-header"></header>
+<main>
+<h1>JWT Builder</h1>
+<p class="subtitle">Build JSON Web Tokens with custom header and payload. Sign with HMAC-SHA256/384/512 (in-browser via Web Crypto). Decode and inspect existing JWTs.</p>
+<div class="tool-layout">
+<div class="controls">
+<h3>Header</h3>
+<label>Algorithm
+<select id="alg">
+<option value="HS256">HS256</option>
+<option value="HS384">HS384</option>
+<option value="HS512">HS512</option>
+<option value="none">none (unsigned)</option>
+</select></label>
+<label>Header (JSON)
+<textarea id="headerJson" rows="3">{"alg":"HS256","typ":"JWT"}</textarea></label>
+<h3>Payload</h3>
+<label>Payload (JSON)
+<textarea id="payloadJson" rows="8">{"sub":"1234567890","name":"John Doe","iat":1690000000,"exp":1899999999,"role":"admin","iss":"virt.tools"}</textarea></label>
+<h3>Signing Key</h3>
+<label>Secret Key <input type="text" id="secret" value="your-256-bit-secret"></label>
+<hr>
+<h3>Decode Existing JWT</h3>
+<label>Paste JWT
+<textarea id="jwtInput" rows="3" placeholder="eyJhbGciOi..."></textarea></label>
+</div>
+<div class="results" id="results"></div>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+(function(){
+const alg=document.getElementById('alg');
+const headerJson=document.getElementById('headerJson');
+const payloadJson=document.getElementById('payloadJson');
+const secret=document.getElementById('secret');
+const jwtInput=document.getElementById('jwtInput');
+const results=document.getElementById('results');
+function b64url(b){return btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');}
+function b64urlStr(s){return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');}
+function b64urlDecode(s){s=s.replace(/-/g,'+').replace(/_/g,'/');while(s.length%4)s+='=';return atob(s);}
+async function sign(data,key,algName){
+const enc=new TextEncoder();
+const algMap={'HS256':'SHA-256','HS384':'SHA-384','HS512':'SHA-512'};
+const cryptoKey=await crypto.subtle.importKey('raw',enc.encode(key),{name:'HMAC',hash:algMap[algName]},false,['sign']);
+const sig=await crypto.subtle.sign('HMAC',cryptoKey,enc.encode(data));
+return b64url(sig);
+}
+async function build(){
+results.innerHTML='Building...';
+try{
+const hdr=JSON.parse(headerJson.value);
+const payload=JSON.parse(payloadJson.value);
+const a=alg.value;
+hdr.alg=a;
+headerJson.value=JSON.stringify(hdr,null,2);
+const encHdr=b64urlStr(JSON.stringify(hdr));
+const encPayload=b64urlStr(JSON.stringify(payload));
+const signingInput=encHdr+'.'+encPayload;
+let signature='';
+if(a==='none'){signature='';}
+else{signature=await sign(signingInput,secret.value,a);}
+const jwt=signingInput+(signature?'.'+signature:'');
+let decoded='';
+if(jwtInput.value.trim()){
+  const parts=jwtInput.value.trim().split('.');
+  if(parts.length>=2){
+    try{
+      const dHdr=JSON.parse(b64urlDecode(parts[0]));
+      const dPayload=JSON.parse(b64urlDecode(parts[1]));
+      decoded='<h3 style="margin-top:1.5rem;">Decoded JWT</h3>'+
+      '<h4>Header</h4><pre>'+JSON.stringify(dHdr,null,2)+'</pre>'+
+      '<h4>Payload</h4><pre>'+JSON.stringify(dPayload,null,2)+'</pre>';
+      if(parts[2]){
+        let isExpired=false;
+        if(dPayload.exp){isExpired=Date.now()/1000>dPayload.exp;}
+        decoded+='<h4>Validation</h4>'+
+        '<div class="stat-row"><span>Issued at</span><span>'+(dPayload.iat?new Date(dPayload.iat*1000).toLocaleString():'n/a')+'</span></div>'+
+        '<div class="stat-row"><span>Expires</span><span>'+(dPayload.exp?new Date(dPayload.exp*1000).toLocaleString():'n/a')+'</span></div>'+
+        (isExpired?'<div class="stat-row bad"><span>Status</span><span>EXPIRED</span></div>':'<div class="stat-row good"><span>Status</span><span>Valid (not expired)</span></div>');
+      }
+    }catch(e){decoded='<h3 style="margin-top:1.5rem;">Decode Error</h3><pre>'+e.message+'</pre>';}
+  }
+}
+results.innerHTML='<h3>Generated JWT</h3>'+
+'<textarea readonly class="jwt-output" style="width:100%;min-height:80px;font-family:monospace;font-size:.85rem;padding:.75rem;border:1px solid #ddd;border-radius:8px;word-break:break-all;" aria-label="Textarea">'+jwt+'</textarea>'+
+'<h4 style="margin-top:1rem;">Header (decoded)</h4><pre>'+JSON.stringify(hdr,null,2)+'</pre>'+
+'<h4>Payload (decoded)</h4><pre>'+JSON.stringify(payload,null,2)+'</pre>'+
+'<button onclick="navigator.clipboard.writeText(\''+jwt.replace(/'/g,"\\'")+'\')" style="margin-top:.5rem;padding:.5rem 1rem;border:none;border-radius:8px;background:#00d4ff;color:#fff;cursor:pointer;font-weight:600;" type="button">Copy JWT</button>'+
+decoded;
+}catch(e){
+results.innerHTML='<div class="stat-row bad"><span>JSON Error</span><span>'+e.message+'</span></div>';
+}
+}
+[alg,headerJson,payloadJson,secret,jwtInput].forEach(el=>el.addEventListener('input',build));
+build();
+})();
+</script>
+<style>
+.tool-layout{display:flex;gap:2rem;flex-wrap:wrap;align-items:flex-start;}
+.controls{display:flex;flex-direction:column;gap:.75rem;min-width:320px;}
+.controls label{display:flex;flex-direction:column;gap:.25rem;font-weight:600;}
+.controls input,.controls select,.controls textarea{padding:.5rem;border:1px solid #ddd;border-radius:8px;font-size:.95rem;font-family:inherit;}
+.controls textarea{font-family:monospace;font-size:.85rem;}
+.results{flex:1;min-width:300px;}
+.results pre{background:#f5f5f5;padding:.75rem;border-radius:8px;overflow-x:auto;font-size:.85rem;}
+.stat-row{display:flex;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid #eee;}
+.stat-row.good{color:#2ecc71;}.stat-row.bad{color:#e74c3c;}
+hr{width:100%;border:none;border-top:1px solid #ddd;margin:.5rem 0;}
+</style>
+</body>
+</html>

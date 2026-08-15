@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Audio Delay/Echo Effect — virt.tools</title>
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<header id="site-header"></header>
+<main class="tool-container">
+<h1>Audio Delay / Echo Effect</h1>
+<p class="subtitle">Add delay/echo to audio with adjustable delay time, feedback, and mix. Export as WAV. 100% client-side.</p>
+<div class="input-section">
+<input type="file" id="file" accept="audio/*" aria-label="File">
+<button id="process" class="primary-btn" type="button">Process & Download</button>
+</div>
+<div class="controls">
+<label>Delay (ms): <input type="range" id="delay" min="10" max="1000" value="300"><span id="dv">300</span></label>
+<label>Feedback: <input type="range" id="feedback" min="0" max="0.95" value="0.4" step="0.05"><span id="fv">0.4</span></label>
+<label>Mix: <input type="range" id="mix" min="0" max="1" value="0.5" step="0.05"><span id="mv">0.5</span></label>
+</div>
+<div id="status"></div>
+<script>
+document.addEventListener('DOMContentLoaded',()=>{
+['delay','feedback','mix'].forEach(id=>{
+const el=document.getElementById(id);
+const sp=document.getElementById(id[0]+'v');
+el.addEventListener('input',()=>sp.textContent=el.value);
+});
+document.getElementById('process').addEventListener('click',async()=>{
+const file=document.getElementById('file').files[0];
+if(!file){alert('Select a file first.');return;}
+const st=document.getElementById('status');st.textContent='Processing...';
+const audioCtx=new AudioContext();
+const buf=await audioCtx.decodeAudioData(await file.arrayBuffer());
+const sr=buf.sampleRate;
+const ch=buf.getChannelData(0);
+const delayMs=parseFloat(document.getElementById('delay').value);
+const feedback=parseFloat(document.getElementById('feedback').value);
+const mix=parseFloat(document.getElementById('mix').value);
+const delaySamples=Math.floor(delayMs/1000*sr);
+const outLen=ch.length+delaySamples*4;
+const out=new Float32Array(outLen);
+const delayBuf=new Float32Array(outLen);
+for(let i=0;i<ch.length;i++){
+out[i]=ch[i]*(1-mix)+delayBuf[i]*mix;
+delayBuf[i+delaySamples]=out[i]*feedback;
+}
+const off=new OfflineAudioContext(1,ch.length,sr);
+const nb=off.createBuffer(1,ch.length,sr);
+nb.copyToChannel(out.slice(0,ch.length),0);
+const src=off.createBufferSource();src.buffer=nb;
+src.connect(off.destination);src.start();
+const rendered=await off.startRendering();
+const wav=audioBufferToWav(rendered);
+const blob=new Blob([wav],{type:'audio/wav'});
+const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='delay.wav';a.click();
+st.textContent='Done! Downloaded as delay.wav';
+audioCtx.close();
+});
+function audioBufferToWav(b){
+const n=b.length,sr=b.sampleRate;
+const data=b.getChannelData(0);
+const buf=new ArrayBuffer(44+n*2);
+const v=new DataView(buf);
+const ws=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i));};
+ws(0,'RIFF');v.setUint32(4,36+n*2,true);ws(8,'WAVE');ws(12,'fmt ');
+v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);
+v.setUint32(24,sr,true);v.setUint32(28,sr*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);
+ws(36,'data');v.setUint32(40,n*2,true);
+for(let i=0;i<n;i++)v.setInt16(44+i*2,Math.max(-32768,Math.min(32767,data[i]*32767)),true);
+return buf;
+}
+});
+</script>
+</main>
+<script src="/assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Compare OpenAPI JSON or JSON Schema documents locally and classify compatibility changes.">
+  <script src="/assets/theme-init.js"></script>
+  <title>API Schema Diff — virt.tools</title>
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.compare-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.source-card{min-width:0}.source-card textarea{min-height:230px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.82rem}.file-row{display:flex;align-items:center;gap:8px;margin-bottom:8px}.file-row input{min-width:0}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}.actions button{flex:0 1 auto}.help{border-left:3px solid var(--accent);padding-left:12px}.status{min-height:1.5em;margin:12px 0 0}.summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:16px 0}.metric{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px}.metric strong{display:block;font-size:1.5rem;font-variant-numeric:tabular-nums}.filters{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.filters button{padding:7px 12px}.filters button[aria-pressed="true"]{outline:2px solid var(--accent);outline-offset:2px}.change-list{list-style:none;padding:0;margin:0;display:grid;gap:10px}.change{border:1px solid var(--border);border-radius:10px;padding:14px;background:var(--bg)}.change-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.change-title{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}.pill{flex:none;border-radius:999px;padding:3px 9px;font-size:.75rem;font-weight:700}.breaking{color:var(--bad);background:color-mix(in srgb,var(--bad) 14%,transparent)}.risky{color:var(--warn);background:color-mix(in srgb,var(--warn) 14%,transparent)}.compatible{color:var(--ok);background:color-mix(in srgb,var(--ok) 14%,transparent)}.detail{color:var(--text-dim);font-size:.88rem;margin:7px 0 0;overflow-wrap:anywhere}.empty{text-align:center;color:var(--text-dim);padding:24px}.limitations{margin-top:18px;color:var(--text-dim);font-size:.86rem}@media(max-width:720px){.compare-grid{grid-template-columns:1fr}.summary{grid-template-columns:1fr 1fr}.change-head{display:block}.pill{display:inline-block;margin-top:8px}}@media(max-width:380px){.summary{grid-template-columns:1fr}.actions button{width:100%}}
+</style>
+</head>
+<body>
+<header id="site-header"></header>
+<main class="tool-container">
+<h1>API Schema Diff</h1>
+<p class="subtitle">Compare two OpenAPI JSON or JSON Schema documents in your browser. Nothing is uploaded.</p>
+
+<section class="input-section" aria-labelledby="inputs-heading">
+<h2 id="inputs-heading">Documents</h2>
+<p class="note help">Use the old/current document on the left and the proposed/new document on the right. JSON only; YAML and external <code>$ref</code> resolution are not supported.</p>
+<div class="compare-grid">
+<div class="source-card">
+<label for="before">Before (old/current)</label>
+<div class="file-row"><input id="before-file" type="file" accept="application/json,.json" aria-label="Load before document from a JSON file"></div>
+<textarea id="before" spellcheck="false" aria-describedby="limits" placeholder='{"openapi":"3.0.3","paths":{}}'></textarea>
+</div>
+<div class="source-card">
+<label for="after">After (new/proposed)</label>
+<div class="file-row"><input id="after-file" type="file" accept="application/json,.json" aria-label="Load after document from a JSON file"></div>
+<textarea id="after" spellcheck="false" aria-describedby="limits" placeholder='{"openapi":"3.0.3","paths":{}}'></textarea>
+</div>
+</div>
+<p class="note" id="limits">Limits: 2 MiB per document, 100 nesting levels, and 10,000 reported changes.</p>
+<div class="actions">
+<button id="compare" type="button">Compare schemas</button>
+<button id="sample" class="secondary" type="button">Load example</button>
+<button id="clear" class="secondary" type="button">Clear</button>
+</div>
+<p id="status" class="status" role="status" aria-live="polite"></p>
+</section>
+
+<section id="results" class="result-section" aria-labelledby="results-heading" hidden>
+<div class="row"><h2 id="results-heading">Compatibility report</h2><button id="export" class="secondary" type="button">Export JSON</button></div>
+<div id="summary" class="summary"></div>
+<div class="filters" role="group" aria-label="Filter changes">
+<button class="secondary filter" type="button" data-filter="all" aria-pressed="true">All</button>
+<button class="secondary filter" type="button" data-filter="breaking" aria-pressed="false">Breaking</button>
+<button class="secondary filter" type="button" data-filter="risky" aria-pressed="false">Risky</button>
+<button class="secondary filter" type="button" data-filter="compatible" aria-pressed="false">Compatible</button>
+</div>
+<p id="visible-count" class="note" aria-live="polite"></p>
+<ul id="changes" class="change-list"></ul>
+<details class="limitations"><summary>How classification works and its limitations</summary><p>Removed paths, operations, properties, enum values, or newly required fields are classified as breaking. Added optional surface area is compatible. Type changes and altered constraints are breaking or risky depending on direction. This is a structural heuristic, not a full OpenAPI compatibility proof: it does not resolve external references, evaluate every JSON Schema keyword, compare response semantics, or infer client/server usage. Review all risky changes.</p></details>
+</section>
+</main>
+<script>
+(()=>{'use strict';
+const MAX_BYTES=2*1024*1024,MAX_DEPTH=100,MAX_CHANGES=10000;
+const $=id=>document.getElementById(id);let report=null,active='all';
+const before=$('before'),after=$('after'),status=$('status'),results=$('results'),list=$('changes');
+function setStatus(message,error=false){status.textContent=message;status.style.color=error?'var(--bad)':'';}
+function own(o,k){return Object.prototype.hasOwnProperty.call(o,k)}
+function obj(v){return v!==null&&typeof v==='object'&&!Array.isArray(v)}
+function display(v){let s;try{s=JSON.stringify(v)}catch(_){s=String(v)}return s&&s.length>180?s.slice(0,177)+'…':(s??'undefined')}
+function depth(value,level=0,seen=new WeakSet()){if(level>MAX_DEPTH)throw new Error('Document exceeds the 100-level nesting limit.');if(value&&typeof value==='object'){if(seen.has(value))return;seen.add(value);for(const v of Object.values(value))depth(v,level+1,seen)}}
+function parse(text,label){if(new Blob([text]).size>MAX_BYTES)throw new Error(label+' exceeds the 2 MiB limit.');if(!text.trim())throw new Error(label+' is empty.');let value;try{value=JSON.parse(text)}catch(e){throw new Error(label+' is not valid JSON: '+e.message)}if(!obj(value))throw new Error(label+' must contain a JSON object.');depth(value);return value}
+function add(out,severity,kind,path,message,beforeValue,afterValue){if(out.length>=MAX_CHANGES)return;out.push({severity,kind,path,message,before:beforeValue,after:afterValue})}
+function compareSet(out,a,b,path,itemName,removeSeverity='breaking'){const as=new Set(Array.isArray(a)?a:[]),bs=new Set(Array.isArray(b)?b:[]);for(const x of as)if(!bs.has(x))add(out,removeSeverity,'removed',path,itemName+' removed: '+x,x,undefined);for(const x of bs)if(!as.has(x))add(out,itemName==='Required field'?'breaking':'compatible','added',path,itemName+' added: '+x,undefined,x)}
+function schema(out,a,b,path,seen=new WeakMap()){if(a===b)return;if(!obj(a)||!obj(b)){if(display(a)!==display(b))add(out,'breaking','changed',path,'Schema definition changed.',a,b);return}let prior=seen.get(a);if(prior===b)return;seen.set(a,b);
+ const at=a.type,bt=b.type;if(display(at)!==display(bt))add(out,'breaking','type',path+'.type','Type changed from '+display(at)+' to '+display(bt)+'.',at,bt);
+ compareSet(out,a.enum,b.enum,path+'.enum','Enum value');
+ const ar=new Set(Array.isArray(a.required)?a.required:[]),br=new Set(Array.isArray(b.required)?b.required:[]);for(const x of ar)if(!br.has(x))add(out,'compatible','required',path+'.required','Field is no longer required: '+x,true,false);for(const x of br)if(!ar.has(x))add(out,'breaking','required',path+'.required','Field became required: '+x,false,true);
+ const ap=obj(a.properties)?a.properties:{},bp=obj(b.properties)?b.properties:{};for(const k of new Set([...Object.keys(ap),...Object.keys(bp)])){const p=path+'.properties.'+k;if(!own(ap,k))add(out,br.has(k)?'breaking':'compatible','added',p,br.has(k)?'Required property added.':'Optional property added.',undefined,bp[k]);else if(!own(bp,k))add(out,'breaking','removed',p,'Property removed.',ap[k],undefined);else schema(out,ap[k],bp[k],p,seen)}
+ for(const key of ['minimum','maximum','minLength','maxLength','minItems','maxItems','pattern','format','additionalProperties'])if(display(a[key])!==display(b[key])){let sev='risky';if(key.startsWith('min')&&b[key]>a[key]||key.startsWith('max')&&b[key]<a[key]||key==='additionalProperties'&&a[key]!==false&&b[key]===false)sev='breaking';add(out,sev,'constraint',path+'.'+key,key+' changed from '+display(a[key])+' to '+display(b[key])+'.',a[key],b[key])}
+ for(const key of ['items','additionalProperties'])if(obj(a[key])&&obj(b[key]))schema(out,a[key],b[key],path+'.'+key,seen);
+ }
+ function openapi(out,a,b){const methods=['get','put','post','delete','options','head','patch','trace'],ap=obj(a.paths)?a.paths:{},bp=obj(b.paths)?b.paths:{};for(const path of new Set([...Object.keys(ap),...Object.keys(bp)])){if(!own(ap,path)){add(out,'compatible','added','paths.'+path,'Path added.',undefined,bp[path]);continue}if(!own(bp,path)){add(out,'breaking','removed','paths.'+path,'Path removed.',ap[path],undefined);continue}for(const m of methods){const ao=ap[path]&&ap[path][m],bo=bp[path]&&bp[path][m],p=m.toUpperCase()+' '+path;if(!ao&&!bo)continue;if(!ao){add(out,'compatible','added',p,'Operation added.',undefined,bo);continue}if(!bo){add(out,'breaking','removed',p,'Operation removed.',ao,undefined);continue}
+ const params=x=>{const map=new Map();for(const q of [...(Array.isArray(x[path].parameters)?x[path].parameters:[]),...(Array.isArray(x[path][m].parameters)?x[path][m].parameters:[])])if(obj(q)&&q.name)map.set((q.in||'?')+':'+q.name,q);return map},pa=params(ap),pb=params(bp);for(const n of new Set([...pa.keys(),...pb.keys()])){if(!pa.has(n)){add(out,pb.get(n).required?'breaking':'compatible','parameter',p+'.parameters.'+n,pb.get(n).required?'Required parameter added.':'Optional parameter added.',undefined,pb.get(n));continue}if(!pb.has(n)){add(out,'breaking','parameter',p+'.parameters.'+n,'Parameter removed.',pa.get(n),undefined);continue}if(!pa.get(n).required&&pb.get(n).required)add(out,'breaking','required',p+'.parameters.'+n,'Parameter became required.',false,true);schema(out,pa.get(n).schema||{},pb.get(n).schema||{},p+'.parameters.'+n+'.schema')}
+ const contentSchema=o=>{const body=o.requestBody||{};const content=obj(body.content)?body.content:{};const type=Object.keys(content)[0];return type&&content[type]&&content[type].schema};const sa=contentSchema(ao),sb=contentSchema(bo);if(sa&&!sb)add(out,'breaking','request',p+'.requestBody','Request body schema removed.',sa,undefined);else if(!sa&&sb)add(out,bo.requestBody&&bo.requestBody.required?'breaking':'risky','request',p+'.requestBody','Request body schema added.',undefined,sb);else if(sa&&sb)schema(out,sa,sb,p+'.requestBody.schema')
+ }}
+ const as=a.components&&a.components.schemas||a.definitions||{},bs=b.components&&b.components.schemas||b.definitions||{};for(const name of new Set([...Object.keys(as),...Object.keys(bs)])){const p=(a.components||b.components?'components.schemas.':'definitions.')+name;if(!own(as,name))add(out,'compatible','added',p,'Reusable schema added.',undefined,bs[name]);else if(!own(bs,name))add(out,'breaking','removed',p,'Reusable schema removed.',as[name],undefined);else schema(out,as[name],bs[name],p)}
+ }
+ function compareDocs(a,b){const out=[],isApi=obj(a.paths)||obj(b.paths)||typeof a.openapi==='string'||typeof b.openapi==='string';if(isApi)openapi(out,a,b);else schema(out,a,b,'schema');if(out.length===MAX_CHANGES)add(out,'risky','limit','report','Change limit reached; the report is truncated.',undefined,undefined);return{format:isApi?'OpenAPI':'JSON Schema',createdAt:new Date().toISOString(),changes:out,limitations:['JSON input only','External $ref values are not resolved','Classification is structural and heuristic']}}
+ function metric(label,value,klass){const d=document.createElement('div');d.className='metric';const strong=document.createElement('strong');strong.textContent=String(value);if(klass)strong.style.color='var(--'+klass+')';d.append(strong,document.createTextNode(label));return d}
+ function render(){if(!report)return;const counts={breaking:0,risky:0,compatible:0};report.changes.forEach(c=>counts[c.severity]++);const summary=$('summary');summary.replaceChildren(metric('Total changes',report.changes.length),metric('Breaking',counts.breaking,'bad'),metric('Risky',counts.risky,'warn'),metric('Compatible',counts.compatible,'ok'));list.replaceChildren();const shown=report.changes.filter(c=>active==='all'||c.severity===active);$('visible-count').textContent='Showing '+shown.length+' of '+report.changes.length+' changes.';if(!shown.length){const li=document.createElement('li');li.className='empty';li.textContent=report.changes.length?'No changes match this filter.':'No structural changes detected.';list.append(li)}for(const c of shown){const li=document.createElement('li');li.className='change';const head=document.createElement('div');head.className='change-head';const title=document.createElement('strong');title.className='change-title';title.textContent=c.path;const pill=document.createElement('span');pill.className='pill '+c.severity;pill.textContent=c.severity;head.append(title,pill);const detail=document.createElement('p');detail.className='detail';detail.textContent=c.message;li.append(head,detail);if(c.before!==undefined||c.after!==undefined){const values=document.createElement('p');values.className='detail';values.textContent='Before: '+display(c.before)+' · After: '+display(c.after);li.append(values)}list.append(li)}results.hidden=false}
+ function run(){try{setStatus('Comparing…');const a=parse(before.value,'Before document'),b=parse(after.value,'After document');report=compareDocs(a,b);active='all';document.querySelectorAll('.filter').forEach(x=>x.setAttribute('aria-pressed',String(x.dataset.filter==='all')));render();setStatus('Compared as '+report.format+'. Found '+report.changes.length+' changes.');results.scrollIntoView({behavior:'smooth',block:'start'})}catch(e){report=null;results.hidden=true;setStatus(e.message,true)}}
+ async function loadFile(input,target,label){const file=input.files&&input.files[0];if(!file)return;if(file.size>MAX_BYTES){setStatus(label+' file exceeds the 2 MiB limit.',true);input.value='';return}try{target.value=await file.text();setStatus('Loaded '+file.name+'.')}catch(_){setStatus('Could not read '+label.toLowerCase()+' file.',true)}}
+ $('compare').addEventListener('click',run);$('before-file').addEventListener('change',e=>loadFile(e.target,before,'Before'));$('after-file').addEventListener('change',e=>loadFile(e.target,after,'After'));
+ document.querySelectorAll('.filter').forEach(btn=>btn.addEventListener('click',()=>{active=btn.dataset.filter;document.querySelectorAll('.filter').forEach(x=>x.setAttribute('aria-pressed',String(x===btn)));render()}));
+ $('sample').addEventListener('click',()=>{
+  const oldDocument={
+   openapi:'3.0.3',
+   paths:{'/pets':{get:{parameters:[{in:'query',name:'limit',required:false,schema:{type:'integer'}}]}}},
+   components:{schemas:{Pet:{type:'object',required:['id'],properties:{id:{type:'integer'},name:{type:'string'},status:{type:'string',enum:['active','adopted']}}}}}
+  };
+  const newDocument={
+   openapi:'3.0.3',
+   paths:{'/pets':{get:{parameters:[{in:'query',name:'limit',required:true,schema:{type:'number'}}]}},'/owners':{get:{}}},
+   components:{schemas:{Pet:{type:'object',required:['id','name'],properties:{id:{type:'string'},name:{type:'string'},status:{type:'string',enum:['active']},age:{type:'integer'}}}}}
+  };
+  before.value=JSON.stringify(oldDocument,null,2);after.value=JSON.stringify(newDocument,null,2);setStatus('Example loaded. Select Compare schemas.');
+ });
+ $('clear').addEventListener('click',()=>{before.value='';after.value='';$('before-file').value='';$('after-file').value='';report=null;results.hidden=true;setStatus('Cleared.');before.focus()});
+ $('export').addEventListener('click',()=>{if(!report)return;const blob=new Blob([JSON.stringify(report,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='api-schema-diff.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);setStatus('Report exported.')});
+})();
+</script>
+<script src="/assets/app.js"></script>
+</body>
+</html>

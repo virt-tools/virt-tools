@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Multi-Timer Cooking Timer — virt.tools</title>
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<header id="site-header"></header>
+<main class="tool-container">
+<h1>Multi-Timer Cooking Timer</h1>
+<p class="subtitle">Run multiple countdown timers simultaneously — perfect for cooking multiple dishes.</p>
+
+<div class="input-section">
+  <div style="display:flex;gap:8px;align-items:center;">
+    <input type="text" id="label" placeholder="Timer label (e.g. Pasta)" style="flex:1;" aria-label="Timer Label (E.G. Pasta)">
+    <input type="number" id="minutes" value="10" min="0" max="999" style="width:70px;" aria-label="Minutes">
+    <span>min</span>
+    <input type="number" id="seconds" value="0" min="0" max="59" style="width:60px;" aria-label="Seconds">
+    <span>sec</span>
+    <button id="add-timer" class="primary-btn" type="button">Add Timer</button>
+  </div>
+</div>
+
+<div id="timers" style="margin-top:16px;"></div>
+
+<style>
+.timer-card { border:1px solid var(--border); border-radius:8px; padding:12px; margin:8px 0; display:flex; align-items:center; gap:12px; }
+.timer-card .label { font-weight:bold; flex:1; }
+.timer-card .time { font-size:1.5em; font-family:monospace; min-width:100px; text-align:center; }
+.timer-card.done { background:rgba(34,197,94,0.15); animation:pulse 1s infinite; }
+.timer-card.done .time { color:#22c55e; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
+.timer-card .controls button { padding:4px 10px; margin:0 2px; }
+.progress-bar { height:4px; background:var(--border); border-radius:2px; flex:1; overflow:hidden; }
+.progress-fill { height:100%; background:var(--accent); transition:width 1s linear; }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const timersDiv = document.getElementById('timers');
+  const timers = [];
+  let idCounter = 0;
+
+  document.getElementById('add-timer').addEventListener('click', () => {
+    const label = document.getElementById('label').value || 'Timer';
+    const mins = parseInt(document.getElementById('minutes').value) || 0;
+    const secs = parseInt(document.getElementById('seconds').value) || 0;
+    const total = mins * 60 + secs;
+    if (total === 0) return;
+
+    const id = ++idCounter;
+    timers.push({ id, label, total, remaining: total, running: false, interval: null });
+
+    const card = document.createElement('div');
+    card.className = 'timer-card';
+    card.id = 'timer-' + id;
+    card.innerHTML = `
+      <span class="label">${label}</span>
+      <div class="progress-bar"><div class="progress-fill" id="fill-${id}" style="width:100%;"></div></div>
+      <span class="time" id="time-${id}">${formatTime(total)}</span>
+      <div class="controls">
+        <button id="start-${id}" type="button">▶</button>
+        <button id="reset-${id}" type="button">↻</button>
+        <button id="del-${id}" type="button">✕</button>
+      </div>
+    `;
+    timersDiv.appendChild(card);
+
+    document.getElementById('start-' + id).addEventListener('click', () => toggleTimer(id));
+    document.getElementById('reset-' + id).addEventListener('click', () => resetTimer(id));
+    document.getElementById('del-' + id).addEventListener('click', () => deleteTimer(id));
+  });
+
+  function toggleTimer(id) {
+    const t = timers.find(x => x.id === id);
+    if (!t) return;
+    if (t.running) {
+      clearInterval(t.interval);
+      t.running = false;
+      document.getElementById('start-' + id).textContent = '▶';
+    } else {
+      t.running = true;
+      document.getElementById('start-' + id).textContent = '⏸';
+      t.interval = setInterval(() => {
+        t.remaining--;
+        updateDisplay(id);
+        if (t.remaining <= 0) {
+          clearInterval(t.interval);
+          t.running = false;
+          document.getElementById('timer-' + id).classList.add('done');
+          document.getElementById('start-' + id).textContent = '✓';
+          beep();
+        }
+      }, 1000);
+    }
+  }
+
+  function resetTimer(id) {
+    const t = timers.find(x => x.id === id);
+    if (!t) return;
+    clearInterval(t.interval);
+    t.running = false;
+    t.remaining = t.total;
+    document.getElementById('timer-' + id).classList.remove('done');
+    document.getElementById('start-' + id).textContent = '▶';
+    updateDisplay(id);
+  }
+
+  function deleteTimer(id) {
+    const t = timers.find(x => x.id === id);
+    if (t) clearInterval(t.interval);
+    const idx = timers.findIndex(x => x.id === id);
+    if (idx >= 0) timers.splice(idx, 1);
+    const el = document.getElementById('timer-' + id);
+    if (el) el.remove();
+  }
+
+  function updateDisplay(id) {
+    const t = timers.find(x => x.id === id);
+    if (!t) return;
+    document.getElementById('time-' + id).textContent = formatTime(t.remaining);
+    const pct = t.total > 0 ? (t.remaining / t.total * 100) : 0;
+    document.getElementById('fill-' + id).style.width = pct + '%';
+  }
+
+  function formatTime(s) {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+  }
+
+  function beep() {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      for (let i = 0; i < 3; i++) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.frequency.value = 880;
+        osc.type = 'sine';
+        gain.gain.setValueAtTime(0.3, ctx.currentTime + i * 0.3);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + i * 0.3 + 0.25);
+        osc.start(ctx.currentTime + i * 0.3);
+        osc.stop(ctx.currentTime + i * 0.3 + 0.25);
+      }
+    } catch(e) {}
+  }
+});
+</script>
+</main>
+<script src="/assets/app.js"></script>
+</body>
+</html>

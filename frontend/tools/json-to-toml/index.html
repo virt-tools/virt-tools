@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JSON to TOML Converter — virt.tools</title>
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<header id="site-header"></header>
+<main class="tool-container">
+<h1>JSON to TOML Converter</h1>
+<p class="subtitle">Convert JSON objects to TOML format with proper type formatting and table nesting.</p>
+<div class="input-section">
+<label>JSON Input</label>
+<textarea id="input" rows="8" placeholder='{"title":"Example","owner":{"name":"Alice"}}' aria-label="{"></textarea>
+<button id="run" class="primary-btn" style="margin-top:8px;" type="button">Convert</button>
+</div>
+<div id="result" style="margin-top:1em;"></div>
+<script src="/assets/app.js"></script>
+<script>
+(function () {
+  "use strict";
+  var input = document.getElementById("input");
+  var result = document.getElementById("result");
+
+  function quote(value) {
+    return '"' + value.replace(/[\\"\b\t\n\f\r]/g, function (ch) {
+      return {"\\":"\\\\", '"':'\\"', "\b":"\\b", "\t":"\\t", "\n":"\\n", "\f":"\\f", "\r":"\\r"}[ch];
+    }).replace(/[\u0000-\u001f\u007f]/g, function (ch) {
+      return "\\u" + ch.charCodeAt(0).toString(16).padStart(4, "0");
+    }) + '"';
+  }
+
+  function key(value) {
+    return /^[A-Za-z0-9_-]+$/.test(value) ? value : quote(value);
+  }
+
+  function valueToToml(value, path) {
+    if (value === null) throw new Error(path + ": TOML has no null value");
+    if (typeof value === "string") return quote(value);
+    if (typeof value === "boolean") return String(value);
+    if (typeof value === "number") {
+      if (!Number.isFinite(value)) throw new Error(path + ": number must be finite");
+      return String(value);
+    }
+    if (Array.isArray(value)) {
+      if (value.some(function (item) { return item && typeof item === "object"; })) {
+        throw new Error(path + ": nested arrays/objects cannot be used as an inline TOML array");
+      }
+      return "[" + value.map(function (item, index) {
+        return valueToToml(item, path + "[" + index + "]");
+      }).join(", ") + "]";
+    }
+    throw new Error(path + ": unsupported value");
+  }
+
+  function emitTable(object, path, lines, includeHeader) {
+    if (includeHeader) lines.push("[" + path.map(key).join(".") + "]");
+
+    Object.keys(object).forEach(function (name) {
+      var value = object[name];
+      if (!(value && typeof value === "object" && !Array.isArray(value)) &&
+          !(Array.isArray(value) && value.every(function (item) {
+            return item && typeof item === "object" && !Array.isArray(item);
+          }))) {
+        lines.push(key(name) + " = " + valueToToml(value, path.concat(name).join(".")));
+      }
+    });
+
+    Object.keys(object).forEach(function (name) {
+      var value = object[name];
+      if (value && typeof value === "object" && !Array.isArray(value)) {
+        if (lines.length && lines[lines.length - 1] !== "") lines.push("");
+        emitTable(value, path.concat(name), lines, true);
+      } else if (Array.isArray(value) && value.length && value.every(function (item) {
+        return item && typeof item === "object" && !Array.isArray(item);
+      })) {
+        value.forEach(function (item) {
+          if (lines.length && lines[lines.length - 1] !== "") lines.push("");
+          lines.push("[[" + path.concat(name).map(key).join(".") + "]]");
+          emitTable(item, path.concat(name), lines, false);
+        });
+      }
+    });
+  }
+
+  document.getElementById("run").addEventListener("click", function () {
+    try {
+      var parsed = JSON.parse(input.value);
+      if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") {
+        throw new Error("The JSON root must be an object");
+      }
+      var lines = [];
+      emitTable(parsed, [], lines, false);
+      result.innerHTML = '<label for="output">TOML Output</label>' +
+        '<textarea id="output" rows="12" readonly></textarea>';
+      document.getElementById("output").value = lines.join("\n") + "\n";
+    } catch (error) {
+      result.textContent = "Error: " + error.message;
+    }
+  });
+}());
+</script>
+</main>
+</body>
+</html>

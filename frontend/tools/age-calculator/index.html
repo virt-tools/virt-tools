@@ -7,13 +7,21 @@
   <title>Age Calculator — Virtual Tools</title>
   <link rel="stylesheet" href="/assets/style.css">
   <style>
-    input.date { font-family: ui-monospace, monospace; font-size: 18px; width: 160px; }
-    .age-big { font-size: 30px; font-weight: 800; font-family: ui-monospace, monospace; }
+    input.date { font-family: ui-monospace, monospace; font-size: 18px; width: min(100%, 190px); }
+    .date-fields { display:flex; flex-wrap:wrap; gap:14px; align-items:flex-end; }
+    .date-field { flex: 1 1 190px; }
+    .date-field input { display:block; margin-top:6px; }
+    .age-big { font-size: clamp(24px, 6vw, 30px); font-weight: 800; font-family: ui-monospace, monospace; line-height:1.5; overflow-wrap:anywhere; }
     .age-big .unit { font-size: 16px; font-weight: 500; opacity: .8; margin: 0 8px 0 2px; }
     .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 8px; }
     .summary .stat { padding: 8px 10px; border: 1px solid var(--border,#444); border-radius: 6px; }
     .summary .stat-value { display:block; font-size: 18px; font-weight: 700; font-family: ui-monospace, monospace; }
     .summary .stat-label { font-size: 12px; opacity: .8; }
+    .section-heading { font-size: 1rem; margin: 0 0 6px; }
+    @media (max-width: 480px) {
+      input.date { width:100%; }
+      .age-big .unit { display:inline-block; margin-right:6px; }
+    }
   </style>
 </head>
 <body>
@@ -26,26 +34,26 @@
     </div>
 
     <div class="panel">
-      <div class="row" style="flex-wrap:wrap; gap:14px; align-items:flex-end;">
-        <div>
-          <label for="b">Date of birth</label><br>
-          <input class="date" id="b" type="text" placeholder="YYYY-MM-DD" inputmode="numeric" value="2000-01-01">
+      <div class="date-fields">
+        <div class="date-field">
+          <label for="b">Date of birth</label>
+          <input class="date" id="b" type="date" min="0001-01-01" max="9999-12-31" value="2000-01-01" required>
         </div>
-        <div>
-          <label for="t">Age at date</label><br>
-          <input class="date" id="t" type="text" placeholder="YYYY-MM-DD" inputmode="numeric">
+        <div class="date-field">
+          <label for="t">Age at date</label>
+          <input class="date" id="t" type="date" min="0001-01-01" max="9999-12-31" required>
         </div>
       </div>
-      <p class="note" id="err" hidden style="color:var(--bad);"></p>
+      <p class="note" id="err" role="alert" hidden style="color:var(--bad);"></p>
 
       <div class="spacer"></div>
-      <label>Age</label>
-      <div class="age-big" id="age">—</div>
+      <h2 class="section-heading">Age</h2>
+      <div class="age-big" id="age" role="status" aria-live="polite" aria-atomic="true">—</div>
 
       <div class="spacer"></div>
-      <label>Time lived &amp; next birthday</label>
+      <h2 class="section-heading">Time lived &amp; next birthday</h2>
       <div class="summary" id="summary"></div>
-      <p class="note" id="note"></p>
+      <p class="note" id="note">For a February 29 birth date, February 28 is used in non-leap years.</p>
     </div>
   </main>
 
@@ -76,7 +84,7 @@
       var m = s.match(/^(\d{1,4})-(\d{1,2})-(\d{1,2})$/);
       if (!m) return null;
       var y = parseInt(m[1], 10), mo = parseInt(m[2], 10), d = parseInt(m[3], 10);
-      if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+      if (y < 1 || y > 9999 || mo < 1 || mo > 12 || d < 1 || d > 31) return null;
       if (d > daysInMonth(y, mo)) return null;
       return { y: y, m: mo, d: d };
     }
@@ -94,27 +102,44 @@
       return 0;
     }
     function daysBetween(from, to) {
-      var f = Date.UTC(from.y, from.m - 1, from.d);
-      var t = Date.UTC(to.y, to.m - 1, to.d);
+      var f = utcTimestamp(from);
+      var t = utcTimestamp(to);
       return Math.round((t - f) / 86400000);
+    }
+
+    // Date.UTC treats years 0–99 as 1900–1999, so set the full year explicitly.
+    function utcTimestamp(value) {
+      var date = new Date(0);
+      date.setUTCHours(0, 0, 0, 0);
+      date.setUTCFullYear(value.y, value.m - 1, value.d);
+      return date.getTime();
+    }
+
+    function addMonthsClamped(date, months) {
+      var monthIndex = date.m - 1 + months;
+      var y = date.y + Math.floor(monthIndex / 12);
+      var m = ((monthIndex % 12) + 12) % 12 + 1;
+      return { y: y, m: m, d: Math.min(date.d, daysInMonth(y, m)) };
     }
 
     function ageYMD(birth, today) {
       var years = today.y - birth.y;
-      var months = today.m - birth.m;
-      var days = today.d - birth.d;
-      if (days < 0) {
-        months -= 1;
-        var pm = today.m - 1, py = today.y;
-        if (pm === 0) { pm = 12; py -= 1; }
-        days += daysInMonth(py, pm);
+      var anniversary = addMonthsClamped(birth, years * 12);
+      if (cmpDate(anniversary, today) > 0) {
+        years -= 1;
+        anniversary = addMonthsClamped(birth, years * 12);
       }
-      if (months < 0) { years -= 1; months += 12; }
-      return { years: years, months: months, days: days };
+      var months = (today.y - anniversary.y) * 12 + today.m - anniversary.m;
+      var monthAnniversary = addMonthsClamped(anniversary, months);
+      if (cmpDate(monthAnniversary, today) > 0) {
+        months -= 1;
+        monthAnniversary = addMonthsClamped(anniversary, months);
+      }
+      return { years: years, months: months, days: daysBetween(monthAnniversary, today) };
     }
 
     function weekdayName(d) {
-      var dow = new Date(Date.UTC(d.y, d.m - 1, d.d)).getUTCDay();
+      var dow = new Date(utcTimestamp(d)).getUTCDay();
       return ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][dow];
     }
 
@@ -155,8 +180,13 @@
       }
 
       var a = ageYMD(birth, today);
-      ageEl.innerHTML = a.years + "<span class=\"unit\">years</span>" + a.months +
-        "<span class=\"unit\">months</span>" + a.days + "<span class=\"unit\">days</span>";
+      [[a.years, "years"], [a.months, "months"], [a.days, "days"]].forEach(function (part) {
+        ageEl.appendChild(document.createTextNode(String(part[0])));
+        var unit = document.createElement("span");
+        unit.className = "unit";
+        unit.textContent = part[1];
+        ageEl.appendChild(unit);
+      });
 
       var totalDays = daysBetween(birth, today);
       var totalWeeks = Math.floor(totalDays / 7);

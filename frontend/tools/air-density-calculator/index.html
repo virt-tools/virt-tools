@@ -11,6 +11,7 @@
     .row2 { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
     .row2 .field { margin-bottom: 0; }
     input[type="number"] { font-family: ui-monospace, monospace; width: 110px; }
+    .input-group { display: flex; gap: 6px; align-items: center; }
     select { min-width: 130px; }
     .kv { display: grid; grid-template-columns: 230px 1fr; gap: 6px 12px; margin-top: 12px; }
     .kv dt { color: var(--text-dim); font-size: 0.85rem; align-self: center; }
@@ -23,6 +24,17 @@
     .seg button { background: var(--bg-elev-2); color: var(--text); border: none; padding: 5px 12px; cursor: pointer; font-size: 0.85rem; }
     .seg button.active { background: var(--accent, #6ea8ff); color: #08111f; font-weight: 600; }
     h3.sec { font-size: 0.92rem; font-weight: 600; margin: 18px 0 4px; color: var(--text-dim); }
+    .error { color: var(--bad, #f87171); }
+    @media (max-width: 560px) {
+      .row2 { display: grid; grid-template-columns: 1fr; align-items: stretch; }
+      .row2 .field { width: 100%; }
+      .input-group input { flex: 1; min-width: 0; width: auto; }
+      .input-group select { flex: 0 0 auto; min-width: 76px; }
+      .kv { grid-template-columns: 1fr; gap: 2px; }
+      .kv dd { margin-bottom: 9px; overflow-wrap: anywhere; }
+      .seg { display: flex; width: 100%; }
+      .seg button { flex: 1; }
+    }
   </style>
 </head>
 <body>
@@ -36,47 +48,51 @@
 
     <div class="panel">
       <div class="field">
-        <label>Pressure source</label>
-        <div class="seg" id="seg">
-          <button data-mode="press" class="active">Station pressure</button>
-          <button data-mode="alt">Altitude</button>
+        <span id="sourceLabel">Pressure source</span>
+        <div class="seg" id="seg" role="group" aria-labelledby="sourceLabel">
+          <button data-mode="press" class="active" type="button" aria-pressed="true">Station pressure</button>
+          <button data-mode="alt" type="button" aria-pressed="false">Altitude</button>
         </div>
       </div>
 
       <div class="row2">
         <div class="field" id="pressField">
           <label for="press">Station pressure</label>
-          <input id="press" type="number" min="0" step="any" value="1013.25">
-          <select id="punit" style="min-width:80px;margin-left:6px;">
-            <option value="hPa" selected>hPa</option>
-            <option value="inHg">inHg</option>
-          </select>
+          <div class="input-group"><input id="press" type="number" min="0" step="any" value="1013.25" inputmode="decimal">
+            <select id="punit" aria-label="Pressure unit">
+              <option value="hPa" selected>hPa</option>
+              <option value="inHg">inHg</option>
+            </select>
+          </div>
         </div>
-        <div class="field" id="altField" style="display:none;">
+        <div class="field" id="altField" hidden>
           <label for="alt">Altitude</label>
-          <input id="alt" type="number" step="any" value="0">
-          <select id="aunit" style="min-width:80px;margin-left:6px;">
-            <option value="m" selected>m</option>
-            <option value="ft">ft</option>
-          </select>
+          <div class="input-group"><input id="alt" type="number" step="any" value="0" inputmode="decimal" aria-describedby="altHelp">
+            <select id="aunit" aria-label="Altitude unit">
+              <option value="m" selected>m</option>
+              <option value="ft">ft</option>
+            </select>
+          </div>
+          <small id="altHelp">ICAO troposphere range: −2,000 to 11,000 m.</small>
         </div>
         <div class="field">
           <label for="temp">Temperature</label>
-          <input id="temp" type="number" step="any" value="15">
-          <select id="tunit" style="min-width:80px;margin-left:6px;">
-            <option value="C" selected>°C</option>
-            <option value="F">°F</option>
-          </select>
+          <div class="input-group"><input id="temp" type="number" step="any" value="15" inputmode="decimal">
+            <select id="tunit" aria-label="Temperature unit">
+              <option value="C" selected>°C</option>
+              <option value="F">°F</option>
+            </select>
+          </div>
         </div>
         <div class="field">
           <label for="rh">Relative humidity</label>
-          <input id="rh" type="number" min="0" max="100" step="any" value="50" style="width:80px;"> %
+          <div class="input-group"><input id="rh" type="number" min="0" max="100" step="any" value="50" style="width:80px;" inputmode="decimal"><span aria-hidden="true">%</span></div>
         </div>
       </div>
 
-      <div class="verdict" id="verdict"></div>
+      <div class="verdict" id="verdict" role="status" aria-live="polite"></div>
       <dl class="kv" id="kv"></dl>
-      <p class="note" id="err"></p>
+      <p class="note" id="err" role="status" aria-live="polite"></p>
     </div>
   </main>
 
@@ -90,65 +106,87 @@
     var verdictEl = $("verdict"), kvEl = $("kv"), errEl = $("err");
     var mode = "press";
 
-    function num(el) { var n = parseFloat(el.value); return isNaN(n) ? NaN : n; }
+    function num(el) { var n = Number(el.value); return el.value.trim() !== "" && Number.isFinite(n) ? n : NaN; }
     function fmt(n, d) { return Number(n).toFixed(d); }
+
+    function fail(message) {
+      verdictEl.textContent = "";
+      verdictEl.className = "verdict";
+      kvEl.replaceChildren();
+      errEl.textContent = message;
+      errEl.className = "note error";
+    }
 
     function pressureFromAlt(alt_m) {
       // ICAO barometric formula (troposphere).
       return 101325 * Math.pow(1 - 2.25577e-5 * alt_m, 5.25588);
     }
     function altFromPressure(P_pa) {
-      return 44330 * (1 - Math.pow(P_pa / 101325, 1 / 5.255));
+      return 44330.77 * (1 - Math.pow(P_pa / 101325, 1 / 5.25588));
+    }
+    function altFromDensity(rho) {
+      // Invert ISA troposphere density: rho/rho0 = (1 - Lh/T0)^(g/(R*L)-1).
+      var rho0 = 1.225, T0 = 288.15, L = 0.0065, exponent = 4.25588;
+      return T0 / L * (1 - Math.pow(rho / rho0, 1 / exponent));
     }
 
     function render() {
-      errEl.textContent = ""; verdictEl.textContent = ""; verdictEl.className = "verdict"; kvEl.innerHTML = "";
+      errEl.textContent = ""; errEl.className = "note"; verdictEl.textContent = ""; verdictEl.className = "verdict"; kvEl.replaceChildren();
       var t = num(tempEl), rh = num(rhEl);
-      if (isNaN(t) || isNaN(rh)) { verdictEl.textContent = "✗ Enter valid temperature and humidity."; verdictEl.className = "verdict bad"; return; }
-      if (rh < 0) rh = 0; if (rh > 100) rh = 100;
+      if (isNaN(t) || isNaN(rh)) { fail("Enter finite values for temperature and relative humidity."); return; }
+      if (rh < 0 || rh > 100) { fail("Relative humidity must be between 0% and 100%."); return; }
 
       // Resolve pressure in Pa.
       var P;
       if (mode === "alt") {
         var a = num(altEl);
-        if (isNaN(a)) { verdictEl.textContent = "✗ Enter a valid altitude."; verdictEl.className = "verdict bad"; return; }
+        if (isNaN(a)) { fail("Enter a finite altitude."); return; }
         var am = aunitEl.value === "ft" ? a * 0.3048 : a;
+        if (am < -2000 || am > 11000) { fail("Altitude mode supports the ICAO troposphere from −2,000 to 11,000 m (−6,562 to 36,089 ft)."); return; }
         P = pressureFromAlt(am);
       } else {
         var p = num(pressEl);
-        if (isNaN(p) || p <= 0) { verdictEl.textContent = "✗ Enter a positive station pressure."; verdictEl.className = "verdict bad"; return; }
+        if (isNaN(p) || p <= 0) { fail("Enter a finite, positive station pressure."); return; }
         P = punitEl.value === "inHg" ? p * 3386.39 : p * 100; // hPa->Pa, inHg->Pa
+        if (!Number.isFinite(P)) { fail("Station pressure is too large to calculate."); return; }
       }
 
       // Temperature to °C then K.
       var Tc = tunitEl.value === "F" ? (t - 32) * 5 / 9 : t;
       var T = Tc + 273.15;
+      if (T <= 0) { fail("Temperature must be above absolute zero (−273.15 °C or −459.67 °F)."); return; }
+      if (Tc < -80 || Tc > 80) { fail("The vapor-pressure model is limited to temperatures from −80 to 80 °C (−112 to 176 °F)."); return; }
 
       var Rd = 287.058, Rv = 461.495;
       var es = 0.61094 * Math.exp(17.625 * Tc / (Tc + 243.04)) * 1000; // saturation vapor pressure, Pa (Tetens)
       var e = rh / 100 * es;                                          // actual vapor pressure, Pa
       var pd = P - e;                                                 // dry-air partial pressure, Pa
+      if (!Number.isFinite(es) || e >= P) { fail("Water-vapor pressure must be lower than station pressure. Check the temperature, humidity, and pressure values."); return; }
       var rho = pd / (Rd * T) + e / (Rv * T);
+      if (!Number.isFinite(rho) || rho <= 0) { fail("These inputs do not produce a finite, positive air density."); return; }
 
-      // Density altitude (approx): altitude at which ISA air would have this density.
-      // Solve P_isa such that rho_dry(P) = rho (dry ref). Use: rho_dry(P) = P/(Rd*288.15) -> P = rho*Rd*288.15
-      // then alt from that P. (Humidity baked into rho; close enough as an indicator.)
-      var P_equiv = rho * Rd * 288.15;
-      var densityAlt = altFromPressure(P_equiv);
+      // Altitude at which ISA tropospheric density equals the calculated moist-air density.
+      var densityAlt = altFromDensity(rho);
       var pressureAlt = altFromPressure(P);
       var rhoISA = 1.225;
       var deltaPct = (rho / rhoISA - 1) * 100;
 
       verdictEl.textContent = fmt(rho, 4) + " kg/m³";
       verdictEl.className = "verdict ok";
-      kvEl.innerHTML =
-        "<dt>Air density</dt><dd class='big'>" + fmt(rho, 4) + " kg/m³</dd>" +
-        "<dt>vs ICAO standard</dt><dd>" + (deltaPct >= 0 ? "+" : "") + fmt(deltaPct, 2) + "%  (vs 1.225 kg/m³)</dd>" +
-        "<dt>Saturation vapor pressure</dt><dd>" + fmt(es / 100, 2) + " hPa</dd>" +
-        "<dt>Actual vapor pressure</dt><dd>" + fmt(e / 100, 2) + " hPa</dd>" +
-        "<dt>Station pressure</dt><dd>" + fmt(P / 100, 2) + " hPa  (" + fmt(P / 3386.39, 2) + " inHg)</dd>" +
-        "<dt>Pressure altitude</dt><dd>" + fmt(pressureAlt, 0) + " m  (" + fmt(pressureAlt * 3.28084, 0) + " ft)</dd>" +
-        "<dt>Density altitude (approx.)</dt><dd>" + fmt(densityAlt, 0) + " m  (" + fmt(densityAlt * 3.28084, 0) + " ft)</dd>";
+      [
+        ["Air density", fmt(rho, 4) + " kg/m³", "big"],
+        ["vs ICAO standard", (deltaPct >= 0 ? "+" : "") + fmt(deltaPct, 2) + "% (vs 1.225 kg/m³)"],
+        ["Saturation vapor pressure", fmt(es / 100, 2) + " hPa"],
+        ["Actual vapor pressure", fmt(e / 100, 2) + " hPa"],
+        ["Station pressure", fmt(P / 100, 2) + " hPa (" + fmt(P / 3386.39, 2) + " inHg)"],
+        ["Pressure altitude", fmt(pressureAlt, 0) + " m (" + fmt(pressureAlt * 3.28084, 0) + " ft)"],
+        ["Density altitude (approx.)", fmt(densityAlt, 0) + " m (" + fmt(densityAlt * 3.28084, 0) + " ft)"]
+      ].forEach(function (item) {
+        var dt = document.createElement("dt"), dd = document.createElement("dd");
+        dt.textContent = item[0]; dd.textContent = item[1];
+        if (item[2]) dd.className = item[2];
+        kvEl.append(dt, dd);
+      });
 
       errEl.textContent = "Moist air is modeled as two ideal gases: ρ = p_d/(R_d·T) + e/(R_v·T), where p_d is the dry-air partial pressure, e the water-vapor partial pressure from the Tetens saturation formula, R_d = 287.058 and R_v = 461.495 J/(kg·K). Humid air is slightly less dense than dry air at the same T and P because water vapor (M = 18) is lighter than the displaced dry air (M ≈ 29). Density altitude is an approximation that folds humidity into the density; for exact aviation performance use a dedicated flight computer. Station pressure is the uncorrected barometer reading — not sea-level-corrected (altimeter) pressure.";
       errEl.className = "note";
@@ -156,11 +194,12 @@
 
     seg.querySelectorAll("button").forEach(function (b) {
       b.addEventListener("click", function () {
-        seg.querySelectorAll("button").forEach(function (x) { x.classList.remove("active"); });
+        seg.querySelectorAll("button").forEach(function (x) { x.classList.remove("active"); x.setAttribute("aria-pressed", "false"); });
         b.classList.add("active");
+        b.setAttribute("aria-pressed", "true");
         mode = b.getAttribute("data-mode");
-        pressField.style.display = mode === "press" ? "" : "none";
-        altField.style.display = mode === "alt" ? "" : "none";
+        pressField.hidden = mode !== "press";
+        altField.hidden = mode !== "alt";
         render();
       });
     });

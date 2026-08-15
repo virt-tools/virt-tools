@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Stack Trace Parser — Virtual Tools</title>
+  <meta name="description" content="Parse, search and export Chrome, Node.js, Firefox, Safari, Python, Java and .NET stack traces locally.">
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .trace-grid{display:grid;grid-template-columns:minmax(17rem,.8fr) minmax(0,1.2fr);gap:1rem}.field textarea{min-height:28rem;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;line-height:1.48;resize:vertical}.toolbar,.actions,.filters{display:flex;flex-wrap:wrap;gap:.65rem;align-items:end}.toolbar{justify-content:space-between;margin-bottom:1rem}.filters{margin:.85rem 0}.filters .field{margin:0;min-width:10rem;flex:1}.filters .search{flex:2 1 15rem}.summary{display:flex;flex-wrap:wrap;gap:.5rem;margin:.5rem 0}.badge{border:1px solid var(--border);border-radius:999px;padding:.22rem .6rem;font-size:.88rem;background:var(--surface)}.frames{list-style:none;padding:0;margin:.75rem 0 0;display:grid;gap:.6rem}.frame{border:1px solid var(--border);border-radius:.6rem;padding:.7rem .8rem;min-width:0;background:var(--surface)}.frame-head{display:flex;gap:.6rem;justify-content:space-between;align-items:start}.frame-function{font-weight:650;overflow-wrap:anywhere}.language{font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}.location{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.88rem;overflow-wrap:anywhere;margin-top:.35rem}.location a{word-break:break-all}.raw{color:var(--muted);white-space:pre-wrap;overflow-wrap:anywhere;margin:.2rem 0 0}.unmatched{border-left:4px solid var(--warning,#b7791f)}.empty{padding:2rem 1rem;text-align:center;border:1px dashed var(--border);border-radius:.6rem;color:var(--muted)}.status{min-height:1.5em;margin:.6rem 0}.error{color:var(--danger,#b42318)}.link-settings{margin-top:1rem}.link-settings summary{cursor:pointer;font-weight:600}.template-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.5rem;align-items:end}.note code{overflow-wrap:anywhere}.count{text-align:right;font-variant-numeric:tabular-nums}.visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+    @media(max-width:820px){.trace-grid{grid-template-columns:1fr}.field textarea{min-height:18rem}.toolbar .actions{width:100%}.toolbar .actions button{flex:1}.template-row{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Stack Trace Parser</h1>
+      <p>Turn mixed stack traces into searchable frames. Parsing, filtering and export happen entirely in your browser.</p>
+    </div>
+    <div class="panel">
+      <div class="toolbar">
+        <div class="actions"><button id="parse" type="button">Parse trace</button><button id="sample" class="secondary" type="button">Load sample</button><button id="clear" class="secondary" type="button">Clear</button></div>
+        <div class="actions"><button id="copy" class="secondary" type="button">Copy JSON</button><button id="download" class="secondary" type="button">Download JSON</button></div>
+      </div>
+      <div class="trace-grid">
+        <div class="field">
+          <label for="input">Stack trace</label>
+          <textarea id="input" spellcheck="false" maxlength="300000" aria-describedby="count limits" placeholder="Paste a Chrome, Node.js, Firefox, Safari, Python, Java or .NET stack trace…"></textarea>
+          <div id="count" class="note count">0 / 300,000 characters</div>
+        </div>
+        <section aria-labelledby="results-title">
+          <h2 id="results-title">Parsed frames</h2>
+          <div class="filters">
+            <div class="field search"><label for="search">Search frames</label><input id="search" type="search" placeholder="Function, file or raw line" disabled></div>
+            <div class="field"><label for="language">Language</label><select id="language" disabled><option value="all">All languages</option></select></div>
+            <div class="field"><label for="kind">Line type</label><select id="kind" disabled><option value="all">Frames and unmatched</option><option value="frame">Parsed frames</option><option value="unmatched">Unmatched lines</option></select></div>
+          </div>
+          <div id="summary" class="summary" aria-label="Trace summary"></div>
+          <div id="empty" class="empty">Paste a stack trace, then choose Parse trace.</div>
+          <ol id="frames" class="frames" aria-label="Parsed stack frames"></ol>
+        </section>
+      </div>
+      <p id="status" class="status note" role="status" aria-live="polite"></p>
+      <details class="link-settings">
+        <summary>Local editor links</summary>
+        <p class="note">Links are off by default and are only displayed locally. Templates must use an allowed protocol: <code>vscode:</code>, <code>vscode-insiders:</code>, <code>idea:</code>, <code>subl:</code>, <code>txmt:</code>, or <code>file:</code>. Available placeholders are <code>{file}</code>, <code>{line}</code>, and <code>{column}</code>.</p>
+        <div class="template-row">
+          <div class="field"><label for="template">Link template</label><input id="template" type="text" value="vscode://file/{file}:{line}:{column}" maxlength="500" spellcheck="false"></div>
+          <label><input id="links" type="checkbox"> Show editor links</label>
+        </div>
+      </details>
+      <p id="limits" class="note">Limits: 300,000 characters, 10,000 input lines, and 5,000 displayed results. Unmatched non-empty lines are preserved in JSON.</p>
+    </div>
+  </main>
+  <script src="/assets/app.js"></script>
+  <script>
+  (function(){
+    "use strict";
+    var MAX_CHARS=300000,MAX_LINES=10000,MAX_RENDER=5000,items=[],filtered=[];
+    var input=document.getElementById("input"),frames=document.getElementById("frames"),empty=document.getElementById("empty"),status=document.getElementById("status"),summary=document.getElementById("summary"),search=document.getElementById("search"),language=document.getElementById("language"),kind=document.getElementById("kind"),links=document.getElementById("links"),template=document.getElementById("template"),count=document.getElementById("count");
+    function locationParts(value){var m=String(value).match(/^(.*?):(\d+)(?::(\d+))?$/);return m?{file:m[1],line:Number(m[2]),column:m[3]?Number(m[3]):null}:null;}
+    function frame(languageName,fn,file,line,column,raw){return{type:"frame",language:languageName,function:fn||"(anonymous)",file:file||null,line:line||null,column:column||null,raw:raw};}
+    function parseLine(raw){var s=raw.trim(),m,loc;
+      if(!s)return{type:"unmatched",raw:raw};
+      m=s.match(/^File\s+["'](.+?)["'],\s+line\s+(\d+)(?:,\s+in\s+(.+))?$/);if(m)return frame("Python",m[3],m[1],Number(m[2]),null,raw);
+      m=s.match(/^at\s+(.+?)\s+in\s+(.+?):line\s+(\d+)$/i);if(m)return frame(".NET",m[1],m[2],Number(m[3]),null,raw);
+      m=s.match(/^at\s+(.+?)\(([^()]*)\)$/);if(m&&(/\.java(?::\d+)?$/.test(m[2])||/^(?:Native Method|Unknown Source)$/.test(m[2]))){loc=locationParts(m[2]);return frame("Java",m[1],loc?loc.file:null,loc?loc.line:null,loc?loc.column:null,raw);}
+      m=s.match(/^at\s+([\w.$+`<>\[\], ]+\([^)]*\))$/);if(m&&/[A-Z][\w+`]*\.[A-Z\w]/.test(m[1]))return frame(".NET",m[1],null,null,null,raw);
+      m=s.match(/^at\s+(?:(.*?)\s+\()?(.+?)(?:\))?$/);if(m){loc=locationParts(m[2]);if(loc)return frame("JavaScript",m[1],loc.file,loc.line,loc.column,raw);}
+      m=s.match(/^(.*?)@(.+)$/);if(m){loc=locationParts(m[2]);if(loc)return frame("JavaScript",m[1],loc.file,loc.line,loc.column,raw);}
+      m=s.match(/^at\s+(.+?)(?:\s+in\s+(.+))?$/);if(m&&/\.(?:cs|vb)(?::\d+)?$/i.test(m[2]||"")){loc=locationParts(m[2]);return frame(".NET",m[1],loc?loc.file:m[2],loc?loc.line:null,loc?loc.column:null,raw);}
+      return{type:"unmatched",raw:raw};
+    }
+    function parse(){clearStatus();var text=input.value;if(!text.trim()){items=[];render();setStatus("Enter a stack trace to parse.",true);input.focus();return;}if(text.length>MAX_CHARS){setStatus("Input exceeds the 300,000 character limit.",true);return;}var lines=text.replace(/\r\n?/g,"\n").split("\n");if(lines.length>MAX_LINES){setStatus("Input exceeds the 10,000 line limit.",true);return;}items=lines.filter(function(x){return x.trim();}).map(parseLine);populateLanguages();search.disabled=language.disabled=kind.disabled=false;applyFilters();var parsed=items.filter(function(x){return x.type==="frame";}).length;setStatus("Parsed "+parsed.toLocaleString()+" frame"+(parsed===1?"":"s")+" from "+items.length.toLocaleString()+" non-empty lines.");}
+    function populateLanguages(){var old=language.value,names=Array.from(new Set(items.filter(function(x){return x.type==="frame";}).map(function(x){return x.language;}))).sort();language.replaceChildren();addOption("all","All languages");names.forEach(function(x){addOption(x,x);});language.value=names.indexOf(old)>=0?old:"all";}
+    function addOption(value,label){var option=document.createElement("option");option.value=value;option.textContent=label;language.appendChild(option);}
+    function applyFilters(){var q=search.value.trim().toLocaleLowerCase(),lang=language.value,k=kind.value;filtered=items.filter(function(x){if(k!=="all"&&x.type!==k)return false;if(lang!=="all"&&x.language!==lang)return false;return !q||JSON.stringify(x).toLocaleLowerCase().indexOf(q)>=0;});render();}
+    function render(){frames.replaceChildren();summary.replaceChildren();var parsed=items.filter(function(x){return x.type==="frame";}).length,unmatched=items.length-parsed;addBadge(parsed+" parsed");addBadge(unmatched+" unmatched");addBadge(filtered.length+" shown");empty.hidden=filtered.length>0;empty.textContent=items.length?"No results match these filters.":"Paste a stack trace, then choose Parse trace.";filtered.slice(0,MAX_RENDER).forEach(renderItem);if(filtered.length>MAX_RENDER)setStatus("Showing the first "+MAX_RENDER.toLocaleString()+" matching results. JSON export still includes all parsed lines.");}
+    function addBadge(text){var span=document.createElement("span");span.className="badge";span.textContent=text;summary.appendChild(span);}
+    function renderItem(item,index){var li=document.createElement("li");li.className="frame"+(item.type==="unmatched"?" unmatched":"");if(item.type==="unmatched"){var p=document.createElement("p");p.className="raw";p.textContent=item.raw;li.appendChild(p);}else{var head=document.createElement("div");head.className="frame-head";var fn=document.createElement("span");fn.className="frame-function";fn.textContent=item.function;var lang=document.createElement("span");lang.className="language";lang.textContent=item.language;head.append(fn,lang);li.appendChild(head);var location=document.createElement("div");location.className="location";var label=formatLocation(item);var url=links.checked?makeLink(item):null;if(url){var a=document.createElement("a");a.href=url;a.textContent=label;a.rel="noopener noreferrer";location.appendChild(a);}else location.textContent=label;li.appendChild(location);var raw=document.createElement("p");raw.className="raw";raw.textContent=item.raw;li.appendChild(raw);}li.setAttribute("aria-label","Result "+(index+1));frames.appendChild(li);}
+    function formatLocation(x){return(x.file||"Unknown source")+(x.line!=null?":"+x.line:"")+(x.column!=null?":"+x.column:"");}
+    function makeLink(item){if(!item.file)return null;var value=template.value.trim(),match=value.match(/^([a-z][a-z0-9+.-]*):/i),allowed=["vscode","vscode-insiders","idea","subl","txmt","file"];if(!match||allowed.indexOf(match[1].toLowerCase())<0)return null;return value.replace(/\{file\}/g,encodeURI(item.file)).replace(/\{line\}/g,String(item.line||1)).replace(/\{column\}/g,String(item.column||1));}
+    function json(){return JSON.stringify({summary:{lines:items.length,frames:items.filter(function(x){return x.type==="frame";}).length,unmatched:items.filter(function(x){return x.type==="unmatched";}).length},items:items},null,2);}
+    function clearStatus(){status.textContent="";status.classList.remove("error");}function setStatus(message,error){status.textContent=message;status.classList.toggle("error",!!error);}
+    function updateCount(){count.textContent=input.value.length.toLocaleString()+" / 300,000 characters";}
+    function copyJSON(){if(!items.length){setStatus("Parse a trace before copying JSON.",true);return;}var value=json();if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(value).then(function(){setStatus("JSON copied to the clipboard.");},fallback);else fallback();function fallback(){var area=document.createElement("textarea");area.value=value;area.className="visually-hidden";document.body.appendChild(area);area.select();try{document.execCommand("copy");setStatus("JSON copied to the clipboard.");}catch(e){setStatus("Copy is unavailable in this browser.",true);}area.remove();}}
+    document.getElementById("parse").addEventListener("click",parse);document.getElementById("sample").addEventListener("click",function(){input.value='Error: mixed example\n    at renderView (/srv/app/view.js:42:17)\nfetchData@https://example.test/app.js:18:9\n  File "/srv/api/main.py", line 73, in handle_request\n    at com.example.Worker.run(Worker.java:88)\n   at Example.Service.Load() in C:\\src\\Service.cs:line 31\nCaused by: timeout';updateCount();parse();});document.getElementById("clear").addEventListener("click",function(){input.value="";items=[];filtered=[];search.value="";language.innerHTML='<option value="all">All languages</option>';language.disabled=search.disabled=kind.disabled=true;kind.value="all";clearStatus();updateCount();render();input.focus();});
+    input.addEventListener("input",updateCount);search.addEventListener("input",applyFilters);language.addEventListener("change",applyFilters);kind.addEventListener("change",applyFilters);links.addEventListener("change",function(){if(links.checked&&!makeLink({file:"test",line:1,column:1})){links.checked=false;setStatus("The editor-link template must begin with an allowed protocol.",true);}render();});template.addEventListener("change",function(){if(links.checked&&!makeLink({file:"test",line:1,column:1})){links.checked=false;setStatus("Invalid template; editor links were turned off.",true);}render();});document.getElementById("copy").addEventListener("click",copyJSON);document.getElementById("download").addEventListener("click",function(){if(!items.length){setStatus("Parse a trace before downloading JSON.",true);return;}var url=URL.createObjectURL(new Blob([json()],{type:"application/json;charset=utf-8"})),a=document.createElement("a");a.href=url;a.download="stack-trace.json";document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(url);},0);setStatus("Downloaded stack-trace.json.");});
+    updateCount();render();
+  })();
+  </script>
+</body>
+</html>

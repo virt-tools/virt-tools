@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Audio Extractor — virt.tools</title>
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<header id="site-header"></header>
+<main class="tool-container">
+<h1>Audio Extractor</h1>
+<p class="subtitle">Extract audio from a video file and download as WAV. 100% client-side via Web Audio API.</p>
+<div class="input-section">
+<input type="file" id="file" accept="video/*" aria-label="File">
+<button id="process" class="primary-btn" type="button">Extract Audio & Download</button>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded',()=>{
+document.getElementById('process').addEventListener('click',async()=>{
+const file=document.getElementById('file').files[0];
+if(!file){alert('Please select a video file.');return;}
+const url=URL.createObjectURL(file);
+const video=document.createElement('video');
+video.src=url;video.crossOrigin='anonymous';
+await new Promise(r=>{video.onloadedmetadata=r;});
+const src=new MediaElementAudioSourceNode(new AudioContext(),{mediaElement:video});
+const dest=src.context.createMediaStreamDestination();
+src.connect(dest);
+await video.play();
+const recorder=new MediaRecorder(dest.stream);
+const chunks=[];
+recorder.ondataavailable=e=>chunks.push(e.data);
+const done=new Promise(r=>{recorder.onstop=r;});
+recorder.start();
+video.onended=()=>recorder.stop();
+await done;
+const blob=new Blob(chunks,{type:'audio/webm'});
+const audioCtx=new AudioContext();
+const buf=await audioCtx.decodeAudioData(await blob.arrayBuffer());
+const wav=audioBufferToWav(buf);
+const a=document.createElement('a');
+a.href=URL.createObjectURL(new Blob([wav],{type:'audio/wav'}));
+a.download='extracted.wav';a.click();
+URL.revokeObjectURL(url);
+audioCtx.close();
+function audioBufferToWav(buf){
+const numCh=buf.numberOfChannels,sr=buf.sampleRate;
+const len=buf.length*2*numCh;
+const arr=new ArrayBuffer(44+len);
+const v=new DataView(arr);
+const ws=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i));};
+ws(0,'RIFF');v.setUint32(4,36+len,true);ws(8,'WAVE');
+ws(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);
+v.setUint16(22,numCh,true);v.setUint32(24,sr,true);
+v.setUint32(28,sr*numCh*2,true);v.setUint16(32,numCh*2,true);
+v.setUint16(34,16,true);ws(36,'data');v.setUint32(40,len,true);
+let off=44;
+for(let i=0;i<buf.length;i++){
+for(let ch=0;ch<numCh;ch++){
+const s=Math.max(-1,Math.min(1,buf.getChannelData(ch)[i]));
+v.setInt16(off,s<0?s*32768:s*32767,true);off+=2;
+}
+}
+return arr;
+}
+});
+});
+</script>
+</main>
+<script src="/assets/app.js"></script>
+</body>
+</html>

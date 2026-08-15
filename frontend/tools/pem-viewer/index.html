@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PEM Viewer - virt.tools</title>
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+body{max-width:900px;margin:0 auto;padding:20px;font-family:system-ui,sans-serif}
+textarea{width:100%;height:150px;font-family:monospace;font-size:13px;padding:10px;border:1px solid #ddd;border-radius:6px;resize:vertical}
+button{padding:8px 16px;border:none;border-radius:6px;background:#2563eb;color:#fff;cursor:pointer;font-size:14px;margin:4px 0}
+button:hover{background:#1d4ed8}
+.result{margin-top:16px;padding:14px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;font-family:monospace;font-size:13px;white-space:pre-wrap;word-break:break-all}
+.result h3{font-family:system-ui;font-size:15px;margin:0 0 8px}
+.tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;color:#fff}
+.tag-rsa{background:#7c3aed}.tag-ec{background:#0891b2}.tag-dsa{background:#dc2626}.tag-unknown{background:#64748b}
+.field{margin:4px 0;color:#475569}
+.field b{color:#0f172a}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main class="tool-container">
+<h1>🔐 PEM Viewer</h1>
+<p>Paste a PEM-encoded certificate, key, or CSR to inspect its structure. 100% client-side — nothing leaves your browser.</p>
+<textarea id="input" placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----" aria-label="Begin Certificate     &#10;...&#10;     End Certificate"></textarea>
+<br>
+<button onclick="parse()" type="button">Parse</button>
+<button onclick="document.getElementById('input').value='';document.getElementById('out').innerHTML=''" type="button">Clear</button>
+<div class="result" id="out"></div>
+<script>
+function parse(){
+  const txt=document.getElementById('input').value.trim();
+  const out=document.getElementById('out');
+  if(!txt){out.innerHTML='<span style="color:#dc2626">Paste PEM text first.</span>';return;}
+  const blocks=[];
+  const re=/-----BEGIN ([^-]+)-----([\s\S]*?)-----END \1-----/g;
+  let m;
+  while((m=re.exec(txt))) blocks.push({label:m[1].trim(),b64:m[2].replace(/\s/g,'')});
+  if(!blocks.length){out.innerHTML='<span style="color:#dc2626">No PEM blocks found.</span>';return;}
+  let html='';
+  blocks.forEach(b=>{
+    const bytes=base64ToBytes(b.b64);
+    let type='unknown',color='tag-unknown';
+    const lbl=b.label.toLowerCase();
+    if(lbl.includes('rsa')){type='RSA';color='tag-rsa';}
+    else if(lbl.includes('ec')){type='ECDSA';color='tag-ec';}
+    else if(lbl.includes('dsa')){type='DSA';color='tag-dsa';}
+    else if(lbl.includes('certificate')||lbl.includes('cert')){type='Certificate';color='tag-rsa';}
+    else if(lbl.includes('csr')||lbl.includes('request')){type='CSR';color='tag-ec';}
+    html+='<h3><span class="tag '+color+'">'+type+'</span> '+b.label+'</h3>';
+    html+='<div class="field"><b>Base64 length:</b> '+b.b64.length+' chars</div>';
+    html+='<div class="field"><b>DER size:</b> '+bytes.length+' bytes</div>';
+    html+='<div class="field"><b>SHA-256 (DER):</b> '+(crypto.subtle?hashing(bytes):'(computing...)')+'</div>';
+    const hex=Array.from(bytes.slice(0,32)).map(x=>x.toString(16).padStart(2,'0')).join(' ');
+    html+='<div class="field"><b>First 32 bytes (hex):</b> '+hex+' ...</div>';
+    html+='<div class="field"><b>ASN.1 tag:</b> 0x'+bytes[0].toString(16).padStart(2,'0')+' ('+asn1Name(bytes[0])+')</div>';
+  });
+  out.innerHTML=html;
+  if(crypto.subtle) blocks.forEach(async(b,i)=>{
+    const bytes=base64ToBytes(b.b64);
+    const h=await crypto.subtle.digest('SHA-256',bytes);
+    const hex=Array.from(new Uint8Array(h)).map(x=>x.toString(16).padStart(2,'0')).join('');
+    const fields=document.querySelectorAll('.field');
+    fields.forEach(f=>{if(f.textContent.includes('(computing...)'))f.innerHTML=f.innerHTML.replace('(computing...)',hex);});
+  });
+}
+function base64ToBytes(b64){
+  const bin=atob(b64);
+  const bytes=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+  return bytes;
+}
+function asn1Name(tag){
+  const names={0x30:'SEQUENCE',0x02:'INTEGER',0x03:'BIT STRING',0x04:'OCTET STRING',0x05:'NULL',0x06:'OBJECT IDENTIFIER',0x0c:'UTF8String',0x13:'PrintableString',0x17:'UTCTime',0x18:'GeneralizedTime'};
+  return names[tag]||'Unknown';
+}
+function hashing(){return '';}
+</script>
+</main>
+</body>
+</html>

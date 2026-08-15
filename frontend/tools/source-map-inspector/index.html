@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Source Map Inspector — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .drop { border:2px dashed var(--border); border-radius:10px; padding:14px; text-align:center; }
+    .drop.drag { border-color:var(--accent); background:var(--bg-elev-2); }
+    .toolbar { display:flex; gap:10px; flex-wrap:wrap; align-items:end; }
+    .toolbar .field { flex:1 1 180px; margin:0; }
+    .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; margin:16px 0; }
+    .stat { border:1px solid var(--border); border-radius:8px; padding:10px; background:var(--bg-elev-2); }
+    .stat strong { display:block; font-size:1.3rem; overflow-wrap:anywhere; }
+    .table-wrap { overflow:auto; border:1px solid var(--border); border-radius:8px; }
+    table { width:100%; border-collapse:collapse; min-width:750px; }
+    th,td { padding:8px 10px; border-bottom:1px solid var(--border); text-align:left; vertical-align:top; }
+    th { position:sticky; top:0; background:var(--bg-elev); }
+    td { max-width:300px; overflow-wrap:anywhere; }
+    .pages { display:flex; justify-content:space-between; gap:12px; align-items:center; margin-top:12px; }
+    .hidden { display:none !important; }
+    .error { color:var(--bad,#b42318); }
+    .source-view { max-height:320px; overflow:auto; white-space:pre; tab-size:2; }
+    @media (max-width:600px) { .pages { align-items:stretch; flex-direction:column; } .pages .row { justify-content:space-between; } }
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Source Map Inspector</h1>
+      <p>Validate and decode source map v3 mappings locally. Files never leave your browser and embedded source text is never executed.</p>
+    </div>
+
+    <section class="panel" aria-labelledby="input-title">
+      <h2 id="input-title">Load a source map</h2>
+      <div id="drop" class="drop">
+        <label for="file"><strong>Choose a .map or JSON file</strong></label>
+        <input id="file" type="file" accept=".map,.json,application/json">
+        <div class="note">or drop it here · maximum 5 MB</div>
+      </div>
+      <div class="field">
+        <label for="input">Source map JSON</label>
+        <textarea id="input" rows="10" spellcheck="false" placeholder='{"version":3,"sources":["input.js"],"names":[],"mappings":"AAAA"}'></textarea>
+      </div>
+      <div class="row">
+        <button id="inspect" type="button">Inspect map</button>
+        <button id="sample" class="secondary" type="button">Load example</button>
+        <button id="clear" class="secondary" type="button">Clear</button>
+      </div>
+      <p id="status" class="note" role="status" aria-live="polite"></p>
+    </section>
+
+    <div id="results" class="hidden">
+      <section class="panel" aria-labelledby="summary-title">
+        <div class="row" style="justify-content:space-between">
+          <h2 id="summary-title">Summary</h2>
+          <button id="export" class="secondary" type="button">Export decoded JSON</button>
+        </div>
+        <div id="stats" class="stats"></div>
+        <p id="warnings" class="note"></p>
+      </section>
+
+      <section class="panel" aria-labelledby="mapping-title">
+        <h2 id="mapping-title">Decoded mappings</h2>
+        <div class="toolbar">
+          <div class="field"><label for="filter">Filter source or name</label><input id="filter" type="search" placeholder="e.g. app.ts"></div>
+          <div class="field"><label for="lookup-line">Generated line</label><input id="lookup-line" type="number" min="1" step="1" placeholder="1"></div>
+          <div class="field"><label for="lookup-col">Generated column</label><input id="lookup-col" type="number" min="0" step="1" placeholder="0"></div>
+          <button id="lookup" class="secondary" type="button">Find position</button>
+        </div>
+        <p id="lookup-result" class="note" role="status" aria-live="polite"></p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>#</th><th>Generated</th><th>Source</th><th>Original</th><th>Name</th></tr></thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+        <div class="pages">
+          <span id="range" class="note"></span>
+          <div class="row"><button id="prev" class="secondary" type="button">Previous</button><button id="next" class="secondary" type="button">Next</button></div>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="sources-title">
+        <h2 id="sources-title">Embedded sources</h2>
+        <div class="field"><label for="source-select">Source</label><select id="source-select"></select></div>
+        <div id="source-meta" class="note"></div>
+        <pre id="source-view" class="output source-view" tabindex="0"></pre>
+      </section>
+    </div>
+  </main>
+  <script src="/assets/app.js"></script>
+  <script>
+  (function () {
+    "use strict";
+    var MAX_BYTES=5*1024*1024, MAX_MAPPINGS=2000000, MAX_SEGMENTS=200000, PAGE=100;
+    var alphabet="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/", decoded=[], shown=[], map=null, page=0;
+    var $=function(id){return document.getElementById(id);};
+    var input=$("input"), status=$("status"), results=$("results"), rows=$("rows");
+
+    function fail(message){ status.textContent=message; status.classList.add("error"); results.classList.add("hidden"); }
+    function integer(value,label){ if(!Number.isInteger(value)||value<0) throw new Error(label+" must be a non-negative integer."); }
+    function vlq(segment, start) {
+      var value=0, shift=0, i=start, digit;
+      do {
+        if(i>=segment.length) throw new Error("Truncated VLQ value.");
+        digit=alphabet.indexOf(segment.charAt(i++));
+        if(digit<0) throw new Error("Invalid Base64 VLQ character at mapping offset.");
+        value+=(digit&31)*Math.pow(2,shift); shift+=5;
+        if(shift>50) throw new Error("VLQ value exceeds the safe integer range.");
+      } while(digit&32);
+      var negative=value&1; value=Math.floor(value/2);
+      value=negative?-value:value;
+      if(!Number.isSafeInteger(value)) throw new Error("VLQ value exceeds the safe integer range.");
+      return [value,i];
+    }
+    function decodeMappings(text) {
+      var out=[], source=0, originalLine=0, originalColumn=0, name=0, lines=text.split(";");
+      for(var li=0;li<lines.length;li++){
+        var generatedColumn=0, segments=lines[li].split(",");
+        for(var si=0;si<segments.length;si++){
+          var segment=segments[si]; if(!segment) continue;
+          var values=[], at=0, item;
+          while(at<segment.length){ item=vlq(segment,at); values.push(item[0]); at=item[1]; }
+          if(values.length!==1&&values.length!==4&&values.length!==5) throw new Error("Invalid segment on generated line "+(li+1)+": expected 1, 4, or 5 fields.");
+          generatedColumn+=values[0]; integer(generatedColumn,"Generated column");
+          var entry={generatedLine:li+1,generatedColumn:generatedColumn,source:null,originalLine:null,originalColumn:null,name:null};
+          if(values.length>1){
+            source+=values[1]; originalLine+=values[2]; originalColumn+=values[3];
+            integer(source,"Source index"); integer(originalLine,"Original line"); integer(originalColumn,"Original column");
+            if(source>=map.sources.length) throw new Error("Mapping references missing source index "+source+".");
+            entry.source=map.sources[source]; entry.originalLine=originalLine+1; entry.originalColumn=originalColumn;
+            if(values.length===5){ name+=values[4]; integer(name,"Name index"); if(name>=map.names.length) throw new Error("Mapping references missing name index "+name+"."); entry.name=map.names[name]; }
+          }
+          out.push(entry); if(out.length>MAX_SEGMENTS) throw new Error("Map exceeds the "+MAX_SEGMENTS.toLocaleString()+" decoded-segment safety limit.");
+        }
+      }
+      return out;
+    }
+    function parse() {
+      var text=input.value;
+      if(!text.trim()) throw new Error("Paste or load a source map first.");
+      if(new Blob([text]).size>MAX_BYTES) throw new Error("Input exceeds the 5 MB safety limit.");
+      map=JSON.parse(text);
+      if(!map||Array.isArray(map)||typeof map!=="object") throw new Error("The top-level value must be a source map object.");
+      if(map.version!==3) throw new Error("Only source map version 3 is supported.");
+      if(Array.isArray(map.sections)) throw new Error("Indexed source maps with sections are not supported; inspect each section map separately.");
+      if(!Array.isArray(map.sources)||!map.sources.every(function(v){return typeof v==="string";})) throw new Error("sources must be an array of strings.");
+      if(map.names===undefined) map.names=[];
+      if(!Array.isArray(map.names)||!map.names.every(function(v){return typeof v==="string";})) throw new Error("names must be an array of strings.");
+      if(typeof map.mappings!=="string") throw new Error("mappings must be a string.");
+      if(map.mappings.length>MAX_MAPPINGS) throw new Error("Mappings exceed the 2,000,000 character safety limit.");
+      if(map.sourcesContent!==undefined&&(!Array.isArray(map.sourcesContent)||!map.sourcesContent.every(function(v){return v===null||typeof v==="string";}))) throw new Error("sourcesContent must be an array of strings or null values.");
+      decoded=decodeMappings(map.mappings);
+    }
+    function cell(tr,text){var td=document.createElement("td");td.textContent=text;tr.appendChild(td);}
+    function renderRows(){
+      rows.textContent=""; var start=page*PAGE,end=Math.min(start+PAGE,shown.length);
+      shown.slice(start,end).forEach(function(e,i){var tr=document.createElement("tr");cell(tr,String(start+i+1));cell(tr,e.generatedLine+":"+e.generatedColumn);cell(tr,e.source===null?"—":e.source);cell(tr,e.originalLine===null?"—":e.originalLine+":"+e.originalColumn);cell(tr,e.name===null?"—":e.name);rows.appendChild(tr);});
+      $("range").textContent=shown.length?"Showing "+(start+1)+"–"+end+" of "+shown.length.toLocaleString():"No matching mappings";
+      $("prev").disabled=page===0; $("next").disabled=end>=shown.length;
+    }
+    function renderSources(){
+      var select=$("source-select"); select.textContent="";
+      map.sources.forEach(function(source,i){var option=document.createElement("option");option.value=String(i);option.textContent=(i+1)+". "+source;select.appendChild(option);});
+      if(!map.sources.length){var option=document.createElement("option");option.textContent="No sources";select.appendChild(option);}
+      showSource();
+    }
+    function showSource(){
+      var i=Number($("source-select").value)||0, content=map.sourcesContent&&i<map.sourcesContent.length?map.sourcesContent[i]:null;
+      $("source-meta").textContent=content===null||content===undefined?"No embedded content for this source.":content.length.toLocaleString()+" characters · displayed as inert text";
+      $("source-view").textContent=content===null||content===undefined?"":content;
+    }
+    function stat(label,value){var div=document.createElement("div"),strong=document.createElement("strong"),span=document.createElement("span");div.className="stat";strong.textContent=value;span.textContent=label;div.appendChild(strong);div.appendChild(span);return div;}
+    function render(){
+      shown=decoded.slice();page=0;var stats=$("stats");stats.textContent="";
+      stats.appendChild(stat("Decoded mappings",decoded.length.toLocaleString()));stats.appendChild(stat("Sources",map.sources.length.toLocaleString()));stats.appendChild(stat("Names",map.names.length.toLocaleString()));stats.appendChild(stat("Generated lines",(map.mappings.split(";").length).toLocaleString()));
+      var embedded=map.sourcesContent?map.sourcesContent.filter(function(v){return typeof v==="string";}).length:0;
+      $("warnings").textContent=(map.file?"Output file: "+map.file+" · ":"")+embedded+" of "+map.sources.length+" sources contain embedded text.";
+      $("filter").value="";$("lookup-result").textContent="";renderRows();renderSources();results.classList.remove("hidden");
+    }
+    function inspect(){status.classList.remove("error");try{parse();render();status.textContent="Valid source map v3 — decoded "+decoded.length.toLocaleString()+" mappings.";}catch(e){fail(e instanceof SyntaxError?"Invalid JSON: "+e.message:e.message);}}
+    function loadFile(file){
+      if(!file)return;if(file.size>MAX_BYTES){fail("File exceeds the 5 MB safety limit.");return;}
+      var reader=new FileReader();reader.onload=function(){input.value=String(reader.result);inspect();};reader.onerror=function(){fail("The file could not be read.");};reader.readAsText(file);
+    }
+    $("inspect").addEventListener("click",inspect);
+    $("file").addEventListener("change",function(){loadFile(this.files[0]);this.value="";});
+    var drop=$("drop");["dragenter","dragover"].forEach(function(ev){drop.addEventListener(ev,function(e){e.preventDefault();drop.classList.add("drag");});});["dragleave","drop"].forEach(function(ev){drop.addEventListener(ev,function(e){e.preventDefault();drop.classList.remove("drag");});});drop.addEventListener("drop",function(e){loadFile(e.dataTransfer.files[0]);});
+    $("sample").addEventListener("click",function(){input.value=JSON.stringify({version:3,file:"bundle.js",sourceRoot:"",sources:["hello.ts"],sourcesContent:["const greeting: string = 'Hello';\nconsole.log(greeting);"],names:["greeting","console","log"],mappings:"AAAA,MAAMA,SAAS;AACfC,QAAQC,IAAI"},null,2);inspect();});
+    $("clear").addEventListener("click",function(){input.value="";status.textContent="";status.classList.remove("error");results.classList.add("hidden");map=null;decoded=[];});
+    $("filter").addEventListener("input",function(){var q=this.value.trim().toLowerCase();shown=q?decoded.filter(function(e){return (e.source||"").toLowerCase().indexOf(q)>=0||(e.name||"").toLowerCase().indexOf(q)>=0;}):decoded.slice();page=0;renderRows();});
+    $("prev").addEventListener("click",function(){if(page){page--;renderRows();}});$("next").addEventListener("click",function(){if((page+1)*PAGE<shown.length){page++;renderRows();}});
+    $("source-select").addEventListener("change",showSource);
+    $("lookup").addEventListener("click",function(){
+      var line=Number($("lookup-line").value),col=Number($("lookup-col").value),best=null;
+      if(!Number.isInteger(line)||line<1||!Number.isInteger(col)||col<0){$("lookup-result").textContent="Enter a generated line of 1 or greater and a column of 0 or greater.";return;}
+      for(var i=0;i<decoded.length;i++){var e=decoded[i];if(e.generatedLine===line&&e.generatedColumn<=col)best=e;if(e.generatedLine>line)break;}
+      if(!best){$("lookup-result").textContent="No mapping begins at or before that column on generated line "+line+".";return;}
+      $("lookup-result").textContent="Closest preceding mapping: "+best.generatedLine+":"+best.generatedColumn+" → "+(best.source===null?"unmapped":best.source+":"+best.originalLine+":"+best.originalColumn+(best.name?" ("+best.name+")":""));
+    });
+    $("export").addEventListener("click",function(){
+      var payload={version:3,file:map.file||null,sourceRoot:map.sourceRoot||null,sources:map.sources,names:map.names,decodedMappings:decoded};
+      var blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="decoded-source-map.json";document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(url);},0);
+    });
+  })();
+  </script>
+</body>
+</html>

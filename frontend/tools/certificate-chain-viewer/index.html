@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Inspect PEM X.509 certificate chains locally, including names, validity, extensions, links, and SHA-256 fingerprints.">
+  <script src="/assets/theme-init.js"></script>
+  <title>Certificate Chain Viewer — virt.tools</title>
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.chain-shell{max-width:1040px;margin:0 auto}.lead,.hint,.privacy{color:var(--text-secondary,#8b949e)}
+.panel,.cert{background:var(--surface,#161b22);border:1px solid var(--border,#30363d);border-radius:10px;padding:1rem;margin:1rem 0}
+label{display:block;font-weight:600;margin:.75rem 0 .35rem}textarea{width:100%;min-height:210px;box-sizing:border-box;resize:vertical;background:var(--background,#0d1117);color:var(--text,#c9d1d9);border:1px solid var(--border,#30363d);border-radius:6px;padding:.75rem;font:13px ui-monospace,SFMono-Regular,Consolas,monospace}
+.actions,.file-row,.badges{display:flex;gap:.65rem;flex-wrap:wrap;align-items:center}.actions{margin-top:.8rem}button,.file-label{display:inline-block;border:1px solid var(--border,#30363d);border-radius:6px;background:var(--surface-raised,#21262d);color:var(--text,#c9d1d9);padding:.62rem .9rem;cursor:pointer;font:inherit}.primary{border-color:var(--accent,#58a6ff);background:var(--accent-soft,#1e3a5f)}
+.file-label input{position:absolute;width:1px;height:1px;opacity:0}button:focus-visible,.file-label:focus-within,textarea:focus-visible{outline:2px solid var(--accent,#58a6ff);outline-offset:2px}.status{min-height:1.5rem;margin:.75rem 0}.bad{color:#f85149}.ok{color:#3fb950}.warn{color:#d29922}
+.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem}.summary div{background:var(--surface,#161b22);border:1px solid var(--border,#30363d);border-radius:8px;padding:.75rem}.summary strong{display:block;font-size:1.3rem;color:var(--accent,#58a6ff)}
+.cert h2{font-size:1.2rem;margin:.15rem 0}.badge{border:1px solid var(--border,#30363d);border-radius:999px;padding:.2rem .55rem;font-size:.78rem}.badge.good{color:#3fb950;border-color:#238636}.badge.warning{color:#d29922;border-color:#9e6a03}.badge.error{color:#f85149;border-color:#da3633}
+.details{display:grid;grid-template-columns:minmax(140px,200px) 1fr;gap:.35rem .8rem;margin-top:1rem}.details dt{font-weight:600;color:var(--text-secondary,#8b949e)}.details dd{margin:0;overflow-wrap:anywhere}.mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.88rem}.privacy{border-left:3px solid var(--accent,#58a6ff);padding-left:.75rem;font-size:.9rem}
+@media(max-width:700px){.summary{grid-template-columns:1fr}.details{grid-template-columns:1fr}.details dt{margin-top:.55rem}.actions>*{flex:1;text-align:center}.panel,.cert{padding:.8rem}}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main class="tool-container"><div class="chain-shell">
+<a href="/">← Back to all tools</a>
+<h1>Certificate Chain Viewer</h1>
+<p class="lead">Inspect the structure and metadata of a PEM-encoded X.509 certificate chain entirely in your browser.</p>
+<section class="panel" aria-labelledby="input-title">
+<h2 id="input-title">Certificate input</h2>
+<label for="pem-input">PEM certificate chain</label>
+<textarea id="pem-input" maxlength="2097152" spellcheck="false" placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"></textarea>
+<div class="file-row"><label class="file-label">Load PEM file<input id="pem-file" type="file" accept=".pem,.crt,.cer,text/plain,application/x-pem-file"></label><span id="file-name" class="hint">Maximum 2 MiB, 16 certificates</span></div>
+<div class="actions"><button id="inspect" class="primary" type="button">Inspect chain</button><button id="clear" type="button">Clear</button></div>
+<p id="status" class="status" role="status" aria-live="polite"></p>
+</section>
+<section id="results" hidden aria-labelledby="results-title"><h2 id="results-title">Chain report</h2><div id="summary" class="summary"></div><div id="cards"></div></section>
+<p class="privacy"><strong>Privacy and scope:</strong> Certificates are parsed locally and never uploaded. This viewer checks names, dates, and structural links only. It does <strong>not</strong> verify certificate signatures, trust anchors, revocation, hostname policy, or certificate policies, so it cannot establish that a chain is trusted.</p>
+</div></main>
+<script src="/assets/tools.js"></script><script src="/assets/app.js"></script>
+<script>
+(() => {
+'use strict';
+const $=id=>document.getElementById(id), MAX_BYTES=2*1024*1024, MAX_CERTS=16, MAX_NODES=12000, MAX_DEPTH=24;
+const oidNames={
+ '2.5.4.3':'CN','2.5.4.6':'C','2.5.4.7':'L','2.5.4.8':'ST','2.5.4.10':'O','2.5.4.11':'OU','1.2.840.113549.1.9.1':'emailAddress',
+ '1.2.840.113549.1.1.1':'RSA','1.2.840.113549.1.1.5':'sha1WithRSAEncryption','1.2.840.113549.1.1.11':'sha256WithRSAEncryption','1.2.840.113549.1.1.12':'sha384WithRSAEncryption','1.2.840.113549.1.1.13':'sha512WithRSAEncryption','1.2.840.10045.2.1':'EC','1.2.840.10045.4.3.2':'ecdsa-with-SHA256','1.2.840.10045.4.3.3':'ecdsa-with-SHA384','1.3.101.112':'Ed25519',
+ '2.5.29.14':'Subject Key Identifier','2.5.29.15':'Key Usage','2.5.29.17':'Subject Alternative Name','2.5.29.19':'Basic Constraints','2.5.29.35':'Authority Key Identifier','2.5.29.37':'Extended Key Usage',
+ '1.3.6.1.5.5.7.3.1':'serverAuth','1.3.6.1.5.5.7.3.2':'clientAuth','1.3.6.1.5.5.7.3.3':'codeSigning','1.3.6.1.5.5.7.3.4':'emailProtection','1.3.6.1.5.5.7.3.8':'timeStamping','1.3.6.1.5.5.7.3.9':'OCSPSigning'
+};
+function status(message,type=''){const el=$('status');el.textContent=message;el.className='status '+type;}
+function readNode(bytes,start=0,end=bytes.length,depth=0,state={count:0}){
+ if(depth>MAX_DEPTH||++state.count>MAX_NODES)throw Error('ASN.1 structure exceeds safety limits.');
+ if(start>=end)throw Error('Unexpected end of DER data.'); let p=start,tag=bytes[p++];
+ if((tag&31)===31)throw Error('High-tag-number ASN.1 values are not supported.'); if(p>=end)throw Error('Truncated ASN.1 length.');
+ let len=bytes[p++]; if(len&128){const n=len&127;if(!n||n>4||p+n>end)throw Error('Invalid ASN.1 length.');len=0;for(let i=0;i<n;i++)len=len*256+bytes[p++];if(len<128)throw Error('Non-canonical ASN.1 length.');}
+ const valueStart=p,valueEnd=p+len;if(valueEnd>end||valueEnd<valueStart)throw Error('ASN.1 value exceeds its container.');
+ const node={tag,start,valueStart,end:valueEnd,bytes,children:[]};
+ if(tag&32){while(p<valueEnd){const child=readNode(bytes,p,valueEnd,depth+1,state);node.children.push(child);p=child.end;}if(p!==valueEnd)throw Error('Invalid constructed ASN.1 value.');}
+ return node;
+}
+function oid(node){const b=node.bytes.subarray(node.valueStart,node.end);if(!b.length)return'';let first=b[0],parts=[Math.min(2,Math.floor(first/40)),first<80?first%40:first-80],v=0;for(let i=1;i<b.length;i++){v=v*128+(b[i]&127);if(v>Number.MAX_SAFE_INTEGER)throw Error('OID is too large.');if(!(b[i]&128)){parts.push(v);v=0;}}if(b[b.length-1]&128)throw Error('Truncated OID.');return parts.join('.');}
+function hex(bytes,sep=''){return Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join(sep).toUpperCase();}
+function text(node){const b=node.bytes.subarray(node.valueStart,node.end);try{if(node.tag===0x1e){let s='';for(let i=0;i+1<b.length;i+=2)s+=String.fromCharCode(b[i]*256+b[i+1]);return s;}return new TextDecoder(node.tag===0x0c?'utf-8':'latin1',{fatal:false}).decode(b);}catch{return'[unreadable]';}}
+function name(node){const parts=[];for(const set of node.children)for(const pair of set.children){if(pair.children.length>=2){const id=oid(pair.children[0]);parts.push(`${oidNames[id]||id}=${text(pair.children[1]).replace(/[\r\n]/g,' ')}`);}}return parts.join(', ')||'(empty name)';}
+function parseTime(node){const raw=text(node),m=node.tag===0x17?/^(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})?Z$/.exec(raw):/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})Z$/.exec(raw);if(!m)return null;let y=+m[1];if(node.tag===0x17)y+=y>=50?1900:2000;const i=node.tag===0x17?2:2;const d=new Date(Date.UTC(y,+m[i]-1,+m[i+1],+m[i+2],+m[i+3],+(m[i+4]||0)));return Number.isNaN(d.valueOf())?null:d;}
+function alg(node){if(!node||!node.children[0])return'Unknown';const id=oid(node.children[0]);return oidNames[id]?`${oidNames[id]} (${id})`:id;}
+function inner(bytes){const n=readNode(bytes);if(n.end!==bytes.length)throw Error('Trailing extension data.');return n;}
+function parseExtensions(extNode,out){if(!extNode||!extNode.children[0])return;for(const ext of extNode.children[0].children){try{const id=oid(ext.children[0]),oct=ext.children[ext.children.length-1];if(oct.tag!==4)continue;const n=inner(oct.bytes.subarray(oct.valueStart,oct.end));
+  if(id==='2.5.29.17'){out.san=[];for(const g of n.children){const b=g.bytes.subarray(g.valueStart,g.end);if(g.tag===0x82)out.san.push('DNS: '+new TextDecoder('ascii').decode(b));else if(g.tag===0x81)out.san.push('Email: '+new TextDecoder('ascii').decode(b));else if(g.tag===0x86)out.san.push('URI: '+new TextDecoder('ascii').decode(b));else if(g.tag===0x87)out.san.push('IP: '+(b.length===4?Array.from(b).join('.'):hex(b,':')));}}
+  else if(id==='2.5.29.19'){out.ca=false;out.pathLength=null;for(const c of n.children){if(c.tag===1)out.ca=c.bytes[c.valueStart]!==0;else if(c.tag===2){let v=0;for(const x of c.bytes.subarray(c.valueStart,c.end))v=v*256+x;out.pathLength=v;}}}
+  else if(id==='2.5.29.15'){const b=n.bytes.subarray(n.valueStart,n.end),bits=['digitalSignature','nonRepudiation','keyEncipherment','dataEncipherment','keyAgreement','keyCertSign','cRLSign','encipherOnly','decipherOnly'];out.keyUsage=[];for(let k=0;k<bits.length;k++)if(b[1+(k>>3)]&(128>>(k&7)))out.keyUsage.push(bits[k]);}
+  else if(id==='2.5.29.37')out.eku=n.children.map(x=>{const xoid=oid(x);return oidNames[xoid]||xoid;});
+  else if(id==='2.5.29.14')out.ski=hex(n.bytes.subarray(n.valueStart,n.end),':');
+  else if(id==='2.5.29.35'){const kid=n.children.find(x=>x.tag===0x80);if(kid)out.aki=hex(kid.bytes.subarray(kid.valueStart,kid.end),':');}
+ }catch{out.extensionWarnings++;}}
+}
+async function parseCert(bytes,index){const root=readNode(bytes);if(root.tag!==0x30||root.end!==bytes.length||root.children.length<3)throw Error(`Certificate ${index+1} is not a complete DER certificate.`);const tbs=root.children[0],c=tbs.children;let p=c[0]&&c[0].tag===0xa0?1:0;if(c.length<p+6)throw Error(`Certificate ${index+1} has an incomplete TBSCertificate.`);const serial=c[p++],tbsAlg=c[p++],issuer=c[p++],validity=c[p++],subject=c[p++],spki=c[p++];const ext=c.find(x=>x.tag===0xa3);const out={original:index,bytes,serial:hex(bytes.subarray(serial.valueStart,serial.end)),issuer:name(issuer),subject:name(subject),notBefore:validity.children[0]?parseTime(validity.children[0]):null,notAfter:validity.children[1]?parseTime(validity.children[1]):null,signatureAlgorithm:alg(root.children[1]||tbsAlg),keyAlgorithm:alg(spki.children[0]),san:[],keyUsage:[],eku:[],ski:'',aki:'',ca:null,pathLength:null,extensionWarnings:0};parseExtensions(ext,out);out.fingerprint=hex(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),':');return out;}
+function parsePem(value){if(new TextEncoder().encode(value).length>MAX_BYTES)throw Error('Input exceeds the 2 MiB limit.');const re=/-----BEGIN CERTIFICATE-----([\s\S]*?)-----END CERTIFICATE-----/g,blocks=[];let m;while((m=re.exec(value))){if(blocks.length>=MAX_CERTS)throw Error(`Only ${MAX_CERTS} certificates may be inspected at once.`);const b64=m[1].replace(/\s/g,'');if(!b64||!/^[A-Za-z0-9+/]*={0,2}$/.test(b64))throw Error(`Certificate ${blocks.length+1} has invalid Base64.`);try{const raw=atob(b64);blocks.push(Uint8Array.from(raw,x=>x.charCodeAt(0)));}catch{throw Error(`Certificate ${blocks.length+1} has invalid Base64.`);}}if(!blocks.length)throw Error('No PEM CERTIFICATE blocks were found.');return blocks;}
+function orderChain(certs){const remaining=[...certs],ordered=[];let next=remaining.find(c=>!remaining.some(o=>o!==c&&o.issuer===c.subject))||remaining[0];while(next){ordered.push(next);remaining.splice(remaining.indexOf(next),1);if(next.issuer===next.subject)break;next=remaining.find(c=>c.subject===ordered[ordered.length-1].issuer);if(!next)break;}return ordered.concat(remaining);}
+function add(parent,tag,textValue,className=''){const el=document.createElement(tag);el.textContent=textValue;if(className)el.className=className;parent.appendChild(el);return el;}
+function detail(dl,label,value,mono=false){add(dl,'dt',label);add(dl,'dd',value||'Not present',mono?'mono':'');}
+function render(certs){const ordered=orderChain(certs),now=new Date(),expired=ordered.filter(c=>c.notAfter&&c.notAfter<now).length,notYet=ordered.filter(c=>c.notBefore&&c.notBefore>now).length,gaps=ordered.slice(0,-1).filter((c,i)=>c.issuer!==ordered[i+1].subject).length;const sum=$('summary');sum.replaceChildren();for(const [n,v] of [['Certificates',ordered.length],['Date warnings',expired+notYet],['Chain gaps',gaps]]){const box=document.createElement('div');add(box,'strong',String(v));add(box,'span',n);sum.appendChild(box);}const cards=$('cards');cards.replaceChildren();ordered.forEach((c,i)=>{const card=document.createElement('article');card.className='cert';add(card,'h2',`Certificate ${i+1}${i===0?' · probable leaf':''}`);const badges=add(card,'div','', 'badges');const self=c.subject===c.issuer;const dateBad=c.notAfter&&c.notAfter<now?'Expired':c.notBefore&&c.notBefore>now?'Not yet valid':'Date valid now';add(badges,'span',dateBad,'badge '+(dateBad==='Date valid now'?'good':'error'));if(self)add(badges,'span','Self-issued name','badge warning');if(i<ordered.length-1)add(badges,'span',c.issuer===ordered[i+1].subject?'Issuer name linked':'Issuer gap','badge '+(c.issuer===ordered[i+1].subject?'good':'error'));if(c.ca!==null)add(badges,'span',c.ca?'CA certificate':'Not a CA','badge');const dl=add(card,'dl','', 'details');detail(dl,'Subject',c.subject);detail(dl,'Issuer',c.issuer);detail(dl,'Serial number',c.serial,true);detail(dl,'Valid from',c.notBefore?c.notBefore.toISOString():'Unrecognized');detail(dl,'Valid until',c.notAfter?c.notAfter.toISOString():'Unrecognized');detail(dl,'Signature algorithm',c.signatureAlgorithm);detail(dl,'Public-key algorithm',c.keyAlgorithm);detail(dl,'SHA-256 fingerprint',c.fingerprint,true);detail(dl,'Subject alternative names',c.san.join('; '));detail(dl,'Basic constraints',c.ca===null?'Not present':`CA=${c.ca}${c.pathLength===null?'':`, path length=${c.pathLength}`}`);detail(dl,'Key usage',c.keyUsage.join(', '));detail(dl,'Extended key usage',c.eku.join(', '));detail(dl,'Subject key identifier',c.ski,true);detail(dl,'Authority key identifier',c.aki,true);if(c.extensionWarnings)detail(dl,'Parser note',`${c.extensionWarnings} recognized extension value(s) could not be decoded.`);card.appendChild(dl);cards.appendChild(card);});$('results').hidden=false;status(`Inspected ${ordered.length} certificate${ordered.length===1?'':'s'}. Structural checks only; signatures and trust were not verified.`,'ok');}
+$('inspect').addEventListener('click',async()=>{status('Parsing certificates…');$('results').hidden=true;try{const blocks=parsePem($('pem-input').value),certs=[];for(let i=0;i<blocks.length;i++)certs.push(await parseCert(blocks[i],i));render(certs);}catch(e){status(e.message,'bad');}});
+$('pem-file').addEventListener('change',async()=>{const f=$('pem-file').files[0];if(!f)return;if(f.size>MAX_BYTES){status('File exceeds the 2 MiB limit.','bad');return;}$('file-name').textContent=`${f.name} (${f.size.toLocaleString()} bytes)`;try{$('pem-input').value=await f.text();status('File loaded locally. Select Inspect chain.');}catch{status('The file could not be read.','bad');}});
+$('clear').addEventListener('click',()=>{$('pem-input').value='';$('pem-file').value='';$('file-name').textContent='Maximum 2 MiB, 16 certificates';$('results').hidden=true;status('');});
+})();
+</script>
+</body>
+</html>

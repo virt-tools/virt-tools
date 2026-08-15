@@ -1,0 +1,347 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><script src="/assets/theme-init.js"></script><title>CORS Preflight Simulator — Virtual Tools</title><meta name="description" content="Simulate browser CORS preflight and response readability locally."><link rel="stylesheet" href="/assets/style.css"><style>.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.field label{display:block;font-weight:700;margin-bottom:5px}.field input:not([type=checkbox]),.field select,.field textarea{width:100%;box-sizing:border-box}.field input[type=checkbox]{width:1.1rem;height:1.1rem;vertical-align:middle}.span2{grid-column:span 2}textarea{min-height:130px;font:12px/1.5 ui-monospace,monospace}.actions,.metrics{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}.metric{border:1px solid var(--border);border-radius:8px;padding:9px;flex:1;min-width:140px}.metric strong{display:block;font-size:1.15rem}.pass{color:color-mix(in srgb,var(--ok) 55%,var(--text))}.fail{color:color-mix(in srgb,var(--bad) 55%,var(--text))}.warn{color:color-mix(in srgb,var(--warn) 55%,var(--text))}.status{white-space:pre-wrap;min-height:1.4em}.notice{padding:10px;border-left:4px solid #d69200;background:color-mix(in srgb,#d69200 12%,transparent)}.findings{display:grid;gap:6px}.finding{padding:8px;border-bottom:1px solid var(--border)}.mono{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.5 ui-monospace,monospace;background:color-mix(in srgb,var(--text) 4%,transparent);padding:9px;border-radius:8px}@media(max-width:750px){.grid{grid-template-columns:1fr}.span2{grid-column:span 1}}</style></head><body><div id="site-header"></div><main><div class="tool-header"><a class="back" href="/">← All tools</a><h1>CORS Preflight Simulator</h1><p>Model browser CORS gates from request details and pasted response headers without making a network request.</p></div><p class="notice"><strong>Educational simulation:</strong> this page models a script-initiated CORS-mode fetch and never sends a request. Redirect targets are not followed. Private Network Access (PNA) is an explicit forced-preflight assumption; address-space detection, secure-context and mixed-content gates, permissions, browser rollout, preflight cache caps, client certificates, extensions, service workers, and redirect-tainted origins are outside its scope.</p>
+<section class="panel"><h2>Request</h2><div class="grid"><div class="field"><label for="origin">Document origin</label><input id="origin" value="https://app.example" maxlength="500"></div><div class="field"><label for="url">Request URL</label><input id="url" value="https://api.example/data" maxlength="2000"></div><div class="field"><label for="method">Method</label><input id="method" value="PUT" maxlength="50"></div><div class="field"><label for="content-type">Content-Type sent</label><input id="content-type" value="application/json" maxlength="500"></div><div class="field"><label for="credentials">Credentials mode</label><select id="credentials"><option value="omit">omit</option><option value="same-origin">same-origin</option><option value="include">include</option></select></div><div class="field"><label for="cache">Preflight cache assumption</label><select id="cache"><option value="miss">No matching cached permission</option><option value="hit">Assume matching fresh cache entry</option></select></div><div class="field span2"><label for="request-headers">Author request headers (one Name: value per line)</label><textarea id="request-headers">X-Client-Version: 2
+Authorization: Bearer example</textarea></div><div class="field"><label><input id="private" type="checkbox"> Request targets a more-private network and requires PNA preflight</label></div></div></section>
+<section class="panel"><h2>Preflight response</h2><div class="grid"><div class="field"><label for="preflight-status">Status code</label><input id="preflight-status" type="number" min="100" max="599" value="204"></div><div class="field span2"><label for="preflight">Response headers</label><textarea id="preflight">Access-Control-Allow-Origin: https://app.example
+Access-Control-Allow-Methods: GET, PUT
+Access-Control-Allow-Headers: authorization, content-type, x-client-version
+Access-Control-Max-Age: 600</textarea></div></div></section><section class="panel"><h2>Actual response</h2><div class="grid"><div class="field"><label for="status-code">Status code</label><input id="status-code" type="number" min="100" max="599" value="200"></div><div class="field span2"><label for="actual">Response headers</label><textarea id="actual">Access-Control-Allow-Origin: https://app.example
+Access-Control-Expose-Headers: X-Request-ID
+Content-Type: application/json
+X-Request-ID: abc123</textarea></div></div><div class="actions"><button id="simulate" type="button">Simulate</button><button id="json" type="button" class="secondary" disabled>Export scenario JSON</button></div><p id="status" class="status" role="status" aria-live="polite"></p></section>
+<section class="panel"><h2>Decision</h2><div id="metrics" class="metrics"></div><div id="findings" class="findings"></div><h3>Audit trace</h3><pre id="trace" class="mono">Run the simulation.</pre></section></main><script src="/assets/app.js"></script><script>
+(function(){
+"use strict";
+var $=function(id){return document.getElementById(id)},report=null;
+var TOKEN=/^[!#$%&'*+.^_\x60|~0-9A-Za-z-]+$/;
+var SAFE_METHODS=new Set(["GET","HEAD","POST"]);
+var NORMAL_METHODS=new Set(["DELETE","GET","HEAD","OPTIONS","POST","PUT"]);
+var FORBIDDEN_METHODS=new Set(["CONNECT","TRACE","TRACK"]);
+var SAFE_REQ=new Set(["accept","accept-language","content-language","content-type","range"]);
+var SAFE_TYPES=new Set(["application/x-www-form-urlencoded","multipart/form-data","text/plain"]);
+var SAFE_RESPONSE=new Set(["cache-control","content-language","content-length","content-type","expires","last-modified","pragma"]);
+var FORBIDDEN_HEADERS=new Set(["accept-charset","accept-encoding","access-control-request-headers","access-control-request-method","connection","content-length","cookie","cookie2","date","dnt","expect","host","keep-alive","origin","referer","set-cookie","te","trailer","transfer-encoding","upgrade","via"]);
+var OVERRIDE_HEADERS=new Set(["x-http-method","x-http-method-override","x-method-override"]);
+var REDIRECT_STATUSES=new Set([301,302,303,307,308]);
+
+function el(tag,attrs,text){
+  var node=document.createElement(tag);
+  Object.keys(attrs||{}).forEach(function(key){node.setAttribute(key,attrs[key])});
+  if(text!==undefined)node.textContent=text;
+  return node;
+}
+function trimHTTP(value){return value.replace(/^[\t ]+|[\t ]+$/g,"")}
+function parseOrigin(value){
+  value=value.trim();
+  if(value==="null")return "null";
+  if(/[\r\n\0]/.test(value))throw new Error("Document origin contains a forbidden control character.");
+  var url;
+  try{url=new URL(value)}catch(error){throw new Error("Document origin must be an absolute HTTP(S) origin or null.")}
+  if(url.protocol!=="http:"&&url.protocol!=="https:")throw new Error("Document origin must use HTTP or HTTPS.");
+  if(url.username||url.password||url.pathname!=="/"||url.search||url.hash)throw new Error("Document origin must contain only scheme, host, and optional port.");
+  return url.origin;
+}
+function parseUrl(value){
+  if(/[\r\n\0]/.test(value)||value.length>2000)throw new Error("Request URL is invalid or too long.");
+  var url;
+  try{url=new URL(value)}catch(error){throw new Error("Request URL must be absolute.")}
+  if(url.protocol!=="http:"&&url.protocol!=="https:")throw new Error("Request URL must use HTTP or HTTPS.");
+  if(url.username||url.password)throw new Error("Credentials in the request URL are not accepted.");
+  return url;
+}
+function addHeader(target,header){
+  var lower=header.name.toLowerCase(),values=target.map.get(lower)||[];
+  values.push(header.value);
+  target.map.set(lower,values);
+  target.list.push(header);
+}
+function headers(source,label){
+  if(new TextEncoder().encode(source).length>65536)throw new Error(label+" headers exceed 64 KiB.");
+  if(/\r(?!\n)/.test(source))throw new Error(label+" headers contain a bare carriage return.");
+  var result={list:[],map:new Map()};
+  source.replace(/\r\n/g,"\n").split("\n").forEach(function(line,index){
+    if(!line.trim())return;
+    if(/^[ \t]/.test(line))throw new Error(label+" line "+(index+1)+" uses obsolete folding.");
+    var colon=line.indexOf(":");
+    if(colon<=0)throw new Error(label+" line "+(index+1)+" is not Name: value.");
+    var name=line.slice(0,colon).trim(),value=trimHTTP(line.slice(colon+1));
+    if(!TOKEN.test(name))throw new Error(label+" has an invalid header name: "+name);
+    if(/[\0\r\n]/.test(value)||/[^\x00-\xff]/.test(value))throw new Error(label+" has a value outside the browser header byte range in "+name+".");
+    addHeader(result,{name:name,value:value});
+  });
+  if(result.list.length>500)throw new Error(label+" exceeds 500 headers.");
+  return result;
+}
+function forbiddenAuthor(header){
+  var name=header.name.toLowerCase();
+  if(FORBIDDEN_HEADERS.has(name)||name.indexOf("proxy-")===0||name.indexOf("sec-")===0)return true;
+  return OVERRIDE_HEADERS.has(name)&&header.value.split(",").some(function(value){return FORBIDDEN_METHODS.has(trimHTTP(value).toUpperCase())});
+}
+function authorHeaders(source,findings){
+  var parsed=headers(source,"Request"),result={list:[],map:new Map()};
+  parsed.list.forEach(function(header){
+    if(forbiddenAuthor(header))findings.push({level:"warn",stage:"request",message:"Browser author-header guards ignore "+header.name+"; it was excluded from this simulation."});
+    else addHeader(result,header);
+  });
+  return result;
+}
+function one(parsed,name,findings,stage){
+  var values=parsed.map.get(name)||[];
+  if(values.length>1){
+    findings.push({level:"fail",stage:stage,message:"Duplicate "+name+" response fields invalidate its single CORS value."});
+    return null;
+  }
+  return values.length?values[0]:null;
+}
+function tokenList(parsed,name,label,findings,stage,level){
+  var values=parsed.map.get(name)||[],items=[],valid=true;
+  values.forEach(function(value){
+    value.split(",").forEach(function(item){
+      item=trimHTTP(item);
+      if(!item)return;
+      if(!TOKEN.test(item)){
+        valid=false;
+        findings.push({level:level||"fail",stage:stage,message:"Invalid token in "+label+": "+item});
+      }else items.push(item);
+    });
+  });
+  return {items:items,valid:valid,present:values.length>0};
+}
+function originAllowed(value,origin,credentialed,findings,stage){
+  if(value==null){
+    findings.push({level:"fail",stage:stage,message:"Access-Control-Allow-Origin is missing or invalid."});
+    return false;
+  }
+  if(value==="*"){
+    if(credentialed){
+      findings.push({level:"fail",stage:stage,message:"Wildcard Access-Control-Allow-Origin cannot authorize credentials mode include."});
+      return false;
+    }
+    return true;
+  }
+  if(value!==origin){
+    findings.push({level:"fail",stage:stage,message:"Access-Control-Allow-Origin does not exactly match the serialized document origin."});
+    return false;
+  }
+  return true;
+}
+function credentialAllowed(parsed,credentialed,findings,stage){
+  if(!credentialed)return true;
+  var value=one(parsed,"access-control-allow-credentials",findings,stage);
+  if(value!=="true"){
+    findings.push({level:"fail",stage:stage,message:"Credentials mode include requires Access-Control-Allow-Credentials: true (case-sensitive)."});
+    return false;
+  }
+  return true;
+}
+function decimalLE(left,right){
+  left=left.replace(/^0+(?=\d)/,"");
+  right=right.replace(/^0+(?=\d)/,"");
+  return left.length<right.length||(left.length===right.length&&left<=right);
+}
+function simpleHeader(name,value){
+  name=name.toLowerCase();
+  if(!SAFE_REQ.has(name)||value.length>128)return false;
+  if(name==="range"){
+    var range=value.match(/^bytes=(\d*)-(\d*)$/);
+    return !!range&&!!(range[1]||range[2])&&(!range[1]||!range[2]||decimalLE(range[1],range[2]));
+  }
+  if(/[\0-\x08\x0a-\x1f\x7f"():<>?@\[\\\]{}]/.test(value))return false;
+  if(name==="content-type"){
+    var parts=trimHTTP(value.split(";",1)[0]).toLowerCase().split("/");
+    return parts.length===2&&TOKEN.test(parts[0])&&TOKEN.test(parts[1])&&SAFE_TYPES.has(parts[0]+"/"+parts[1]);
+  }
+  if(name==="accept-language"||name==="content-language")return /^[0-9A-Za-z *,\-.;=]*$/.test(value);
+  return true;
+}
+function unsafeHeaderNames(requestHeaders){
+  var unsafe=[],potential=[],safeBytes=0;
+  requestHeaders.list.forEach(function(header){
+    if(simpleHeader(header.name,header.value)){
+      potential.push(header.name);
+      safeBytes+=header.value.length;
+    }else unsafe.push(header.name);
+  });
+  if(safeBytes>1024)unsafe=unsafe.concat(potential);
+  return Array.from(new Set(unsafe.map(function(name){return name.toLowerCase()}))).sort();
+}
+function exposedNames(actual,credentialed,findings){
+  var parsed=tokenList(actual,"access-control-expose-headers","Access-Control-Expose-Headers",findings,"actual","warn");
+  var allow=parsed.valid?parsed.items.map(function(name){return name.toLowerCase()}):[];
+  var names=[];
+  actual.list.forEach(function(header){
+    var name=header.name.toLowerCase();
+    if(name==="set-cookie"||name==="set-cookie2")return;
+    if(SAFE_RESPONSE.has(name)||allow.includes(name)||(allow.includes("*")&&!credentialed))names.push(name);
+  });
+  return Array.from(new Set(names)).sort();
+}
+function basicNames(actual){
+  return Array.from(new Set(actual.list.map(function(header){return header.name.toLowerCase()}).filter(function(name){return name!=="set-cookie"&&name!=="set-cookie2"}))).sort();
+}
+function statusValue(id,label){
+  var value=Number($(id).value);
+  if(!Number.isInteger(value)||value<100||value>599)throw new Error(label+" status code must be 100–599.");
+  return value;
+}
+function simulate(){
+  var findings=[],trace=[],origin=parseOrigin($("origin").value),url=parseUrl($("url").value);
+  var entered=trimHTTP($("method").value);
+  if(!TOKEN.test(entered)||entered.length>50)throw new Error("Method must be a valid HTTP token of at most 50 characters.");
+  var upper=entered.toUpperCase();
+  if(FORBIDDEN_METHODS.has(upper))throw new Error("Browser Fetch APIs forbid the "+upper+" method.");
+  var method=NORMAL_METHODS.has(upper)?upper:entered;
+  var req=authorHeaders($("request-headers").value,findings),contentType=trimHTTP($("content-type").value);
+  if(contentType){
+    if(/[\r\n\0]/.test(contentType)||/[^\x00-\xff]/.test(contentType)||contentType.length>500)throw new Error("Content-Type is invalid or too long.");
+    var existing=req.map.get("content-type");
+    if(existing&&existing.some(function(value){return value!==contentType}))throw new Error("Content-Type input conflicts with a pasted Content-Type request header.");
+    if(!existing)addHeader(req,{name:"Content-Type",value:contentType});
+  }
+  var same=origin!=="null"&&origin===url.origin;
+  var credentialed=$("credentials").value==="include";
+  var unsafeNames=unsafeHeaderNames(req);
+  var corsSafelisted=SAFE_METHODS.has(method)&&unsafeNames.length===0;
+  var pna=$("private").checked;
+  var needs=pna||(!same&&!corsSafelisted);
+  var cacheHit=needs&&$("cache").value==="hit";
+  var pre=headers($("preflight").value,"Preflight response");
+  var actual=headers($("actual").value,"Actual response");
+  var preStatus=statusValue("preflight-status","Preflight response");
+  var actualStatus=statusValue("status-code","Actual response");
+  trace.push("Document origin: "+origin,"Request origin: "+url.origin,same?"Origins match; core CORS does not gate the actual response.":"Origins differ; CORS applies.",corsSafelisted?"Method and author headers are CORS-safelisted.":"Non-safelisted method/header names: "+(unsafeNames.join(", ")||method),pna?"PNA forced-preflight assumption is enabled.":"PNA forced preflight is not enabled.");
+
+  var preflightPass=true,maxAge=null;
+  if(needs&&!cacheHit){
+    if(preStatus<200||preStatus>299){
+      preflightPass=false;
+      findings.push({level:"fail",stage:"preflight",message:"A CORS preflight requires an HTTP 2xx response status."});
+    }
+    var originPass=originAllowed(one(pre,"access-control-allow-origin",findings,"preflight"),origin,credentialed,findings,"preflight");
+    var credentialsPass=credentialAllowed(pre,credentialed,findings,"preflight");
+    preflightPass=preflightPass&&originPass&&credentialsPass;
+    var methodResult=tokenList(pre,"access-control-allow-methods","Access-Control-Allow-Methods",findings,"preflight","fail");
+    var headerResult=tokenList(pre,"access-control-allow-headers","Access-Control-Allow-Headers",findings,"preflight","fail");
+    if(!methodResult.valid||!headerResult.valid)preflightPass=false;
+    var methods=methodResult.items.slice();
+    if(pna&&!methodResult.present)methods=[method];
+    if(!methods.includes(method)&&!SAFE_METHODS.has(method)&&(credentialed||!methods.includes("*"))){
+      preflightPass=false;
+      findings.push({level:"fail",stage:"preflight",message:"Requested method "+method+" is not allowed by Access-Control-Allow-Methods."});
+    }
+    var allowed=headerResult.items.map(function(name){return name.toLowerCase()});
+    var missing=unsafeNames.filter(function(name){
+      if(allowed.includes(name))return false;
+      return name==="authorization"||credentialed||!allowed.includes("*");
+    });
+    if(missing.length){
+      preflightPass=false;
+      findings.push({level:"fail",stage:"preflight",message:"Non-safelisted request headers not allowed: "+missing.join(", ")});
+    }
+    if(pna&&one(pre,"access-control-allow-private-network",findings,"preflight")!=="true"){
+      preflightPass=false;
+      findings.push({level:"fail",stage:"preflight",message:"The forced PNA path requires Access-Control-Allow-Private-Network: true."});
+    }
+    var maxValues=pre.map.get("access-control-max-age")||[];
+    if(maxValues.length===0)maxAge=5;
+    else if(maxValues.length>1||!/^\d+$/.test(maxValues[0])){
+      maxAge=5;
+      findings.push({level:"warn",stage:"preflight",message:"Invalid or duplicate Access-Control-Max-Age is ignored; Fetch uses its 5-second default before browser caps."});
+    }else{
+      maxAge=Number(maxValues[0]);
+      if(!Number.isSafeInteger(maxAge)){
+        maxAge=null;
+        findings.push({level:"warn",stage:"preflight",message:"Access-Control-Max-Age exceeds this simulator's safe integer range; browser-specific caps still apply."});
+      }else trace.push("Advertised preflight max-age: "+maxAge+" seconds (browser caps may be lower).");
+    }
+  }else if(cacheHit)findings.push({level:"warn",stage:"preflight",message:"A matching fresh, partitioned preflight cache entry is assumed; pasted preflight response fields were not evaluated."});
+
+  var sent=!needs||cacheHit||preflightPass;
+  var readable=false,exposed=[];
+  if(sent){
+    if(same){
+      readable=true;
+      exposed=basicNames(actual);
+    }else{
+      var actualOriginPass=originAllowed(one(actual,"access-control-allow-origin",findings,"actual"),origin,credentialed,findings,"actual");
+      var actualCredentialsPass=credentialAllowed(actual,credentialed,findings,"actual");
+      readable=actualOriginPass&&actualCredentialsPass;
+      if(readable)exposed=exposedNames(actual,credentialed,findings);
+    }
+    var locations=actual.map.get("location")||[];
+    if(REDIRECT_STATUSES.has(actualStatus)&&locations.length&&readable!==false){
+      exposed=[];
+      if(locations.length>1){
+        readable=false;
+        findings.push({level:"fail",stage:"redirect",message:"Duplicate Location fields make redirect URL extraction fail."});
+      }else{
+        readable=null;
+        findings.push({level:"warn",stage:"redirect",message:"The initial response is a redirect. Request rewriting, target-origin preflight/CORS checks, and final response access are not simulated."});
+      }
+    }
+  }else findings.push({level:"fail",stage:"send",message:"The preflight gate failed, so the simulated actual request would not be sent."});
+
+  var readableText=readable===null?"not determined":String(readable);
+  trace.push(needs?(cacheHit?"Preflight required; matching cache permission assumed.":"Preflight required and evaluated."):"No preflight required.","Actual request may be sent: "+sent,"Final response readable to script: "+readableText,"Script-visible response headers: "+(readable===null?"not determined":exposed.join(", ")||"none"));
+  return {
+    version:1,
+    request:{documentOrigin:origin,url:url.href,requestOrigin:url.origin,method:method,credentialsMode:$("credentials").value,privateNetwork:pna,headers:req.list,sameOrigin:same,simple:corsSafelisted,corsSafelisted:corsSafelisted,nonSafelistedHeaderNames:unsafeNames},
+    preflight:{status:preStatus,required:needs,cacheAssumption:cacheHit?"matching fresh entry":"none",evaluated:needs&&!cacheHit,passed:needs?(cacheHit?null:preflightPass):null,maxAgeSeconds:maxAge,responseHeaders:pre.list},
+    actual:{status:actualStatus,requestMayBeSent:sent,responseReadable:readable,exposedHeaderNames:exposed,responseHeaders:actual.list},
+    findings:findings,
+    trace:trace
+  };
+}
+function render(){
+  var readable=report.actual.responseReadable===null?"Not determined":report.actual.responseReadable?"Yes":"No";
+  var preflight=report.preflight.required?(report.preflight.evaluated?(report.preflight.passed?"Pass":"Fail"):"Cache assumed"):"Not required";
+  var rows=[
+    ["Same origin",report.request.sameOrigin?"Yes":"No",""],
+    ["CORS-safelisted",report.request.corsSafelisted?"Yes":"No",""],
+    ["Preflight",preflight,preflight==="Fail"?"fail":preflight==="Cache assumed"?"warn":""],
+    ["Request may be sent",report.actual.requestMayBeSent?"Yes":"No",report.actual.requestMayBeSent?"":"fail"],
+    ["Response readable",readable,readable==="No"?"fail":readable==="Not determined"?"warn":""]
+  ];
+  var metrics=$("metrics");
+  metrics.replaceChildren();
+  rows.forEach(function(row){
+    var node=el("div",{class:"metric "+row[2]});
+    node.append(el("span",{},row[0]),el("strong",{},row[1]));
+    metrics.appendChild(node);
+  });
+  var findings=$("findings");
+  findings.replaceChildren();
+  if(!report.findings.length)findings.appendChild(el("p",{},"No findings for this simulated path."));
+  report.findings.forEach(function(item){findings.appendChild(el("div",{class:"finding "+item.level},item.level.toUpperCase()+" · "+item.stage+": "+item.message))});
+  $("trace").textContent=report.trace.join("\n");
+}
+function clearResults(){
+  $("metrics").replaceChildren();
+  $("findings").replaceChildren();
+  $("trace").textContent="Simulation failed; correct the input and run again.";
+}
+function run(){
+  try{
+    report=simulate();
+    render();
+    $("json").disabled=false;
+    $("status").className="status";
+    $("status").textContent="Simulated locally. No request was made.";
+  }catch(error){
+    report=null;
+    clearResults();
+    $("json").disabled=true;
+    $("status").className="status error";
+    $("status").textContent=error.message;
+  }
+}
+function download(){
+  var url=URL.createObjectURL(new Blob([JSON.stringify(report,null,2)],{type:"application/json"}));
+  var link=el("a",{href:url,download:"cors-scenario-audit.json"});
+  link.click();
+  setTimeout(function(){URL.revokeObjectURL(url)},0);
+}
+$("simulate").addEventListener("click",run);
+$("json").addEventListener("click",function(){if(report)download()});
+run();
+})();
+</script></body></html>

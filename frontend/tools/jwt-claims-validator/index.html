@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>JWT Claims Validator — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .layout{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(300px,.92fr);gap:18px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.wide{grid-column:1/-1}.field label,.label{display:block;font-weight:650;margin-bottom:6px}.field input,.field textarea{box-sizing:border-box;width:100%}.secret-row{display:flex;gap:8px}.secret-row input{min-width:0;flex:1}.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}.banner{padding:12px;border-radius:8px;border-left:4px solid #d69200;background:color-mix(in srgb,#d69200 12%,transparent)}.verdict{border:1px solid var(--border);border-radius:10px;padding:14px}.verdict h2{margin-top:0}.result-list{list-style:none;margin:0;padding:0;display:grid;gap:8px}.result-list li{padding:9px 10px;border-radius:7px;background:var(--panel-2,var(--panel));overflow-wrap:anywhere}.pass{border-left:4px solid #298a46}.fail{border-left:4px solid var(--danger,#c63838)}.warn{border-left:4px solid #d69200}.info{border-left:4px solid var(--accent)}.json{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;max-height:360px;overflow:auto}.status{min-height:1.5em}.error{color:var(--danger,#c63838)}.sensitive{padding:10px;border:1px solid var(--border);border-radius:8px}.muted{opacity:.76}@media(max-width:820px){.layout{grid-template-columns:1fr}}@media(max-width:560px){.grid{grid-template-columns:1fr}.wide{grid-column:auto}.secret-row{flex-wrap:wrap}.secret-row input{flex-basis:100%}.actions button{flex:1 1 44%}}
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>JWT Claims Validator</h1>
+      <p>Decode a compact JWT, apply claim-policy checks, and optionally verify an HS256 signature entirely in your browser.</p>
+    </div>
+    <div class="banner" role="note"><strong>Decoded does not mean trusted.</strong> Header and claim checks do not prove who created a token. Only a successful signature verification with a trusted key provides integrity—and this tool verifies HS256 only.</div>
+    <div class="layout" style="margin-top:16px">
+      <section class="panel" aria-labelledby="input-title">
+        <h2 id="input-title">Token and policy</h2>
+        <div class="field"><label for="token">Compact JWT / JWS</label><textarea id="token" rows="7" maxlength="65536" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.…"></textarea><small class="muted">Exactly three unpadded Base64url segments, up to 64 KiB.</small></div>
+        <h3>Time checks</h3>
+        <div class="grid">
+          <div class="field"><label for="now">Evaluation time (UTC)</label><input id="now" type="datetime-local" step="1" aria-describedby="now-help"><small id="now-help" class="muted">Leave blank to use the current time.</small></div>
+          <div class="field"><label for="skew">Allowed clock skew (seconds)</label><input id="skew" type="number" min="0" max="3600" step="1" value="0" inputmode="numeric"></div>
+        </div>
+        <h3>Expected claims</h3>
+        <div class="grid">
+          <div class="field"><label for="expected-iss">Issuer (<code>iss</code>)</label><input id="expected-iss" maxlength="512" autocomplete="off"></div>
+          <div class="field"><label for="expected-sub">Subject (<code>sub</code>)</label><input id="expected-sub" maxlength="512" autocomplete="off"></div>
+          <div class="field"><label for="expected-aud">Audience (<code>aud</code>)</label><input id="expected-aud" maxlength="512" autocomplete="off"><small class="muted">Matches a string or one item in an array.</small></div>
+          <div class="field"><label for="required">Required claims</label><input id="required" maxlength="1024" autocomplete="off" placeholder="exp, iss, sub"><small class="muted">Comma-separated JSON member names.</small></div>
+        </div>
+        <h3>Optional HS256 verification</h3>
+        <div class="sensitive">
+          <div class="field"><label for="secret">Shared secret (UTF-8 text)</label><div class="secret-row"><input id="secret" type="password" maxlength="4096" autocomplete="new-password" spellcheck="false"><button id="show-secret" type="button" class="secondary" aria-pressed="false">Show</button></div></div>
+          <p class="muted">Only use a key you are authorized to handle. It stays in this page and is never saved or sent. An empty field skips verification.</p>
+        </div>
+        <div class="actions"><button id="validate" type="button">Validate token</button><button id="clear" type="button" class="secondary">Clear all</button></div>
+        <p id="status" class="status" role="status" aria-live="polite"></p>
+      </section>
+      <div>
+        <section class="panel verdict" aria-labelledby="results-title"><h2 id="results-title">Validation results</h2><ul id="results" class="result-list"><li class="info">Paste a token to begin.</li></ul></section>
+        <section class="panel"><h2>Decoded header</h2><pre id="header" class="json">—</pre></section>
+        <section class="panel"><h2>Decoded claims</h2><pre id="claims" class="json">—</pre></section>
+      </div>
+    </div>
+  </main>
+  <script src="/assets/app.js"></script>
+  <script>
+  (function(){
+    "use strict";
+    var $=function(id){return document.getElementById(id);},token=$("token"),secret=$("secret"),results=$("results"),status=$("status");
+    var decoder=new TextDecoder("utf-8",{fatal:true});
+    function add(kind,text){var li=document.createElement("li");li.className=kind;li.textContent=text;results.appendChild(li);}
+    function resetOutput(){results.replaceChildren();$("header").textContent="—";$("claims").textContent="—";status.textContent="";status.className="status";}
+    function fail(text){add("fail",text);status.textContent="Validation could not complete.";status.className="status error";}
+    function decodeB64url(segment,name,allowEmpty){
+      if(!segment&&!allowEmpty)throw new Error(name+" segment is empty.");if(segment.length>65536)throw new Error(name+" segment is too large.");
+      if(!/^[A-Za-z0-9_-]*$/.test(segment))throw new Error(name+" must use unpadded Base64url characters only.");if(segment.length%4===1)throw new Error(name+" has an invalid Base64url length.");
+      var b64=segment.replace(/-/g,"+").replace(/_/g,"/")+"===".slice((segment.length+3)%4);var raw;
+      try{raw=atob(b64);}catch(e){throw new Error(name+" is not valid Base64url.");}
+      var canonical=btoa(raw).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");if(canonical!==segment)throw new Error(name+" is not canonical Base64url (unused trailing bits must be zero).");
+      var bytes=new Uint8Array(raw.length);for(var i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);return bytes;
+    }
+    function parseJsonSegment(segment,name){var text;try{text=decoder.decode(decodeB64url(segment,name,false));}catch(e){throw new Error(e.message||name+" is not valid UTF-8.");}var value;try{value=JSON.parse(text);}catch(e){throw new Error(name+" is not valid JSON.");}if(!value||Array.isArray(value)||typeof value!=="object")throw new Error(name+" must be a JSON object.");return value;}
+    function numericDate(claims,name){if(!(name in claims))return null;var value=claims[name];if(typeof value!=="number"||!Number.isFinite(value))throw new Error(name+" must be a finite NumericDate value.");return value;}
+    function evaluationTime(){var raw=$("now").value;if(!raw)return Date.now()/1000;var ms=new Date(raw+"Z").getTime();if(!Number.isFinite(ms))throw new Error("Evaluation time is invalid.");return ms/1000;}
+    function requiredNames(){var raw=$("required").value.trim();if(!raw)return [];var seen=Object.create(null);return raw.split(",").map(function(v){return v.trim();}).filter(function(v){if(!v||seen[v])return false;seen[v]=true;return true;});}
+    function claimChecks(claims){
+      var now=evaluationTime(),skew=Number($("skew").value);if(!Number.isInteger(skew)||skew<0||skew>3600)throw new Error("Clock skew must be a whole number from 0 to 3600 seconds.");
+      var req=requiredNames();req.forEach(function(name){if(Object.prototype.hasOwnProperty.call(claims,name))add("pass","Required claim present: "+name);else add("fail","Required claim missing: "+name);});
+      var exp=numericDate(claims,"exp"),nbf=numericDate(claims,"nbf"),iat=numericDate(claims,"iat");
+      if(exp===null)add("info","No exp claim; expiry was not evaluated.");else if(now-skew>=exp)add("fail","Expired: exp was "+new Date(exp*1000).toISOString()+".");else add("pass","Not expired at the evaluation time (including allowed skew).");
+      if(nbf===null)add("info","No nbf claim; not-before was not evaluated.");else if(now+skew<nbf)add("fail","Not active yet: nbf is "+new Date(nbf*1000).toISOString()+".");else add("pass","nbf permits use at the evaluation time (including allowed skew).");
+      if(iat===null)add("info","No iat claim; issued-at was not evaluated.");else if(iat>now+skew)add("fail","iat is in the future beyond allowed skew: "+new Date(iat*1000).toISOString()+".");else add("pass","iat is not in the future beyond allowed skew.");
+      var expectedIss=$("expected-iss").value,expectedSub=$("expected-sub").value,expectedAud=$("expected-aud").value;
+      if(expectedIss)add(claims.iss===expectedIss?"pass":"fail",claims.iss===expectedIss?"Issuer matches.":"Issuer does not match the expected value.");
+      if(expectedSub)add(claims.sub===expectedSub?"pass":"fail",claims.sub===expectedSub?"Subject matches.":"Subject does not match the expected value.");
+      if(expectedAud){var aud=claims.aud,match=typeof aud==="string"?aud===expectedAud:Array.isArray(aud)&&aud.every(function(v){return typeof v==="string";})&&aud.indexOf(expectedAud)>=0;add(match?"pass":"fail",match?"Audience matches.":"Audience does not contain the expected value.");}
+    }
+    async function verifyHs256(parts,header){
+      if(!secret.value){add("warn","Signature NOT verified: no HS256 secret was provided.");return;}
+      if(header.alg!=="HS256"){if(String(header.alg).toLowerCase()==="none")add("fail","Signature NOT verified: alg none is never accepted for verification.");else add("fail","Signature NOT verified: this tool supports HS256 only, but header alg is "+String(header.alg||"missing")+".");return;}
+      if(!parts[2]){add("fail","Signature NOT verified: signature segment is empty.");return;}
+      if(!window.crypto||!crypto.subtle){add("fail","Signature NOT verified: Web Crypto requires HTTPS or localhost.");return;}
+      var keyBytes=new TextEncoder().encode(secret.value),sig=decodeB64url(parts[2],"Signature",false),data=new TextEncoder().encode(parts[0]+"."+parts[1]);
+      var key=await crypto.subtle.importKey("raw",keyBytes,{name:"HMAC",hash:"SHA-256"},false,["verify"]);var valid=await crypto.subtle.verify("HMAC",key,sig,data);add(valid?"pass":"fail",valid?"HS256 signature verified with the supplied secret.":"HS256 signature does not match the supplied secret.");
+    }
+    async function validate(){
+      resetOutput();var raw=token.value.trim();if(!raw){add("info","Paste a token to begin.");return;}if(raw.length>65536){fail("Token exceeds the 64 KiB limit.");return;}
+      var parts=raw.split(".");if(parts.length!==3){fail("A compact JWT/JWS must have exactly three dot-separated segments.");return;}
+      try{var header=parseJsonSegment(parts[0],"Header"),claims=parseJsonSegment(parts[1],"Payload");decodeB64url(parts[2],"Signature",true);$("header").textContent=JSON.stringify(header,null,2);$("claims").textContent=JSON.stringify(claims,null,2);add("pass","Header and claims decoded as UTF-8 JSON objects.");claimChecks(claims);await verifyHs256(parts,header);status.textContent="Validation complete. Review every result; decode and claim checks alone do not establish trust.";}catch(e){fail(e.message||String(e));}
+    }
+    $("validate").addEventListener("click",validate);$("show-secret").addEventListener("click",function(){var show=secret.type==="password";secret.type=show?"text":"password";this.textContent=show?"Hide":"Show";this.setAttribute("aria-pressed",String(show));secret.focus();});
+    $("clear").addEventListener("click",function(){[token,secret,$("expected-iss"),$("expected-sub"),$("expected-aud"),$("required"),$("now")].forEach(function(el){el.value="";});$("skew").value="0";secret.type="password";$("show-secret").textContent="Show";$("show-secret").setAttribute("aria-pressed","false");resetOutput();add("info","Sensitive data cleared.");token.focus();});
+  })();
+  </script>
+</body>
+</html>

@@ -29,6 +29,11 @@
   function injectHeader() {
     var mount = document.getElementById("site-header");
     if (!mount) return;
+    var main = document.querySelector("main");
+    if (main && !main.id) main.id = "main-content";
+    if (main && !document.querySelector(".skip-link")) {
+      document.body.insertBefore(el("a", { class: "skip-link", href: "#" + main.id }, ["Skip to main content"]), document.body.firstChild);
+    }
     var brand = el("a", { class: "brand", href: ROOT });
     brand.appendChild(el("span", { class: "brand-mark", html: WRENCH_SVG }));
     brand.appendChild(el("span", {}, ["Virtual Tools"]));
@@ -54,6 +59,10 @@
     mount.appendChild(brand);
     mount.appendChild(nav);
     mount.appendChild(themeBtn);
+    var currentPath = location.pathname.replace(/\/+$/, "/");
+    nav.querySelectorAll("a").forEach(function (link) {
+      try { if (new URL(link.href, location.href).pathname.replace(/\/+$/, "/") === currentPath) link.setAttribute("aria-current", "page"); } catch (_) {}
+    });
   }
 
   /* ---- Theme toggle ----------------------------------------------------- */

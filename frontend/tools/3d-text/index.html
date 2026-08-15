@@ -12,14 +12,17 @@
 .controls{display:flex;gap:8px;margin:12px 0;flex-wrap:wrap;align-items:center;}
 .controls label{font-size:13px;color:var(--text-secondary,#888);margin-right:4px;}
 .controls input[type="text"]{flex:1;min-width:200px;padding:6px 10px;border-radius:6px;border:1px solid var(--border,#444);background:var(--card,#2a2f3e);color:var(--text,#eee);font-size:13px;}
-.controls select,.controls input[type="number"]{padding:6px 10px;border-radius:6px;border:1px solid var(--border,#444);background:var(--card,#2a2f3e);color:var(--text,#eee);font-size:13px;}
-.preview{background:linear-gradient(135deg,#1a1a2e,#16213e);border:1px solid var(--border,#333);border-radius:8px;padding:48px;margin:12px 0;text-align:center;min-height:120px;display:flex;align-items:center;justify-content:center;perspective:600px;}
-.three-d-text{font-family:Impact,sans-serif;font-size:56px;color:#fff;transform:rotateX(10deg) rotateY(-10deg);}
+.controls select,.controls input[type="number"],.color-row select,.color-row input[type="number"]{padding:6px 10px;border-radius:6px;border:1px solid var(--border,#444);background:var(--card,#2a2f3e);color:var(--text,#eee);font-size:13px;}
+.preview{background:linear-gradient(135deg,#1a1a2e,#16213e);border:1px solid var(--border,#333);border-radius:8px;padding:48px;margin:12px 0;text-align:center;min-height:120px;min-width:0;display:flex;align-items:center;justify-content:center;perspective:600px;overflow:hidden;}
+.three-d-text{font-family:Impact,sans-serif;font-size:56px;color:#fff;transform:rotateX(10deg) rotateY(-10deg);max-width:100%;overflow-wrap:anywhere;}
 .color-row{display:flex;gap:8px;align-items:center;margin:8px 0;flex-wrap:wrap;}
 .color-row input[type="color"]{width:40px;height:32px;border:none;border-radius:6px;cursor:pointer;background:none;}
 button.action{padding:8px 16px;border-radius:6px;border:1px solid var(--border,#444);background:var(--card,#2a2f3e);color:var(--text,#eee);cursor:pointer;font-size:13px;}
 button.action:hover{border-color:var(--accent,#5b8def);}
 .css-output{background:var(--bg,#1e2230);border:1px solid var(--border,#444);border-radius:8px;padding:12px;margin:12px 0;font-family:monospace;font-size:12px;color:var(--text,#eee);white-space:pre-wrap;word-break:break-all;}
+.output-label{display:block;margin-top:16px;font-size:13px;color:var(--text-secondary,#aaa);}
+.status{min-height:1.4em;margin:8px 0;color:var(--text-secondary,#aaa);font-size:13px;}
+@media (max-width:520px){.preview{padding:28px 16px;min-height:100px}.controls,.color-row{align-items:stretch}.controls>label,.color-row>label{display:flex;align-items:center;justify-content:space-between;gap:8px}.controls input[type="text"]{min-width:0;width:100%}.three-d-text{font-size:clamp(28px,12vw,56px)}}
 </style>
 </head>
 <body>
@@ -27,9 +30,9 @@ button.action:hover{border-color:var(--accent,#5b8def);}
 <main>
 <div class="tool-wrap">
 <h1>🧊 3D Text Generator</h1>
-<p class="tool-desc">Create CSS 3D extruded text with depth layers, perspective rotation, and color gradients. Copy CSS.</p>
+<p class="tool-desc">Create CSS 3D extruded text with depth layers, perspective rotation, and custom face and side colors. Copy the generated CSS.</p>
 <div class="controls">
-<input type="text" id="text" value="3D TEXT" placeholder="Enter text...">
+<input type="text" id="text" value="3D TEXT" placeholder="Enter text..." aria-label="Enter Text...">
 <label>Size: <input type="number" id="size" value="56" min="8" max="120"></label>
 <label>Depth: <input type="number" id="depth" value="8" min="1" max="30"></label>
 <label>Font: <select id="font"><option value="Impact, sans-serif" selected>Impact</option><option value="Arial, sans-serif">Arial</option><option value="'Courier New', monospace">Monospace</option><option value="Georgia, serif">Georgia</option><option value="Verdana, sans-serif">Verdana</option></select></label>
@@ -42,43 +45,76 @@ button.action:hover{border-color:var(--accent,#5b8def);}
 <label>Skeleton: <select id="skeleton"><option value="0">None</option><option value="1">Outline</option><option value="2">Wireframe</option></select></label>
 </div>
 <div class="controls">
-<button class="action" onclick="copyCSS()">Copy CSS</button>
+<button class="action" onclick="copyCSS()" type="button">Copy CSS</button>
 </div>
 <div class="preview"><div class="three-d-text" id="preview">3D TEXT</div></div>
-<div class="css-output" id="cssOutput"></div>
+<label class="output-label" id="cssOutputLabel" for="cssOutput">Generated CSS</label>
+<pre class="css-output" id="cssOutput" tabindex="0" aria-labelledby="cssOutputLabel"></pre>
+<p class="status" id="status" role="status" aria-live="polite"></p>
 </div>
 </main>
 <script src="/assets/app.js"></script>
 <script>
-function build3D(){
-const depth=parseInt(document.getElementById('depth').value);
+function readNumber(id,min,max,fallback,errors){
+const el=document.getElementById(id);
+const value=Number(el.value);
+if(el.value.trim()===''||!Number.isFinite(value)){
+el.setAttribute('aria-invalid','true');
+errors.push(id+' must be a number');
+return fallback;
+}
+const clamped=Math.min(max,Math.max(min,value));
+if(clamped!==value){
+el.value=clamped;
+errors.push(id+' was limited to '+clamped);
+}
+el.removeAttribute('aria-invalid');
+return clamped;
+}
+function build3D(values){
+const depth=values.depth;
 const fc=document.getElementById('faceColor').value;
 const sc=document.getElementById('sideColor').value;
-const rx=parseInt(document.getElementById('rotX').value);
-const ry=parseInt(document.getElementById('rotY').value);
+const rx=values.rx;
+const ry=values.ry;
 let shadows=[];
 for(let i=1;i<=depth;i++){
 shadows.push((i)+'px '+(i)+'px 0 '+sc);
 }
-if(parseInt(document.getElementById('skeleton').value)===1)shadows.push('0 0 2px #fff');
+const skeleton=document.getElementById('skeleton').value;
+const stroke=skeleton==='1'?'1px #fff':skeleton==='2'?'1px '+fc:'0 transparent';
+const fill=skeleton==='2'?'transparent':fc;
 const textShadow=shadows.join(', ');
 const transform='perspective(600px) rotateX('+rx+'deg) rotateY('+ry+'deg)';
 const p=document.getElementById('preview');
 p.style.textShadow=textShadow;
 p.style.transform=transform;
-const css='color: '+fc+';\nfont-size: '+document.getElementById('size').value+'px;\nfont-family: '+document.getElementById('font').value+';\ntext-shadow: '+textShadow+';\ntransform: '+transform+';';
+p.style.color=fill;
+p.style.webkitTextStroke=stroke;
+const css='color: '+fill+';\n-webkit-text-stroke: '+stroke+';\nfont-size: '+values.size+'px;\nfont-family: '+document.getElementById('font').value+';\ntext-shadow: '+textShadow+';\ntransform: '+transform+';';
 document.getElementById('cssOutput').textContent=css;
 }
 function update(){
+const errors=[];
+const values={
+size:readNumber('size',8,120,56,errors),
+depth:readNumber('depth',1,30,8,errors),
+rx:readNumber('rotX',-45,45,10,errors),
+ry:readNumber('rotY',-45,45,-10,errors)
+};
 const text=document.getElementById('text').value||'3D TEXT';
-const size=document.getElementById('size').value;
 const font=document.getElementById('font').value;
-const fc=document.getElementById('faceColor').value;
 const p=document.getElementById('preview');
-p.textContent=text;p.style.fontSize=size+'px';p.style.fontFamily=font;p.style.color=fc;
-build3D();
+p.textContent=text;p.style.fontSize=values.size+'px';p.style.fontFamily=font;
+build3D(values);
+document.getElementById('status').textContent=errors.join('. ');
 }
-function copyCSS(){navigator.clipboard.writeText(document.getElementById('cssOutput').textContent).then(()=>alert('CSS copied!')).catch(()=>alert('Copy failed'));}
+function copyCSS(){
+const status=document.getElementById('status');
+navigator.clipboard.writeText(document.getElementById('cssOutput').textContent)
+.then(()=>{status.textContent='CSS copied to clipboard.';})
+.catch(()=>{status.textContent='Copy failed. Select the generated CSS and copy it manually.';});
+}
 ['text','size','depth','font','faceColor','sideColor','rotX','rotY','skeleton'].forEach(id=>{const el=document.getElementById(id);if(el)el.addEventListener('input',update);});
 update();
 </script>

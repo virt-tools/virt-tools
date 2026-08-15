@@ -8,11 +8,12 @@
 <link rel="stylesheet" href="/assets/style.css">
 <style>
 .tool-wrap{max-width:700px;margin:0 auto;}
-.noise-card{border:1px solid var(--border,#333);border-radius:12px;padding:20px;margin:10px 0;cursor:pointer;transition:all .2s;}
+.noise-card{width:100%;border:1px solid var(--border,#333);border-radius:12px;padding:20px;margin:0;cursor:pointer;transition:border-color .2s,transform .2s,background .2s;text-align:left;background:var(--bg-alt,#1a1f2e);color:var(--text,#e0e0e0);font:inherit;}
 .noise-card:hover{border-color:#1565c0;transform:translateY(-2px);}
 .noise-card.active{border-color:#1565c0;background:rgba(21,101,192,.1);}
-.noise-card h3{margin:0 0 5px;font-size:18px;}
-.noise-card p{margin:0;font-size:13px;opacity:.7;}
+.noise-card:focus-visible,.controls button:focus-visible,.timer-row button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid #42a5f5;outline-offset:2px;}
+.noise-card .card-title{display:block;margin:0 0 5px;font-size:18px;font-weight:700;}
+.noise-card .card-desc{display:block;font-size:13px;color:var(--text-muted,var(--text,#e0e0e0));}
 .noise-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin:15px 0;}
 .noise-icon{font-size:32px;margin-bottom:8px;}
 .master-vol{margin:15px 0;}
@@ -22,8 +23,12 @@ input[type=range]{width:100%;accent-color:#1565c0;}
 .controls button{padding:10px 24px;border-radius:8px;border:1px solid var(--border,#333);background:var(--bg-alt,#1a1f2e);color:var(--text,#e0e0e0);cursor:pointer;font-size:14px;}
 .controls button.active{background:#1565c0;color:#fff;border:none;}
 .timer-row{display:flex;gap:10px;align-items:center;justify-content:center;margin:10px 0;flex-wrap:wrap;}
-.timer-row select,input{padding:6px;border-radius:6px;border:1px solid var(--border,#333);background:var(--bg-alt,#1a1f2e);color:var(--text,#e0e0e0);}
-.status{text-align:center;font-size:14px;opacity:.7;margin:5px 0;}
+.timer-row select{padding:8px;border-radius:6px;border:1px solid var(--border,#333);background:var(--bg-alt,#1a1f2e);color:var(--text,#e0e0e0);}
+.timer-row button{padding:8px 16px;border-radius:6px;border:1px solid var(--border,#333);background:var(--bg-alt,#1a1f2e);color:var(--text,#e0e0e0);cursor:pointer;}
+.status{text-align:center;font-size:14px;min-height:1.5em;margin:8px 0;color:var(--text-muted,var(--text,#e0e0e0));}
+.status.error{color:#d32f2f;font-weight:600;}
+@media (max-width:520px){.noise-grid{grid-template-columns:1fr}.noise-card{padding:16px}.timer-row{align-items:stretch;flex-direction:column}.timer-row select,.timer-row button{width:100%;min-height:44px}}
+@media (prefers-reduced-motion:reduce){.noise-card{transition:none}.noise-card:hover{transform:none}}
 </style>
 </head>
 <body>
@@ -34,14 +39,15 @@ input[type=range]{width:100%;accent-color:#1565c0;}
 <p class="tool-desc">Generate white, pink, or brown noise, and ambient sounds (rain, ocean, wind, forest) using the Web Audio API. Mix sounds, set a sleep timer, and adjust volume. All client-side — no audio files, everything synthesized in real time.</p>
 
 <div class="master-vol">
-<label>Master Volume: <span id="volLabel">50%</span></label>
-<input type="range" id="masterVol" min="0" max="100" value="50" oninput="setMasterVol(this.value)">
+<label for="masterVol">Master volume: <span id="volLabel">50%</span></label>
+<input type="range" id="masterVol" min="0" max="100" value="50" oninput="setMasterVol(this.value)" aria-describedby="volHelp">
+<span id="volHelp" class="sr-only">Controls the combined volume of all playing sounds.</span>
 </div>
 
 <div class="noise-grid" id="noiseGrid"></div>
 
 <div class="timer-row">
-<label>Sleep timer:</label>
+<label for="timerSelect">Sleep timer:</label>
 <select id="timerSelect" onchange="setSleepTimer()">
 <option value="0">Off</option>
 <option value="300">5 min</option>
@@ -50,16 +56,16 @@ input[type=range]{width:100%;accent-color:#1565c0;}
 <option value="1800">30 min</option>
 <option value="3600">1 hour</option>
 </select>
-<button onclick="stopAll()">Stop All</button>
+<button onclick="stopAll()" type="button">Stop All</button>
 </div>
 
-<div class="status" id="status"></div>
+<div class="status" id="status" role="status" aria-live="polite">No sounds playing</div>
 
 </div>
 </main>
 <script src="/assets/app.js"></script>
 <script>
-let audioCtx,masterGain,timerEnd=0,timerId=null;
+let audioCtx,masterGain,timerEnd=0,timerId=null,statusInterval=null;
 const sounds=[
 {id:'white',name:'White Noise',desc:'Equal energy across all frequencies',icon:'📊'},
 {id:'pink',name:'Pink Noise',desc:'Balanced, like steady rain',icon:'🌸'},
@@ -73,29 +79,38 @@ const sounds=[
 {id:'stream',name:'Stream',desc:'Bubbling brook',icon:'💧'},
 ];
 const active={};
+const starting=new Set();
 
 function init(){
 const grid=document.getElementById('noiseGrid');
 sounds.forEach(s=>{
-const c=document.createElement('div');
+const c=document.createElement('button');
+c.type='button';
 c.className='noise-card';c.id='card-'+s.id;
 c.onclick=()=>toggle(s.id);
-c.innerHTML=`<div class="noise-icon">${s.icon}</div><h3>${s.name}</h3><p>${s.desc}</p>`;
+c.setAttribute('aria-pressed','false');
+c.innerHTML=`<span class="noise-icon" aria-hidden="true">${s.icon}</span><span class="card-title">${s.name}</span><span class="card-desc">${s.desc}</span>`;
 grid.appendChild(c);
 });
 }
 
 function ensureCtx(){
-if(!audioCtx){audioCtx=new(window.AudioContext||window.webkitAudioContext)();masterGain=audioCtx.createGain();masterGain.gain.value=0.5;masterGain.connect(audioCtx.destination);}
+const AudioContextClass=window.AudioContext||window.webkitAudioContext;
+if(!AudioContextClass)throw new Error('Web Audio is not supported by this browser.');
+if(!audioCtx||audioCtx.state==='closed'){audioCtx=new AudioContextClass();masterGain=audioCtx.createGain();masterGain.gain.value=Number(document.getElementById('masterVol').value)/100;masterGain.connect(audioCtx.destination);}
 }
 
 function toggle(id){
+if(starting.has(id))return;
 if(active[id])stopSound(id);
 else playSound(id);
 }
 
-function playSound(id){
-ensureCtx();if(audioCtx.state==='suspended')audioCtx.resume();
+async function playSound(id){
+starting.add(id);
+try{ensureCtx();if(audioCtx.state==='suspended')await audioCtx.resume();}
+catch(error){showError(error.message||'Audio could not be started. Check your browser permissions.');starting.delete(id);return;}
+if(active[id]){starting.delete(id);return;}
 const g=audioCtx.createGain();g.gain.value=0;g.gain.linearRampToValueAtTime(0.3,audioCtx.currentTime+0.5);
 g.connect(masterGain);
 let node;
@@ -113,7 +128,9 @@ case'stream':node=makeStream();break;
 }
 if(node){node.connect(g);node.start();}
 active[id]={node,gain:g};
+starting.delete(id);
 document.getElementById('card-'+id).classList.add('active');
+document.getElementById('card-'+id).setAttribute('aria-pressed','true');
 updateStatus();
 }
 
@@ -124,10 +141,11 @@ a.gain.gain.linearRampToValueAtTime(0,audioCtx.currentTime+0.3);
 setTimeout(()=>{try{a.node.stop();}catch(e){}},400);
 delete active[id];
 document.getElementById('card-'+id).classList.remove('active');
+document.getElementById('card-'+id).setAttribute('aria-pressed','false');
 updateStatus();
 }
 
-function stopAll(){Object.keys(active).forEach(stopSound);clearTimeout(timerId);document.getElementById('timerSelect').value='0';updateStatus();}
+function stopAll(){Object.keys(active).forEach(stopSound);clearTimeout(timerId);clearInterval(statusInterval);timerId=null;statusInterval=null;timerEnd=0;document.getElementById('timerSelect').value='0';updateStatus();}
 
 function makeNoise(type){
 const bufSize=audioCtx.sampleRate*2;
@@ -198,15 +216,10 @@ function makeThunder(){
 const noise=makeNoise('brown');
 const filter=audioCtx.createBiquadFilter();filter.type='lowpass';filter.frequency.value=100;
 noise.connect(filter);
-let rumbleInterval=setInterval(()=>{
-if(!active['thunder']){clearInterval(rumbleInterval);return;}
-const g=audioCtx.createGain();
-g.gain.setValueAtTime(0,audioCtx.currentTime);
-g.gain.linearRampToValueAtTime(0.3,audioCtx.currentTime+0.5);
-g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+3);
-filter.connect(g);g.connect(masterGain);
-},5000+Math.random()*10000);
-return{connect:(n)=>filter.connect(n),start:()=>noise.start(),stop:()=>{noise.stop();clearInterval(rumbleInterval);}};
+const rumble=audioCtx.createGain();rumble.gain.value=0.04;filter.connect(rumble);
+let rumbleTimer;
+function scheduleRumble(){rumbleTimer=setTimeout(()=>{const now=audioCtx.currentTime;rumble.gain.cancelScheduledValues(now);rumble.gain.setValueAtTime(0.04,now);rumble.gain.linearRampToValueAtTime(0.7,now+0.35);rumble.gain.exponentialRampToValueAtTime(0.04,now+3);scheduleRumble();},5000+Math.random()*10000);}
+return{connect:(n)=>rumble.connect(n),start:()=>{noise.start();scheduleRumble();},stop:()=>{noise.stop();clearTimeout(rumbleTimer);}};
 }
 
 function makeFan(){
@@ -232,20 +245,26 @@ return{connect:(n)=>filter.connect(n),start:()=>{noise.start();lfo.start();},sto
 function setMasterVol(v){if(masterGain)masterGain.gain.value=v/100;document.getElementById('volLabel').textContent=v+'%';}
 
 function setSleepTimer(){
-const min=parseInt(document.getElementById('timerSelect').value);
+const seconds=Number(document.getElementById('timerSelect').value);
 clearTimeout(timerId);
-if(min>0){timerEnd=Date.now()+min*1000;
-timerId=setTimeout(()=>{stopAll();document.getElementById('timerSelect').value='0';},min*1000);
+clearInterval(statusInterval);
+if(seconds>0){timerEnd=Date.now()+seconds*1000;
+timerId=setTimeout(stopAll,seconds*1000);
+statusInterval=setInterval(updateStatus,60000);
 updateStatus();}
-else{timerEnd=0;updateStatus();}
+else{timerEnd=0;timerId=null;statusInterval=null;updateStatus();}
 }
 
 function updateStatus(){
 const count=Object.keys(active).length;
 let s=count===0?'No sounds playing':`${count} sound${count>1?'s':''} playing`;
-if(timerEnd>0){const left=Math.ceil((timerEnd-Date.now())/1000);if(left>0)s+=` · Sleep timer: ${Math.floor(left/60)}:${String(left%60).padStart(2,'0')}`;}
-document.getElementById('status').textContent=s;
+if(timerEnd>0){const minutesLeft=Math.ceil((timerEnd-Date.now())/60000);if(minutesLeft>0)s+=` · Sleep timer: ${minutesLeft} min remaining`;}
+const status=document.getElementById('status');status.classList.remove('error');status.textContent=s;
 }
+
+function showError(message){const status=document.getElementById('status');status.classList.add('error');status.textContent=message;}
+
+window.addEventListener('pagehide',()=>{stopAll();if(audioCtx&&audioCtx.state!=='closed')audioCtx.close();});
 
 VT.ready(init);
 </script>

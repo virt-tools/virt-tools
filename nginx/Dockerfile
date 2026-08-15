@@ -1,22 +1,39 @@
-# Stage 1: build-time SEO + sitemap generation.
+# Stage 1: validate all browser JavaScript with Node's parser.
+FROM node:alpine AS javascript
+WORKDIR /build
+COPY frontend/ ./frontend/
+COPY scripts/validate_javascript.mjs ./validate_javascript.mjs
+RUN node validate_javascript.mjs frontend && touch /build/javascript-validation-ok
+
+# Stage 2: build-time SEO + sitemap generation.
 # Uses python for robust HTML/JSON escaping when injecting meta tags and JSON-LD
 # into every page from the tool registry. These artifacts are static files, so the
 # runtime nginx image below needs none of this tooling.
 FROM python:3.13-alpine AS seo
 WORKDIR /build
+COPY --from=javascript /build/javascript-validation-ok ./javascript-validation-ok
 COPY frontend/ ./frontend/
 COPY scripts/generate_seo.py ./generate_seo.py
 COPY scripts/generate_sitemap.sh ./generate_sitemap.sh
+COPY scripts/validate_tools.py ./validate_tools.py
+COPY tool-curation.json ./tool-curation.json
+COPY generated-conversion-tools.json ./generated-conversion-tools.json
+COPY scripts/validate_generated_conversions.py ./validate_generated_conversions.py
+COPY scripts/validate_tool_design.py ./validate_tool_design.py
+RUN python validate_tools.py frontend
+RUN python validate_generated_conversions.py /build
+RUN python validate_tool_design.py frontend
 RUN python generate_seo.py frontend https://virt.tools
 RUN sh generate_sitemap.sh frontend https://virt.tools
 
-# Stage 2: runtime nginx.
+# Stage 3: runtime nginx.
 FROM nginx:alpine
 
 # Build context is the project root (see docker-compose.yml). Copy the
 # SEO/sitemap-enriched frontend from the generator stage.
 COPY --from=seo /build/frontend/ /usr/share/nginx/html/
 COPY nginx/nginx.conf /etc/nginx/conf.d/default.conf
+COPY nginx/tool-redirects.conf /etc/nginx/tool-redirects.conf
 
 # Cache-bust asset URLs so returning visitors always load the latest JS/CSS.
 # A build-time version query (?v=...) is appended to every assets/*.js|css

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Audio Crossfader — virt.tools</title>
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<header id="site-header"></header>
+<main class="tool-container">
+<h1>Audio Crossfader</h1>
+<p class="subtitle">Crossfade between two audio files with adjustable fade duration. Export as WAV. 100% client-side.</p>
+<div class="input-section">
+<input type="file" id="file1" accept="audio/*" aria-label="File1"><label>Track 1</label>
+<input type="file" id="file2" accept="audio/*" aria-label="File2"><label>Track 2</label>
+<label>Crossfade (seconds): <input type="range" id="fade" min="0.5" max="10" value="3" step="0.5"><span id="fadev">3</span></label>
+<button id="process" class="primary-btn" type="button">Crossfade & Download</button>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded',()=>{
+const fade=document.getElementById('fade');
+document.getElementById('fadev').textContent=fade.value;
+fade.oninput=()=>document.getElementById('fadev').textContent=fade.value;
+document.getElementById('process').addEventListener('click',async()=>{
+const f1=document.getElementById('file1').files[0];
+const f2=document.getElementById('file2').files[0];
+if(!f1||!f2){alert('Please select both audio files.');return;}
+const audioCtx=new AudioContext();
+const b1=await audioCtx.decodeAudioData(await f1.arrayBuffer());
+const b2=await audioCtx.decodeAudioData(await f2.arrayBuffer());
+const fadeSec=+fade.value;
+const totalLen=Math.ceil(b1.sampleRate*(b1.duration+b2.duration-fadeSec));
+const out=audioCtx.createBuffer(2,totalLen,b1.sampleRate);
+const fadeSamples=Math.floor(fadeSec*b1.sampleRate);
+for(let ch=0;ch<2;ch++){
+const d1=b1.getChannelData(Math.min(ch,b1.numberOfChannels-1));
+const d2=b2.getChannelData(Math.min(ch,b2.numberOfChannels-1));
+const od=out.getChannelData(ch);
+let i=0;
+for(let s=0;s<b1.length;s++){od[i++]=d1[s];}
+for(let s=0;s<fadeSamples;s++){
+const t=s/fadeSamples;
+od[i-fadeSamples+s]=d1[b1.length-fadeSamples+s]*(1-t)+d2[s]*t;
+}
+for(let s=fadeSamples;s<b2.length;s++){od[i++]=d2[s];}
+}
+const offline=new OfflineAudioContext(2,totalLen,b1.sampleRate);
+const src=offline.createBufferSource();
+src.buffer=out;src.connect(offline.destination);src.start();
+const rendered=await offline.startRendering();
+const wav=audioBufferToWav(rendered);
+const a=document.createElement('a');
+a.href=URL.createObjectURL(new Blob([wav],{type:'audio/wav'}));
+a.download='crossfade.wav';a.click();
+audioCtx.close();
+function audioBufferToWav(buf){
+const numCh=buf.numberOfChannels,sr=buf.sampleRate;
+const len=buf.length*2*numCh;
+const arr=new ArrayBuffer(44+len);
+const v=new DataView(arr);
+const writeStr=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i));};
+writeStr(0,'RIFF');v.setUint32(4,36+len,true);writeStr(8,'WAVE');
+writeStr(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);
+v.setUint16(22,numCh,true);v.setUint32(24,sr,true);
+v.setUint32(28,sr*numCh*2,true);v.setUint16(32,numCh*2,true);
+v.setUint16(34,16,true);writeStr(36,'data');v.setUint32(40,len,true);
+let off=44;
+for(let i=0;i<buf.length;i++){
+for(let ch=0;ch<numCh;ch++){
+const s=Math.max(-1,Math.min(1,buf.getChannelData(ch)[i]));
+v.setInt16(off,s<0?s*32768:s*32767,true);off+=2;
+}
+}
+return arr;
+}
+});
+});
+</script>
+</main>
+<script src="/assets/app.js"></script>
+</body>
+</html>

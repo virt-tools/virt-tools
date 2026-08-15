@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>SQL Query Formatter — Virtual Tools</title>
+  <meta name="description" content="Format or minify common SQL locally while preserving strings, quoted identifiers and comments.">
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .sql-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:1rem}.sql-grid textarea{min-height:26rem;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;line-height:1.5;resize:vertical}.controls{display:flex;flex-wrap:wrap;gap:.75rem;align-items:end;margin-bottom:1rem}.controls .field{min-width:9rem;margin:0}.actions{display:flex;flex-wrap:wrap;gap:.5rem}.output-wrap{position:relative}.output-actions{display:flex;gap:.5rem;justify-content:flex-end;margin-bottom:.5rem}.status{min-height:1.5em;margin:.75rem 0 0}.scope{margin-top:1rem}.scope summary{cursor:pointer;font-weight:600}.scope p{margin-bottom:0}.count{text-align:right;font-variant-numeric:tabular-nums}.error{color:var(--danger,#b42318)}
+    @media(max-width:780px){.sql-grid{grid-template-columns:1fr}.sql-grid textarea{min-height:18rem}.controls>*{flex:1 1 9rem}.actions{flex-basis:100%}.actions button{flex:1 1 auto}}
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>SQL Query Formatter</h1>
+      <p>Format and minify common SQL without sending your query anywhere. Strings, quoted identifiers, comments and PostgreSQL dollar strings are kept intact.</p>
+    </div>
+    <div class="panel">
+      <div class="controls">
+        <div class="field"><label for="dialect">SQL dialect hints</label><select id="dialect"><option value="standard">Standard / generic</option><option value="postgres">PostgreSQL</option><option value="mysql">MySQL</option><option value="sqlserver">SQL Server</option></select></div>
+        <div class="field"><label for="keywordCase">Keyword case</label><select id="keywordCase"><option value="upper">UPPERCASE</option><option value="lower">lowercase</option><option value="preserve">Preserve input</option></select></div>
+        <div class="field"><label for="indent">Indentation</label><select id="indent"><option value="2">2 spaces</option><option value="4">4 spaces</option><option value="tab">Tab</option></select></div>
+        <div class="actions"><button id="format" type="button">Format SQL</button><button id="minify" class="secondary" type="button">Minify</button><button id="clear" class="secondary" type="button">Clear</button></div>
+      </div>
+      <div class="sql-grid">
+        <div class="field"><label for="input">SQL input</label><textarea id="input" spellcheck="false" maxlength="500000" placeholder="SELECT u.id, u.name FROM users AS u WHERE u.active = true ORDER BY u.name;"></textarea><div id="count" class="note count">0 / 500,000 characters</div></div>
+        <div class="field output-wrap"><div class="output-actions"><button id="copy" class="secondary" type="button">Copy</button><button id="download" class="secondary" type="button">Download .sql</button></div><label for="output">Formatted output</label><textarea id="output" spellcheck="false" readonly aria-describedby="status"></textarea></div>
+      </div>
+      <p id="status" class="status note" role="status" aria-live="polite"></p>
+      <details class="scope"><summary>Formatter scope and safety</summary><p class="note">This is a structure-aware formatter, not a SQL parser or validator. The dialect choice recognizes common dialect-specific keywords and quoting, but does not certify syntax. Formatting preserves token text inside single quotes, double quotes, backticks, square-bracket identifiers, comments, and PostgreSQL dollar-quoted strings. Always review generated SQL before executing it.</p></details>
+    </div>
+  </main>
+  <script src="/assets/app.js"></script>
+  <script>
+  (function(){
+    "use strict";
+    var input=document.getElementById("input"), output=document.getElementById("output"), status=document.getElementById("status"), count=document.getElementById("count");
+    var LIMIT=500000;
+    var common=("select from where join inner left right full outer cross on as and or not null is in exists between like ilike case when then else end distinct all union intersect except group by order having limit offset fetch first rows only insert into values update set delete create alter drop table view index with recursive returning over partition window asc desc nulls last begin commit rollback grant revoke primary key foreign references constraint default check unique database schema procedure function trigger explain analyze cast collate escape using natural lateral materialized merge matched source target declare cursor for loop if elsif while do conflict nothing duplicate replace truncate cascade restrict rename add column generated always identity current date time timestamp interval true false unknown top percent output pivot unpivot apply connect start qualify sample vacuum returning lock share nowait skip locked").split(" ");
+    var dialectWords={postgres:"serial bigserial jsonb bytea array unnest returning ilike vacuum conflict nothing language plpgsql",mysql:"show describe use engine auto_increment unsigned zerofill delimiter straight_join regexp rlike duplicate",sqlserver:"go top nocount identity nvarchar datetime2 money try catch raiserror tran clustered nonclustered apply"};
+    var major=new Set(["SELECT","FROM","WHERE","HAVING","LIMIT","OFFSET","VALUES","SET","RETURNING","UNION","INTERSECT","EXCEPT","INSERT","UPDATE","DELETE","CREATE","ALTER","DROP","WITH","MERGE","WHEN","ELSE","END","ORDER BY","GROUP BY","PARTITION BY","FETCH FIRST","ON CONFLICT"]);
+    var joins=new Set(["JOIN","INNER JOIN","LEFT JOIN","RIGHT JOIN","FULL JOIN","OUTER JOIN","CROSS JOIN","NATURAL JOIN"]);
+    function keywordSet(){var s=new Set(common.map(function(x){return x.toUpperCase();}));var d=dialectWords[document.getElementById("dialect").value];if(d)d.split(" ").forEach(function(x){s.add(x.toUpperCase());});return s;}
+    function tokenize(sql){
+      var t=[],i=0,n=sql.length;
+      function push(type,start,end){t.push({type:type,text:sql.slice(start,end)});i=end;}
+      while(i<n){var c=sql[i],start=i,j,tag;
+        if(/\s/.test(c)){j=i+1;while(j<n&&/\s/.test(sql[j]))j++;push("space",i,j);continue;}
+        if(c==="-"&&sql[i+1]==="-"){j=i+2;while(j<n&&sql[j]!=="\n")j++;push("linecomment",i,j);continue;}
+        if(c==="/"&&sql[i+1]==="*"){j=sql.indexOf("*/",i+2);if(j<0)throw new Error("Unclosed block comment at character "+(i+1)+".");push("comment",i,j+2);continue;}
+        if(c==="'"||c==='"'||c==='`'){j=i+1;while(j<n){if(sql[j]===c){if(sql[j+1]===c){j+=2;continue;}j++;break;}if(sql[j]==="\\"&&(c!=="'"||document.getElementById("dialect").value==="mysql"))j+=2;else j++;}if(j>n||sql[j-1]!==c)throw new Error("Unclosed quoted value at character "+(i+1)+".");push(c==="'"?"string":"identifier",i,j);continue;}
+        if(c==="["){j=i+1;while(j<n){if(sql[j]==="]"){if(sql[j+1]==="]"){j+=2;continue;}j++;break;}j++;}if(sql[j-1]!=="]")throw new Error("Unclosed bracket identifier at character "+(i+1)+".");push("identifier",i,j);continue;}
+        if(c==="$"&&(tag=sql.slice(i).match(/^\$[A-Za-z_][A-Za-z0-9_]*\$|^\$\$/))){var delim=tag[0];j=sql.indexOf(delim,i+delim.length);if(j<0)throw new Error("Unclosed dollar-quoted string at character "+(i+1)+".");push("string",i,j+delim.length);continue;}
+        if((c===":"||c==="@"||c==="$"||c==="?")&&(/[A-Za-z0-9_@]/.test(sql[i+1]||"")||c==="?")){j=i+1;while(j<n&&/[A-Za-z0-9_$@]/.test(sql[j]))j++;push("parameter",i,j);continue;}
+        if(/[A-Za-z_]/.test(c)){j=i+1;while(j<n&&/[A-Za-z0-9_$]/.test(sql[j]))j++;push("word",i,j);continue;}
+        if(/[0-9]/.test(c)||(c==="."&&/[0-9]/.test(sql[i+1]||""))){j=i+1;while(j<n&&/[0-9A-Fa-f_xXbBeE.+-]/.test(sql[j])){if((sql[j]==="+"||sql[j]==="-")&&!/[eE]/.test(sql[j-1]))break;j++;}push("number",i,j);continue;}
+        if("(),;.".indexOf(c)>=0){push("punct",i,i+1);continue;}
+        j=i+1;while(j<n&&!/\s|[A-Za-z0-9_'"`()\[\],;.]/.test(sql[j]))j++;push("operator",i,j);
+      }return t.filter(function(x){return x.type!=="space";});
+    }
+    function prepare(tokens){var keys=keywordSet(),mode=document.getElementById("keywordCase").value;tokens.forEach(function(x){if(x.type==="word"&&keys.has(x.text.toUpperCase())){x.keyword=x.text.toUpperCase();if(mode==="upper")x.text=x.keyword;else if(mode==="lower")x.text=x.keyword.toLowerCase();}});return tokens;}
+    function combine(tokens){var pairs=new Set(["GROUP BY","ORDER BY","PARTITION BY","FETCH FIRST","ON CONFLICT","INNER JOIN","LEFT JOIN","RIGHT JOIN","FULL JOIN","OUTER JOIN","CROSS JOIN","NATURAL JOIN"]),out=[];for(var i=0;i<tokens.length;i++){var a=tokens[i],b=tokens[i+1],p=a.keyword&&b&&b.keyword?a.keyword+" "+b.keyword:"";if(pairs.has(p)){out.push({type:"word",text:a.text+" "+b.text,keyword:p});i++;}else out.push(a);}return out;}
+    function formatSQL(sql){var ts=combine(prepare(tokenize(sql))),unit=document.getElementById("indent").value==="tab"?"\t":" ".repeat(Number(document.getElementById("indent").value)),lines=[],line="",depth=0;
+      function write(s,space){if(!line)line=unit.repeat(Math.max(0,depth))+s;else line+=(space===false?"":" ")+s;}
+      function newline(){if(line.trim())lines.push(line.replace(/[ \t]+$/,""));line="";}
+      function prev(){return ts[Math.max(0,idx-1)];}
+      for(var idx=0;idx<ts.length;idx++){var x=ts[idx],k=x.keyword||"";
+        if(x.type==="linecomment"){write(x.text);newline();continue;}if(x.type==="comment"){if(line)newline();write(x.text);newline();continue;}
+        if(k==="CASE"){write(x.text);depth++;continue;}
+        if(k&&major.has(k)){if(k==="END")depth=Math.max(0,depth-1);newline();write(x.text);continue;}
+        if(k&&joins.has(k)){newline();write(x.text);continue;}
+        if((k==="AND"||k==="OR")&&depth===0){newline();write(x.text);continue;}
+        if(x.text==="("){var before=prev();write("(",!(before&&(before.type==="word"||before.type==="identifier")));depth++;continue;}
+        if(x.text===")"){depth=Math.max(0,depth-1);write(")",false);continue;}
+        if(x.text===","){write(",",false);if(depth===0)newline();continue;}
+        if(x.text===";"){write(";",false);newline();if(idx<ts.length-1)lines.push("");continue;}
+        if(x.text==="."){write(".",false);continue;}
+        var p=prev();write(x.text,tokenNeedsSpace(p,x));
+      }newline();return lines.join("\n").replace(/\n{3,}/g,"\n\n");
+    }
+    function tokenNeedsSpace(a,b){if(!a)return false;if(a.text==="("||a.text==="."||b.text===")"||b.text===","||b.text===";"||b.text===".")return false;if(b.type==="string"&&a.type==="word"&&(/^(N|E|X|B)$/i.test(a.text)||/^_[A-Za-z0-9]+$/.test(a.text)))return false;return true;}
+    function minifySQL(sql){var ts=prepare(tokenize(sql)),s="",last=null;ts.forEach(function(x){if(x.type==="linecomment"||x.type==="comment"){if(s&&!/\s$/.test(s))s+=" ";s+=x.text;if(x.type==="linecomment")s+="\n";else s+=" ";last=null;return;}if(tokenNeedsSpace(last,x))s+=" ";s+=x.text;last=x;});return s.trim();}
+    function run(mode){status.classList.remove("error");var sql=input.value;if(!sql.trim()){output.value="";status.textContent="Enter SQL to process.";input.focus();return;}if(sql.length>LIMIT){status.textContent="Input exceeds the 500,000 character limit.";status.classList.add("error");return;}try{var result=mode==="format"?formatSQL(sql):minifySQL(sql);output.value=result;status.textContent=(mode==="format"?"Formatted":"Minified")+" locally. Review the output before running it.";}catch(e){output.value="";status.textContent=e.message||"Unable to process this SQL.";status.classList.add("error");}}
+    function setCount(){count.textContent=input.value.length.toLocaleString()+" / 500,000 characters";}
+    document.getElementById("format").addEventListener("click",function(){run("format");});document.getElementById("minify").addEventListener("click",function(){run("minify");});
+    document.getElementById("clear").addEventListener("click",function(){input.value="";output.value="";status.textContent="";setCount();input.focus();});input.addEventListener("input",setCount);
+    document.getElementById("copy").addEventListener("click",function(){if(!output.value){status.textContent="Nothing to copy yet.";return;}if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(output.value).then(function(){status.textContent="Output copied to the clipboard.";},selectOutput);}else selectOutput();});
+    function selectOutput(){output.focus();output.select();status.textContent="Automatic copy is unavailable; the output is selected for you.";}
+    document.getElementById("download").addEventListener("click",function(){if(!output.value){status.textContent="Nothing to download yet.";return;}var url=URL.createObjectURL(new Blob([output.value],{type:"application/sql;charset=utf-8"})),a=document.createElement("a");a.href=url;a.download="formatted-query.sql";document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(url);},0);status.textContent="Downloaded formatted-query.sql.";});
+    setCount();
+  })();
+  </script>
+</body>
+</html>

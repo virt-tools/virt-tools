@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/assets/theme-init.js"></script>
+  <title>Protocol Buffers Wire Inspector — Virtual Tools</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .controls{display:grid;grid-template-columns:minmax(9rem,12rem) 1fr;gap:1rem;align-items:end}.actions{display:flex;gap:.6rem;flex-wrap:wrap}.table-wrap{overflow-x:auto;margin-top:1rem}.wire-table{width:100%;border-collapse:collapse;min-width:720px}.wire-table th,.wire-table td{text-align:left;vertical-align:top;padding:.65rem;border-bottom:1px solid var(--border,#d4d4d8)}.wire-table th{font-size:.85rem}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}.candidate{margin-top:.35rem;font-size:.86rem}.candidate summary{cursor:pointer}.empty{padding:1.2rem;text-align:center}.error{color:#b42318}.ok{color:#067647}@media(max-width:620px){.controls{grid-template-columns:1fr}.actions button{flex:1 1 8rem}}
+  </style>
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <div class="tool-header">
+      <a class="back" href="/">← All tools</a>
+      <h1>Protocol Buffers Wire Inspector</h1>
+      <p>Decode raw protobuf fields, offsets, wire types, and candidate nested messages locally in your browser. No schema or upload is required.</p>
+    </div>
+    <section class="panel" aria-labelledby="input-title">
+      <h2 id="input-title">Encoded message</h2>
+      <div class="controls">
+        <div class="field">
+          <label for="format">Input format</label>
+          <select id="format"><option value="hex">Hexadecimal</option><option value="base64">Base64</option></select>
+        </div>
+        <div class="actions">
+          <button id="inspect" type="button">Inspect bytes</button>
+          <button id="example" class="secondary" type="button">Load example</button>
+          <button id="clear" class="secondary" type="button">Clear</button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="input">Message bytes</label>
+        <textarea id="input" rows="7" spellcheck="false" class="mono" placeholder="08 96 01 12 05 68 65 6c 6c 6f" aria-describedby="input-help status"></textarea>
+        <p class="note" id="input-help">Hex may contain whitespace, colons, hyphens, or an optional 0x prefix per byte. Maximum decoded size: 1 MiB.</p>
+      </div>
+      <p id="status" class="note" role="status" aria-live="polite"></p>
+    </section>
+    <section class="panel" aria-labelledby="result-title">
+      <h2 id="result-title">Decoded fields</h2>
+      <div class="table-wrap">
+        <table class="wire-table">
+          <thead><tr><th scope="col">Offset</th><th scope="col">Field</th><th scope="col">Wire type</th><th scope="col">Raw bytes</th><th scope="col">Decoded value</th></tr></thead>
+          <tbody id="results"><tr><td colspan="5" class="empty">Enter an encoded message to inspect its fields.</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+  <script src="/assets/app.js"></script>
+  <script>
+  (function(){
+    "use strict";
+    var MAX=1024*1024, input=document.getElementById("input"), format=document.getElementById("format"), results=document.getElementById("results"), status=document.getElementById("status");
+    function fail(message){throw new Error(message)}
+    function decodeInput(){
+      var text=input.value.trim(); if(!text) fail("Enter some message bytes first.");
+      var bytes;
+      if(format.value==="hex"){
+        text=text.replace(/0x/gi,"").replace(/[\s:\-_,]/g,"");
+        if(!text) fail("Enter at least one hexadecimal byte.");
+        if(!/^[0-9a-f]+$/i.test(text)) fail("Hex input contains a non-hexadecimal character.");
+        if(text.length%2) fail("Hex input must contain complete two-digit bytes.");
+        if(text.length/2>MAX) fail("Decoded input exceeds the 1 MiB limit.");
+        bytes=new Uint8Array(text.length/2); for(var i=0;i<bytes.length;i++) bytes[i]=parseInt(text.slice(i*2,i*2+2),16);
+      }else{
+        text=text.replace(/\s/g,"");
+        if(!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(text)) fail("Base64 input has invalid characters, padding, or length.");
+        if(text.length>Math.ceil(MAX/3)*4) fail("Decoded input exceeds the 1 MiB limit.");
+        var binary; try{binary=atob(text)}catch(e){fail("Base64 input could not be decoded.")}
+        if(binary.length>MAX) fail("Decoded input exceeds the 1 MiB limit.");
+        bytes=new Uint8Array(binary.length); for(var j=0;j<binary.length;j++) bytes[j]=binary.charCodeAt(j);
+      }
+      return bytes;
+    }
+    function hex(bytes,start,end){var out=[];for(var i=start;i<end;i++)out.push(bytes[i].toString(16).padStart(2,"0"));return out.join(" ")}
+    function readVarint(bytes,pos,end,label){var value=0n,start=pos;for(var i=0;i<10;i++){if(pos>=end)fail("Truncated "+label+" at byte "+start+".");var b=bytes[pos++];if(i===9&&b>1)fail("Overflowing "+label+" at byte "+start+" (more than 64 bits).");value|=BigInt(b&127)<<BigInt(i*7);if(!(b&128))return {value:value,next:pos,start:start};}fail("Invalid "+label+" at byte "+start+" (more than 10 bytes).")}
+    function little(bytes,start,count){var n=0n;for(var i=count-1;i>=0;i--)n=(n<<8n)|BigInt(bytes[start+i]);return n}
+    function printable(bytes,start,end){if(end===start)return "";try{var s=new TextDecoder("utf-8",{fatal:true}).decode(bytes.slice(start,end));if(!s||Array.from(s).some(function(c){var n=c.codePointAt(0);return n<32&&n!==9&&n!==10&&n!==13}))return null;return s}catch(e){return null}}
+    function floating(bytes,start,count){var copy=bytes.slice(start,start+count),view=new DataView(copy.buffer);var n=count===4?view.getFloat32(0,true):view.getFloat64(0,true);return Number.isFinite(n)?String(n):String(n)}
+    function parse(bytes,start,end,depth){
+      var fields=[],pos=start;
+      while(pos<end){
+        var fieldStart=pos,key=readVarint(bytes,pos,end,"field key");pos=key.next;var number=key.value>>3n,wire=Number(key.value&7n);
+        if(number<1n||number>536870911n)fail("Invalid field number "+number+" at byte "+fieldStart+".");
+        if(wire!==0&&wire!==1&&wire!==2&&wire!==5)fail("Unsupported wire type "+wire+" at byte "+fieldStart+". Groups (types 3 and 4) are not supported.");
+        var value,contentStart=pos,contentEnd=pos,candidate=null;
+        if(wire===0){var v=readVarint(bytes,pos,end,"varint value");pos=v.next;contentEnd=pos;value=v.value.toString()+" (signed zigzag: "+((v.value>>1n)^(-(v.value&1n))).toString()+")";}
+        else if(wire===1){if(end-pos<8)fail("Truncated fixed64 field "+number+" at byte "+pos+".");contentEnd=pos+8;var n64=little(bytes,pos,8);value=n64.toString()+" (0x"+n64.toString(16).padStart(16,"0")+") · double: "+floating(bytes,pos,8);pos+=8;}
+        else if(wire===5){if(end-pos<4)fail("Truncated fixed32 field "+number+" at byte "+pos+".");contentEnd=pos+4;var n32=little(bytes,pos,4);value=n32.toString()+" (0x"+n32.toString(16).padStart(8,"0")+") · float: "+floating(bytes,pos,4);pos+=4;}
+        else{var length=readVarint(bytes,pos,end,"length");pos=length.next;if(length.value>BigInt(end-pos))fail("Length-delimited field "+number+" claims "+length.value+" bytes but only "+(end-pos)+" remain.");if(length.value>BigInt(Number.MAX_SAFE_INTEGER))fail("Length is too large to process safely.");contentStart=pos;contentEnd=pos+Number(length.value);var text=printable(bytes,contentStart,contentEnd);value=length.value+" bytes"+(text!==null?' · UTF-8: “'+text+'”':"");if(depth<3&&contentEnd>contentStart){try{var nested=parse(bytes,contentStart,contentEnd,depth+1);if(nested.length)candidate=nested}catch(e){candidate=null}}pos=contentEnd;}
+        fields.push({offset:fieldStart,number:number.toString(),wire:wire,raw:hex(bytes,fieldStart,pos),value:value,nested:candidate});
+      }
+      return fields;
+    }
+    var wireNames={0:"0 · varint",1:"1 · fixed64",2:"2 · length-delimited",5:"5 · fixed32"};
+    function nestedText(fields,level){var lines=[];fields.forEach(function(f){lines.push("  ".repeat(level)+"field "+f.number+" ("+wireNames[f.wire]+"): "+f.value);if(f.nested)lines=lines.concat(nestedText(f.nested,level+1))});return lines}
+    function render(fields){results.replaceChildren();fields.forEach(function(f){var tr=document.createElement("tr");[String(f.offset),f.number,wireNames[f.wire],f.raw,f.value].forEach(function(value,i){var td=document.createElement("td");td.textContent=value;if(i===0||i===3||i===4)td.classList.add("mono");if(i===4&&f.nested){var details=document.createElement("details"),summary=document.createElement("summary"),pre=document.createElement("pre");details.className="candidate";summary.textContent="Show nested-message candidate";pre.textContent=nestedText(f.nested,1).join("\n");details.append(summary,pre);td.appendChild(details)}tr.appendChild(td)});results.appendChild(tr)});}
+    function inspect(){status.textContent="";status.className="note";try{var bytes=decodeInput(),fields=parse(bytes,0,bytes.length,0);render(fields);status.textContent="Decoded "+fields.length+" top-level field"+(fields.length===1?"":"s")+" from "+bytes.length+" byte"+(bytes.length===1?"":"s")+".";status.classList.add("ok")}catch(e){results.replaceChildren();var tr=document.createElement("tr"),td=document.createElement("td");td.colSpan=5;td.className="empty";td.textContent="No decoded fields.";tr.appendChild(td);results.appendChild(tr);status.textContent=e.message||"Unable to decode input.";status.classList.add("error")}}
+    document.getElementById("inspect").addEventListener("click",inspect);
+    document.getElementById("example").addEventListener("click",function(){format.value="hex";input.value="08 96 01 12 05 68 65 6c 6c 6f 1d 78 56 34 12";inspect()});
+    document.getElementById("clear").addEventListener("click",function(){input.value="";status.textContent="";results.replaceChildren();var tr=document.createElement("tr"),td=document.createElement("td");td.colSpan=5;td.className="empty";td.textContent="Enter an encoded message to inspect its fields.";tr.appendChild(td);results.appendChild(tr);input.focus()});
+    input.addEventListener("keydown",function(e){if((e.ctrlKey||e.metaKey)&&e.key==="Enter")inspect()});
+  })();
+  </script>
+</body>
+</html>

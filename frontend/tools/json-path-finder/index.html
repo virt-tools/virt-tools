@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JSON Path Finder — virt.tools</title>
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<header id="site-header"></header>
+<main>
+<h1>JSON Path Finder</h1>
+<p class="subtitle">Query JSON data using JSONPath syntax ($.., $.store.book[*].author, filters). Extract matching values with full path display.</p>
+<div class="tool-layout">
+<div class="controls">
+<label>JSON Data
+<textarea id="jsonInput" rows="10">{
+  "store": {
+    "book": [
+      {"category":"reference","author":"Nigel Rees","title":"Sayings of the Century","price":8.95},
+      {"category":"fiction","author":"Evelyn Waugh","title":"Sword of Honour","price":12.99},
+      {"category":"fiction","author":"Herman Melville","title":"Moby Dick","isbn":"0-201-53312-4","price":8.99},
+      {"category":"fiction","author":"J. R. R. Tolkien","title":"The Lord of the Rings","isbn":"0-395-19395-8","price":22.99}
+    ],
+    "bicycle":{"color":"red","price":19.95}
+  }
+}</textarea></label>
+<label>JSONPath Expression
+<input type="text" id="pathInput" value="$.store.book[*].author" style="font-family:monospace;"></label>
+<button id="runBtn" style="padding:.6rem 1.5rem;border:none;border-radius:8px;background:#00d4ff;color:#fff;cursor:pointer;font-weight:600;font-size:1rem;" type="button">Run Query</button>
+<div style="margin-top:1rem;font-size:.9rem;opacity:.7;">
+<strong>Examples:</strong><br>
+$.store.book[*].author<br>
+$.store.book[?(@.price<10)].title<br>
+$..book[0].title<br>
+$.store.*<br>
+$..price<br>
+$.store.book.length
+</div>
+</div>
+<div class="results" id="results"></div>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+(function(){
+const jsonInput=document.getElementById('jsonInput');
+const pathInput=document.getElementById('pathInput');
+const runBtn=document.getElementById('runBtn');
+const results=document.getElementById('results');
+const exampleRe = /\$\.\w+|\$\.\.\w+|\$\[\*?\]|\$\[\?\(@\.\w+\s*[<>=~!]+\s*[\d.]+\)\]|\$\..+\(\)/g;
+function parseJsonPath(data, path) {
+  let results = [];
+  function walk(obj, segments, currentPath) {
+    if (!segments.length) {
+      results.push({path: currentPath, value: obj});
+      return;
+    }
+    const seg = segments[0];
+    const rest = segments.slice(1);
+    if (seg === '$' || seg === '') {
+      walk(obj, rest, currentPath);
+      return;
+    }
+    if (seg === '*') {
+      if (Array.isArray(obj)) {
+        obj.forEach((v, i) => walk(v, rest, currentPath + '[' + i + ']'));
+      } else if (obj && typeof obj === 'object') {
+        Object.keys(obj).forEach(k => walk(obj[k], rest, currentPath + '.' + k));
+      }
+      return;
+    }
+    if (seg === '..') {
+      if (rest.length === 0 || rest[0] === '') {
+        results.push({path: currentPath, value: obj});
+        return;
+      }
+      const next = rest[0];
+      const rest2 = rest.slice(1);
+      if (Array.isArray(obj)) {
+        obj.forEach((v, i) => {
+          if (typeof v === 'object' && v !== null) {
+            walk(v, rest, currentPath + '[' + i + ']');
+            walk(v, ['..', ...rest2], currentPath + '[' + i + ']');
+          }
+        });
+      } else if (obj && typeof obj === 'object') {
+        Object.keys(obj).forEach(k => {
+          if (k === next) walk(obj[k], rest2, currentPath + '.' + k);
+          if (obj[k] && typeof obj[k] === 'object') {
+            walk(obj[k], ['..', ...rest2], currentPath + '.' + k);
+          }
+        });
+      }
+      return;
+    }
+    const filterMatch = seg.match(/^\?\(@\.(\w+)\s*([<>=~!]+)\s*([\d.]+)\)$/);
+    if (filterMatch) {
+      const [, prop, op, val] = filterMatch;
+      if (Array.isArray(obj)) {
+        obj.forEach((v, i) => {
+          if (v && v[prop] !== undefined) {
+            const actual = v[prop];
+            const expected = parseFloat(val);
+            let match = false;
+            if (op === '<') match = actual < expected;
+            else if (op === '>') match = actual > expected;
+            else if (op === '<=') match = actual <= expected;
+            else if (op === '>=') match = actual >= expected;
+            else if (op === '=' || op === '==') match = actual == expected;
+            else if (op === '!=' || op === '~') match = actual != expected;
+            if (match) walk(v, rest, currentPath + '[' + i + ']');
+          }
+        });
+      }
+      return;
+    }
+    if (seg === 'length') {
+      if (Array.isArray(obj)) {
+        results.push({path: currentPath + '.length', value: obj.length});
+      } else if (obj && typeof obj === 'object') {
+        results.push({path: currentPath + '.length', value: Object.keys(obj).length});
+      }
+      return;
+    }
+    if (obj && typeof obj === 'object' && obj[seg] !== undefined) {
+      walk(obj[seg], rest, currentPath + '.' + seg);
+    }
+  }
+  const segments = path.match(/(\$\.\.\.?|\$\[\?[^]]+\]|\$\[\*\]|\$\[0\]|\$\.\w+|\$\$|\$)/g) || [];
+  const cleanSegs = segments.map(s => {
+    if (s === '$') return '$';
+    if (s.startsWith('$.') && !s.startsWith('$..')) return s.slice(1);
+    if (s === '$..') return '..';
+    if (s === '$[*]') return '*';
+    if (s === '$[0]') return '0';
+    return s.replace(/^\$/, '');
+  });
+  walk(data, cleanSegs, '$');
+  return results;
+}
+function run() {
+  results.innerHTML = 'Running...';
+  try {
+    const data = JSON.parse(jsonInput.value);
+    const path = pathInput.value.trim();
+    const matches = parseJsonPath(data, path);
+    if (matches.length === 0) {
+      results.innerHTML = '<p style="opacity:.6;">No matches found.</p>';
+      return;
+    }
+    let html = '<h3>' + matches.length + ' Match' + (matches.length > 1 ? 'es' : '') + '</h3>';
+    matches.forEach((m, i) => {
+      const valStr = typeof m.value === 'object' ? JSON.stringify(m.value, null, 2) : String(m.value);
+      html += '<div class="match-row"><div class="match-path">' + m.path + '</div><pre class="match-val">' + escapeHtml(valStr) + '</pre></div>';
+    });
+    results.innerHTML = html;
+  } catch(e) {
+    results.innerHTML = '<div class="stat-row bad"><span>Error</span><span>' + e.message + '</span></div>';
+  }
+}
+function escapeHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+runBtn.addEventListener('click', run);
+pathInput.addEventListener('keydown', e => { if (e.key === 'Enter') run(); });
+})();
+</script>
+<style>
+.tool-layout{display:flex;gap:2rem;flex-wrap:wrap;align-items:flex-start;}
+.controls{display:flex;flex-direction:column;gap:.75rem;min-width:320px;}
+.controls label{display:flex;flex-direction:column;gap:.25rem;font-weight:600;}
+.controls textarea,.controls input{padding:.5rem;border:1px solid #ddd;border-radius:8px;font-family:monospace;font-size:.85rem;}
+.results{flex:1;min-width:300px;}
+.match-row{margin-bottom:1rem;padding:.75rem;background:#f9f9f9;border-radius:8px;border-left:3px solid #00d4ff;}
+.match-path{font-family:monospace;font-size:.9rem;font-weight:600;color:#0099cc;margin-bottom:.5rem;word-break:break-all;}
+.match-val{font-family:monospace;font-size:.85rem;white-space:pre-wrap;word-break:break-word;margin:0;}
+.stat-row.bad{color:#e74c3c;}
+</style>
+</body>
+</html>

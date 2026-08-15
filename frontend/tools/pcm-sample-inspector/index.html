@@ -1,0 +1,77 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><script src="/assets/theme-init.js"></script><title>PCM Sample Inspector — Virtual Tools</title><link rel="stylesheet" href="/assets/style.css"><style>.row{display:flex;gap:8px;flex-wrap:wrap}.row>*{flex:1 1 130px}input,select{width:100%;box-sizing:border-box}button{width:auto}.notice{border-left:4px solid #e8b75e;padding:9px 12px;background:var(--panel-2,#252b35)}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+gap:8px}.card{border:1px solid var(--border,#394150);
+border-radius:8px;padding:9px}.card h3{margin:0 0 4px}.scroll{overflow:auto;max-height:600px}table{width:100%;border-collapse:collapse}th,td{padding:6px;text-align:left;border-bottom:1px solid var(--border,#394150)}canvas{width:100%;height:240px;border:1px solid var(--border,#394150);
+margin:5px 0}.muted{opacity:.72}</style></head><body><div id="site-header"></div><main><div class="tool-header"><a class="back" href="/">← All tools</a><h1>PCM Sample Inspector</h1><p>Decode and inspect bounded PCM or IEEE-float WAV samples locally.</p></div><p class="notice"><strong>Signal inspection only:</strong> statistics and clipping counters are arithmetic descriptions, not audio-quality, mastering, restoration, or compliance diagnoses. Files stay in browser memory and are never uploaded.</p><section class="panel"><h2>WAV input and range</h2><div class="row"><label>WAV file (50 MiB maximum)<input id="file" type="file" accept=".wav,audio/wav"></label><label>Channel<select id="channel" disabled></select></label><label>Start frame<input id="start" type="number" min="0" value="0"></label><label>End frame exclusive<input id="end" type="number" min="1"></label><label>Display stride<input id="stride" type="number" min="1" max="100000" value="1"></label><button type="button" id="inspect" disabled>Inspect range</button></div><p id="status" role="status"></p></section><section class="panel"><h2>Container and format</h2><div id="header" class="cards"><p class="muted">Choose a supported WAV.</p></div><p id="chunks"></p><h2>Selected channel statistics</h2><div id="stats" class="cards"></div><p class="muted">Integer normalization divides signed PCM by 2^(bits−1);
+ 8-bit raw bytes are shown as 0…255 and normalized after subtracting 128. IEEE-float samples use 1.0 as the dBFS reference but values may exceed ±1. NaN/Inf values are counted and excluded from finite statistics.</p><h2>Waveform</h2><canvas id="wave" width="1200" height="300" role="img" aria-label="Selected PCM waveform"></canvas><h2>Histogram</h2><canvas id="hist" width="1200" height="300" role="img" aria-label="Selected PCM normalized sample histogram"></canvas><h2>Contiguous clipping runs</h2><div id="runs"></div><h2>Paginated sample table</h2><div class="row"><button type="button" id="prev" disabled>Previous</button><span id="page-status" role="status"></span><button type="button" id="next" disabled>Next</button></div><div class="scroll"><table><thead><tr><th>Frame</th><th>Time (s)</th><th>Raw decoded value</th><th>Normalized value</th></tr></thead><tbody id="rows"></tbody></table></div><div class="row"><button type="button" id="json" disabled>Analysis JSON</button><button type="button" id="csv" disabled>Displayed samples CSV</button></div></section></main><script src="/assets/app.js"></script><script>
+(()=>{'use strict';const $=x=>document.getElementById(x),CAP={bytes:52428800,frames:5000000,totalSamples:10000000,channels:32,page:200,render:20000,runs:10000};let wav=null,analysis=null,page=0;function four(v,o){return String.fromCharCode(v.getUint8(o),v.getUint8(o+1),v.getUint8(o+2),v.getUint8(o+3))}function parse(buf){if(buf.byteLength>CAP.bytes)throw Error('File exceeds 50 MiB.');if(buf.byteLength<12)throw Error('WAV header is shorter than 12 bytes.');
+let v=new DataView(buf),riff=four(v,0),le=riff==='RIFF';if(!le&&riff!=='RIFX')throw Error('Expected RIFF or RIFX.');
+if(four(v,8)!=='WAVE')throw Error('Missing WAVE signature.');
+let fmt=null,data=null,chunks=[],o=12,U16=p=>v.getUint16(p,le),U32=p=>v.getUint32(p,le),riffEnd=U32(4)+8;if(riffEnd<12||riffEnd>v.byteLength)throw Error('RIFF size is invalid or truncated.');
+while(o+8<=riffEnd){let id=four(v,o),n=U32(o+4),p=o+8,next=p+n+(n&1);if(p+n>riffEnd||next>riffEnd)throw Error(`Truncated ${id} chunk or missing pad byte.`);
+chunks.push({id,size:n,offset:p});
+if(id==='fmt '){if(fmt)throw Error('Multiple fmt chunks are unsupported.');if(n<16)throw Error('Short fmt chunk.');
+fmt={code:U16(p),channels:U16(p+2),rate:U32(p+4),byteRate:U32(p+8),align:U16(p+12),bits:U16(p+14)}}if(id==='data'){if(data)throw Error('Multiple data chunks are unsupported.');data={offset:p,bytes:n}}o=next}if(o!==riffEnd)chunks.push({id:'riff-trailing',size:riffEnd-o,offset:o});if(riffEnd<v.byteLength)chunks.push({id:'file-trailing',size:v.byteLength-riffEnd,offset:riffEnd});
+if(!fmt||!data)throw Error('fmt and data chunks are required.');
+if(![1,3].includes(fmt.code))throw Error(`Unsupported codec ${fmt.code}; only PCM integer (1) and IEEE float (3).`);
+if(fmt.code===1&&![8,16,24,32].includes(fmt.bits)||fmt.code===3&&![32,64].includes(fmt.bits))throw Error(`Unsupported ${fmt.bits}-bit encoding.`);
+let bps=fmt.bits/8;if(fmt.channels<1||fmt.channels>CAP.channels||fmt.rate<1000||fmt.rate>768000||fmt.align!==fmt.channels*bps||fmt.byteRate!==fmt.rate*fmt.align||data.bytes%fmt.align)throw Error('Inconsistent channels/rate/block-align/byte-rate/data size.');
+let frames=data.bytes/fmt.align,total=frames*fmt.channels;if(frames<1||frames>CAP.frames||total>CAP.totalSamples)throw Error('Empty data or frame/sample cap exceeded.');
+let raw=Array.from({length:fmt.channels},()=>new Float64Array(frames));
+function get(p){if(fmt.code===3)return fmt.bits===32?v.getFloat32(p,le):v.getFloat64(p,le);
+if(fmt.bits===8)return v.getUint8(p);
+if(fmt.bits===16)return v.getInt16(p,le);
+if(fmt.bits===24){let x=le?v.getUint8(p)|v.getUint8(p+1)<<8|v.getUint8(p+2)<<16:v.getUint8(p+2)|v.getUint8(p+1)<<8|v.getUint8(p)<<16;if(x&0x800000)x|=0xff000000;return x}return v.getInt32(p,le)}for(let i=0;i<frames;i++)for(let c=0;c<fmt.channels;c++)raw[c][i]=get(data.offset+i*fmt.align+c*bps);
+return{...fmt,frames,duration:frames/fmt.rate,raw,chunks,container:riff,dataBytes:data.bytes}}
+function normalized(raw){if(wav.code===3)return raw;return wav.bits===8?(raw-128)/128:raw/2**(wav.bits-1)}function inspect(){let ch=Number($('channel').value),a=Number($('start').value),b=Number($('end').value),stride=Number($('stride').value);
+if(!Number.isInteger(ch)||ch<0||ch>=wav.channels||!Number.isInteger(a)||!Number.isInteger(b)||a<0||b<=a||b>wav.frames||!Number.isInteger(stride)||stride<1||stride>100000)throw Error('Invalid channel, range, or stride (maximum 100,000).');
+let min=Infinity,max=-Infinity,peak=0,mean=0,scale=0,ssq=0,finite=0,nan=0,inf=0,silence=0,full=0,over=0,zc=0,lastSign=0,runs=[],run=null,runCount=0;const closeRun=()=>{if(!run)return;runCount++;if(runs.length<CAP.runs)runs.push(run);run=null};for(let i=a;i<b;i++){let raw=wav.raw[ch][i],x=normalized(raw);
+if(Number.isNaN(x)){nan++;lastSign=0;closeRun();continue}if(!Number.isFinite(x)){inf++;lastSign=0;closeRun();continue}finite++;min=Math.min(min,x);
+max=Math.max(max,x);
+let ax=Math.abs(x);peak=Math.max(peak,ax);mean=mean*((finite-1)/finite)+x/finite;if(ax){if(scale<ax){ssq=1+ssq*(scale/ax)**2;scale=ax}else ssq+=(ax/scale)**2}
+if(x===0)silence++;let sign=x>0?1:x<0?-1:0;if(sign&&lastSign&&sign!==lastSign)zc++;if(sign)lastSign=sign;let hit=wav.code===3?ax>=1:wav.bits===8?raw===0||raw===255:raw===-(2**(wav.bits-1))||raw===2**(wav.bits-1)-1;if(hit){full++;if(run)run.length++;else run={start:i,length:1}}else closeRun();if(wav.code===3&&ax>1)over++}closeRun();
+let rms=finite?scale*Math.sqrt(ssq/finite):null;analysis={channel:ch,start:a,end:b,stride,count:b-a,finite,min:finite?min:null,max:finite?max:null,peak,peakDb:peak>0?20*Math.log10(peak):null,mean:finite?mean:null,rms,rmsDb:rms>0?20*Math.log10(rms):null,crest:rms>0?peak/rms:null,zeroCrossings:zc,zeroCrossRate:finite>1?zc/(finite-1):null,fullScaleHits:full,overRangeFloat:over,silence,nan,inf,runs,runCount,runsTruncated:runCount-runs.length};page=0;render()}
+const node=(t,s)=>{let x=document.createElement(t);
+x.textContent=s;return x},f=(x,d=6)=>x===null?'—':Number(x).toFixed(d);
+function render(){let s=analysis,c=$('stats');
+c.replaceChildren();
+[['Finite samples',s.finite],['Minimum',f(s.min)],['Maximum',f(s.max)],['Absolute peak',f(s.peak)],['Peak dBFS',s.peakDb===null?'−∞':f(s.peakDb,3)],['Mean / DC',f(s.mean)],['RMS',f(s.rms)],['RMS dBFS',s.rmsDb===null?'−∞':f(s.rmsDb,3)],['Crest factor',f(s.crest,3)],['Zero crossings',s.zeroCrossings],['Crossing rate',f(s.zeroCrossRate)],['Full-scale hits',s.fullScaleHits],['Float over-range',s.overRangeFloat],['Exact zeros',s.silence],['NaN / Inf',`${s.nan} / ${s.inf}`]].forEach(([a,b])=>{let q=node('article','');
+q.className='card';q.append(node('h3',String(b)),node('p',a));
+c.append(q)});
+$('runs').replaceChildren(s.runCount?node('ul',''):node('p','No contiguous full-scale/clipping runs.'));
+s.runs.forEach(r=>$('runs').firstChild.append(node('li',`frame ${r.start}, length ${r.length}`)));if(s.runsTruncated)$('runs').append(node('p',`${s.runsTruncated} additional runs were counted but not retained after the ${CAP.runs.toLocaleString()}-run memory cap.`));
+table();
+draw();
+$('json').disabled=$('csv').disabled=false}
+function displayCount(){return Math.ceil((analysis.end-analysis.start)/analysis.stride)}function frameAt(k){return analysis.start+k*analysis.stride}function table(){let count=displayCount(),pages=Math.max(1,Math.ceil(count/CAP.page));
+page=Math.max(0,Math.min(page,pages-1));
+let from=page*CAP.page,to=Math.min(count,(page+1)*CAP.page),body=$('rows');
+body.replaceChildren();
+for(let k=from;k<to;k++){let i=frameAt(k),raw=wav.raw[analysis.channel][i],tr=node('tr','');
+[i,(i/wav.rate).toFixed(9),String(raw),String(normalized(raw))].forEach(v=>tr.append(node('td',v)));
+body.append(tr)}
+$('page-status').textContent=`Page ${page+1}/${pages}; ${count} stride-selected samples.`;$('prev').disabled=page===0;$('next').disabled=page>=pages-1}function draw(){let count=displayCount(),step=Math.max(1,Math.ceil(count/CAP.render)),wv=$('wave'),g=wv.getContext('2d'),w=wv.width,h=wv.height;g.clearRect(0,0,w,h);
+g.strokeStyle='#58a6ff';g.beginPath();
+let shown=Math.ceil(count/step),pen=false,k=0;for(let pos=0;pos<count&&k<CAP.render;pos+=step,k++){let i=frameAt(pos),sample=normalized(wav.raw[analysis.channel][i]),x=k/(shown-1||1)*w;if(!Number.isFinite(sample)){pen=false;continue}let y=Math.max(-4*h,Math.min(5*h,h/2-sample*h*.45));if(pen)g.lineTo(x,y);else{g.moveTo(x,y);pen=true}}
+g.stroke();
+let bins=101,histCounts=Array(bins).fill(0);
+for(let i=analysis.start;i<analysis.end;i++){let x=normalized(wav.raw[analysis.channel][i]);
+if(Number.isFinite(x)){let b=Math.max(0,Math.min(bins-1,Math.floor((Math.max(-1,Math.min(1,x))+1)/2*bins)));
+histCounts[b]++}}let hv=$('hist'),q=hv.getContext('2d'),mx=Math.max(1,...histCounts);
+q.clearRect(0,0,hv.width,hv.height);
+q.fillStyle='#f2a65a';histCounts.forEach((v,i)=>q.fillRect(i/bins*hv.width,hv.height-v/mx*hv.height,hv.width/bins-1,v/mx*hv.height))}
+function header(){let h=$('header');
+h.replaceChildren();
+[['Container',wav.container],['Format',`${wav.code===1?'PCM integer':'IEEE float'} ${wav.bits}-bit`],['Channels',wav.channels],['Sample rate',`${wav.rate} Hz`],['Frames',wav.frames],['Duration',`${wav.duration.toFixed(6)} s`],['Data bytes',wav.dataBytes]].forEach(([a,b])=>{let c=node('article','');
+c.className='card';c.append(node('h3',String(b)),node('p',a));
+h.append(c)});
+$('chunks').textContent='Chunks: '+wav.chunks.map(x=>`${x.id} ${x.size} bytes @${x.offset}`).join(' · ')}$('file').onchange=async e=>{let file=e.target.files[0];analysis=null;$('json').disabled=$('csv').disabled=true;try{if(!file)throw Error('Choose a file.');
+wav=parse(await file.arrayBuffer());
+$('channel').replaceChildren();for(let i=0;i<wav.channels;i++){let option=document.createElement('option');option.value=String(i);option.textContent=`Channel ${i+1}`;$('channel').append(option)}
+$('channel').disabled=$('inspect').disabled=false;$('end').value=wav.frames;$('start').max=wav.frames-1;$('end').max=wav.frames;header();
+$('status').textContent='WAV decoded in memory.'}catch(x){wav=null;$('channel').disabled=$('inspect').disabled=true;$('status').textContent='WAV rejected: '+x.message}finally{e.target.value=''}};$('inspect').onclick=()=>{try{inspect();
+$('status').textContent='Range statistics computed over every sample; stride affects display/table only.'}catch(x){$('status').textContent=x.message}};$('prev').onclick=()=>{page--;table()};$('next').onclick=()=>{page++;table()};function dl(n,t,s){let a=document.createElement('a'),u=URL.createObjectURL(new Blob([s],{type:t}));
+a.href=u;a.download=n;a.click();
+setTimeout(()=>URL.revokeObjectURL(u),1000)}const cell=x=>{let s=String(x??'');if(typeof x==='string'&&/^[=+\-@\t\r]/.test(s))s="'"+s;return'"'+s.replace(/"/g,'""')+'"'};$('json').onclick=()=>analysis&&dl('pcm-sample-analysis.json','application/json',JSON.stringify({header:{container:wav.container,code:wav.code,bits:wav.bits,channels:wav.channels,sampleRate:wav.rate,frames:wav.frames,duration:wav.duration,chunks:wav.chunks},analysis,disclaimer:'Signal arithmetic only; no audio-quality, mastering, restoration, or compliance diagnosis.'},null,2)+'\n');
+$('csv').onclick=()=>{if(!analysis)return;let count=displayCount(),from=page*CAP.page,to=Math.min(count,(page+1)*CAP.page),lines=[];for(let k=from;k<to;k++){let i=frameAt(k);lines.push([i,i/wav.rate,wav.raw[analysis.channel][i],normalized(wav.raw[analysis.channel][i])].map(cell).join(','))}
+dl('pcm-displayed-samples.csv','text/csv;charset=utf-8','frame,time_s,raw_value,normalized_value\r\n'+lines.join('\r\n')+'\r\n')}})();
+</script></body></html>

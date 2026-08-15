@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Audio Compressor — virt.tools</title>
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<header id="site-header"></header>
+<main class="tool-container">
+<h1>Audio Compressor</h1>
+<p class="subtitle">Apply dynamic range compression to audio. Adjust threshold, ratio, attack, and release. Export as WAV. 100% client-side.</p>
+<div class="input-section">
+<input type="file" id="file" accept="audio/*" aria-label="File">
+<button id="process" class="primary-btn" type="button">Process & Download</button>
+</div>
+<div class="controls">
+<label>Threshold (dB): <input type="range" id="threshold" min="-100" max="0" value="-24"><span id="tv">-24</span></label>
+<label>Ratio: <input type="range" id="ratio" min="1" max="20" value="4" step="0.5"><span id="rv">4</span></label>
+<label>Attack (ms): <input type="range" id="attack" min="0" max="1000" value="3"><span id="av">3</span></label>
+<label>Release (ms): <input type="range" id="release" min="0" max="5000" value="250"><span id="relv">250</span></label>
+</div>
+<div id="status"></div>
+<script>
+document.addEventListener('DOMContentLoaded',()=>{
+['threshold','ratio','attack','release'].forEach(id=>{
+const el=document.getElementById(id);
+const sp=document.getElementById(id[0]=='r'&&(id=='ratio'||id=='release')?(id=='ratio'?'rv':'relv'):id[0]+'v');
+el.addEventListener('input',()=>sp.textContent=el.value);
+});
+document.getElementById('process').addEventListener('click',async()=>{
+const file=document.getElementById('file').files[0];
+if(!file){alert('Select a file first.');return;}
+const st=document.getElementById('status');st.textContent='Processing...';
+const audioCtx=new AudioContext();
+const buf=await audioCtx.decodeAudioData(await file.arrayBuffer());
+const ch=buf.getChannelData(0);
+const sr=buf.sampleRate;
+const threshold=parseFloat(document.getElementById('threshold').value);
+const ratio=parseFloat(document.getElementById('ratio').value);
+const attackMs=parseFloat(document.getElementById('attack').value);
+const releaseMs=parseFloat(document.getElementById('release').value);
+const attackCoef=Math.exp(-1/(sr*attackMs/1000));
+const releaseCoef=Math.exp(-1/(sr*releaseMs/1000));
+let env=0;
+const out=new Float32Array(ch.length);
+for(let i=0;i<ch.length;i++){
+const x=Math.abs(ch[i]);
+if(x>env)env=attackCoef*env+(1-attackCoef)*x;
+else env=releaseCoef*env+(1-releaseCoef)*x;
+const dB=20*Math.log10(env||1e-10);
+let gain=1;
+if(dB>threshold){const over=dB-threshold;gain=Math.pow(10,(-over*(1-1/ratio))/20);}
+out[i]=ch[i]*gain;
+}
+const w=audioCtx.sampleRate;
+const nb=audioCtx.createBuffer(1,out.length,w);
+nb.copyToChannel(out,0);
+const offline=new OfflineAudioContext(1,out.length,w);
+const src=offline.createBufferSource();src.buffer=nb;
+src.connect(offline.destination);src.start();
+const rendered=await offline.startRendering();
+const wav=audioBufferToWav(rendered);
+const blob=new Blob([wav],{type:'audio/wav'});
+const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='compressed.wav';a.click();
+st.textContent='Done! Downloaded as compressed.wav';
+audioCtx.close();
+});
+function audioBufferToWav(b){
+const n=b.length,sr=b.sampleRate;
+const data=b.getChannelData(0);
+const buf=new ArrayBuffer(44+n*2);
+const v=new DataView(buf);
+const ws=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i));};
+ws(0,'RIFF');v.setUint32(4,36+n*2,true);ws(8,'WAVE');ws(12,'fmt ');
+v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);
+v.setUint32(24,sr,true);v.setUint32(28,sr*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);
+ws(36,'data');v.setUint32(40,n*2,true);
+for(let i=0;i<n;i++)v.setInt16(44+i*2,Math.max(-32768,Math.min(32767,data[i]*32767)),true);
+return buf;
+}
+});
+</script>
+</main>
+<script src="/assets/app.js"></script>
+</body>
+</html>

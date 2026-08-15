@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Audio Concatenator — virt.tools</title>
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<header id="site-header"></header>
+<main class="tool-container">
+<h1>Audio Concatenator</h1>
+<p class="subtitle">Concatenate multiple audio files into one WAV in selection order. 100% client-side.</p>
+<div class="input-section">
+<input type="file" id="files" accept="audio/*" multiple aria-label="Files">
+<button id="process" class="primary-btn" type="button">Concatenate & Download</button>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded',()=>{
+document.getElementById('process').addEventListener('click',async()=>{
+const files=Array.from(document.getElementById('files').files);
+if(!files.length){alert('Please select audio files.');return;}
+const audioCtx=new AudioContext();
+const bufs=[];
+for(const f of files){
+const buf=await audioCtx.decodeAudioData(await f.arrayBuffer());
+bufs.push(buf);
+}
+const sr=Math.max(...bufs.map(b=>b.sampleRate));
+const numCh=Math.max(...bufs.map(b=>b.numberOfChannels));
+const totalLen=bufs.reduce((s,b)=>s+Math.ceil(b.length*sr/b.sampleRate),0);
+const out=audioCtx.createBuffer(numCh,totalLen,sr);
+let off=0;
+for(const buf of bufs){
+const scale=sr/buf.sampleRate;
+const len=Math.ceil(buf.length*scale);
+for(let ch=0;ch<numCh;ch++){
+const srcD=buf.getChannelData(Math.min(ch,buf.numberOfChannels-1));
+const dstD=out.getChannelData(ch);
+for(let i=0;i<len;i++){
+dstD[off+i]=srcD[Math.floor(i/scale)]||0;
+}
+}
+off+=len;
+}
+const wav=audioBufferToWav(out);
+const a=document.createElement('a');
+a.href=URL.createObjectURL(new Blob([wav],{type:'audio/wav'}));
+a.download='concatenated.wav';a.click();
+audioCtx.close();
+function audioBufferToWav(buf){
+const numCh=buf.numberOfChannels,sr=buf.sampleRate;
+const len=buf.length*2*numCh;
+const arr=new ArrayBuffer(44+len);
+const v=new DataView(arr);
+const ws=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i));};
+ws(0,'RIFF');v.setUint32(4,36+len,true);ws(8,'WAVE');
+ws(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);
+v.setUint16(22,numCh,true);v.setUint32(24,sr,true);
+v.setUint32(28,sr*numCh*2,true);v.setUint16(32,numCh*2,true);
+v.setUint16(34,16,true);ws(36,'data');v.setUint32(40,len,true);
+let o=44;
+for(let i=0;i<buf.length;i++){
+for(let ch=0;ch<numCh;ch++){
+const s=Math.max(-1,Math.min(1,buf.getChannelData(ch)[i]));
+v.setInt16(o,s<0?s*32768:s*32767,true);o+=2;
+}
+}
+return arr;
+}
+});
+});
+</script>
+</main>
+<script src="/assets/app.js"></script>
+</body>
+</html>

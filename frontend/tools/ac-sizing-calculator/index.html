@@ -7,8 +7,8 @@
   <title>AC Sizing &amp; Cooling Load Calculator — Virtual Tools</title>
   <link rel="stylesheet" href="/assets/style.css">
   <style>
-    .field { margin-bottom: 14px; }
-    .row2 { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+    .field { margin-bottom: 14px; min-width: 0; }
+    .row2 { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 18px; }
     .row2 .field { margin-bottom: 0; }
     input[type="number"] { font-family: ui-monospace, monospace; width: 100px; }
     select { min-width: 130px; }
@@ -21,6 +21,18 @@
     .big { font-size: 1.05rem; font-weight: 700; }
     .check { display:flex; gap:6px; align-items:center; }
     .check input { width:auto; }
+    .input-group { display: flex; align-items: center; gap: 6px; }
+    .input-group select { margin-left: 0 !important; }
+    .results { border-top: 1px solid var(--border, #334155); padding-top: 16px; }
+    @media (max-width: 560px) {
+      .row2 { display: grid; grid-template-columns: 1fr; align-items: stretch; }
+      .row2 .field { width: 100%; }
+      .input-group input { flex: 1; width: 0; min-width: 0; }
+      .input-group select { min-width: 76px; }
+      .kv { grid-template-columns: 1fr; gap: 2px; }
+      .kv dd { margin-bottom: 10px; overflow-wrap: anywhere; }
+      .verdict { font-size: 1.25rem; overflow-wrap: anywhere; }
+    }
   </style>
 </head>
 <body>
@@ -36,23 +48,23 @@
       <div class="row2">
         <div class="field">
           <label for="area">Floor area</label>
-          <input id="area" type="number" min="0" step="any" value="400">
-          <select id="aunit" style="min-width:80px;margin-left:6px;">
+          <div class="input-group"><input id="area" type="number" min="0.1" max="1000000" step="any" value="400" inputmode="decimal" aria-describedby="input-help">
+          <select id="aunit" style="min-width:80px;margin-left:6px;" aria-label="Floor area unit">
             <option value="sqft" selected>ft²</option>
             <option value="sqm">m²</option>
-          </select>
+          </select></div>
         </div>
         <div class="field">
           <label for="ceil">Ceiling height</label>
-          <input id="ceil" type="number" min="0" step="any" value="8">
-          <select id="cunit" style="min-width:70px;margin-left:6px;">
+          <div class="input-group"><input id="ceil" type="number" min="0.1" max="100" step="any" value="8" inputmode="decimal" aria-describedby="input-help">
+          <select id="cunit" style="min-width:70px;margin-left:6px;" aria-label="Ceiling height unit">
             <option value="ft" selected>ft</option>
             <option value="m">m</option>
-          </select>
+          </select></div>
         </div>
         <div class="field">
           <label for="occ">Occupants</label>
-          <input id="occ" type="number" min="0" step="1" value="2">
+          <input id="occ" type="number" min="0" max="1000" step="1" value="2" inputmode="numeric" aria-describedby="input-help">
         </div>
       </div>
 
@@ -71,9 +83,12 @@
         </div>
       </div>
 
-      <div class="verdict" id="verdict"></div>
-      <dl class="kv" id="kv"></dl>
-      <p class="note" id="err"></p>
+      <p class="note" id="input-help">Values update the estimate immediately. Occupants must be a whole number.</p>
+      <section class="results" aria-label="Cooling load result" aria-live="polite" aria-atomic="true">
+        <div class="verdict" id="verdict"></div>
+        <dl class="kv" id="kv"></dl>
+        <p class="note" id="err"></p>
+      </section>
     </div>
   </main>
 
@@ -94,8 +109,8 @@
     function render() {
       errEl.textContent = ""; verdictEl.textContent = ""; verdictEl.className = "verdict"; kvEl.innerHTML = "";
       var area = num(areaEl), ceil = num(ceilEl), occ = num(occEl);
-      if ([area, ceil, occ].some(isNaN) || area <= 0 || ceil <= 0 || occ < 0) {
-        verdictEl.textContent = "✗ Enter positive area and ceiling height (occupants ≥ 0)."; verdictEl.className = "verdict bad"; return;
+      if (![area, ceil, occ].every(Number.isFinite) || !areaEl.validity.valid || !ceilEl.validity.valid || !occEl.validity.valid || !Number.isInteger(occ)) {
+        verdictEl.textContent = "Check the highlighted values. Area and height must be positive, and occupants must be a whole number of 0 or more."; verdictEl.className = "verdict bad"; return;
       }
 
       var areaSqft = aunitEl.value === "sqm" ? area * 10.7639 : area;
@@ -106,7 +121,9 @@
       var base = areaSqft * 20 * (ceilFt / 8);
       var occAdj = Math.max(0, occ - 2) * 600;
       var kitAdj = kitchenEl.checked ? 4000 : 0;
-      var btu = (base + occAdj + kitAdj) * sun;
+      // Sun exposure adjusts the room load; occupant and kitchen gains are added afterward.
+      var sunAdjustedBase = base * sun;
+      var btu = sunAdjustedBase + occAdj + kitAdj;
       var tons = btu / 12000;
       var kW = btu * 0.00029307107;
 
@@ -120,9 +137,9 @@
         "<dt>In tons</dt><dd>" + fmt(tons, 2) + " tons  (1 ton = 12 000 BTU/h)</dd>" +
         "<dt>In kW</dt><dd>" + fmt(kW, 2) + " kW  <span class='muted'>(cooling capacity, not electrical input)</span></dd>" +
         "<dt>Recommended unit size</dt><dd class='big'>" + fmt(rec, 0) + " BTU/h  (" + fmt(rec / 12000, 2) + " ton) — round up</dd>" +
-        "<dt>Breakdown</dt><dd>area " + fmt(base / sun, 0) + (occAdj ? "  +  occ " + fmt(occAdj, 0) : "") + (kitAdj ? "  +  kitchen " + fmt(kitAdj, 0) : "") + (sun !== 1 ? "  ×  " + sun : "") + "</dd>";
+        "<dt>Breakdown</dt><dd>area " + fmt(base, 0) + (sun !== 1 ? " × " + fmt(sun, 1) + " = " + fmt(sunAdjustedBase, 0) : "") + (occAdj ? " + occupants " + fmt(occAdj, 0) : "") + (kitAdj ? " + kitchen " + fmt(kitAdj, 0) : "") + " BTU/h</dd>";
 
-      errEl.textContent = "Base load is ~20 BTU/h per ft² of floor (about 215 BTU/h per m²), scaled up for ceilings taller than 8 ft, plus 600 BTU/h for each occupant beyond two, plus 4 000 BTU/h for a kitchen, with ±10% for sun exposure. Oversizing hurts: an AC that's too big short-cycles and dehumidifies poorly, leaving the room cold and clammy, so don't round up by more than one size. This rule-of-thumb works for single rooms; whole-house and commercial loads need an ACCA Manual J calculation accounting for insulation R-values, window U-factors and orientation, infiltration, duct losses and local design temperatures.";
+      errEl.textContent = "Base load is ~20 BTU/h per ft² of floor (about 215 BTU/h per m²), scaled for ceiling height and adjusted ±10% for sun exposure. Then add 600 BTU/h for each occupant beyond two and 4,000 BTU/h for a kitchen. Oversizing hurts: an AC that's too big short-cycles and dehumidifies poorly, so don't round up by more than one size. This rule of thumb works for single rooms; whole-house and commercial loads need a Manual J calculation.";
       errEl.className = "note";
     }
 

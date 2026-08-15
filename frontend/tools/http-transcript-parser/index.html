@@ -1,0 +1,104 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><script src="/assets/theme-init.js"></script><title>HTTP Transcript Parser — Virtual Tools</title><meta name="description" content="Parse raw HTTP/1.x transcript messages locally."><link rel="stylesheet" href="/assets/style.css"><style>.layout{display:grid;grid-template-columns:minmax(300px,.8fr) minmax(0,1.2fr);gap:14px}.field label{display:block;font-weight:700;margin-bottom:5px}.field textarea,.field input,.field select{width:100%;box-sizing:border-box}textarea{min-height:500px;font:12px/1.5 ui-monospace,monospace}.grid{display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px}.actions,.metrics{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}.metric{border:1px solid var(--border);border-radius:8px;padding:8px;min-width:90px}.metric strong{display:block;font-size:1.2rem}.notice{padding:10px;border-left:4px solid #d69200;background:color-mix(in srgb,#d69200 12%,transparent)}.status{white-space:pre-wrap;min-height:1.4em}.error,.severity-error,.severity-warning{color:var(--text);font-weight:700}.cards{display:grid;gap:10px;max-height:720px;overflow:auto}.message{border:1px solid var(--border);border-radius:9px;padding:11px}.message h3{margin:0 0 6px;overflow-wrap:anywhere}.tags{display:flex;gap:5px;flex-wrap:wrap}.tag{border:1px solid var(--border);border-radius:999px;padding:1px 7px;font-size:.75rem}.details{display:grid;grid-template-columns:1fr 1fr;gap:9px}.mono{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.5 ui-monospace,monospace;background:color-mix(in srgb,var(--text) 4%,transparent);padding:8px;border-radius:7px;max-height:210px;overflow:auto}.finding{padding:4px 0}.muted{opacity:.75}@media(max-width:850px){.layout,.details{grid-template-columns:1fr}.grid{grid-template-columns:1fr}textarea{min-height:330px}}</style></head><body><div id="site-header"></div><main><div class="tool-header"><a class="back" href="/">← All tools</a><h1>HTTP Transcript Parser</h1><p>Inspect bounded HTTP/1.x request and response transcripts without sending requests or rendering bodies.</p></div><p class="notice"><strong>Text inspection only:</strong> URLs are never fetched, HTML is never rendered, and bodies are never executed. Paste one or more messages separated by a line beginning <code>---</code>. Unframed bodies require that separator. Optional timing syntax: <code>--- timing=123.4ms</code> before a response.</p><div class="layout"><section class="panel" aria-labelledby="input-heading"><h2 id="input-heading">Transcript input</h2><div class="field"><label for="input">Raw transcript</label><textarea id="input" spellcheck="false" maxlength="2097152" aria-describedby="input-help">GET /old HTTP/1.1
+Host: example.test
+Cookie: session=abc; theme=dark
+
+--- timing=42ms
+HTTP/1.1 302 Found
+Location: /new
+Content-Length: 0
+Set-Cookie: session=def; Path=/; HttpOnly; SameSite=Lax
+
+---
+GET /new HTTP/1.1
+Host: example.test
+
+--- timing=18ms
+HTTP/1.1 200 OK
+Transfer-Encoding: chunked
+Content-Type: text/plain
+
+5
+Hello
+6
+ world
+0
+X-Trace: done
+
+</textarea></div><p id="input-help" class="muted">Limits: 2 MiB after UTF-8 encoding, 500 messages, 1,000 header/trailer lines per message, 64 KiB per framing line, and 1 MiB decoded body per message. CRLF and LF are accepted; bare CR is not. This text input cannot reproduce arbitrary binary captures. Exported body hex preserves the UTF-8 bytes parsed from this field; the UI preview shows at most 4 KiB.</p><div class="actions"><button id="parse" type="button">Parse transcript</button><button id="clear" type="button" class="secondary">Clear</button><button id="json" type="button" class="secondary" disabled>Export JSON</button></div><p id="status" class="status" role="status" aria-live="polite" aria-atomic="true"></p></section><section class="panel" aria-labelledby="results-heading"><h2 id="results-heading">Parsed messages</h2><div id="metrics" class="metrics" aria-label="Parse summary"></div><div class="grid"><div class="field"><label for="search">Search</label><input id="search" type="search" maxlength="100" placeholder="method, path, status, header"></div><div class="field"><label for="type">Message type</label><select id="type"><option value="all">All</option><option value="request">Requests</option><option value="response">Responses</option></select></div><div class="field"><label for="issues">Findings</label><select id="issues"><option value="all">All</option><option value="with">With findings</option><option value="errors">Errors only</option></select></div></div><div id="messages" class="cards" role="region" aria-label="Parsed message details" tabindex="0"></div><h2>Transactions and redirects</h2><div id="transactions" class="mono">Run the parser.</div></section></div></main><script src="/assets/app.js"></script><script>
+(function(){"use strict";var $=function(x){return document.getElementById(x)},LIMIT={bytes:2097152,messages:500,headers:1000,line:65536,body:1048576,preview:4096},decoder=new TextDecoder("utf-8",{fatal:false}),asciiDecoder=new TextDecoder("ascii"),report=null;
+function el(tag,a,t){var n=document.createElement(tag);Object.keys(a||{}).forEach(function(k){n.setAttribute(k,a[k])});if(t!==undefined)n.textContent=t;return n}
+function ascii(bytes,label){if(bytes.length>LIMIT.line)throw new Error(label+" exceeds 64 KiB.");for(var i=0;i<bytes.length;i++)if(bytes[i]>127)throw new Error(label+" must be ASCII.");return asciiDecoder.decode(bytes)}
+function line(bytes,state){if(state.p>=bytes.length)return null;var start=state.p,i=start;while(i<bytes.length&&bytes[i]!==10)i++;var end=i;if(end>start&&bytes[end-1]===13)end--;state.p=i<bytes.length?i+1:i;return {bytes:bytes.slice(start,end),start:start,end:end,next:state.p}}
+function peekLine(bytes,p){var s={p:p},l=line(bytes,s);return l?{text:ascii(l.bytes,"Transcript separator/start line"),next:s.p}:null}
+function headers(bytes,state,findings,label,budget){var list=[],last=null;while(true){var l=line(bytes,state);if(!l)throw new Error(label+" ends before the header terminator.");if(!l.bytes.length)break;if(++budget.count>LIMIT.headers)throw new Error("Message exceeds 1,000 header/trailer lines.");var text=ascii(l.bytes,"Header line");if(/^[ \t]/.test(text)){if(!last){findings.push({severity:"error",message:"Obsolete folded line appears before any header."});continue}if(/[\x00-\x08\x0a-\x1f\x7f]/.test(text)){findings.push({severity:"error",message:"Folded header value contains a control character."});last=null;continue}last.value+=" "+text.trim();findings.push({severity:"warning",message:"Obsolete header folding was unfolded for "+last.name+"."});continue}var colon=text.indexOf(":");if(colon<=0){findings.push({severity:"error",message:"Malformed header line: "+text});last=null;continue}var name=text.slice(0,colon),value=text.slice(colon+1).trim();if(!/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(name))findings.push({severity:"error",message:"Invalid header name: "+name});if(/[\x00-\x08\x0a-\x1f\x7f]/.test(text.slice(colon+1)))findings.push({severity:"error",message:"Header value for "+name+" contains a control character."});last={name:name,value:value};list.push(last)}return list}
+function values(h,name){name=name.toLowerCase();return h.filter(function(x){return x.name.toLowerCase()===name}).map(function(x){return x.value})}
+function consumeEnding(bytes,state,label){if(bytes[state.p]===13&&bytes[state.p+1]===10)state.p+=2;else if(bytes[state.p]===10)state.p++;else throw new Error(label+" is not followed by CRLF/LF.")}
+function chunks(bytes,state,findings,budget){var decoded=[],trailers=[],rawStart=state.p,total=0;while(true){var sizeLine=line(bytes,state);if(!sizeLine)throw new Error("Truncated chunk-size line.");var st=ascii(sizeLine.bytes,"Chunk-size line"),m=st.match(/^([0-9A-Fa-f]+)(?:;[^\r\n]*)?$/);if(!m)throw new Error("Invalid chunk-size line: "+st);var size=parseInt(m[1],16);if(!Number.isSafeInteger(size)||size>LIMIT.body)throw new Error("Chunk size exceeds the 1 MiB body limit.");if(size===0){trailers=headers(bytes,state,findings,"Chunk trailers",budget);break}if(state.p+size>bytes.length)throw new Error("Chunk data is truncated.");var part=bytes.slice(state.p,state.p+size);state.p+=size;consumeEnding(bytes,state,"Chunk data");total+=size;if(total>LIMIT.body)throw new Error("Decoded chunked body exceeds 1 MiB.");for(var i=0;i<part.length;i++)decoded.push(part[i])}return {decoded:new Uint8Array(decoded),trailers:trailers,raw:bytes.slice(rawStart,state.p)}}
+function separatorStart(bytes,p){var fourth=bytes[p+3];return bytes[p]===45&&bytes[p+1]===45&&bytes[p+2]===45&&(fourth===undefined||fourth===9||fourth===10||fourth===11||fourth===12||fourth===13||fourth===32)}
+function unframed(bytes,state){var start=state.p,p=start;while(p<bytes.length){if((p===start||bytes[p-1]===10)&&separatorStart(bytes,p)){state.p=p;return bytes.slice(start,p)}var nl=bytes.indexOf(10,p);if(nl<0)break;p=nl+1}state.p=bytes.length;return bytes.slice(start)}
+function hex(bytes,max){var n=Math.min(bytes.length,max),out=[];for(var i=0;i<n;i++)out.push(bytes[i].toString(16).padStart(2,"0"));return out.join(" ")+(bytes.length>max?" …":"")}
+function cookies(headersList,response){var target=response?"set-cookie":"cookie",out=[];values(headersList,target).forEach(function(v){if(response){var parts=v.split(";").map(function(x){return x.trim()}),pair=parts.shift().split("="),attrs={};parts.forEach(function(x){var i=x.indexOf("=");attrs[(i<0?x:x.slice(0,i)).toLowerCase()]=i<0?true:x.slice(i+1)});out.push({name:pair.shift(),value:pair.join("="),attributes:attrs})}else v.split(";").forEach(function(x){var i=x.indexOf("=");if(i>0)out.push({name:x.slice(0,i).trim(),value:x.slice(i+1).trim()})})});return out}
+function parse(raw){
+if(!raw.length)throw new Error("Paste an HTTP transcript.");
+if(raw.length>LIMIT.bytes)throw new Error("Transcript exceeds 2 MiB.");
+var bytes=new TextEncoder().encode(raw);
+if(bytes.length>LIMIT.bytes)throw new Error("Transcript exceeds 2 MiB after UTF-8 encoding.");
+var state={p:0},messages=[],pendingTiming=null,requestQueue=[];
+while(state.p<bytes.length){
+while(bytes[state.p]===10||(bytes[state.p]===13&&bytes[state.p+1]===10)){state.p+=bytes[state.p]===13?2:1}
+if(bytes[state.p]===13)throw new Error("Bare CR line endings are not supported; use CRLF or LF.");
+if(state.p>=bytes.length)break;
+var maybe=peekLine(bytes,state.p);
+if(maybe&&/^---(?:\s|$)/.test(maybe.text)){var tm=maybe.text.match(/\btiming\s*=\s*(\d+(?:\.\d+)?)\s*ms\b/i);pendingTiming=tm?Number(tm[1]):null;state.p=maybe.next;continue}
+if(messages.length>=LIMIT.messages)throw new Error("Transcript exceeds 500 messages.");
+var start=line(bytes,state);
+if(!start)break;
+var startText=ascii(start.bytes,"HTTP start line"),req=startText.match(/^([!#$%&'*+.^_`|~0-9A-Za-z-]+)[ \t]+([^\x00-\x20\x7f]+)[ \t]+(HTTP\/1\.[01])$/),res=startText.match(/^(HTTP\/1\.[01])[ \t]+(\d{3})(?:[ \t]+([\x09\x20-\x7e]*))?$/),findings=[],msg;
+if(req)msg={type:"request",method:req[1],target:req[2],version:req[3]};
+else if(res){var code=Number(res[2]);msg={type:"response",version:res[1],status:code,reason:res[3]||""};if(code<100||code>599)findings.push({severity:"error",message:"Status code is outside 100–599."})}
+else throw new Error("Malformed HTTP start line at byte "+start.start+": "+startText);
+msg.index=messages.length+1;msg.startLine=startText;msg.findings=findings;msg.timingMs=pendingTiming;pendingTiming=null;
+var associated=msg.type==="response"&&requestQueue.length?requestQueue[0]:null;
+if(associated)msg.requestMessage=associated.index;
+var budget={count:0};
+msg.headers=headers(bytes,state,findings,"Message "+msg.index,budget);
+var cls=values(msg.headers,"content-length"),lengthTokens=[];
+cls.forEach(function(v){v.split(",").forEach(function(x){lengthTokens.push(x.trim())})});
+var lengths=lengthTokens.map(function(x){return /^\d+$/.test(x)?Number(x):NaN}),invalidLength=lengths.some(function(x){return !Number.isSafeInteger(x)||x<0});
+if(invalidLength)findings.push({severity:"error",message:"Invalid Content-Length value."});
+var distinct=Array.from(new Set(lengths.filter(Number.isFinite)));
+if(distinct.length>1)findings.push({severity:"error",message:"Conflicting Content-Length values."});
+var framedLength=!invalidLength&&distinct.length===1?distinct[0]:null;
+var teFields=values(msg.headers,"transfer-encoding"),teParts=teFields.length?teFields.join(",").split(","):[],tes=[],teInvalid=false;
+teParts.forEach(function(part){var rawCoding=part.trim(),semi=rawCoding.indexOf(";"),coding=(semi<0?rawCoding:rawCoding.slice(0,semi)).trim().toLowerCase();if(!/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(coding)){teInvalid=true;return}if(coding==="chunked"&&semi>=0)teInvalid=true;tes.push(coding)});
+if(teFields.length&&(!teParts.length||teInvalid||tes.length!==teParts.length))findings.push({severity:"error",message:"Malformed Transfer-Encoding value."});
+var chunkedCount=tes.filter(function(x){return x==="chunked"}).length;
+if(tes.length&&tes[tes.length-1]!=="chunked")findings.push({severity:"error",message:"Transfer-Encoding final coding is not chunked; separator framing is required."});
+if(chunkedCount>1)findings.push({severity:"error",message:"Transfer-Encoding repeats chunked."});
+if(tes.some(function(x){return x!=="chunked"}))findings.push({severity:"warning",message:"Unsupported transfer coding is present: "+tes.join(", ")});
+if(teFields.length&&cls.length)findings.push({severity:"error",message:"Both Transfer-Encoding and Content-Length are present; Content-Length was ignored."});
+var noBodyStatus=msg.type==="response"&&((msg.status>=100&&msg.status<200)||msg.status===204||msg.status===304),headResponse=associated&&associated.method.toUpperCase()==="HEAD",connectTunnel=associated&&associated.method.toUpperCase()==="CONNECT"&&msg.status>=200&&msg.status<300,noBody=noBodyStatus||headResponse||connectTunnel;
+var body=new Uint8Array(),rawBody=body,trailers=[];
+if(noBody){msg.bodyRule=headResponse?"HEAD response":connectTunnel?"successful CONNECT response":"status "+msg.status}
+else if(!teInvalid&&chunkedCount===1&&tes[tes.length-1]==="chunked"){var c=chunks(bytes,state,findings,budget);body=c.decoded;rawBody=c.raw;trailers=c.trailers}
+else if(!teFields.length&&framedLength!==null){var size=framedLength;if(size>LIMIT.body)throw new Error("Message "+msg.index+" body exceeds 1 MiB.");if(state.p+size>bytes.length)throw new Error("Message "+msg.index+" Content-Length exceeds remaining transcript bytes.");body=bytes.slice(state.p,state.p+size);rawBody=body;state.p+=size}
+else{body=unframed(bytes,state);rawBody=body;if(body.length>LIMIT.body)throw new Error("Message "+msg.index+" unframed body exceeds 1 MiB.")}
+msg.trailers=trailers;
+if(values(trailers,"content-length").length||values(trailers,"transfer-encoding").length)findings.push({severity:"error",message:"Chunk trailers contain a framing header."});
+msg.bodyBytes=body.length;msg.rawBodyBytes=rawBody.length;msg.bodyText=decoder.decode(body);msg.bodyHex=hex(body,LIMIT.body);msg.cookies=cookies(msg.headers,msg.type==="response");msg.location=values(msg.headers,"location")[0]||null;
+messages.push(msg);
+if(msg.type==="request")requestQueue.push(msg);
+else if(associated&&!((msg.status>=100&&msg.status<200)&&msg.status!==101))requestQueue.shift()
+}
+var transactions=[];
+messages.forEach(function(m){if(m.type!=="response"||!m.requestMessage||((m.status>=100&&m.status<200)&&m.status!==101))return;var request=messages[m.requestMessage-1];transactions.push({requestMessage:request.index,responseMessage:m.index,method:request.method,target:request.target,status:m.status,timingMs:m.timingMs,redirect:m.status>=300&&m.status<400&&m.location?m.location:null})});
+return {version:1,inputEncoding:"UTF-8 encoding of the textarea value",messages:messages,transactions:transactions,unpairedRequests:messages.filter(function(m){return m.type==="request"&&!transactions.some(function(t){return t.requestMessage===m.index})}).map(function(m){return m.index}),unpairedResponses:messages.filter(function(m){return m.type==="response"&&!m.requestMessage}).map(function(m){return m.index})}
+}
+function summaryHeader(m){return m.headers.map(function(h){return h.name+": "+h.value}).join("\n")+(m.trailers.length?"\nTrailers:\n"+m.trailers.map(function(h){return h.name+": "+h.value}).join("\n"):"")}
+function render(){var met=$("metrics");met.replaceChildren();[["Messages",report.messages.length],["Requests",report.messages.filter(function(x){return x.type==="request"}).length],["Responses",report.messages.filter(function(x){return x.type==="response"}).length],["Transactions",report.transactions.length],["Findings",report.messages.reduce(function(n,x){return n+x.findings.length},0)]].forEach(function(x){var d=el("div",{class:"metric"});d.append(el("span",{},x[0]),el("strong",{},String(x[1])));met.appendChild(d)});$("transactions").textContent=report.transactions.length?report.transactions.map(function(t){return "#"+t.requestMessage+" → #"+t.responseMessage+" · "+t.method+" "+t.target+" · "+t.status+(t.timingMs!=null?" · "+t.timingMs+" ms":"")+(t.redirect?" · redirect → "+t.redirect:"")}).join("\n"):"No paired final request/response messages found.";filter()}
+function filter(){if(!report)return;var q=$("search").value.trim().toLowerCase(),type=$("type").value,issues=$("issues").value,list=report.messages.filter(function(m){var hay=(m.startLine+" "+summaryHeader(m)).toLowerCase();return (type==="all"||m.type===type)&&(!q||hay.includes(q))&&(issues==="all"||(issues==="with"&&m.findings.length)||(issues==="errors"&&m.findings.some(function(f){return f.severity==="error"}))) }),host=$("messages");host.replaceChildren();if(!list.length)host.appendChild(el("p",{class:"muted"},"No messages match the filters."));list.forEach(function(m){var card=el("article",{class:"message"});card.appendChild(el("h3",{},"#"+m.index+" "+m.startLine));var tags=el("div",{class:"tags"});[m.type,m.bodyBytes+" decoded bytes",m.rawBodyBytes+" framed bytes"].concat(m.timingMs!=null?[m.timingMs+" ms"]:[]).forEach(function(t){tags.appendChild(el("span",{class:"tag"},t))});card.appendChild(tags);m.findings.forEach(function(f){card.appendChild(el("div",{class:"finding severity-"+f.severity},f.severity.toUpperCase()+": "+f.message))});var detail=el("div",{class:"details"}),head=el("div"),body=el("div");head.append(el("h4",{},"Headers and cookies"),el("pre",{class:"mono"},summaryHeader(m)+(m.cookies.length?"\nCookies:\n"+m.cookies.map(function(c){return c.name+"="+c.value+(c.attributes?"; "+Object.keys(c.attributes).join("; "):"")}).join("\n"):"")));var previewBytes=new TextEncoder().encode(m.bodyText).slice(0,LIMIT.preview);body.append(el("h4",{},"Body preview (text / hex)"),el("pre",{class:"mono"},decoder.decode(previewBytes)+(m.bodyBytes>LIMIT.preview?"\n… preview truncated":"")+"\n\nHEX\n"+m.bodyHex.split(" ").slice(0,LIMIT.preview).join(" ")));detail.append(head,body);card.appendChild(detail);host.appendChild(card)})}
+function clearResults(message){report=null;$("metrics").replaceChildren();$("messages").replaceChildren(el("p",{class:"muted"},message));$("transactions").textContent="No parsed transactions.";$("json").disabled=true}
+function run(){var st=$("status");try{report=parse($("input").value);render();$("json").disabled=false;st.className="status";st.textContent="Parsed locally: "+report.messages.length+" message(s). No URL was fetched and no body was rendered."}catch(e){clearResults("No results: the transcript could not be parsed.");st.className="status error";st.textContent=e.message}}
+function download(){var copy=JSON.parse(JSON.stringify(report)),u=URL.createObjectURL(new Blob([JSON.stringify(copy,null,2)],{type:"application/json;charset=utf-8"})),a=el("a",{href:u,download:"http-transcript-report.json"});a.click();setTimeout(function(){URL.revokeObjectURL(u)},1000)}
+$("parse").addEventListener("click",run);$("clear").addEventListener("click",function(){$("input").value="";clearResults("Paste a transcript and parse it to see messages.");$("status").className="status";$("status").textContent="Transcript and parsed results cleared.";$("input").focus()});$("json").addEventListener("click",function(){if(report)download()});["search","type","issues"].forEach(function(id){$(id).addEventListener("input",filter);$(id).addEventListener("change",filter)});run()})();
+</script></body></html>
