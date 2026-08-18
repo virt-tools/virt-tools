@@ -108,6 +108,42 @@
   var searchInput = null, emptyNote = null, catalogMount = null, countEl = null;
   var emptyNoteDefault = "";
 
+  // Slug -> tool object index for O(1) lookups (popular tools, etc.).
+  var toolIndex = {};
+  function buildToolIndex() {
+    toolIndex = {};
+    (window.VIRTUAL_TOOLS || []).forEach(function (t) { if (t && t.slug) toolIndex[t.slug] = t; });
+  }
+  buildToolIndex();
+
+  /* Per-browser usage counts — privacy-first, localStorage only, never sent
+   * to any server. Each visit to a tool page bumps that tool's count, and the
+   * homepage surfaces the top 5 as a "Popular" shortcut category. */
+  var USAGE_KEY = "vt-tool-usage";
+  function usageMap() {
+    try { var m = JSON.parse(localStorage.getItem(USAGE_KEY) || "{}"); return m && typeof m === "object" ? m : {}; }
+    catch (e) { return {}; }
+  }
+  function bumpUsage(slug) {
+    if (!slug) return;
+    var m = usageMap();
+    m[slug] = (parseFloat(m[slug]) || 0) + 1;
+    try { localStorage.setItem(USAGE_KEY, JSON.stringify(m)); } catch (e) {}
+  }
+  function popularTools(limit) {
+    var m = usageMap();
+    var entries = Object.keys(m)
+      .map(function (s) { return [s, parseFloat(m[s]) || 0]; })
+      .filter(function (e) { return e[1] > 0; })
+      .sort(function (a, b) { return b[1] - a[1]; });
+    var out = [];
+    for (var i = 0; i < entries.length && out.length < limit; i++) {
+      var t = toolIndex[entries[i][0]];
+      if (t) out.push(t); // skip slugs no longer in the registry (merged/renamed)
+    }
+    return out;
+  }
+
   // Relative "added X ago" label, with the exact ISO timestamp as a tooltip so
   // the precise add time is available on hover without crowding the card.
   function formatAdded(iso) {
@@ -165,6 +201,17 @@
       sorted.forEach(function (t) { grid.appendChild(toolCard(t)); });
       catalogMount.appendChild(grid);
     } else {
+      // "Popular" shortcut at the very top: the user's 5 most-visited tools,
+      // drawn from per-browser usage counts (localStorage). Hidden until the
+      // user has any recorded usage. Tools also remain listed under their real
+      // category below, so this is a shortcut, not a relocation.
+      var pop = popularTools(5);
+      if (pop.length) {
+        catalogMount.appendChild(el("h2", { class: "catalog-category popular-heading" }, ["🔥 Popular"]));
+        var pgrid = el("div", { class: "tool-grid popular-grid" });
+        pop.forEach(function (t) { pgrid.appendChild(toolCard(t)); });
+        catalogMount.appendChild(pgrid);
+      }
       var byCategory = {};
       window.VIRTUAL_TOOLS.forEach(function (t) {
         (byCategory[t.category] = byCategory[t.category] || []).push(t);
@@ -320,6 +367,7 @@
   function recordVisit() {
     var slug = slugFromPath();
     if (!slug) return;
+    bumpUsage(slug);
     var name = "";
     var h1 = document.querySelector("main h1, .tool-header h1, h1");
     if (h1) name = h1.textContent.trim();
@@ -346,5 +394,5 @@
   ready(recordVisit);
 
   // Expose helpers for tool pages to reuse.
-  window.VT = { el: el, ready: ready, ROOT: ROOT, recentTools: recentTools };
+  window.VT = { el: el, ready: ready, ROOT: ROOT, recentTools: recentTools, popularTools: popularTools };
 })();
