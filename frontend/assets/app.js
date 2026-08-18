@@ -26,6 +26,17 @@
   // Brand mark: a wrench (this is a tools catalog, after all) — theme-colored via currentColor.
   var WRENCH_SVG = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>';
 
+  function injectFavicon() {
+    if (document.querySelector('link[rel~="icon"][data-vt-favicon]')) return;
+    var link = el("link", {
+      rel: "icon",
+      type: "image/svg+xml",
+      href: ROOT + "favicon.svg",
+      "data-vt-favicon": "1"
+    });
+    document.head.appendChild(link);
+  }
+
   function injectHeader() {
     var mount = document.getElementById("site-header");
     if (!mount) return;
@@ -327,6 +338,7 @@
     } catch (e) { return []; }
   }
 
+  ready(injectFavicon);
   ready(injectHeader);
   ready(initCatalog);
   ready(recordVisit);
