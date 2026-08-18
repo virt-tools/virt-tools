@@ -135,7 +135,9 @@
     // data-search attribute and the registry so search and SEO still work, but
     // the homepage lists just icon + name (+ "added X ago" in the recent view)
     // for less clutter and quicker navigation.
-    if (t.added) {
+    // The "added X ago" label is shown only in the Recently-added view; the
+    // default grouped homepage hides it to stay uncluttered.
+    if (t.added && currentView === "recent") {
       var addedDate = new Date(t.added);
     var addedTitle = isNaN(addedDate.getTime()) ? t.added : addedDate.toLocaleString(undefined, { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
     var added = el("div", { class: "tool-card-added", title: addedTitle }, ["Added " + formatAdded(t.added)]);
