@@ -10,6 +10,9 @@ The workflow uses the existing Codex ChatGPT sign-in and normal workspace sandbo
 with automatic approval review (`--approve-for-me`), not unrestricted execution.
 It consumes account usage. The host, Docker, network, and sign-in must remain
 available. A rejected approval is a blocker, not permission to bypass review.
+The service uses `sg docker` to pick up devbot's existing Docker group membership;
+the long-lived user manager may predate that membership. Codex still runs as
+devbot, not root.
 
 ## Install on this host
 
