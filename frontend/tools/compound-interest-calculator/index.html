@@ -8,18 +8,18 @@
 <style>
 .ci{max-width:550px;margin:0 auto;padding:2rem 1rem}
 .ci h1{font-size:2rem;margin-bottom:.5rem}
-.ci .sub{color:#888;margin-bottom:1.5rem}
+.ci .sub{color:var(--text-dim);margin-bottom:1.5rem}
 .ci label{font-size:14px;display:block;margin-bottom:4px;margin-top:1rem}
 .ci input,.ci select{width:100%;font-size:15px;padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);box-sizing:border-box}
-.ci .btn{padding:10px 22px;border:none;border-radius:8px;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;margin-top:1.5rem}
+.ci .btn{padding:10px 22px;border:none;border-radius:8px;background:var(--accent);color:var(--on-accent);font-weight:600;cursor:pointer;margin-top:1.5rem}
 .ci .results{margin-top:2rem}
 .ci .res-card{padding:1.2rem;border:1px solid var(--border);border-radius:12px;margin-bottom:1rem;background:var(--bg)}
 .ci .res-card .big{font-size:2rem;font-weight:700;color:var(--accent)}
-.ci .res-card .lbl{color:#888;font-size:13px}
-.ci .grid2{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.ci .res-card .lbl{color:var(--text-dim);font-size:13px}
+.ci .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:1rem}
 .ci table{width:100%;border-collapse:collapse;margin-top:1rem;font-size:13px}
 .ci th,.ci td{padding:6px 8px;text-align:right;border-bottom:1px solid var(--border)}
-.ci th{text-align:left;color:#888;font-weight:600}
+.ci th{text-align:left;color:var(--text-dim);font-weight:600}
 </style>
 </head>
 <body>
@@ -44,40 +44,35 @@
 <option value="365">Daily</option>
 </select>
 <button class="btn" onclick="calc()" type="button">Calculate</button>
-<div class="results" id="results"></div>
+<div class="results" id="results" aria-live="polite"></div>
+<p class="note">Monthly deposits are made at month-end. The selected compounding rate is converted to an equivalent monthly rate. Assumes a constant return, before taxes, fees and inflation; actual investment returns vary.</p>
 </main>
 <script src="/assets/app.js"></script>
 <script>
 function calc(){
-  const P=parseFloat(document.getElementById('principal').value)||0;
-  const PMT=parseFloat(document.getElementById('monthly').value)||0;
-  const r=(parseFloat(document.getElementById('rate').value)||0)/100;
-  const years=parseInt(document.getElementById('years').value)||1;
-  const n=parseInt(document.getElementById('freq').value)||12;
+  const output=document.getElementById('results');
+  const raw=['principal','monthly','rate','years'].map(id=>document.getElementById(id).value);
+  const [P,PMT,annual,years]=raw.map(Number);
+  if(raw.some(v=>!v.trim())||![P,PMT,annual,years].every(Number.isFinite)||P<0||PMT<0||P>1e12||PMT>1e12||annual<0||annual>100||!Number.isInteger(years)||years<1||years>100){output.textContent='Enter non-negative amounts up to 1 trillion, a rate from 0 to 100%, and 1–100 whole years.';return;}
+  const r=annual/100,n=Number(document.getElementById('freq').value);
   const totalContrib=P+PMT*12*years;
-  const rPer=r/n;
-  const periods=n*years;
-  let FV=P*Math.pow(1+rPer,periods);
-  if(PMT>0){
-    const PMTper=PMT;
-    const pmtPeriods=periods;
-    FV+=PMTper*((Math.pow(1+rPer,pmtPeriods)-1)/rPer);
-  }
+  const monthlyLog=n/12*Math.log1p(r/n),monthlyRate=Math.expm1(monthlyLog);
+  function balance(y){const growth=Math.expm1(monthlyLog*12*y);return P*(1+growth)+PMT*(monthlyRate===0?12*y:growth/monthlyRate);}
+  const FV=balance(years);
+  if(!Number.isFinite(FV)||FV>Number.MAX_SAFE_INTEGER/100){output.textContent='Result exceeds the supported currency range. Reduce the amount, rate, or term.';return;}
   const interest=FV-totalContrib;
   let html='<div class="grid2">';
-  html+='<div class="res-card"><div class="lbl">Final Balance</div><div class="big" style="color:#27ae60">$'+FV.toLocaleString(undefined,{maximumFractionDigits:0})+'</div></div>';
-  html+='<div class="res-card"><div class="lbl">Total Interest</div><div class="big" style="color:#27ae60">$'+interest.toLocaleString(undefined,{maximumFractionDigits:0})+'</div></div>';
+  html+='<div class="res-card"><div class="lbl">Final Balance</div><div class="big" style="color:var(--ok)">$'+FV.toLocaleString(undefined,{maximumFractionDigits:2})+'</div></div>';
+  html+='<div class="res-card"><div class="lbl">Total Interest</div><div class="big" style="color:var(--ok)">$'+interest.toLocaleString(undefined,{maximumFractionDigits:2})+'</div></div>';
   html+='</div>';
   html+='<div class="res-card"><div class="lbl">Total Contributions</div><div class="big">$'+totalContrib.toLocaleString(undefined,{maximumFractionDigits:0})+'</div></div>';
-  html+='<table><tr><th>Year</th><th>Balance</th><th>Interest</th></tr>';
-  for(let y=1;y<=years&&y<=30;y++){
-    const yp=n*y;
-    let bv=P*Math.pow(1+rPer,yp);
-    if(PMT>0) bv+=PMT*((Math.pow(1+rPer,yp)-1)/rPer);
+  html+='<details><summary>View all '+years+' years</summary><table><tr><th>Year</th><th>Balance</th><th>Interest</th></tr>';
+  for(let y=1;y<=years;y++){
+    const bv=balance(y);
     const iv=bv-(P+PMT*12*y);
     html+='<tr><td>'+y+'</td><td>$'+bv.toLocaleString(undefined,{maximumFractionDigits:0})+'</td><td>$'+iv.toLocaleString(undefined,{maximumFractionDigits:0})+'</td></tr>';
   }
-  html+='</table>';
+  html+='</table></details>';
   document.getElementById('results').innerHTML=html;
 }
 calc();

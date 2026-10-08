@@ -14,7 +14,7 @@
     .seg button.on { background: var(--accent,#ffd54a); color: #000; }
     .results { font-family: ui-monospace, monospace; }
     .results .big { font-size: 22px; font-weight: 700; }
-    .steps { font-family: ui-monospace, monospace; font-size: 13px; white-space: pre; opacity: .85; }
+    .steps { font-family: ui-monospace, monospace; font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; opacity: .85; }
     .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-top: 6px; }
     .summary .stat { padding: 8px 10px; border: 1px solid var(--border,#444); border-radius: 6px; }
     .summary .stat-value { display:block; font-size: 18px; font-weight: 700; font-family: ui-monospace, monospace; }
@@ -32,14 +32,14 @@
 
     <div class="panel">
       <div class="frac-row">
-        <input class="frac-input" id="a" type="text" inputmode="text" value="1 1/2" placeholder="3/4 or 1 1/2 or 0.5" aria-label="3/4 Or 1 1/2 Or 0.5">
+        <input class="frac-input" id="a" type="text" inputmode="text" maxlength="1000" value="1 1/2" placeholder="3/4 or 1 1/2 or 0.5" aria-label="First fraction">
         <div class="seg" id="ops">
           <button data-op="add" class="on" type="button">+</button>
           <button data-op="sub" type="button">−</button>
           <button data-op="mul" type="button">×</button>
           <button data-op="div" type="button">÷</button>
         </div>
-        <input class="frac-input" id="b" type="text" inputmode="text" value="2 3/4" placeholder="3/4 or 1 1/2 or 0.5" aria-label="3/4 Or 1 1/2 Or 0.5">
+        <input class="frac-input" id="b" type="text" inputmode="text" maxlength="1000" value="2 3/4" placeholder="3/4 or 1 1/2 or 0.5" aria-label="Second fraction">
       </div>
       <p class="note" id="err" hidden style="color:var(--bad);"></p>
 
@@ -71,7 +71,7 @@
     }
     function parseFrac(s) {
       s = String(s).trim();
-      if (s === "") return null;
+      if (s === "" || s.length > 1000) return null;
       // mixed "1 1/2" or "-1 1/2" (single whitespace run)
       if (/\s/.test(s) && s.indexOf("/") !== -1) {
         var parts = s.split(/\s+/);
@@ -79,8 +79,8 @@
           var w = tryInt(parts[0]); if (w === null) return null;
           var ff = parts[1].split("/"); if (ff.length !== 2) return null;
           var n = tryInt(ff[0]), d = tryInt(ff[1]); if (n === null || d === null) return null;
-          if (d === 0n) return null;
-          var num = w < 0n ? w * d - n : w * d + n;
+          if (d <= 0n || n < 0n || n >= d) return null;
+          var num = parts[0][0] === '-' ? w * d - n : w * d + n;
           return norm(num, d);
         }
         return null;
@@ -92,17 +92,25 @@
       }
       // decimal or integer
       if (/[.eE]/.test(s)) {
-        // exponent notation -> approximate via Number then to BigInt fraction (rare path)
+        // Parse decimal exponents as integers too: Number would round large
+        // values and String(Number) can recurse forever in exponential form.
         if (/[eE]/.test(s)) {
-          var fn = Number(s); if (!isFinite(fn)) return null;
-          return decToFraction(fn);
+          var match = /^([+-]?)(\d+(?:\.\d*)?|\.\d+)[eE]([+-]?\d+)$/.exec(s);
+          if (!match) return null;
+          var exponent = Number(match[3]);
+          if (!Number.isInteger(exponent) || Math.abs(exponent) > 1000) return null;
+          var mantissa = match[2].split('.');
+          var decimals = mantissa[1] || '';
+          var coefficient = BigInt((match[1] === '-' ? '-' : '') + (mantissa[0] || '0') + decimals);
+          var power = exponent - decimals.length;
+          return power >= 0 ? norm(coefficient * pow10(power), 1n) : norm(coefficient, pow10(-power));
         }
         // plain decimal: split on '.'
         var sign = "";
         if (s[0] === "+" || s[0] === "-") { sign = s[0]; s = s.slice(1); }
         var pp = s.split("."); if (pp.length !== 2) return null;
         var ip = pp[0] || "0", fp = pp[1] || "";
-        if (!/^\d*$/.test(ip) || !/^\d*$/.test(fp)) return null;
+        if (!/^\d*$/.test(ip) || !/^\d*$/.test(fp) || !/\d/.test(s)) return null;
         var den = pow10(fp.length);
         var digits = (ip + fp) === "" ? "0" : (ip + fp);
         var num = BigInt((sign === "-" ? "-" : "") + digits);
@@ -117,12 +125,6 @@
       return null;
     }
     function pow10(n) { var r = 1n; while (n-- > 0) r *= 10n; return r; }
-    function decToFraction(x) {
-      // best exact from a finite double: use the decimal string of the double
-      if (!isFinite(x)) return null;
-      var s = String(x);
-      return parseFrac(s);   // String(Number) yields plain decimal -> exact-ish (double precision)
-    }
 
     function opFrac(a, b, kind) {
       var an = a.num, ad = a.den, bn = b.num, bd = b.den;
@@ -162,6 +164,7 @@
       }
       var sign = neg ? "-" : "";
       if (rem === 0n) return sign + ip.toString() + "." + frac;
+      if (repStart === null) return sign + ip.toString() + "." + frac + '… (truncated)';
       return sign + ip.toString() + "." + frac.slice(0, repStart) + "(" + frac.slice(repStart) + ")";
     }
 

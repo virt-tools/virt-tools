@@ -159,6 +159,12 @@ and [the audit guide](docs/audits/INDIVIDUAL_TOOL_AUDIT.md) for review evidence 
 ledger maintenance. Automated validation does not imply every tool has been
 individually reviewed.
 
+For the catalog-wide UI baseline and targeted calculation regressions, see the
+[2026-10-08 audit evidence](docs/audits/TOOL_REVIEW_FIXES.md#2026-10-08-catalog-ui-and-correctness-pass).
+The full browser pass is `node tests/catalog_audit.mjs` against a local server;
+focused regressions are `node tests/tool_correctness.mjs` and
+`node tests/unit_converter.test.cjs`. These are local checks, not GitHub workflows.
+
 ## Reviewing feedback (offline, developer only)
 
 The admin tool runs inside the `api` container so it reads the same data volume:

@@ -3,61 +3,79 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="/assets/theme-init.js"></script>
 <title>Loan Calculator — virt.tools</title>
 <link rel="stylesheet" href="/assets/style.css">
-<style>
-.lc{max-width:600px;margin:0 auto;padding:2rem 1rem}
-.lc h1{font-size:2rem;margin-bottom:.5rem}
-.lc .sub{color:#888;margin-bottom:1.5rem}
-.lc label{font-size:14px;display:block;margin-bottom:4px;margin-top:1rem}
-.lc input{width:100%;font-size:15px;padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);box-sizing:border-box}
-.lc select{width:100%;font-size:15px;padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);box-sizing:border-box}
-.lc .btn{padding:10px 22px;border:none;border-radius:8px;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;margin-top:1.5rem}
-.lc .results{margin-top:2rem}
-.lc .res-card{padding:1.2rem;border:1px solid var(--border);border-radius:12px;margin-bottom:1rem;background:var(--bg)}
-.lc .res-card .big{font-size:2rem;font-weight:700;color:var(--accent)}
-.lc .res-card .lbl{color:#888;font-size:13px}
-.lc table{width:100%;border-collapse:collapse;margin-top:1rem;font-size:13px}
-.lc th,.lc td{padding:8px;text-align:right;border-bottom:1px solid var(--border)}
-.lc th{text-align:left}
-</style>
 </head>
 <body>
 <header id="site-header"></header>
-<main class="lc">
-<h1>🏦 Loan Calculator</h1>
-<p class="sub">Calculate monthly payments, total interest, and full amortization schedule.</p>
-<label for="amount">Loan amount ($):</label>
-<input type="number" id="amount" value="250000" min="0" oninput="calc()">
-<label for="rate">Annual interest rate (%):</label>
-<input type="number" id="rate" value="6.5" min="0" step="0.01" oninput="calc()">
-<label for="years">Loan term (years):</label>
-<input type="number" id="years" value="30" min="1" oninput="calc()">
-<button class="btn" onclick="calc()" type="button">Calculate</button>
-<div class="results" id="results"></div>
+<main class="tool-container">
+<h1>Loan Calculator</h1>
+<p class="subtitle">Estimate a fixed-rate loan's monthly payment and total interest.</p>
+<form class="input-section" id="loan-form" novalidate>
+  <label for="amount">Loan amount ($)</label>
+  <input type="number" id="amount" value="250000" min="0.01" max="1000000000000" step="any" required>
+  <label for="rate">Annual interest rate (%)</label>
+  <input type="number" id="rate" value="6.5" min="0" max="100" step="any" required>
+  <label for="years">Loan term (years)</label>
+  <input type="number" id="years" value="30" min="0" max="50" step="any" aria-describedby="term-hint" required>
+  <span class="note" id="term-hint">Use a term of 1–600 whole months; for example, 1.5 years is 18 months.</span>
+  <button type="submit">Calculate</button>
+</form>
+<p id="loan-error" role="alert" class="note"></p>
+<section class="result-section" id="results" aria-live="polite"></section>
+<details id="schedule" hidden>
+  <summary id="schedule-title">View monthly payment schedule</summary>
+  <p class="note">Values are calculated before rounding to cents. Your lender's rounding and payment dates may differ.</p>
+  <div style="max-height:420px;overflow:auto" tabindex="0" role="region" aria-label="Monthly payment schedule"><table>
+    <thead><tr><th scope="col">Month</th><th scope="col">Payment</th><th scope="col">Principal</th><th scope="col">Interest</th><th scope="col">Balance</th></tr></thead>
+    <tbody id="schedule-rows"></tbody>
+  </table></div>
+</details>
+<p class="note">Assumes a fixed interest rate, monthly payments, and no extra payments. Excludes taxes, insurance, fees, and variable rates. This estimate is not a loan offer.</p>
 </main>
 <script src="/assets/app.js"></script>
 <script>
-function calc(){
-  const P=parseFloat(document.getElementById('amount').value)||0;
-  const r=(parseFloat(document.getElementById('rate').value)||0)/100/12;
-  const n=(parseFloat(document.getElementById('years').value)||1)*12;
-  let monthly,totalInterest,totalPaid;
-  if(r===0){monthly=P/n;totalPaid=P;totalInterest=0;}
-  else{monthly=P*r*Math.pow(1+r,n)/(Math.pow(1+r,n)-1);totalPaid=monthly*n;totalInterest=totalPaid-P;}
-  let html='<div class="res-card"><div class="lbl">Monthly Payment</div><div class="big">$'+monthly.toFixed(2)+'</div></div>';
-  html+='<div class="res-card"><div class="lbl">Total Interest</div><div class="big">$'+totalInterest.toFixed(2)+'</div></div>';
-  html+='<div class="res-card"><div class="lbl">Total Paid</div><div class="big">$'+totalPaid.toFixed(2)+'</div></div>';
-  let bal=P;let rows='';
-  for(let i=1;i<=Math.min(n,360);i++){
-    const intPart=bal*r;const princPart=monthly-intPart;bal-=princPart;
-    if(bal<0)bal=0;
-    rows+='<tr><td>'+i+'</td><td>'+monthly.toFixed(2)+'</td><td>'+princPart.toFixed(2)+'</td><td>'+intPart.toFixed(2)+'</td><td>'+bal.toFixed(2)+'</td></tr>';
+(function(){
+  'use strict';
+  const form=document.getElementById('loan-form'),results=document.getElementById('results'),error=document.getElementById('loan-error'),schedule=document.getElementById('schedule'),rows=document.getElementById('schedule-rows');
+  const currency=new Intl.NumberFormat(undefined,{style:'currency',currency:'USD'});
+  function read(id,min,max,label){
+    const input=document.getElementById(id),value=Number(input.value);
+    if(!input.value.trim()||!Number.isFinite(value)||value<min||value>max){input.setAttribute('aria-invalid','true');throw new Error(label+' must be a number from '+min+' to '+max+'.');}
+    return value;
   }
-  html+='<h3>Amortization Schedule</h3><table><tr><th>#</th><th>Payment</th><th>Principal</th><th>Interest</th><th>Balance</th></tr>'+rows+'</table>';
-  document.getElementById('results').innerHTML=html;
-}
-calc();
+  function calc(){
+    results.replaceChildren();rows.replaceChildren();error.textContent='';schedule.hidden=true;
+    form.querySelectorAll('[aria-invalid]').forEach(input=>input.removeAttribute('aria-invalid'));
+    try{
+      const principal=read('amount',0.01,1e12,'Loan amount'),annualRate=read('rate',0,100,'Interest rate'),years=read('years',1/12,50,'Loan term');
+      const months=Math.round(years*12),rate=annualRate/1200;
+      if(Math.abs(years*12-months)>1e-8){document.getElementById('years').setAttribute('aria-invalid','true');throw new Error('Loan term must equal a whole number of months.');}
+      // expm1/log1p avoid cancellation for rates very close to zero.
+      const payment=rate===0?principal/months:principal*rate/(-Math.expm1(-months*Math.log1p(rate)));
+      const total=payment*months,interest=Math.max(0,total-principal);
+      if(![payment,total,interest].every(Number.isFinite))throw new Error('Inputs are outside the supported numeric range.');
+      [['Monthly payment',payment],['Total interest',interest],['Total paid',total]].forEach(([label,value])=>{
+        const row=document.createElement('div');row.className='result-row';const term=document.createElement('span'),amount=document.createElement('strong');term.textContent=label;amount.textContent=currency.format(value);row.append(term,amount);results.append(row);
+      });
+      let balance=principal;
+      const fragment=document.createDocumentFragment();
+      for(let month=1;month<=months;month++){
+        const interestPart=balance*rate,principalPart=month===months?balance:Math.min(balance,payment-interestPart);
+        balance=Math.max(0,balance-principalPart);
+        const row=document.createElement('tr');
+        [String(month),currency.format(principalPart+interestPart),currency.format(principalPart),currency.format(interestPart),currency.format(balance)].forEach(value=>{const cell=document.createElement('td');cell.textContent=value;row.append(cell);});
+        fragment.append(row);
+      }
+      rows.append(fragment);schedule.hidden=false;
+      document.getElementById('schedule-title').textContent='View all '+months+' monthly payments';
+    }catch(problem){error.textContent=problem.message;}
+  }
+  form.addEventListener('submit',event=>{event.preventDefault();calc();form.querySelector('[aria-invalid]')?.focus();});
+  form.addEventListener('input',calc);
+  calc();
+})();
 </script>
 </body>
 </html>

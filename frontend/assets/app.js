@@ -781,6 +781,23 @@
     var heading = main.querySelector("h1");
     var title = heading ? heading.textContent.trim() : slug;
     main.classList.add("tool-page");
+    // Fixed-cell boards retain playable target sizes on narrow screens. Scroll
+    // just the board (also keyboard accessible), never the entire tool page.
+    var boardSelectors = {
+      "checkers": "#board", "chess": "#board", "color-sequence-memory": "#board",
+      "crossword": "#grid", "game-2048": "#board", "game-of-life": "#grid",
+      "gomoku": "#board", "killer-sudoku": "#grid", "knights-tour": "#board",
+      "nonogram": "#board", "reversi": "#board", "rubiks-cube": "#cube",
+      "simon-says": ".pad-grid", "sliding-puzzle": "#board",
+      "sudoku-puzzle": "#grid", "sudoku-solver": "#board", "synthesizer": "#keyboard",
+      "tic-tac-toe": "#board", "word-search": "#grid", "wordle": "#grid"
+    };
+    var board = boardSelectors[slug] && main.querySelector(boardSelectors[slug]);
+    if (board) {
+      var region = el("div", { class: "tool-scroll-region", tabindex: "0", role: "region", "aria-label": title + " board; scroll horizontally on small screens" });
+      board.parentNode.insertBefore(region, board);
+      region.appendChild(board);
+    }
     main.querySelectorAll(".tool-header .back").forEach(function (back) { back.remove(); });
 
     var breadcrumbs = el("nav", { class: "tool-breadcrumbs", "aria-label": "Breadcrumb" }, [
@@ -947,7 +964,10 @@
 
   function registerServiceWorker() {
     if (!("serviceWorker" in navigator) || !/^https?:$/.test(location.protocol)) return;
-    navigator.serviceWorker.register(ROOT + "service-worker.js", { scope: ROOT }).catch(function () {});
+    // Access itself can throw in a sandboxed preview with an opaque origin.
+    try {
+      navigator.serviceWorker.register(ROOT + "service-worker.js", { scope: ROOT }).catch(function () {});
+    } catch (_error) {}
   }
 
   function ready(callback) {

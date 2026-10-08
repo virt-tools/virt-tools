@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Keep the local test server and both browser suites in one supervised run.
+# Keep the local test server and browser suites in one supervised run.
 set -euo pipefail
 
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
@@ -43,3 +43,5 @@ fi
 
 node tests/browser_smoke.mjs
 node tests/ui_smoke.mjs
+node tests/unit_converter.test.cjs
+node tests/tool_correctness.mjs

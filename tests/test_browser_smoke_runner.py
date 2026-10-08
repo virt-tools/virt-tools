@@ -75,7 +75,7 @@ if [ "$STUB_MODE" = ui_failure ] && [ "$1" = tests/ui_smoke.mjs ]; then exit 23;
         self.assertEqual((self.root / "attempts").read_text().strip(), "4")
         self.assertEqual(
             (self.root / "suites").read_text().splitlines(),
-            ["tests/browser_smoke.mjs", "tests/ui_smoke.mjs"],
+            ["tests/browser_smoke.mjs", "tests/ui_smoke.mjs", "tests/unit_converter.test.cjs", "tests/tool_correctness.mjs"],
         )
 
     def test_startup_failure_prints_log_without_running_tests(self):

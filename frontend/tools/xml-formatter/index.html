@@ -12,48 +12,48 @@
 <h1>XML Formatter & Minifier</h1>
 <p class="subtitle">Format XML with proper indentation or minify it to reduce size. 100% client-side.</p>
 <div class="input-section">
-<label>Paste XML</label>
-<textarea id="input" rows="10" placeholder="<root aria-label="<Root>"><item>value</item></root>"></textarea>
+<label for="input">Paste XML</label>
+<textarea id="input" rows="10" placeholder="&lt;root&gt;&lt;item&gt;value&lt;/item&gt;&lt;/root&gt;"></textarea>
 <div style="margin-top:8px">
 <button id="format" class="primary-btn" type="button">Format</button>
 <button id="minify" class="primary-btn" type="button">Minify</button>
 </div>
 </div>
-<div id="result" style="margin-top:1em;"></div>
+<div id="result" aria-live="polite" style="margin-top:1em;"></div>
+<p class="note">Preserves mixed text, CDATA, and xml:space="preserve". Formatting changes whitespace-only indentation between child elements; avoid it when that whitespace is meaningful. Limit: 1 MiB.</p>
 <script>
 document.addEventListener('DOMContentLoaded',()=>{
-function formatXML(xml){
-let formatted='';let indent='';let inTag=false;let inContent=false;
-for(let i=0;i<xml.length;i++){
-const c=xml[i];
-if(c==='<'){
-if(inContent&&formatted){formatted=formatted.replace(/\s+$/,'');}
-formatted+='\n'+indent;
-inTag=true;
+const parserErrorNamespace=new DOMParser().parseFromString('<','application/xml').querySelector('parsererror').namespaceURI;
+function transformXML(xml,pretty){
+  if(new Blob([xml]).size>1048576)throw new Error('XML is limited to 1 MiB.');
+  const doc=new DOMParser().parseFromString(xml,'application/xml');
+  if(doc.getElementsByTagNameNS(parserErrorNamespace,'parsererror').length)throw new Error('Enter well-formed XML.');
+  let count=0;
+  function visit(element,depth,inherited){
+    if(depth>100||++count>20000)throw new Error('XML is too deeply nested or has too many elements.');
+    const setting=element.getAttributeNS('http://www.w3.org/XML/1998/namespace','space');
+    const preserve=setting==='preserve'||(setting!=='default'&&inherited);
+    const children=Array.from(element.childNodes);
+    if(preserve||children.some(node=>node.nodeType===4||(node.nodeType===3&&node.nodeValue.trim())))return;
+    children.filter(node=>node.nodeType===1).forEach(child=>visit(child,depth+1,preserve));
+    if(!children.some(node=>node.nodeType===1))return;
+    children.filter(node=>node.nodeType===3&&!node.nodeValue.trim()).forEach(node=>node.remove());
+    if(pretty){
+      Array.from(element.childNodes).forEach(child=>element.insertBefore(doc.createTextNode('\n'+'  '.repeat(depth+1)),child));
+      element.append(doc.createTextNode('\n'+'  '.repeat(depth)));
+    }
+  }
+  visit(doc.documentElement,0,false);
+  const declaration=xml.match(/^\s*(<\?xml\s[^?]*\?>)/)?.[1];
+  const serialized=new XMLSerializer().serializeToString(doc).replace(/^<\?xml\s[^?]*\?>\s*/,'');
+  return (declaration?declaration+(pretty?'\n':''):'')+serialized;
 }
-formatted+=c;
-if(c==='>'){
-inTag=false;
-inContent=true;
-if(xml[i-1]==='/'){
-indent=indent.slice(2);
-}
-}
-if(c==='>'&&!inTag){
-const next=xml.slice(i+1).trimStart();
-if(next.startsWith('</')){
-indent=indent.slice(2);
-}
-if(!next.startsWith('</')&&!next.startsWith('<')&&next){
-indent+='  ';
-}
-}
-}
-return formatted.trim();
-}
-function minifyXML(xml){return xml.replace(/>\s+</g,'><').replace(/\s{2,}/g,' ').trim();}
+function formatXML(xml){return transformXML(xml,true);}
+function minifyXML(xml){return transformXML(xml,false);}
+function showError(message){const result=document.getElementById('result');result.textContent=message;}
+document.getElementById('input').addEventListener('input',()=>document.getElementById('result').replaceChildren());
 function showResult(text){
-const ta=document.createElement('textarea');ta.value=text;ta.rows=12;ta.style.width='100%';
+const ta=document.createElement('textarea');ta.value=text;ta.rows=12;ta.style.width='100%';ta.readOnly=true;ta.setAttribute('aria-label','XML output');
 const btn=document.createElement('button');btn.textContent='Copy';btn.className='primary-btn';btn.style.marginTop='4px';
 btn.addEventListener('click',()=>{ta.select();document.execCommand('copy');btn.textContent='Copied!';});
 const size=document.createElement('p');size.textContent=`Size: ${new Blob([text]).size} bytes`;
@@ -62,12 +62,12 @@ const r=document.getElementById('result');r.innerHTML='';r.appendChild(size);r.a
 document.getElementById('format').addEventListener('click',()=>{
 const input=document.getElementById('input').value;
 if(!input.trim()){document.getElementById('result').innerHTML='<p style="color:#ff9800">No input.</p>';return;}
-try{showResult(formatXML(input));}catch(e){document.getElementById('result').innerHTML=`<p style="color:#f44336">Error: ${e.message}</p>`;}
+try{showResult(formatXML(input));}catch(e){showError(e.message);}
 });
 document.getElementById('minify').addEventListener('click',()=>{
 const input=document.getElementById('input').value;
 if(!input.trim()){document.getElementById('result').innerHTML='<p style="color:#ff9800">No input.</p>';return;}
-showResult(minifyXML(input));
+try{showResult(minifyXML(input));}catch(e){showError(e.message);}
 });
 });
 </script>

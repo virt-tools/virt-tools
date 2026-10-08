@@ -4,7 +4,7 @@ from __future__ import annotations
 import re,sys
 from pathlib import Path
 
-CONTROL_RE=re.compile(r'<(?:input|select|textarea)\b[^>]*>',re.I)
+CONTROL_RE=re.compile(r'''<(?:input|select|textarea)\b(?:[^>"']|"[^"]*"|'[^']*')*>''',re.I)
 BUTTON_RE=re.compile(r'<button\b[^>]*>',re.I)
 INLINE_SCRIPT_RE=re.compile(r'<script(?![^>]*\bsrc=)[^>]*>.*?</script>',re.I|re.S)
 
@@ -13,6 +13,7 @@ def main():
  for page in pages:
   text=page.read_text(encoding='utf-8'); low=text.lower(); label=page.relative_to(frontend)
   markup=INLINE_SCRIPT_RE.sub('',text)
+  if re.search(r'</[a-z][a-z0-9]*\}',markup,re.I): issues.append(f'{label}: malformed closing tag')
   required=[('<html lang=','language'),('name="viewport"','viewport'),('/assets/style.css','shared stylesheet'),('<main','main landmark'),('<h1','page heading')]
   for needle,name in required:
    if needle not in low: issues.append(f'{label}: missing {name}')

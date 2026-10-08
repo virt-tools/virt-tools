@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-CONTROL_RE=re.compile(r'<(input|select|textarea)\b[^>]*>',re.I)
+CONTROL_RE=re.compile(r'''<(input|select|textarea)\b(?:[^>"']|"[^"]*"|'[^']*')*>''',re.I)
 BUTTON_RE=re.compile(r'<button\b(?![^>]*\btype\s*=)[^>]*>',re.I)
 
 def humanize(value):
@@ -44,7 +44,7 @@ def normalize(path):
   for attr in ('placeholder','name','id'):
    found=re.search(rf'\b{attr}=["\']([^"\']+)',tag,re.I)
    if found: source=found.group(1); break
-  return tag[:-1]+f' aria-label="{humanize(source or match.group(1))}">'+tag[-1]
+  return tag[:-1]+f' aria-label="{humanize(source or match.group(1))}">'
  text=CONTROL_RE.sub(control,text)
  form_ranges=[(m.start(),m.end()) for m in re.finditer(r'<form\b.*?</form>',text,re.I|re.S)]
  def button(match):

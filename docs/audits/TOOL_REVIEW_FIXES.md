@@ -3,6 +3,153 @@
 This historical report records confirmed defects fixed during tool reviews. Counts
 and verification results reflect the workspace at the time of each fix.
 
+## 2026-10-08 catalog UI and correctness pass
+
+Scope: 3,416 retained source pages, of which 1,739 are public. The initial
+browser pass flagged 155 public pages for startup failures, missing control
+names, horizontal overflow, or non-finite default results. All 155 passed
+targeted rechecks after corrections. A broader follow-up pass also caught a
+shifted-column bug in the food-storage guide. This is a browser baseline and targeted
+correctness work, **not** independent mathematical or professional validation
+of every tool. Existing quarantine, maturity labels, and pending individual
+audit records remain unchanged.
+
+### Confirmed repairs
+
+- Shared layout: shrinkable form/grid tracks, wrapping results and code,
+  stacked key/value results on phones, theme-aware legacy color variables,
+  correctly clipped hidden file pickers, and keyboard-scrollable fixed-size
+  game boards. Wide tables scroll locally instead of widening the page.
+- Startup: fixed malformed closing tags in five cipher pages; incorrect
+  variables in geometry, matrices, vectors, equation solving, resistor colors,
+  Mad Libs, exposure value, and the circle of fifths; an L-system state shadow;
+  and attempts to assign the read-only textarea `type` in two inventory tools.
+- Accessible controls: corrected malformed placeholder attributes and named
+  dynamically generated inputs. The design normalizer now respects `>` inside
+  quoted attributes and does not append a second closing bracket. Its new test
+  preserves template-variable case and checks idempotence.
+- Percentage calculator: repaired percentage-change mode, keyboard submission,
+  missing-input errors, zero-denominator handling, and stale results.
+- Length converter: corrected computer points/picas, rods/chains, and the
+  angstrom input factor; uses one unit table for both input and output; tiny
+  nonzero results are no longer rounded to zero.
+- All 37 shared converters: reject non-finite results and empty input; identity
+  conversion preserves tiny values even in offset units. Temperature tools
+  reject values below absolute zero. The new Node tests state one independent
+  reference conversion per quantity, rather than relying only on round trips.
+- Fraction calculator: scientific notation is parsed exactly with bounded
+  BigInts, without recursive conversion through `Number`; negative-zero mixed
+  numbers and invalid decimal points are handled; truncated expansions are not
+  falsely labelled repeating.
+- Loan calculator: simpler payment summary with an expandable full schedule,
+  bounded whole-month terms, explicit empty-input errors, stable near-zero
+  interest arithmetic, and schedules beyond 360 months.
+- Compound-interest pages: monthly contributions no longer become daily or
+  annual contributions when frequency changes; zero interest works; the
+  equivalent-monthly-rate assumption is explicit. The per-period variant
+  rejects fractional years, clears stale results/exports, and guards precision.
+- Retirement savings: corrected the employer-match variable that produced
+  `NaN` for default inputs; validates finite amounts, age ranges, and numerical
+  overflow, with explicit model assumptions. This does not validate tax limits
+  or plan rules.
+- Statistics: strict numeric tokens, bounded data size, finite results,
+  interpolated quartiles, and an explicit unavailable sample deviation for
+  one observation. Invalid tokens are no longer silently dropped.
+- Dates: correct years below 100, bounded spans, constant-time weekday counts,
+  inclusive end dates, and month-end clamping; weekday counts do not account for
+  public holidays.
+- Ring sizes: replaced incorrect formulas and a string passed to `Math.max`
+  with nearest-row GIA reference estimates, explicit supported range and fit
+  limitations; removed unsupported regional/ISO equivalence claims.
+- PEM viewer: restored the shared shell; literal DOM output, strict Base64,
+  bounded input, separate hashes for each block, and stale-request protection.
+  The tool explicitly does not establish certificate or key validity.
+- Gratitude journal: empty storage no longer causes an infinite streak loop;
+  malformed saved JSON does not prevent startup, local dates are used, and
+  prompt text uses DOM values. Removed its now-unneeded raw-HTML exception.
+- HTML entity reference: displays and copies literal entity names and numeric
+  references instead of accidentally decoding them into characters.
+- Vectors/matrix multiplication: explicit zero-vector angle/2D-cross errors,
+  finite components/results, and bounded integer matrix dimensions.
+- Determinants, equation solving, and geometry: reject missing/non-finite
+  inputs and overflowing results; distinguish numerical precision from exact
+  algebraic certainty.
+- XML formatter: validates well-formed input, preserves mixed text, CDATA,
+  `xml:space="preserve"`, and a single XML declaration. Minification no longer
+  collapses meaningful text spaces; invalid input clears old output. Structural
+  indentation changes and input limits are explained next to the controls.
+- Food storage: the old four-field data was rendered as five columns, placing
+  refrigerated times under pantry storage and notes under freezer storage.
+  Replaced it with 22 explicitly sourced cold-storage entries, named fields,
+  two condition-labelled results, a link for other foods, and a warning that
+  smell/appearance cannot establish safety. Unsourced pantry/produce estimates
+  were removed from the tool; their previous contents remain in Git history.
+
+### Reproduce and interpret the checks
+
+Install the Playwright version documented in the operations guide. Start a
+local server with `python3 -m http.server 4173 --directory frontend`, then run:
+
+```sh
+node tests/catalog_audit.mjs
+node tests/tool_correctness.mjs
+node tests/formula_workbench_ui.mjs
+node tests/unit_converter.test.cjs
+python3 -m unittest discover -s tests -p test_design_normalizer.py
+```
+
+The catalog audit visits every generated public route at 320px/light and
+1280px/dark, checks startup errors, failed local assets, accessible input names,
+page overflow, and bounded default actions where populated inputs are present.
+It blocks external requests and production API calls. `AUDIT_REPORT` optionally
+writes a JSON report; `AUDIT_FROM` rechecks failures in an earlier report, and
+`AUDIT_SLUGS` limits a run to comma-separated slugs. A scoped run is never a
+replacement for the full pass after shared changes.
+
+The numerical browser suite covers the repairs above and all shared converter
+configurations. The existing formula checks execute 160 generated formulas and
+57 golden vectors; the new formula UI suite checks all examples, golden vectors,
+and empty/malformed/overflow inputs with stale-result handling. Existing
+browser/UI suites cover discovery and eight
+responsive/theme combinations. Full static checks still cover retained legacy
+and quarantined source pages. None of these tests exhausts every interactive
+state, file format, browser, or specialized domain assumption. The existing
+individual audit ledger remains the source for unfinished detailed reviews.
+
+Final verification for this pass:
+
+- Full public-catalog scan: 1,739 routes, mobile/light and desktop/dark layouts,
+  plus 220 populated default actions. Its one remaining finding was the food
+  storage display; after correction, all 11 final changed-page rechecks passed.
+  No shared layout changes were made after that full scan.
+- Focused browser correctness regressions passed, including all 37 shared
+  converter configurations and all 22 revised food-reference entries.
+- Formula UI: 160 examples, 57 golden vectors, and 480 invalid-input/stale-result
+  checks passed, in addition to the isolated formula-function checks.
+- Catalog, routes, design, conversion consolidation, formula generation,
+  browser security, risk policy, operations, and JavaScript syntax checks passed.
+- 38 host Python tests and 9 containerized feedback API tests passed.
+- The updated local browser smoke runner passed against a disposable
+  SEO-generated copy, including discovery, eight viewport/theme combinations,
+  shared-converter checks, and the focused correctness regressions. All eight
+  pre-existing Farkle unit tests also passed.
+- These are local results. No commit, push, or production deployment was made
+  by this audit; pre-existing Farkle work was preserved.
+
+### Primary references used for targeted numerical checks
+
+- [NIST SP 811 conversion factors](https://www.nist.gov/pml/special-publication-811/nist-guide-si-appendix-b-conversion-factors/nist-guide-si-appendix-b8)
+  for SI/customary conversions; typography explicitly uses computer points and picas.
+- [CFPB monthly loan payment example](https://www.consumerfinance.gov/ask-cfpb/how-do-mortgage-lenders-calculate-monthly-payments-en-1965/)
+  as an independent amortization sanity check, not a claim of loan suitability.
+- [R quantile documentation](https://www.stat.ethz.ch/R-manual/R-devel/library/stats/html/quantile.html)
+  for the explicitly selected type-7 quartile convention.
+- [GIA ring-size chart](https://4cs.gia.edu/en-us/blog/how-to-determine-ring-size-tips-and-ring-size-chart/)
+  for approximate chart lookups, not universal equivalence between brands.
+- [FoodSafety.gov cold-storage chart](https://www.foodsafety.gov/food-safety-charts/cold-food-storage-charts)
+  and [FDA storage guidance](https://www.fda.gov/consumers/consumer-updates/are-you-storing-food-safely)
+  for the revised, condition-specific food-storage reference.
+
 ## Registry integrity and broken catalog routes
 
 - Found 1,366 registry entries for 1,287 tool pages. Seventy-six slugs were

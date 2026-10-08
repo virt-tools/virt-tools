@@ -234,12 +234,14 @@ python3 scripts/validate_operations.py
 node scripts/validate_javascript.mjs frontend
 node scripts/validate_formula_workbenches.mjs .
 node tests/security/math-expression.test.cjs
+node tests/unit_converter.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py' -v
 ```
 
 Run browser checks in a disposable checkout: metadata generation rewrites HTML
-and browser setup installs local test dependencies. Both suites use a supervised
-static server and retain failure diagnostics:
+and browser setup installs local test dependencies. The smoke runner includes
+the UI suites and targeted correctness regressions, using a supervised static
+server with failure diagnostics:
 
 ```sh
 npm install --no-save --ignore-scripts --package-lock=false playwright@1.54.2
@@ -247,6 +249,13 @@ npx playwright install --with-deps chromium
 python3 scripts/generate_seo.py frontend https://virt.tools
 bash scripts/run_browser_smoke.sh
 ```
+
+For shared UI or catalog-wide changes, also start a local static server on port
+4173 and run `node tests/catalog_audit.mjs`. This visits all public tool pages;
+it does not certify every algorithm. `node tests/formula_workbench_ui.mjs`
+exercises every generated formula's example, recorded golden vectors, and
+invalid-input handling through the real browser UI. Keep raw reports under the
+ignored `runtime/audit/` directory if using `AUDIT_REPORT`.
 
 Dependency audits and production-image security checks remain available
 manually. Use a candidate-only tag, then deploy through the blue-green process
