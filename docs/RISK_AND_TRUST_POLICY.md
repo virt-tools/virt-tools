@@ -1,5 +1,7 @@
 # Tool Risk and Trust Policy
 
+File paths in this guide are relative to the repository root.
+
 Virtual Tools is a browser-local utility catalog, not a substitute for a
 qualified professional, an applicable code or standard, a listed product's
 instructions, or an independently verified engineering model.

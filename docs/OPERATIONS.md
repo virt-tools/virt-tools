@@ -1,5 +1,7 @@
 # Operations
 
+Run the commands in this guide from the repository root.
+
 ## Hardened standard deployment
 
 The standard Compose deployment publishes the web service at
@@ -208,18 +210,62 @@ The deployment script creates the named feedback volume when absent, and the
 slot Compose model treats it as external so both releases attach it without
 project-ownership warnings or accidental lifecycle coupling.
 
-## Continuous integration
+## Release checks
 
-The workflows under `.github/workflows/` run:
+Repository GitHub Actions workflows and scheduled Dependabot updates have been
+removed. No automatic GitHub test, build, or container-scan gate is configured.
+The local validators, browser suites, and Docker build checks are retained.
+Run the relevant checks before releasing; removing automation does not mean
+unchecked changes are safe to deploy.
 
-- canonical catalog, route, conversion, design, risk, audit-ledger, operations,
-  and JavaScript validation;
-- API schema, rate-limit, health, and WAL-safe backup tests;
-- Chromium smoke tests over the homepage and representative tool routes;
-- production container builds, pinned Python dependency auditing, and weekly
-  high/critical container vulnerability scans;
-- an isolated public-edge response test proving feedback responses retain
-  no-store, privacy, framing, and MIME headers without leaking Gunicorn's
-  upstream `Server` value.
+Install the pinned API dependencies, then run the source and unit checks:
 
-Treat all three workflows as required checks for the protected release branch.
+```sh
+python3 -m pip install --requirement api/requirements.txt
+python3 scripts/generate_tool_catalog.py frontend --check
+python3 scripts/generate_formula_workbenches.py --check
+python3 scripts/validate_formula_workbenches.py .
+python3 scripts/validate_tools.py frontend
+python3 scripts/validate_generated_conversions.py .
+python3 scripts/validate_tool_design.py frontend
+python3 scripts/validate_risk_policy.py .
+python3 scripts/validate_browser_security.py
+python3 scripts/validate_operations.py
+node scripts/validate_javascript.mjs frontend
+node scripts/validate_formula_workbenches.mjs .
+node tests/security/math-expression.test.cjs
+python3 -m unittest discover -s tests -p 'test_*.py' -v
+```
+
+Run browser checks in a disposable checkout: metadata generation rewrites HTML
+and browser setup installs local test dependencies. Both suites use a supervised
+static server and retain failure diagnostics:
+
+```sh
+npm install --no-save --ignore-scripts --package-lock=false playwright@1.54.2
+npx playwright install --with-deps chromium
+python3 scripts/generate_seo.py frontend https://virt.tools
+bash scripts/run_browser_smoke.sh
+```
+
+Dependency audits and production-image security checks remain available
+manually. Use a candidate-only tag, then deploy through the blue-green process
+above after verification; these commands do not switch production traffic:
+
+```sh
+python3 -m pip install pip-audit==2.9.0
+python3 -m pip_audit --requirement api/requirements.txt
+docker compose config --quiet
+VT_IMAGE_TAG=local-check docker compose build --pull
+VT_API_TEST_IMAGE=virt-tools-api:local-check scripts/test_edge_headers.sh
+docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+  aquasec/trivy:0.58.1 image --ignore-unfixed --exit-code 1 \
+  --severity HIGH,CRITICAL virt-tools-api:local-check
+docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+  aquasec/trivy:0.58.1 image --ignore-unfixed --exit-code 1 \
+  --severity HIGH,CRITICAL virt-tools-web:local-check
+```
+
+The edge-header test runs against isolated test containers; it verifies that
+feedback responses retain no-store, privacy, framing, and MIME headers without
+leaking Gunicorn's upstream `Server` value.

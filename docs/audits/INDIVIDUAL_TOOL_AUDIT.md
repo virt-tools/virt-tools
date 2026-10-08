@@ -2,7 +2,7 @@
 
 ## Honest scope
 
-`individual-tool-audit.json` accounts for every physical
+[The audit ledger](../../individual-tool-audit.json) accounts for every physical
 `frontend/tools/<slug>/index.html` page currently in the workspace. Accounting
 for a page is not the same as auditing it: a `pending` record means no completed
 individual review is claimed.
@@ -24,8 +24,10 @@ materialized. It contains **3,416** unique page records.
 
 This is **123 pages with a recorded audit outcome (3.60%)** and **3,293 pages
 still pending (96.40%)**. The completed evidence consists of 100 explicit
-second-wave page reviews documented in `SECOND_WAVE_INDIVIDUAL_AUDIT.md`, 15
-earlier fixed records, and eight targeted stabilization reviews. These figures do
+second-wave page reviews documented in
+[the second-wave report](SECOND_WAVE_INDIVIDUAL_AUDIT.md), 15
+earlier fixed records (see [confirmed repairs](TOOL_REVIEW_FIXES.md)), and eight
+targeted stabilization reviews. These figures do
 not support a claim that every tool in the project has been individually
 audited.
 
@@ -58,8 +60,8 @@ not constitute an individual page audit.
 
 ## Ledger maintenance
 
-Run the manager without a record to refresh physical-page coverage while
-preserving existing entries:
+From the repository root, run the manager without a record to refresh
+physical-page coverage while preserving existing entries:
 
 ```sh
 python3 scripts/manage_individual_tool_audit.py

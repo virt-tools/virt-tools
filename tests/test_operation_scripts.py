@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 import json
+import runpy
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,6 +12,42 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class OperationScriptTest(unittest.TestCase):
+    def test_root_markdown_is_limited_to_readme(self) -> None:
+        markdown = {
+            path.name for path in ROOT.iterdir()
+            if path.is_file() and path.suffix.lower() in {".md", ".markdown", ".mdown", ".mkd"}
+        }
+        self.assertEqual(markdown, {"README.md"})
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        maintenance = (ROOT / "scripts/feedback-maintenance-prompt.txt").read_text(
+            encoding="utf-8"
+        )
+        for guide in ("docs/OPERATIONS.md", "docs/RISK_AND_TRUST_POLICY.md"):
+            self.assertTrue((ROOT / guide).is_file())
+            self.assertIn(f"]({guide})", readme)
+            self.assertIn(guide, maintenance)
+
+    def test_audit_evidence_survives_documentation_cleanup(self) -> None:
+        audit = runpy.run_path(str(ROOT / "scripts" / "manage_individual_tool_audit.py"))
+        available = set(audit["page_slugs"]())
+        reviewed = audit["second_wave_slugs"](available)
+        self.assertEqual(len(reviewed), 100)
+        self.assertEqual(len(set(reviewed)), 100)
+        self.assertEqual(
+            audit["SECOND_WAVE_REPORT"],
+            ROOT / "docs" / "audits" / "SECOND_WAVE_INDIVIDUAL_AUDIT.md",
+        )
+        self.assertIn(
+            audit["SECOND_WAVE_REPORT"].relative_to(ROOT).as_posix(),
+            audit["SECOND_WAVE_FINDING"],
+        )
+        for record in audit["load_existing"]().values():
+            for finding in record["findings"]:
+                prefix = "Review and recheck evidence: "
+                if finding.startswith(prefix):
+                    evidence = finding[len(prefix):].removesuffix(".")
+                    self.assertTrue((ROOT / evidence).is_file(), evidence)
+
     def test_admin_cli_exposes_the_complete_feedback_lifecycle(self) -> None:
         result = subprocess.run(
             ["python3", str(ROOT / "scripts" / "manage_feedback.py"), "reply", "--help"],

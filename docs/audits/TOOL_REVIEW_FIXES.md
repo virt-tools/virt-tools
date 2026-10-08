@@ -1,6 +1,6 @@
 # Tool Review Fixes
 
-This file records confirmed defects fixed during the full tool review. Counts
+This historical report records confirmed defects fixed during tool reviews. Counts
 and verification results reflect the workspace at the time of each fix.
 
 ## Registry integrity and broken catalog routes

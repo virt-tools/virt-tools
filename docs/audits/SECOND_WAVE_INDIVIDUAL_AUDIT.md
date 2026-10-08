@@ -2,7 +2,7 @@
 
 ## Method
 
-- Scope: the 100 tools in `NEW_TOOL_PROPOSALS_2.md`.
+- Scope: the 100 tools listed individually under Confirmed fixes below.
 - Assignment: one fresh, independent subagent per tool; no batched audits.
 - Each auditor checks functional correctness, edge cases, security and bounded input handling, accessibility, responsive/theme behavior, truthful scope, exports, and JavaScript syntax.
 - Auditors may edit only their assigned tool page, fix confirmed findings, and rerun focused fixtures plus repository design and whitespace checks.

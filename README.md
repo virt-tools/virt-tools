@@ -45,8 +45,16 @@ nginx/
   nginx.conf           Serves frontend, proxies /api/ to the api service
   Dockerfile
 docker-compose.yml     web (nginx) + api, exposed on port 8080
-OPERATIONS.md          Deployment, privacy, backup and rollback runbook
+docs/
+  OPERATIONS.md        Deployment, privacy, backup and rollback runbook
+  RISK_AND_TRUST_POLICY.md
+                       Publication rules and review requirements
+  audits/              Retained review evidence and audit-ledger instructions
 ```
+
+Personal AI/editor settings and installed skills are local-only and ignored by
+Git; they are not needed to build or run the app. Superseded proposals and
+release summaries remain available in Git history.
 
 ## Adding a new tool
 
@@ -90,7 +98,7 @@ python3 scripts/validate_tools.py frontend
 The one-time converter migration scripts have been retired. Preserve legacy
 route mappings and retained source pages; the build omits redirect-source and
 unlisted pages from the runtime image while nginx preserves old URLs through
-exact redirects. See [OPERATIONS.md](OPERATIONS.md) for deployment details.
+exact redirects. See [the operations guide](docs/OPERATIONS.md) for deployment details.
 
 ## Catalog and search architecture
 
@@ -125,6 +133,32 @@ docker compose up -d --no-build
 
 Then open http://localhost:8080.
 
+## Development checks and documentation
+
+GitHub Actions workflows and scheduled Dependabot updates are disabled.
+Run checks locally before a release; core checks include:
+
+```bash
+python3 scripts/generate_tool_catalog.py frontend --check
+python3 scripts/generate_formula_workbenches.py --check
+python3 scripts/validate_tools.py frontend
+python3 scripts/validate_generated_conversions.py .
+node scripts/validate_javascript.mjs frontend
+python3 -m unittest discover -s tests -p 'test_*.py' -v
+```
+
+API tests require the pinned dependencies in `api/requirements.txt`. Shared
+design checks live in `scripts/validate_tool_design.py`; the repeatable markup
+normalizer is `scripts/normalize_tool_design.py`. Browser suites remain available
+through `bash scripts/run_browser_smoke.sh`; setup and the full manual release
+checklist are in [the operations guide](docs/OPERATIONS.md#release-checks).
+
+Use [the operations guide](docs/OPERATIONS.md) for production releases and rollback,
+[the risk policy](docs/RISK_AND_TRUST_POLICY.md) for publication requirements,
+and [the audit guide](docs/audits/INDIVIDUAL_TOOL_AUDIT.md) for review evidence and
+ledger maintenance. Automated validation does not imply every tool has been
+individually reviewed.
+
 ## Reviewing feedback (offline, developer only)
 
 The admin tool runs inside the `api` container so it reads the same data volume:
@@ -153,6 +187,6 @@ access.
   limiting; raw client addresses and UUID lookup paths are not retained in
   application access logs.
 
-See [OPERATIONS.md](OPERATIONS.md) for health probes, encrypted backup and
-restore, container controls, CI gates, and zero-downtime blue-green deployment
+See [the operations guide](docs/OPERATIONS.md) for health probes, encrypted backup and
+restore, container controls, local release checks, and zero-downtime blue-green deployment
 and rollback.

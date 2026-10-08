@@ -1,6 +1,5 @@
-"""Test CI startup, failure reporting, and cleanup without a real browser."""
+"""Test local browser startup, failure reporting, and cleanup without a browser."""
 import os
-import re
 import shutil
 import subprocess
 import tempfile
@@ -107,22 +106,6 @@ if [ "$STUB_MODE" = ui_failure ] && [ "$1" = tests/ui_smoke.mjs ]; then exit 23;
         result = self.run_smoke("ui_failure")
         self.assertEqual(result.returncode, 23)
         self.assertIn("test server diagnostic", result.stderr)
-
-    def test_workflow_uses_supervised_runner(self):
-        workflow = (ROOT / ".github/workflows/browser-smoke.yml").read_text()
-        self.assertIn("run: bash scripts/run_browser_smoke.sh", workflow)
-        self.assertNotIn("run: python -m http.server", workflow)
-
-    def test_dependabot_docker_directories_contain_dockerfiles(self):
-        config = (ROOT / ".github/dependabot.yml").read_text()
-        docker = config.split("  - package-ecosystem: docker\n", 1)[1].split(
-            "  - package-ecosystem:", 1
-        )[0]
-        directories = re.findall(r"^      - (/\S+)$", docker, flags=re.MULTILINE)
-        self.assertEqual(set(directories), {"/api", "/nginx"})
-        for directory in directories:
-            self.assertTrue((ROOT / directory.lstrip("/") / "Dockerfile").is_file())
-
 
 if __name__ == "__main__":
     unittest.main()

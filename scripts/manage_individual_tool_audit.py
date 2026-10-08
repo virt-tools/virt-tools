@@ -13,10 +13,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 TOOLS_ROOT = ROOT / "frontend" / "tools"
 LEDGER = ROOT / "individual-tool-audit.json"
-SECOND_WAVE_REPORT = ROOT / "SECOND_WAVE_INDIVIDUAL_AUDIT.md"
+SECOND_WAVE_REPORT = ROOT / "docs" / "audits" / "SECOND_WAVE_INDIVIDUAL_AUDIT.md"
 SECOND_WAVE_AGENT = "documented second-wave individual audit"
 SECOND_WAVE_FINDING = (
-    "Review and recheck evidence: SECOND_WAVE_INDIVIDUAL_AUDIT.md."
+    "Review and recheck evidence: docs/audits/SECOND_WAVE_INDIVIDUAL_AUDIT.md."
 )
 STATUSES = ("pending", "auditing", "clean", "findings", "fixed", "rechecked")
 
@@ -31,7 +31,7 @@ def parse_args() -> argparse.Namespace:
         "--sync-second-wave",
         action="store_true",
         help=(
-            "mark the 100 explicit tools in SECOND_WAVE_INDIVIDUAL_AUDIT.md "
+            "mark the 100 explicit tools in docs/audits/SECOND_WAVE_INDIVIDUAL_AUDIT.md "
             "as rechecked when their current status is pending"
         ),
     )

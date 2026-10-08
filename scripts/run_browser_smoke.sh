@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Keep the test server and both suites in one supervised CI step.
+# Keep the local test server and both browser suites in one supervised run.
 set -euo pipefail
 
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
