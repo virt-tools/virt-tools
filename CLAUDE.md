@@ -1,50 +1,48 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Repository guidance for coding agents. See [README.md](README.md) for the app
+layout and [OPERATIONS.md](OPERATIONS.md) for production operations.
 
-## What this is
+## Invariants
 
-Virtual Tools (virt.tools) is a privacy-first catalog of browser utilities. Every tool runs **fully client-side** — no tool makes a network request. The only server-side component is the anonymous feedback service (Flask + SQLite). Keep this invariant when adding tools: vendor any JS dependency under `frontend/vendor/` rather than loading from a CDN.
+- Tool inputs and calculations stay in the browser. Vendor dependencies under
+  `frontend/vendor/`; do not add runtime CDNs or transmit tool inputs.
+- Flask + SQLite handles anonymous feedback only. Administrative access is
+  through `scripts/manage_feedback.py`, never a public list/admin endpoint.
+- Preserve unlisted and redirect-source pages in Git for audit and compatibility.
+  The build prunes them from the runtime image. Follow
+  [RISK_AND_TRUST_POLICY.md](RISK_AND_TRUST_POLICY.md) before publishing
+  quarantined or higher-risk tools.
 
-## Commands
+## Sources of truth
+
+- Edit `frontend/assets/tool-catalog.json`, not generated `tools.js` or
+  `frontend/assets/tool-meta/*.json`. Regenerate with
+  `python3 scripts/generate_tool_catalog.py frontend`.
+- Edit `formula-workbenches.json` for generated formula tools, then run
+  `python3 scripts/generate_formula_workbenches.py`.
+- Maintain converter definitions and compatibility mappings as described in
+  the README's unit-converter section.
+
+## Verification and deployment
+
+CI in `.github/workflows/` defines the validation, security, and browser gates.
+Run the checks relevant to each change; the core checks include:
 
 ```bash
-# Build + run both services (web on :8080, api internal on :8000)
-docker compose up --build
-# Open http://localhost:8080
-
-# Rebuild just the frontend after editing files under frontend/
-docker compose up -d --build web
-
-# Review feedback (CLI runs inside the api container so it shares the data volume)
-docker compose exec api python /app/scripts/manage_feedback.py list
-docker compose exec api python /app/scripts/manage_feedback.py show <uuid>
-docker compose exec api python /app/scripts/manage_feedback.py reply <uuid> --status completed --text "Shipped!"
+python3 scripts/generate_tool_catalog.py frontend --check
+python3 scripts/generate_formula_workbenches.py --check
+python3 scripts/validate_tools.py frontend
+python3 scripts/validate_generated_conversions.py .
+node scripts/validate_javascript.mjs frontend
+python3 -m unittest discover -s tests -p 'test_*.py' -v
 ```
 
-There is no test suite, linter, or formatter configured. Verification is manual: rebuild `web`, then `curl` the new tool path and the homepage's `assets/tools.js` to confirm the catalog entry is present.
+API tests require the pinned dependencies in `api/requirements.txt`. See CI for
+the remaining formula, design, risk, operational, and browser checks.
 
-## Architecture
-
-Two containers defined in `docker-compose.yml`:
-
-- **web** (nginx, `nginx/Dockerfile`) — serves the static frontend from `/usr/share/nginx/html` and proxies `/api/` to the `api` service (`nginx/nginx.conf`). Exposed on host port 8080.
-- **api** (Flask, `api/Dockerfile`) — `api/app.py` exposes `POST /api/feedback`, `GET /api/feedback/<uuid>`, `GET /api/health`. Stores submissions in SQLite at `$VT_FEEDBACK_DB` (default `/data/feedback.db`, a named docker volume). `api/db.py` is the storage layer. There is **deliberately no public list/admin endpoint** — the admin surface is the offline CLI in `scripts/manage_feedback.py`, runnable only by someone with host/docker access.
-
-### Catalog is data-driven
-
-The homepage and per-tool nav are generated from `window.VIRTUAL_TOOLS` in `frontend/assets/tools.js`. **To add a tool:**
-1. Create `frontend/tools/<slug>/index.html` (copy an existing tool folder for the consistent header / back-link / styles).
-2. Add an entry to `frontend/assets/tools.js`. No other wiring — the homepage, search, and "Recently added" view all derive from this registry.
-
-Entry fields: `slug`, `name`, `description`, `category`, `icon` (emoji), `added` (ISO 8601 timestamp — drives the "Recently added" tab and the "Added X ago" card label; use the first-commit date of the tool's folder).
-
-`frontend/assets/app.js` injects the shared site header (any element with `id="site-header"`), renders the catalog (grouped-by-category vs. flat "recent", view choice persisted in `localStorage`), and wires client-side search. It exposes `window.VT = { el, ready, ROOT }` for tool pages to reuse.
-
-### Asset cache-busting (nginx Dockerfile)
-
-The `web` image build rewrites every `assets/*.js` and `assets/*.css` reference in the built HTML to append `?v=<build-timestamp>`, forcing returning visitors to fetch changed assets. This sed pass only matches the `assets/` path prefix — **vendored libraries under `frontend/vendor/` are not versioned**, so when you add a new vendor file just reference it directly (e.g. `/vendor/foo.min.js`). nginx sends `Cache-Control: no-cache` for `*.html|js|css` so revalidation still happens. Rebuild `web` whenever frontend files change, or new tools won't appear.
-
-### Feedback lifecycle
-
-Client (`frontend/feedback/index.html`) `POST /api/feedback` → API writes row with `status='received'` and returns a UUID the user keeps. User later `GET /api/feedback/<uuid>` to read status/reply. Valid statuses: `received`, `completed`, `rejected`. Admin updates status + reply via the CLI, never via a public endpoint.
+For local development, use Docker Compose as documented in the README. For
+production, follow the blue-green release and rollback runbook in OPERATIONS;
+do not replace the live stack with the local-development Compose commands.
+Asset versions are deterministic hashes, including vendored assets, rather
+than build timestamps.

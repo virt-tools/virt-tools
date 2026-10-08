@@ -75,6 +75,23 @@ generated into domain workbenches. Their former routes remain in source and
 redirect to the exact replacement formula with `?formula=<legacy-slug>`; do not
 hand-edit the generated workbench pages or function assets.
 
+## Maintaining unit converters
+
+The 37 quantity-level converters share `frontend/assets/unit-converter.js`.
+Their unit definitions and 1,047 legacy route mappings are recorded in
+`generated-conversion-tools.json`. When changing units, update both the manifest
+and the corresponding page's embedded `unit-config`, then run:
+
+```bash
+python3 scripts/validate_generated_conversions.py .
+python3 scripts/validate_tools.py frontend
+```
+
+The one-time converter migration scripts have been retired. Preserve legacy
+route mappings and retained source pages; the build omits redirect-source and
+unlisted pages from the runtime image while nginx preserves old URLs through
+exact redirects. See [OPERATIONS.md](OPERATIONS.md) for deployment details.
+
 ## Catalog and search architecture
 
 The canonical catalog stores domain category, subcategory, tags, aliases, risk,
