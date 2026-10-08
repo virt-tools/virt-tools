@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Inject SEO meta tags + JSON-LD into the homepage and each tool page.
+"""Inject SEO and trust metadata into the homepage and public tool pages.
 
-The tool registry (assets/tools.js) is the single source of truth for per-tool
-name/description. This script rewrites the built HTML in place so the nginx
+The canonical JSON catalog is the single source of truth for per-tool metadata.
+This script rewrites the built HTML in place so the nginx
 image serves fully-formed meta tags with no runtime logic.
 
 Usage: generate_seo.py <frontend_root> <base_url>
@@ -22,6 +22,11 @@ import re
 import sys
 from pathlib import Path
 
+try:
+    from .generate_tool_catalog import public_guidance
+except ImportError:  # Direct script execution places scripts/ on sys.path.
+    from generate_tool_catalog import public_guidance
+
 SITE_NAME = "Virtual Tools"
 HOME_DESC = "A collection of free browser-based tools that run locally and preserve your privacy."
 OG_IMAGE = "/assets/og-image.png"
@@ -40,24 +45,39 @@ def esc_attr(s: str) -> str:
 def jsonld(obj) -> str:
     """Serialise JSON-LD, escaping characters that could break the <script> context."""
     s = json.dumps(obj, ensure_ascii=False)
-    return s.replace("\\", "\\\\").replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
+    return s.replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
 
 
-def load_registry(tools_js: Path) -> list[dict]:
-    text = tools_js.read_text(encoding="utf-8")
-    rows, cur = [], None
-    # Match `key: "value"` pairs (handles backslash escapes inside the value).
-    for m in re.finditer(r'([A-Za-z_]\w*):\s*"((?:[^"\\]|\\.)*)"', text):
-        key, val = m.group(1), m.group(2)
-        if key == "slug":
-            if cur:
-                rows.append(cur)
-            cur = {"slug": val}
-        elif cur is not None and key in ("name", "description", "category", "added"):
-            cur[key] = val
-    if cur:
-        rows.append(cur)
-    return rows
+def load_catalog(root: Path) -> list[dict]:
+    """Load public entries and apply curation as a final publication guard."""
+    document = json.loads((root / "assets" / "tool-catalog.json").read_text(encoding="utf-8"))
+    tools = document.get("tools")
+    if not isinstance(tools, list):
+        raise RuntimeError("canonical catalog has no tools array")
+    project_root = root.parent
+    hidden: set[str] = set()
+    policy_path = project_root / "tool-curation.json"
+    if policy_path.is_file():
+        policy = json.loads(policy_path.read_text(encoding="utf-8"))
+        keep = set(policy.get("keep", []))
+        hidden.update(policy.get("unlist", []))
+        hidden.update(policy.get("redirects", {}))
+        prefixes = tuple(policy.get("unlist_prefixes", []))
+        if prefixes:
+            hidden.update(
+                page.parent.name
+                for page in (root / "tools").glob("*/index.html")
+                if page.parent.name.startswith(prefixes) and page.parent.name not in keep
+            )
+        hidden.difference_update(keep)
+    generated_path = project_root / "generated-conversion-tools.json"
+    if generated_path.is_file():
+        generated = json.loads(generated_path.read_text(encoding="utf-8"))
+        hidden.update(generated.get("legacy_redirects", {}))
+    return [
+        tool for tool in tools
+        if isinstance(tool, dict) and tool.get("listed", True) and tool.get("slug") not in hidden
+    ]
 
 
 def meta_tags(*triples: tuple[str, str, str]) -> str:
@@ -141,6 +161,13 @@ def tool_block(base: str, t: dict) -> str:
         ("name", "twitter:title", name + " — " + SITE_NAME),
         ("name", "twitter:description", desc),
         ("name", "twitter:image", base + OG_IMAGE),
+        ("name", "vt:tool-slug", slug),
+        ("name", "vt:guidance", public_guidance(t)),
+        ("name", "vt:maturity", t.get("maturity", "unreviewed")),
+        ("name", "vt:reviewed-at", t.get("reviewedAt") or ""),
+        ("name", "vt:method", t.get("method") or ""),
+        ("name", "vt:source-count", str(len(t.get("sources") or []))),
+        ("name", "vt:test-count", str(len(t.get("testCases") or []))),
     )
     ld = jsonld({
         "@context": "https://schema.org",
@@ -148,7 +175,7 @@ def tool_block(base: str, t: dict) -> str:
         "name": name,
         "url": url,
         "description": desc,
-        "applicationCategory": "DeveloperApplication",
+        "applicationCategory": t.get("category", "Utility") + "Application",
         "operatingSystem": "Any (web browser)",
         "browserRequirements": "Requires JavaScript",
         "isAccessibleForFree": True,
@@ -170,9 +197,9 @@ def main() -> int:
     root = Path(sys.argv[1])
     base = sys.argv[2].rstrip("/")
 
-    tools = load_registry(root / "assets" / "tools.js")
+    tools = load_catalog(root)
     if not tools:
-        raise RuntimeError(f"no tools parsed from {root / 'assets' / 'tools.js'}")
+        raise RuntimeError(f"no public tools loaded from {root / 'assets' / 'tool-catalog.json'}")
 
     home = root / "index.html"
     inject(home, homepage_block(base))

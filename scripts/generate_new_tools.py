@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate new client-side calculator tools from a curated spec table to grow
 the catalog toward a target total. Each spec renders a house-style tool page
-(see e.g. tools/swr-calculator) and a tools.js registry entry. Specs whose slug
+(see e.g. tools/swr-calculator) and a canonical catalog entry. Specs whose slug
 or display name collides with an existing tool (or within the batch) are skipped,
 so the emitted set never overlaps existing tools.
 
@@ -10,10 +10,11 @@ Run: python3 scripts/generate_new_tools.py
 from __future__ import annotations
 import json, os, re, sys
 from pathlib import Path
+from generate_tool_catalog import curated_slugs, load_catalog, normalize_entry, public_tools, write_browser_artifacts
 
 ROOT = Path(__file__).resolve().parents[1]
 FRONTEND = ROOT / "frontend"
-TOOLS_JS = FRONTEND / "assets" / "tools.js"
+CATALOG_JSON = FRONTEND / "assets" / "tool-catalog.json"
 TOOLS_DIR = FRONTEND / "tools"
 TARGET_TOTAL = 2000
 
@@ -373,28 +374,16 @@ calc();
 </html>
 """
 
-def registry_entry(e):
-    return (
-        "  {\n"
-        f"    slug: {json.dumps(e['slug'])},\n"
-        f"    name: {json.dumps(e['name'])},\n"
-        f"    description: {json.dumps(e['desc'])},\n"
-        f"    category: {json.dumps(e['cat'])},\n"
-        f"    icon: {json.dumps(e['icon'])},\n"
-        f"    added: {json.dumps(e.get('added','2026-08-17T00:00:00Z'))},\n"
-        "  },\n"
-    )
-
 # ---- main ---------------------------------------------------------------
 def main():
-    # load existing slugs + names (folders + registry + redirect policy)
+    # Load existing slugs + names from the canonical catalog and page tree.
     existing_slugs = set()
     for p in TOOLS_DIR.iterdir():
         if p.is_dir(): existing_slugs.add(p.name)
-    reg = TOOLS_JS.read_text(encoding="utf-8")
-    existing_slugs |= set(re.findall(r'slug: "([^"]+)"', reg))
-    existing_names = set(re.findall(r'name: "([^"]+)"', reg))
-    current = len(re.findall(r'slug: "', reg))
+    document, catalog_tools = load_catalog(CATALOG_JSON)
+    existing_slugs |= {tool["slug"] for tool in catalog_tools}
+    existing_names = {tool["name"] for tool in catalog_tools}
+    current = len(public_tools(catalog_tools, curated_slugs(ROOT, FRONTEND)))
     need = TARGET_TOTAL - current
     print(f"current registered: {current}; need {need} more to reach {TARGET_TOTAL}")
     if need <= 0:
@@ -416,13 +405,15 @@ def main():
     for e in written:
         d = TOOLS_DIR / e["slug"]; d.mkdir(parents=True, exist_ok=True)
         (d / "index.html").write_text(render_html(e), encoding="utf-8")
-    # append registry entries before the closing "];"
-    text = TOOLS_JS.read_text(encoding="utf-8")
-    m = re.search(r"\n\];\s*$", text)
-    assert m, "no ]; close found in tools.js"
-    insert = "\n" + "".join(registry_entry(e) for e in written)
-    text = text[:m.start()] + insert + text[m.start():]
-    TOOLS_JS.write_text(text, encoding="utf-8")
+    additions = [normalize_entry({
+        "slug": e["slug"], "name": e["name"], "description": e["desc"],
+        "category": e["cat"], "icon": e["icon"],
+        "added": e.get("added", "2026-08-17T00:00:00Z"),
+    }, bootstrap=True) for e in written]
+    document["tools"] = catalog_tools + additions
+    CATALOG_JSON.write_text(json.dumps(document, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    hidden = curated_slugs(ROOT, FRONTEND)
+    write_browser_artifacts(FRONTEND, public_tools(document["tools"], hidden))
     print(f"written {len(written)} tools ({len(skipped)} skipped)")
     for sl, why in skipped[:20]: print(f"  skip {sl}: {why}")
     for e in written[:3]: print(f"  + /tools/{e['slug']}/  ({e['name']})")

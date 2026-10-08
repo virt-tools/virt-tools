@@ -1,23 +1,111 @@
 services:
-  web:
-    build:
-      context: .
-      dockerfile: nginx/Dockerfile
-    ports:
-      - "8080:80"
-    depends_on:
-      - api
-    restart: unless-stopped
+  data-init:
+    image: virt-tools-api:${VT_IMAGE_TAG:-latest}
+    user: "0:0"
+    command: ["sh", "-c", "chown -R 10001:10001 /data && chmod 0700 /data"]
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    security_opt: [no-new-privileges:true]
+    volumes:
+      - feedback-data:/data
+    restart: "no"
+    logging:
+      driver: local
+      options:
+        max-size: 1m
+        max-file: "1"
 
   api:
+    image: virt-tools-api:${VT_IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: api/Dockerfile
+    depends_on:
+      data-init:
+        condition: service_completed_successfully
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m
+    shm_size: 32m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
     volumes:
       - feedback-data:/data
     environment:
       VT_FEEDBACK_DB: /data/feedback.db
+      VT_SQLITE_BUSY_TIMEOUT_MS: "10000"
+      VT_FEEDBACK_POST_LIMIT: "10"
+      VT_FEEDBACK_LOOKUP_LIMIT: "60"
+      VT_RATE_WINDOW_SECONDS: "60"
+      VT_FEEDBACK_RETENTION_DAYS: ${VT_FEEDBACK_RETENTION_DAYS:-365}
+      VT_TRUST_PROXY: "1"
+    healthcheck:
+      test: [CMD, python, -c, "import json,urllib.request; assert json.load(urllib.request.urlopen('http://127.0.0.1:8000/api/ready', timeout=2))['ok']"]
+      interval: 15s
+      timeout: 3s
+      start_period: 10s
+      retries: 4
     restart: unless-stopped
+    stop_grace_period: 35s
+    pids_limit: 100
+    mem_limit: 256m
+    cpus: 1.0
+    ulimits:
+      nofile:
+        soft: 1024
+        hard: 2048
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  web:
+    image: virt-tools-web:${VT_IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
+      args:
+        ASSET_VERSION: ${VT_ASSET_VERSION:-}
+    ports:
+      - "${VT_WEB_PORT:-8080}:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      api:
+        condition: service_healthy
+        restart: true
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=32m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:8080/api/live]
+      interval: 15s
+      timeout: 3s
+      start_period: 10s
+      retries: 4
+    restart: unless-stopped
+    stop_signal: SIGQUIT
+    stop_grace_period: 30s
+    pids_limit: 100
+    mem_limit: 256m
+    cpus: 1.0
+    ulimits:
+      nofile:
+        soft: 1024
+        hard: 2048
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: "3"
 
 volumes:
   feedback-data:
+    name: ${VT_FEEDBACK_VOLUME:-virt-tools_feedback-data}

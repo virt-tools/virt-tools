@@ -1,0 +1,56 @@
+name: Container security
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 4 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: containers-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-scan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      VT_IMAGE_TAG: ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Validate Compose model
+        run: docker compose config --quiet
+      - name: Audit pinned Python dependencies
+        run: |
+          python -m pip install pip-audit==2.9.0
+          python -m pip_audit --requirement api/requirements.txt
+      - name: Build validated production images
+        run: docker compose build --pull
+      - name: Assert minimized web runtime
+        run: >-
+          docker run --rm --entrypoint sh virt-tools-web:ci -c
+          'test ! -e /usr/share/nginx/html/assets/tool-catalog.json &&
+          test ! -e /usr/share/nginx/html/assets/tool-catalog.schema.json &&
+          test -s /usr/share/nginx/html/assets/tools.js &&
+          test -n "$(find /usr/share/nginx/html/assets/tool-meta -type f -name "*.json" -print -quit)"'
+      - name: Test public edge API response headers
+        env:
+          VT_API_TEST_IMAGE: virt-tools-api:ci
+        run: scripts/test_edge_headers.sh
+      - name: Scan API image
+        run: >-
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock
+          aquasec/trivy:0.58.1 image --ignore-unfixed --exit-code 1
+          --severity HIGH,CRITICAL virt-tools-api:ci
+      - name: Scan web image
+        run: >-
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock
+          aquasec/trivy:0.58.1 image --ignore-unfixed --exit-code 1
+          --severity HIGH,CRITICAL virt-tools-web:ci

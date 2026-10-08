@@ -23,8 +23,9 @@ for _p in (os.path.join(_HERE, "..", "api"), os.path.join(_HERE, "..")):
         sys.path.insert(0, _p)
 
 import db  # noqa: E402
+from feedback_policy import FEEDBACK_STATUSES  # noqa: E402
 
-STATUS = {"received", "completed", "rejected"}
+STATUS = set(FEEDBACK_STATUSES)
 
 
 def cmd_list(_args):

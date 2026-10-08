@@ -3,11 +3,16 @@
 import json,math,re,sys
 from pathlib import Path
 CONFIG_RE=re.compile(r'<script id="unit-config" type="application/json">(.*?)</script>',re.S)
-SLUG_RE=re.compile(r'^    slug: "([^"]+)",$',re.M)
 def main():
  root=Path(sys.argv[1] if len(sys.argv)>1 else '.').resolve(); frontend=root/'frontend'
  manifest=json.loads((root/'generated-conversion-tools.json').read_text(encoding='utf-8')); tools=manifest.get('tools',[]); redirects=manifest.get('legacy_redirects',{}); issues=[]
- registered=set(SLUG_RE.findall((frontend/'assets/tools.js').read_text(encoding='utf-8')))
+ catalog=json.loads((frontend/'assets/tool-catalog.json').read_text(encoding='utf-8'))
+ policy=json.loads((root/'tool-curation.json').read_text(encoding='utf-8')); keep=set(policy.get('keep',[])); hidden=set(policy.get('unlist',[]))|set(policy.get('redirects',{}))|set(redirects)
+ prefixes=tuple(policy.get('unlist_prefixes',[]))
+ if prefixes:
+  hidden.update(page.parent.name for page in (frontend/'tools').glob('*/index.html') if page.parent.name.startswith(prefixes) and page.parent.name not in keep)
+ hidden-=keep
+ registered={tool['slug'] for tool in catalog.get('tools',[]) if tool.get('listed',True) and tool['slug'] not in hidden}
  if len(tools)!=37 or manifest.get('count')!=37: issues.append(f"expected 37 consolidated tools, found {len(tools)}")
  if len(redirects)!=1047 or manifest.get('legacy_count')!=1047: issues.append(f"expected 1047 legacy redirects, found {len(redirects)}")
  if len(registered)<1209: issues.append(f"expected at least 1209 registered tools after consolidation and approved additions, found {len(registered)}")

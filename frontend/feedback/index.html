@@ -12,6 +12,12 @@
     .chip:hover { border-color:var(--accent,#6ea8fe); color:var(--accent,#6ea8fe); }
     .chip .x { opacity:.5; font-size:11px; }
     #recent-panel { margin-bottom:16px; }
+    .feedback-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+    .feedback-actions button, .feedback-actions a { width:auto; }
+    .saved-list { display:grid; gap:8px; margin:12px 0; padding:0; list-style:none; }
+    .saved-item { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:8px; border:1px solid var(--border,#2a2f3a); border-radius:8px; }
+    .saved-item code { flex:1; min-width:230px; overflow-wrap:anywhere; }
+    .visually-hidden { position:absolute!important; width:1px!important; height:1px!important; padding:0!important; margin:-1px!important; overflow:hidden!important; clip:rect(0,0,0,0)!important; white-space:nowrap!important; border:0!important; }
   </style>
 </head>
 <body>
@@ -24,13 +30,13 @@
     </div>
 
     <!-- Suggestion to comment on a recently visited tool (client-side only) -->
-    <div class="panel" id="recent-panel" hidden>
-      <p style="margin:0 0 8px;">Was this about a tool you just used? Pick one to attach it to your feedback:</p>
-      <div class="chip-row" id="recent-chips"></div>
+    <div class="panel" id="recent-panel" aria-labelledby="recent-title" hidden>
+      <p id="recent-title" style="margin:0 0 8px;">Was this about a tool you just used? Pick one to attach it to your feedback:</p>
+      <div class="chip-row" id="recent-chips" role="group" aria-labelledby="recent-title"></div>
     </div>
 
     <!-- Submit form -->
-    <div class="panel feedback-form" id="submit-panel">
+    <form class="panel feedback-form" id="submit-panel">
       <div class="field">
         <label for="kind">Type</label>
         <select id="kind">
@@ -41,40 +47,56 @@
       </div>
       <div class="field">
         <label for="tool">Related tool (optional)</label>
-        <input type="text" id="tool" placeholder="e.g. QR Code Generator">
+        <input type="text" id="tool" maxlength="120" placeholder="e.g. QR Code Generator">
       </div>
       <div class="field">
         <label for="message">Your message</label>
-        <textarea id="message" placeholder="Tell me what you think…"></textarea>
+        <textarea id="message" maxlength="5000" required aria-describedby="message-help submit-err" placeholder="Tell me what you think…"></textarea>
+        <p class="note" id="message-help">Required. Do not include passwords, access tokens, or other sensitive information.</p>
       </div>
-      <button id="submit-btn">Submit feedback</button>
-      <p class="note" id="submit-err"></p>
-    </div>
+      <button id="submit-btn" type="submit">Submit feedback</button>
+      <p class="note" id="submit-err" role="alert" aria-live="assertive"></p>
+    </form>
 
     <!-- Status view (shown after submit or when ?id= is present) -->
-    <div class="panel" id="status-panel" hidden>
-      <h2 style="margin-top:0;">Feedback status</h2>
+    <section class="panel" id="status-panel" aria-labelledby="status-title" tabindex="-1" hidden>
+      <h2 id="status-title" style="margin-top:0;">Feedback status</h2>
       <p class="muted">Keep this ID to check back later. It is the only way to view your submission.</p>
-      <label>Your feedback ID</label>
-      <div class="uuid-box" id="status-uuid"></div>
+      <h3>Your feedback ID</h3>
+      <div class="uuid-box" id="status-uuid" tabindex="0"></div>
+      <div class="feedback-actions">
+        <button id="copy-id" type="button">Copy ID</button>
+        <button id="copy-link" type="button">Copy private status link</button>
+        <a id="status-link" href="/feedback/">Open status link</a>
+      </div>
       <div class="spacer"></div>
-      <label>Status</label>
+      <h3>Status</h3>
       <p><span class="status-badge" id="status-badge">received</span></p>
-      <label>Reply from the developer</label>
-      <div class="output" id="status-reply"></div>
-      <p class="note" id="status-note"></p>
-    </div>
+      <h3>Reply from the developer</h3>
+      <div class="output" id="status-reply" aria-live="polite"></div>
+      <p class="note" id="status-note" role="status" aria-live="polite"></p>
+    </section>
 
     <!-- Lookup an existing submission -->
     <div class="spacer"></div>
-    <div class="panel">
+    <form class="panel" id="lookup-form">
       <h2 style="margin-top:0;">Check an existing submission</h2>
+      <label for="lookup-id">Feedback ID</label>
       <div class="row">
-        <input type="text" id="lookup-id" placeholder="Paste your feedback ID (UUID)">
-        <button id="lookup-btn">Check status</button>
+        <input type="text" id="lookup-id" inputmode="text" autocomplete="off" spellcheck="false" aria-describedby="lookup-err" placeholder="Paste your feedback ID (UUID)">
+        <button id="lookup-btn" type="submit">Check status</button>
       </div>
-      <p class="note" id="lookup-err"></p>
-    </div>
+      <p class="note" id="lookup-err" role="alert" aria-live="assertive"></p>
+    </form>
+
+    <div class="spacer"></div>
+    <section class="panel" id="saved-panel" aria-labelledby="saved-title" hidden>
+      <h2 id="saved-title" style="margin-top:0;">IDs saved in this browser</h2>
+      <p class="muted">These bearer IDs stay in this browser's local storage. Anyone with an ID or status link can read that submission and its reply.</p>
+      <ul class="saved-list" id="saved-list"></ul>
+      <button id="clear-saved" type="button">Forget all saved IDs</button>
+      <p class="note" id="saved-note" role="status" aria-live="polite"></p>
+    </section>
   </main>
 
   <script src="/assets/app.js"></script>
@@ -86,6 +108,56 @@
     var statusBadge = document.getElementById("status-badge");
     var statusReply = document.getElementById("status-reply");
     var statusNote = document.getElementById("status-note");
+    var statusLink = document.getElementById("status-link");
+    var currentId = "";
+    var STORAGE_KEY = "vt.feedback.ids.v1";
+    var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    var ALLOWED_STATUSES = ["received", "reviewing", "planned", "resolved", "closed", "completed", "rejected"];
+
+    function normalizedId(value) {
+      var id = String(value || "").trim().toLowerCase();
+      return UUID_RE.test(id) ? id : "";
+    }
+
+    function readSavedIds() {
+      try {
+        var parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+        if (!Array.isArray(parsed)) return [];
+        return parsed.map(function (item) { return typeof item === "string" ? { id:item, savedAt:"" } : item; })
+          .filter(function (item) { return item && normalizedId(item.id); })
+          .slice(0, 20);
+      } catch (e) { return []; }
+    }
+
+    function writeSavedIds(items) {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(items.slice(0, 20))); return true; }
+      catch (e) { return false; }
+    }
+
+    function saveId(id) {
+      id = normalizedId(id); if (!id) return;
+      var items = readSavedIds().filter(function (item) { return item.id !== id; });
+      items.unshift({ id:id, savedAt:new Date().toISOString() });
+      writeSavedIds(items); renderSavedIds();
+    }
+
+    function renderSavedIds() {
+      var panel = document.getElementById("saved-panel");
+      var list = document.getElementById("saved-list");
+      var items = readSavedIds();
+      list.replaceChildren(); panel.hidden = items.length === 0;
+      items.forEach(function (item) {
+        var row = document.createElement("li"); row.className = "saved-item";
+        var code = document.createElement("code"); code.textContent = item.id;
+        var check = document.createElement("button"); check.type = "button"; check.textContent = "Check"; check.setAttribute("aria-label", "Check feedback " + item.id); check.addEventListener("click", function () { document.getElementById("lookup-id").value = item.id; loadStatus(item.id); });
+        var forget = document.createElement("button"); forget.type = "button"; forget.textContent = "Forget"; forget.setAttribute("aria-label", "Forget feedback " + item.id); forget.addEventListener("click", function () { writeSavedIds(readSavedIds().filter(function (saved) { return saved.id !== item.id; })); renderSavedIds(); });
+        row.append(code, check, forget); list.append(row);
+      });
+    }
+
+    function copyText(value, button) {
+      navigator.clipboard.writeText(value).then(function () { var old=button.textContent; button.textContent="Copied"; setTimeout(function(){button.textContent=old;},1200); }).catch(function () { statusNote.textContent="Copy was blocked by the browser. Select the ID and copy it manually."; });
+    }
 
     // Suggest commenting on a recently visited tool (client-side, localStorage).
     var toolInput = document.getElementById("tool");
@@ -115,24 +187,34 @@
     }
 
     function setStatus(data) {
-      statusUuid.textContent = data.uuid;
-      statusBadge.textContent = data.status;
-      statusBadge.className = "status-badge status-" + data.status;
+      currentId = normalizedId(data.uuid);
+      if (!currentId) throw new Error("invalid response");
+      var status = ALLOWED_STATUSES.indexOf(data.status) >= 0 ? data.status : "received";
+      statusUuid.textContent = currentId;
+      statusBadge.textContent = status;
+      statusBadge.className = "status-badge status-" + status;
       statusReply.textContent = data.reply || "(no reply yet — check back later)";
       statusNote.textContent = "Submitted " + (data.created_at || "") + (data.updated_at ? " · updated " + data.updated_at : "");
+      statusLink.href = "/feedback/?id=" + encodeURIComponent(currentId);
+      saveId(currentId);
       submitPanel.hidden = true;
       statusPanel.hidden = false;
+      statusPanel.focus();
     }
 
     function loadStatus(id) {
-      fetch("/api/feedback/" + id).then(function (r) {
+      var lookupError = document.getElementById("lookup-err");
+      id = normalizedId(id);
+      lookupError.textContent = "";
+      if (!id) { lookupError.textContent = "Enter a valid version 4 feedback UUID."; return; }
+      fetch("/api/feedback/" + encodeURIComponent(id), { headers:{ "Accept":"application/json" } }).then(function (r) {
         if (!r.ok) throw new Error("not found");
         return r.json();
       }).then(function (data) {
         setStatus(data);
-        history.replaceState(null, "", "/feedback/?id=" + id);
+        history.replaceState(null, "", "/feedback/?id=" + encodeURIComponent(id));
       }).catch(function () {
-        document.getElementById("lookup-err").textContent = "No feedback found for that ID.";
+        lookupError.textContent = "No feedback found for that ID.";
       });
     }
 
@@ -146,7 +228,7 @@
     // were looking for. Only applies when we're not showing a status lookup.
     if (!existingId) {
       var pKind = params.get("kind");
-      if (pKind) {
+      if (["feedback", "suggestion", "bug"].indexOf(pKind) >= 0) {
         var kindSel = document.getElementById("kind");
         if (kindSel) kindSel.value = pKind;
       }
@@ -164,8 +246,10 @@
       }
     }
     initRecentSuggest();
+    renderSavedIds();
 
-    document.getElementById("submit-btn").addEventListener("click", function () {
+    submitPanel.addEventListener("submit", function (event) {
+      event.preventDefault();
       var err = document.getElementById("submit-err");
       err.textContent = "";
       var body = {
@@ -174,7 +258,7 @@
         message: document.getElementById("message").value,
       };
       if (!body.message.trim()) { err.textContent = "Please enter a message."; return; }
-      var btn = this; btn.disabled = true;
+      var btn = document.getElementById("submit-btn"); btn.disabled = true;
       fetch("/api/feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -189,13 +273,18 @@
       }).finally(function () { btn.disabled = false; });
     });
 
-    document.getElementById("lookup-btn").addEventListener("click", function () {
+    document.getElementById("lookup-form").addEventListener("submit", function (event) {
+      event.preventDefault();
       var id = document.getElementById("lookup-id").value.trim();
       var err = document.getElementById("lookup-err");
       err.textContent = "";
       if (!id) return;
       loadStatus(id);
     });
+
+    document.getElementById("copy-id").addEventListener("click", function () { if (currentId) copyText(currentId, this); });
+    document.getElementById("copy-link").addEventListener("click", function () { if (currentId) copyText(new URL(statusLink.getAttribute("href"), location.origin).href, this); });
+    document.getElementById("clear-saved").addEventListener("click", function () { try { localStorage.removeItem(STORAGE_KEY); } catch (e) {} renderSavedIds(); document.getElementById("saved-note").textContent = "Saved feedback IDs were removed from this browser."; });
   })();
   </script>
 </body>

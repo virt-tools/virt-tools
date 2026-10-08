@@ -9,9 +9,6 @@ import json
 import re
 from pathlib import Path
 
-from validate_tools import parse_registry
-
-
 TARGET_NEW_TOOLS = 1047
 ADDED = "2026-08-06T00:00:00Z"
 
@@ -95,23 +92,6 @@ PAGE = """<!DOCTYPE html>
 """
 
 
-def js_string(value: str) -> str:
-    return value.replace("\\", "\\\\").replace('"', '\\"')
-
-
-def registry_block(tool: dict) -> str:
-    return (
-        "  {\n"
-        f'    slug: "{js_string(tool["slug"])}",\n'
-        f'    name: "{js_string(tool["name"])}",\n'
-        f'    description: "{js_string(tool["description"])}",\n'
-        '    category: "Converters",\n'
-        '    icon: "⇄",\n'
-        f'    added: "{ADDED}",\n'
-        "  },\n"
-    )
-
-
 def candidates() -> list[dict]:
     by_group: list[list[dict]] = []
     for group_slug, quantity, units in GROUPS:
@@ -144,53 +124,6 @@ def main() -> int:
     raise RuntimeError(
         "Pair-specific generation was retired; run scripts/consolidate_conversion_tools.py instead"
     )
-    # Retained below only as migration history and the audited unit-definition source.
-    root = Path(__file__).resolve().parents[1]
-    frontend = root / "frontend"
-    registry = frontend / "assets" / "tools.js"
-    manifest_path = root / "generated-conversion-tools.json"
-    tools = candidates()
-    existing_pages = {p.parent.name for p in (frontend / "tools").glob("*/index.html")}
-    previous = set()
-    if manifest_path.is_file():
-        old_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        previous = set(old_manifest.get("slugs", [])) | {
-            tool["slug"] for tool in old_manifest.get("tools", [])
-        }
-    collisions = sorted(({tool["slug"] for tool in tools} & existing_pages) - previous)
-    if collisions:
-        raise RuntimeError("Generated slug collisions: " + ", ".join(collisions))
-
-    for tool in tools:
-        page_dir = frontend / "tools" / tool["slug"]
-        page_dir.mkdir(parents=True, exist_ok=True)
-        config = json.dumps({"from": tool["from"], "to": tool["to"]}, ensure_ascii=False, separators=(",", ":"))
-        page = PAGE.format(
-            title=html.escape(tool["name"]),
-            from_name=html.escape(tool["from"]["name"]),
-            to_name=html.escape(tool["to"]["name"]),
-            config=config.replace("</", "<\\/"),
-        )
-        (page_dir / "index.html").write_text(page, encoding="utf-8")
-
-    prefix, objects, suffix = parse_registry(registry)
-    generated = previous | {tool["slug"] for tool in tools}
-    retained = [block for slug, block in objects if slug not in generated]
-    registry.write_text(prefix + "".join(retained) + "".join(registry_block(tool) for tool in tools) + suffix, encoding="utf-8")
-    manifest_path.write_text(json.dumps({
-        "count": len(tools),
-        "tools": [
-            {
-                "slug": tool["slug"],
-                "quantity": tool["quantity"],
-                "from": tool["from"],
-                "to": tool["to"],
-            }
-            for tool in tools
-        ],
-    }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(f"Generated {len(tools)} conversion tools")
-    return 0
 
 
 if __name__ == "__main__":

@@ -29,7 +29,7 @@
     <div class="tool-header">
       <a class="back" href="/">← All tools</a>
       <h1>CSV Column Formula</h1>
-      <p>Add a derived column to a CSV by applying a JavaScript math expression that references other columns by name. Type the new column's name and a formula like <code>price * quantity</code>, <code>subtotal * (1 + tax_rate)</code>, or <code>Math.round(amount / 100) / 100</code> — column names become variables (spaces and dashes become underscores). Numeric strings are coerced; non-numeric cells stay blank. Handles quoted fields and embedded newlines. Everything runs locally in your browser.</p>
+      <p>Add a derived column to a CSV by applying an allowlisted arithmetic expression that references other columns by name. Type the new column's name and a formula like <code>price * quantity</code>, <code>subtotal * (1 + tax_rate)</code>, or <code>Math.round(amount / 100) / 100</code> — column names become variables (spaces and dashes become underscores). Numeric strings are coerced; non-numeric cells stay blank. Handles quoted fields and embedded newlines. Expressions are parsed as math, never executed as JavaScript, and everything runs locally in your browser.</p>
     </div>
 
     <div class="panel">
@@ -59,6 +59,7 @@
   </main>
 
   <script src="/assets/app.js"></script>
+  <script src="/assets/math-expression.js"></script>
   <script>
   (function () {
     var $ = function (id) { return document.getElementById(id); };
@@ -106,32 +107,11 @@
     }
     function toNum(s) { return Number(String(s).replace(/,/g, "")); }
 
-    function allowedIdentifiers(src) {
-      var ok = /^[A-Za-z_$][A-Za-z0-9_$\s\.\+\-\*\/\(\)%^<>=!&|~?:,\d]*$/;
-      return ok.test(src);
-    }
     function buildEvaluator(formula, headers) {
-      // Map original names → varName; reject identifiers not in the header allowlist
-      var allow = {};
-      headers.forEach(function (h) { allow[varName(h)] = true; });
-      // tokenize identifiers
-      var idents = formula.match(/[A-Za-z_$][A-Za-z0-9_$]*/g) || [];
-      for (var i = 0; i < idents.length; i++) {
-        var id = idents[i];
-        // Math.* is allowed
-        if (id === "Math" || id === "PI" || id === "E") continue;
-        if (!(id in allow) && !(id in Math)) {
-          throw new Error("Unknown identifier in formula: '" + id + "'. Use a column name or a Math.* function.");
-        }
-      }
-      // Build function body
       var params = headers.map(varName);
-      var body = "return (" + formula + ");";
-      try {
-        return new Function(params.join(","), "Math", body);
-      } catch (e) {
-        throw new Error("Could not compile formula: " + (e.message || e));
-      }
+      if (new Set(params).size !== params.length) throw new Error("Column names become ambiguous after normalization; rename duplicate columns.");
+      var compiled = VTMathExpression.compile(formula, params);
+      return function () { var scope=Object.create(null);for(var i=0;i<params.length;i++)scope[params[i]]=arguments[i];return compiled(scope); };
     }
 
     function run() {
@@ -167,7 +147,7 @@
           });
           var result;
           try {
-            result = evaluator.apply(null, args.concat([Math]));
+            result = evaluator.apply(null, args);
             if (typeof result !== "number" || !isFinite(result)) result = "";
             else if (round !== "") result = Number(result.toFixed(parseInt(round, 10)));
           } catch (e) { result = ""; errors++; }
@@ -214,10 +194,11 @@
       if (!window._csv) return;
       var blob = new Blob([window._csv], { type: "text/csv" });
       var a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
+      var url = URL.createObjectURL(blob);
+      a.href = url;
       a.download = "csv-with-formula.csv";
       a.click();
-      URL.revokeObjectURL(a.href);
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
     });
     run();
   })();

@@ -51,14 +51,15 @@ contain private feedback; do not publish them. Codex also keeps its normal local
 session records. There is no external notification delivery configured. Review
 the logs for `NEEDS_ATTENTION.txt`, failures, and disk usage regularly.
 
-## Existing checkout caveat
+## Source baseline and concurrent edits
 
-At setup, the working tree contains substantial pre-existing, uncommitted
-stabilization source and deployment files. The worker must not silently include
-them in a commit. It stops an affected release if those files prevent an isolated,
-reproducible change; the owner must resolve that baseline before such releases
-can proceed. Failed feedback access or ambiguous feedback never counts as an
-empty queue, and pending work is resumed rather than replaced by a new tool.
+At setup, the checkout contained uncommitted stabilization source and deployment
+files. The owner approved reviewing and committing that baseline on 2026-10-08.
+That approval does not extend to unrelated edits made after the baseline commit.
+The worker must continue to preserve other work and stop an affected release if
+it cannot make an isolated, reproducible change. Failed feedback access or
+ambiguous feedback never counts as an empty queue, and pending work is resumed
+rather than replaced by a new tool.
 
 Systemd is used because this CLI session has no native Scheduled task control.
 OpenAI's [scheduled-task documentation](https://learn.chatgpt.com/docs/automations)

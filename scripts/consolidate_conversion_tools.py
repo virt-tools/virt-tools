@@ -3,8 +3,8 @@
 from __future__ import annotations
 import html,json
 from pathlib import Path
-from generate_conversion_tools import GROUPS,ADDED,js_string
-from validate_tools import parse_registry
+from generate_conversion_tools import GROUPS,ADDED
+from generate_tool_catalog import curated_slugs, load_catalog, normalize_entry, public_tools, write_browser_artifacts
 
 PAGE='''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>{title} — virt.tools</title><link rel="stylesheet" href="/assets/style.css"></head>
@@ -13,9 +13,6 @@ PAGE='''<!DOCTYPE html>
 <section class="result-section" aria-live="polite"><div class="result-row"><span>Result</span><strong id="unit-result"></strong></div><p id="unit-equation"></p></section>
 <script id="unit-config" type="application/json">{config}</script></main><script src="/assets/app.js"></script><script src="/assets/unit-converter.js"></script></body></html>
 '''
-
-def block(slug,name,quantity,count):
- return "  {\n"+f'    slug: "{js_string(slug)}",\n    name: "{js_string(name)}",\n    description: "Convert between {count} supported {js_string(quantity.lower())} units in either direction.",\n    category: "Converters",\n    icon: "⇄",\n    added: "{ADDED}",\n  }},\n'
 
 def main():
  root=Path(__file__).resolve().parents[1]; frontend=root/'frontend'; manifest_path=root/'generated-conversion-tools.json'
@@ -28,10 +25,13 @@ def main():
   (page_dir/'index.html').write_text(PAGE.format(title=html.escape(name),quantity=html.escape(quantity.lower()),config=config),encoding='utf-8')
   consolidated.append({'slug':slug,'quantity':quantity,'units':units})
  redirects={tool['slug']:quantity_target[tool['quantity']] for tool in old_tools}
- registry=frontend/'assets'/'tools.js'; prefix,objects,suffix=parse_registry(registry); canonical={t['slug'] for t in consolidated}
- retained=[text for slug,text in objects if slug not in old_slugs|canonical]
- additions=[block(t['slug'],f"{t['quantity']} Unit Converter",t['quantity'],len(t['units'])) for t in consolidated]
- registry.write_text(prefix+''.join(retained)+''.join(additions)+suffix,encoding='utf-8')
+ catalog_path=frontend/'assets'/'tool-catalog.json'; document,catalog_tools=load_catalog(catalog_path); canonical={t['slug'] for t in consolidated}
+ retained=[tool for tool in catalog_tools if tool['slug'] not in old_slugs|canonical]
+ additions=[normalize_entry({'slug':t['slug'],'name':f"{t['quantity']} Unit Converter",'description':f"Convert between {len(t['units'])} supported {t['quantity'].lower()} units in either direction.",'category':'Converters','icon':'⇄','added':ADDED},bootstrap=True) for t in consolidated]
+ document['tools']=retained+additions
+ catalog_path.write_text(json.dumps(document,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+ hidden=curated_slugs(root,frontend)
+ write_browser_artifacts(frontend,public_tools(document['tools'],hidden))
  manifest_path.write_text(json.dumps({'count':len(consolidated),'legacy_count':len(redirects),'tools':consolidated,'legacy_redirects':redirects},ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
  print(f'Consolidated {len(redirects)} legacy routes into {len(consolidated)} registered tools')
  return 0

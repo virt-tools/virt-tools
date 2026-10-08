@@ -78,11 +78,12 @@
       <h3>Convergence (estimate vs samples)</h3>
       <div class="canvaswrap"><canvas id="conv" width="600" height="160"></canvas></div>
 
-      <p class="note" style="margin-top:14px"><strong>Monte Carlo methods</strong> estimate a quantity by averaging many random samples — trading exactness for simplicity, with error shrinking as 1/√n. To estimate <strong>π</strong>, throw darts uniformly into a unit square: the fraction landing in the inscribed quarter circle equals π/4, so π ≈ 4·(inside/total). <strong>Buffon's needle</strong> drops needles of length L on a floor ruled with lines spaced D: the crossing probability is 2L/(πD), so π ≈ 2L·n/(D·crossings). A <strong>definite integral</strong> ∫ₐᵇ f(x) dx is estimated by averaging f over uniform random points in [a,b] and multiplying by (b−a), with a standard error of (b−a)·σ/√n. f(x) may use <code>Math</code> functions (e.g. <code>Math.sin(x)</code>, <code>x*x</code>, <code>Math.exp(-x*x)</code>). The PRNG is a seeded mulberry32 so results reproduce. Pairs with the Normal Distribution and Bayes' Theorem tools. Everything runs locally — nothing leaves your browser.</p>
+      <p class="note" style="margin-top:14px"><strong>Monte Carlo methods</strong> estimate a quantity by averaging many random samples — trading exactness for simplicity, with error shrinking as 1/√n. To estimate <strong>π</strong>, throw darts uniformly into a unit square: the fraction landing in the inscribed quarter circle equals π/4, so π ≈ 4·(inside/total). <strong>Buffon's needle</strong> drops needles of length L on a floor ruled with lines spaced D: the crossing probability is 2L/(πD), so π ≈ 2L·n/(D·crossings). A <strong>definite integral</strong> ∫ₐᵇ f(x) dx is estimated by averaging f over uniform random points in [a,b] and multiplying by (b−a), with a standard error of (b−a)·σ/√n. f(x) accepts arithmetic and allowlisted math functions (for example <code>sin(x)</code>, <code>x*x</code>, or <code>exp(-x*x)</code>; a <code>Math.</code> prefix is optional). The PRNG is a seeded mulberry32 so results reproduce. Pairs with the Normal Distribution and Bayes' Theorem tools. Everything runs locally — nothing leaves your browser.</p>
     </div>
   </main>
 
   <script src="/assets/app.js"></script>
+  <script src="/assets/math-expression.js"></script>
   <script>
   (function () {
     // ---- pure core ----
@@ -129,6 +130,7 @@
     // Buffon's needle: needle length L, line spacing D (L<=D). pi = 2*L*n / (D*crossings).
     // Returns { pi, crossings, total, needles:[{...}] }.
     function buffonPi(n, L, D, rng, maxNeedles) {
+      if (!Number.isFinite(L) || !Number.isFinite(D)) throw new Error("L and D must be finite");
       if (L <= 0 || D <= 0) throw new Error("L and D must be positive");
       if (L > D) throw new Error("Needle length L must be <= line spacing D");
       var crossings = 0, needles = [];
@@ -168,11 +170,10 @@
       return { integral: (b - a) * m, mean: m, variance: v, stderr: stderr, n: n, a: a, b: b, xs: xs, ys: ys };
     }
 
-    // build f from expression string, with Math in scope
     function makeFn(expr) {
       try {
-        var fn = new Function("x", "with(Math){return (" + expr + ");}");
-        // sanity probe
+        var evaluator = VTMathExpression.compile(expr, ["x"]);
+        var fn = function (x) { var value=evaluator({x:x});if(!Number.isFinite(value))throw new Error("f(x) returned a non-finite value");return value; };
         var v = fn(0.5);
         if (typeof v !== "number") throw new Error("f does not return a number");
         return fn;
@@ -186,7 +187,9 @@
     var cfgs = { pi: $("cfg-pi"), buffon: $("cfg-buffon"), integral: $("cfg-int") };
 
     function showCfg(m) { for (var k in cfgs) cfgs[k].style.display = (k === m) ? "block" : "none"; }
-    function num(id, def) { var v = parseFloat($(id).value); return isNaN(v) ? def : v; }
+    function finiteInput(id, label) { var raw=$(id).value.trim(),value=Number(raw);if(!raw||!Number.isFinite(value))throw new Error(label+" must be a finite number.");return value; }
+    function integerInput(id, label, min, max) { var value=finiteInput(id,label);if(!Number.isInteger(value)||value<min||value>max)throw new Error(label+" must be an integer from "+min+" to "+max+".");return value; }
+    function sampleCount(id) { return integerInput(id,"Samples",1,1000000); }
 
     function clearCanvas(c) { var ctx = c.getContext("2d"); ctx.fillStyle = "#0d1016"; ctx.fillRect(0, 0, c.width, c.height); }
 
@@ -272,11 +275,11 @@
     function run() {
       errEl.textContent = "";
       try {
-        var seed = parseInt(seedEl.value, 10) || 42;
+        var seed = integerInput("seed", "Seed", 0, 4294967295);
         var mode = modeEl.value;
         var rng = makeRng(seed);
         if (mode === "pi") {
-          var n = Math.max(1, parseInt($("pi-n").value, 10) || 20000);
+          var n = sampleCount("pi-n");
           var res = estimatePi(n, rng, 4000);
           drawPi(res);
           var err = res.pi - Math.PI;
@@ -291,8 +294,8 @@
           for (var i = 0; i < uniq.length; i++) hist.push({ est: estimatePi(uniq[i], rng2, 0).pi });
           drawConvergence(hist, Math.PI);
         } else if (mode === "buffon") {
-          var n = Math.max(1, parseInt($("bu-n").value, 10) || 20000);
-          var L = num("bu-l", 0.5), D = num("bu-d", 1);
+          var n = sampleCount("bu-n");
+          var L = finiteInput("bu-l", "Needle length L"), D = finiteInput("bu-d", "Line spacing D");
           var res = buffonPi(n, L, D, rng, 4000);
           drawBuffon(res, L, D);
           var err = res.pi - Math.PI;
@@ -308,7 +311,8 @@
           drawConvergence(hist, Math.PI);
         } else {
           var f = makeFn($("in-f").value);
-          var a = num("in-a", 0), b = num("in-b", 1), n = Math.max(1, parseInt($("in-n").value, 10) || 20000);
+          var a = finiteInput("in-a", "Lower bound"), b = finiteInput("in-b", "Upper bound"), n = sampleCount("in-n");
+          if (a === b) throw new Error("Integral bounds must be different.");
           var res = integrate(f, a, b, n, rng, 4000);
           drawIntegral(res, f);
           outEl.innerHTML = "<span class='k'>estimate ∫ₐᵇ f(x) dx</span><span class='v'>" + res.integral.toFixed(6) + "</span><br>" +
