@@ -114,21 +114,19 @@ try {
   assert.equal(pwaResources.manifest.display, "standalone", "web app manifest display mode changed");
   assert.equal(pwaResources.workerStatus, 200, "service worker script is not fetchable");
   assert.match(pwaResources.workerSource, /addEventListener\(["']install["']/, "service worker has no install handler");
-  await homepage.waitForFunction(
-    async () => {
-      if (!("serviceWorker" in navigator)) return false;
-      const registration = await navigator.serviceWorker.getRegistration("/");
-      return Boolean(registration?.active);
-    },
-    undefined,
-    { timeout: 10_000 },
-  );
   const serviceWorker = await homepage.evaluate(async () => {
-    const registration = await navigator.serviceWorker.getRegistration("/");
-    return {
-      scope: registration?.scope || "",
-      scriptURL: registration?.active?.scriptURL || "",
-    };
+    let timer;
+    try {
+      const registration = await Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error("Service worker did not become ready")), 10_000);
+        }),
+      ]);
+      return { scope: registration.scope, scriptURL: registration.active.scriptURL };
+    } finally {
+      clearTimeout(timer);
+    }
   });
   assert.equal(serviceWorker.scope, routeURL("/"), "service worker registered with the wrong scope");
   assert.equal(
