@@ -1,6 +1,6 @@
 # Build images use digest-pinned release lines; Python and Node never reach runtime.
 ARG ASSET_VERSION=""
-FROM node:22-alpine3.22@sha256:cd7807368cf24826297cbad5dca1a44972ccfd770647db52a8c7589eb4599ac8 AS javascript
+FROM node:26-alpine3.22@sha256:c7932b9e5e337b0e733d6e16abc1b0e104759e8b05e59ed56586cce967d26dfe AS javascript
 WORKDIR /build
 COPY frontend/ ./frontend/
 COPY scripts/validate_javascript.mjs ./validate_javascript.mjs
