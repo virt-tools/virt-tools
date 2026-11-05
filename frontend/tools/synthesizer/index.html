@@ -42,15 +42,15 @@ input[type=range]{padding:0;}
 <button class="preset-btn" onclick="setPreset('square','square')" type="button">Square</button>
 <button class="preset-btn" onclick="setPreset('sawtooth','sawtooth')" type="button">Saw</button>
 <button class="preset-btn" onclick="setPreset('triangle','triangle')" type="button">Triangle</button>
-<button class="preset-btn" onclick="setPreset('sawtooth','square')" type="button">Fat Lead</button>
-<button class="preset-btn" onclick="setPreset('square','sawtooth')" type="button">Harsh</button>
+<button class="preset-btn" onclick="setPreset('sawtooth','square')" type="button">Fat Lead (saw + square)</button>
+<button class="preset-btn" onclick="setPreset('square','sawtooth')" type="button">Harsh (square + saw)</button>
 </div>
 
 <div class="controls">
 <div class="ctrl-group">
 <h3>Oscillator</h3>
 <label>Wave Type</label>
-<select id="waveType" onchange="cfg.wave=this.value" aria-label="Wave Type">
+<select id="waveType" onchange="cfg.wave=this.value;cfg.wave2=null" aria-label="Wave Type">
 <option value="sine">Sine</option>
 <option value="square">Square</option>
 <option value="sawtooth">Sawtooth</option>
@@ -88,7 +88,7 @@ input[type=range]{padding:0;}
 </div>
 </div>
 
-<div class="keyboard" id="keyboard"></div>
+<div style="overflow-x:auto"><div class="keyboard" id="keyboard"></div></div>
 </div>
 </main>
 <script src="/assets/app.js"></script>
@@ -97,7 +97,7 @@ const NOTES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const WHITE=[0,2,4,5,7,9,11,12,14,16,17,19,21,23];
 const BLACK=[{n:1,p:0},{n:3,p:1},{n:6,p:3},{n:8,p:4},{n:10,p:5},{n:13,p:7},{n:15,p:8},{n:18,p:10},{n:20,p:11},{n:22,p:12}];
 const KEY_MAP={'a':0,'w':1,'s':2,'e':3,'d':4,'f':5,'t':6,'g':7,'y':8,'h':9,'u':10,'j':11,'k':12,'o':13,'l':14,'p':15,';':16};
-const cfg={wave:'sine',octave:0,detune:0,attack:0.01,decay:0.1,sustain:0.7,release:0.3,cutoff:8000,resonance:1,volume:0.5};
+const cfg={wave:'sine',wave2:null,octave:0,detune:0,attack:0.01,decay:0.1,sustain:0.7,release:0.3,cutoff:8000,resonance:1,volume:0.5};
 let ctx,masterGain,filter,active={};
 
 function initAudio(){
@@ -113,29 +113,32 @@ function updateFilter(){if(filter){filter.frequency.value=cfg.cutoff;filter.Q.va
 function updateOctLabel(){document.getElementById('octLabel').textContent=cfg.octave;}
 
 function noteOn(midi){
-midi+=cfg.octave*12;
 if(active[midi])return;
 initAudio();
-const osc=ctx.createOscillator();osc.type=cfg.wave;osc.frequency.value=noteFreq(midi);osc.detune.value=cfg.detune;
+const shifted=midi+cfg.octave*12;
+const osc=ctx.createOscillator();osc.type=cfg.wave;osc.frequency.value=noteFreq(shifted);osc.detune.value=cfg.detune;
 const g=ctx.createGain();
-osc.connect(g);g.connect(filter);
+osc.connect(g);
+let osc2=null;
+if(cfg.wave2&&cfg.wave2!==cfg.wave){osc2=ctx.createOscillator();osc2.type=cfg.wave2;osc2.frequency.value=noteFreq(shifted);osc2.detune.value=cfg.detune+7;osc2.connect(g);}
+g.connect(filter);
 const t=ctx.currentTime;
 g.gain.setValueAtTime(0,t);
 g.gain.linearRampToValueAtTime(1,t+cfg.attack);
 g.gain.linearRampToValueAtTime(cfg.sustain,t+cfg.attack+cfg.decay);
-osc.start(t);
-active[midi]={osc,g};
-document.getElementById('noteDisplay').textContent=NOTES[midi%12]+(Math.floor(midi/12)-1);
+osc.start(t);if(osc2)osc2.start(t);
+active[midi]={osc,osc2,g};
+document.getElementById('noteDisplay').textContent=NOTES[shifted%12]+(Math.floor(shifted/12)-1);
 }
 
 function noteOff(midi){
-midi+=cfg.octave*12;
 const a=active[midi];if(!a)return;
 const t=ctx.currentTime;
 a.g.gain.cancelScheduledValues(t);
 a.g.gain.setValueAtTime(a.g.gain.value,t);
 a.g.gain.linearRampToValueAtTime(0,t+cfg.release);
 a.osc.stop(t+cfg.release+0.01);
+if(a.osc2)a.osc2.stop(t+cfg.release+0.01);
 delete active[midi];
 }
 
@@ -162,13 +165,13 @@ kb.appendChild(k);
 }
 
 function setPreset(w1,w2){
-cfg.wave=w1;document.getElementById('waveType').value=w1;
+cfg.wave=w1;cfg.wave2=(w2&&w2!==w1)?w2:null;document.getElementById('waveType').value=w1;
 document.querySelectorAll('.preset-btn').forEach(b=>b.classList.remove('active'));
 event.target.classList.add('active');
 }
 
 document.addEventListener('keydown',e=>{
-if(e.repeat||!KEY_MAP.hasOwnProperty(e.key))return;
+if(e.repeat||e.ctrlKey||e.metaKey||e.altKey||!KEY_MAP.hasOwnProperty(e.key))return;
 const keys=document.querySelectorAll('[data-midi]');
 const midi=60+KEY_MAP[e.key];
 const el=Array.from(keys).find(k=>+k.dataset.midi===midi);

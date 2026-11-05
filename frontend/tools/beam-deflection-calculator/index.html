@@ -41,7 +41,7 @@
           <label>Units</label>
           <div class="seg" id="useg">
             <button data-u="si" class="active" type="button">Metric (mm, N, MPa)</button>
-            <button data-u="ip" type="button">Imperial (in, lbf, ksi)</button>
+            <button data-u="ip" type="button">Imperial (in, lbf, psi)</button>
           </div>
         </div>
         <div class="field">
@@ -134,14 +134,6 @@
     function fmt(n, d) { return Number(n).toFixed(d); }
     function bad(msg) { verdictEl.textContent = "✗ " + msg; verdictEl.className = "verdict bad"; kvEl.innerHTML = ""; errEl.textContent = ""; }
 
-    function bindSeg(seg, cb) {
-      seg.querySelectorAll("button").forEach(function (b) {
-        b.addEventListener("click", function () {
-          seg.querySelectorAll("button").forEach(function (x) { x.classList.remove("active"); });
-          b.classList.add("active"); cb(b.getAttribute("data-" + seg.id[0] || seg.id.slice(0,1)));
-        });
-      });
-    }
     useg.querySelectorAll("button").forEach(function (b) {
       b.addEventListener("click", function () {
         useg.querySelectorAll("button").forEach(function (x) { x.classList.remove("active"); });
@@ -209,25 +201,28 @@
       else { coeff = 5 / 384; where = "centre"; }
       var delta = coeff * W * Math.pow(L, 3) / (E * I);
 
-      var spanRatio = L / Math.abs(delta);            // L / δ
+      var spanRatio = delta === 0 ? Infinity : L / Math.abs(delta);            // L / δ
       var limit360 = L / 360, limit240 = L / 240;
       var vcls, vmsg;
-      if (Math.abs(delta) <= limit360) { vcls = "ok"; vmsg = "passes L/360"; }
-      else if (Math.abs(delta) <= limit240) { vcls = "warn"; vmsg = "fails L/360, passes L/240"; }
-      else { vcls = "bad"; vmsg = "fails L/240"; }
+      if (delta === 0) { vcls = "ok"; vmsg = "no load applied"; }
+      else if (Math.abs(delta) <= limit360) { vcls = "ok"; vmsg = "deflection within L/360"; }
+      else if (Math.abs(delta) <= limit240) { vcls = "warn"; vmsg = "exceeds L/360, within L/240"; }
+      else { vcls = "bad"; vmsg = "exceeds L/240"; }
 
       var disp = Math.abs(delta);
       var dUnit = si ? "mm" : "in";
       var Iunit = si ? "mm⁴" : "in⁴";
       var Eunit = si ? "MPa" : "psi";
 
-      verdictEl.textContent = fmt(disp, 4) + " " + dUnit + "  ·  L/" + fmt(spanRatio, 0) + "  ·  " + vmsg;
+      verdictEl.textContent = fmt(disp, 4) + " " + dUnit + "  ·  " +
+        (isFinite(spanRatio) ? "L/" + fmt(spanRatio, 0) + "  ·  " : "") + vmsg +
+        "  ·  deflection check only — verify bending, shear, and buckling separately";
       verdictEl.className = "verdict " + vcls;
 
       kvEl.innerHTML =
         "<dt>Max deflection</dt><dd class='big'>" + fmt(disp, 4) + " " + dUnit + "  <span class='muted'>(" + fmt(disp, 3) + ")</span></dd>" +
         "<dt>At</dt><dd>" + where + "</dd>" +
-        "<dt>Deflection / span</dt><dd>1 / " + fmt(spanRatio, 0) + "  <span class='muted'>(δ = " + fmt(delta / L * 100, 3) + "% of L)</span></dd>" +
+        "<dt>Deflection / span</dt><dd>" + (isFinite(spanRatio) ? "1 / " + fmt(spanRatio, 0) : "—") + "  <span class='muted'>(δ = " + fmt(delta / L * 100, 3) + "% of L)</span></dd>" +
         "<dt>L/360 limit</dt><dd>" + fmt(limit360, 3) + " " + dUnit + "  <span class='muted'>(live load)</span></dd>" +
         "<dt>L/240 limit</dt><dd>" + fmt(limit240, 3) + " " + dUnit + "  <span class='muted'>(total load)</span></dd>" +
         "<dt>Moment of inertia I</dt><dd>" + (I >= 1e6 ? fmt(I / 1e6, 3) + "×10⁶ " : fmt(I, 1) + " ") + Iunit + "</dd>" +
@@ -237,7 +232,8 @@
         (load === "point" ? "end/centre point load" : "uniformly distributed load");
       errEl.textContent = "Case: " + caseName + ". The maximum deflection uses the standard Euler-Bernoulli result δ = " +
         (support === "cant" && load === "point" ? "PL³/3EI" : support === "cant" ? "WL³/8EI" : support === "simple" && load === "point" ? "PL³/48EI" : "5WL³/384EI") +
-        " where W is the total load (for the uniform case the distributed load is W/L per unit length). With E = " + fmt(E, 0) + " " + Eunit + ", I = " + fmt(I, 0) + " " + Iunit + ", L = " + fmt(L, 0) + " " + (si ? "mm" : "in") + " and W = " + fmt(W, 0) + " " + (si ? "N" : "lbf") + ", the deflection is " + fmt(disp, 3) + " " + dUnit + " at the " + where + " — a span ratio of 1/" + fmt(spanRatio, 0) + ". Building codes typically limit live-load deflection to L/360 (" + fmt(limit360, 2) + " " + dUnit + " here) and total deflection to L/240 (" + fmt(limit240, 2) + " " + dUnit + "); long-span or plastered ceilings use L/480 or tighter. This is small-deflection, linear-elastic theory: it assumes the material stays below yield, the section is prismatic, and deflection is small relative to the span. It ignores shear deflection (significant for short, deep beams), self-weight (add the beam's own weight to W), and any rotational stiffness at the supports. For point loads the position matters — these formulas are for the worst case (free end of a cantilever, centre of a simply-supported beam).";
+        " where W is the total load (for the uniform case the distributed load is W/L per unit length). With E = " + fmt(E, 0) + " " + Eunit + ", I = " + fmt(I, 0) + " " + Iunit + ", L = " + fmt(L, 0) + " " + (si ? "mm" : "in") + " and W = " + fmt(W, 0) + " " + (si ? "N" : "lbf") + ", the deflection is " + fmt(disp, 3) + " " + dUnit + " at the " + where +
+        (isFinite(spanRatio) ? " — a span ratio of 1/" + fmt(spanRatio, 0) + ". " : ". ") + "Building codes typically limit live-load deflection to L/360 (" + fmt(limit360, 2) + " " + dUnit + " here) and total deflection to L/240 (" + fmt(limit240, 2) + " " + dUnit + "); long-span or plastered ceilings use L/480 or tighter. This is small-deflection, linear-elastic theory: it assumes the material stays below yield, the section is prismatic, and deflection is small relative to the span. It ignores shear deflection (significant for short, deep beams), self-weight (add the beam's own weight to W), and any rotational stiffness at the supports. For point loads the position matters — these formulas are for the worst case (free end of a cantilever, centre of a simply-supported beam).";
       errEl.className = "note";
     }
 

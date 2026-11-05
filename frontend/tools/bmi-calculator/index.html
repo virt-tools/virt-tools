@@ -122,7 +122,7 @@
           <div class="sub" id="lbmSub"></div>
         </div>
       </div>
-      <p class="hint">Estimates only — not medical advice. Navy body fat method uses circumference measurements.</p>
+      <p class="hint">Estimates only — not medical advice. BMI categories use adult cutoffs; for anyone under 18, a clinician should interpret BMI against pediatric growth charts. The Navy body-fat method and Mifflin-St Jeor BMR equation were developed for adults. BMR/TDEE figures are kilocalories (kcal).</p>
     </div>
   </main>
   <script src="/assets/app.js"></script>
@@ -162,46 +162,69 @@
     unitImperial.addEventListener('click', () => { imperial = true; unitImperial.classList.add('active'); unitMetric.classList.remove('active'); setUnit(); });
     gender.addEventListener('change', showHip);
 
-    function num(id) { return parseFloat(document.getElementById(id).value) || 0; }
+    function num(id) { const v = parseFloat(document.getElementById(id).value); return isFinite(v) ? v : NaN; }
+
+    const calcErr = document.createElement('p');
+    calcErr.style.cssText = 'color:var(--bad,#f87171);font-size:13px;min-height:1.2em;margin:8px 0 0;';
+    calcErr.setAttribute('role', 'alert');
+    calcBtn.insertAdjacentElement('afterend', calcErr);
 
     calcBtn.addEventListener('click', () => {
+      calcErr.textContent = '';
       const age = num('age');
       const h_in = imperial ? num('height') : num('height') / 2.54;
       const w_kg = imperial ? num('weight') * 0.453592 : num('weight');
+      if (!isFinite(age) || age <= 0 || age > 120) { calcErr.textContent = 'Enter an age between 1 and 120.'; return; }
+      if (!isFinite(h_in) || h_in <= 0) { calcErr.textContent = 'Enter a positive height.'; return; }
+      if (!isFinite(w_kg) || w_kg <= 0) { calcErr.textContent = 'Enter a positive weight.'; return; }
       const h_m = h_in * 0.0254;
       const bmi = w_kg / (h_m * h_m);
 
-      // BMR (Mifflin-St Jeor)
+      // BMR (Mifflin-St Jeor — developed for adults; treat under-18 as an estimate only)
       const bmr = gender.value === 'male'
         ? 10 * w_kg + 6.25 * (h_in * 2.54) - 5 * age + 5
         : 10 * w_kg + 6.25 * (h_in * 2.54) - 5 * age - 161;
 
       const tdee = bmr * parseFloat(document.getElementById('activity').value);
 
-      // Navy body fat %
+      // Navy body fat % (adult method)
       let bf;
       const neck_in = (imperial ? num('neck') : num('neck') / 2.54);
       const waist_in = (imperial ? num('waist') : num('waist') / 2.54);
       const hip_in = (imperial ? num('hip') : num('hip') / 2.54);
+      let bfInvalid = '';
       if (gender.value === 'male') {
-        bf = 86.010 * Math.log10(waist_in - neck_in) - 70.041 * Math.log10(h_in) + 36.76;
+        if (!isFinite(neck_in) || !isFinite(waist_in) || neck_in <= 0 || waist_in <= 0 || waist_in <= neck_in) {
+          bfInvalid = 'Body fat: waist must be larger than neck (both positive).';
+        } else {
+          bf = 86.010 * Math.log10(waist_in - neck_in) - 70.041 * Math.log10(h_in) + 36.76;
+        }
       } else {
-        bf = 163.205 * Math.log10(waist_in + hip_in - neck_in) - 97.684 * Math.log10(h_in) - 78.387;
+        if (!isFinite(neck_in) || !isFinite(waist_in) || !isFinite(hip_in) || neck_in <= 0 || waist_in <= 0 || hip_in <= 0 || waist_in + hip_in <= neck_in) {
+          bfInvalid = 'Body fat: waist + hip must be larger than neck (all positive).';
+        } else {
+          bf = 163.205 * Math.log10(waist_in + hip_in - neck_in) - 97.684 * Math.log10(h_in) - 78.387;
+        }
       }
-      bf = Math.max(0, Math.min(60, bf));
+      const bfOk = !bfInvalid && isFinite(bf);
+      if (bfOk) bf = Math.max(0, Math.min(60, bf));
 
-      const lbm_kg = w_kg * (1 - bf / 100);
+      const lbm_kg = bfOk ? w_kg * (1 - bf / 100) : NaN;
+      const pediatric = age < 18;
 
-      // BMI category
-      let cat, catClass, catText;
-      if (bmi < 18.5) { cat = 'Underweight'; catClass = 'cat-under'; }
+      // BMI category (adult cutoffs only)
+      let cat, catClass;
+      if (pediatric) { cat = 'Adult cutoffs don’t apply under 18'; catClass = 'cat-over'; }
+      else if (bmi < 18.5) { cat = 'Underweight'; catClass = 'cat-under'; }
       else if (bmi < 25) { cat = 'Normal weight'; catClass = 'cat-normal'; }
       else if (bmi < 30) { cat = 'Overweight'; catClass = 'cat-over'; }
       else { cat = 'Obese'; catClass = 'cat-obese'; }
 
-      // Body fat category
+      // Body fat category (adult categories)
       let bfCat, bfClass;
-      if (gender.value === 'male') {
+      if (!bfOk) { bfCat = '—'; bfClass = 'cat-over'; }
+      else if (pediatric) { bfCat = 'Adult categories don’t apply under 18'; bfClass = 'cat-over'; }
+      else if (gender.value === 'male') {
         if (bf < 6) { bfCat = 'Essential'; bfClass = 'cat-under'; }
         else if (bf < 14) { bfCat = 'Athletic'; bfClass = 'cat-normal'; }
         else if (bf < 18) { bfCat = 'Fitness'; bfClass = 'cat-normal'; }
@@ -225,17 +248,27 @@
       const markerPct = Math.max(0, Math.min(100, ((bmi - 15) / 25) * 100));
       document.getElementById('bmiMarker').style.left = markerPct + '%';
 
-      document.getElementById('bmrVal').textContent = Math.round(bmr) + ' cal';
-      document.getElementById('tdeeVal').textContent = Math.round(tdee) + ' cal';
-      document.getElementById('tdeeSub').textContent = `${Math.round(tdee * 0.8)} to lose · ${Math.round(tdee * 1.2)} to gain`;
+      document.getElementById('bmrVal').textContent = Math.round(bmr) + ' kcal';
+      document.getElementById('tdeeVal').textContent = Math.round(tdee) + ' kcal';
+      document.getElementById('tdeeSub').textContent = `Maintenance estimate. ±20% (${Math.round(tdee * 0.8)}–${Math.round(tdee * 1.2)} kcal) is a common adjustment range; talk to a professional before pursuing weight-change goals`;
 
-      document.getElementById('bfVal').textContent = bf.toFixed(1) + '%';
-      document.getElementById('bfSub').textContent = `${wOut(lbm_kg)}${wUnit} fat mass, ${wOut(w_kg - lbm_kg)}${wUnit} lean mass`;
+      if (bfOk) {
+        document.getElementById('bfVal').textContent = bf.toFixed(1) + '%';
+        document.getElementById('bfSub').textContent = `${wOut(w_kg - lbm_kg)}${wUnit} fat mass, ${wOut(lbm_kg)}${wUnit} lean mass`;
+      } else {
+        document.getElementById('bfVal').textContent = '—';
+        document.getElementById('bfSub').textContent = bfInvalid || 'Enter valid circumference measurements.';
+      }
       const bfc = document.getElementById('bfCat');
       bfc.textContent = bfCat; bfc.className = 'cat ' + bfClass;
 
-      document.getElementById('lbmVal').textContent = wOut(lbm_kg) + wUnit;
-      document.getElementById('lbmSub').textContent = `${(lbm_kg / w_kg * 100).toFixed(1)}% of total body weight`;
+      if (bfOk) {
+        document.getElementById('lbmVal').textContent = wOut(lbm_kg) + wUnit;
+        document.getElementById('lbmSub').textContent = `${(lbm_kg / w_kg * 100).toFixed(1)}% of total body weight`;
+      } else {
+        document.getElementById('lbmVal').textContent = '—';
+        document.getElementById('lbmSub').textContent = 'Requires valid body-fat inputs.';
+      }
 
       results.style.display = '';
     });

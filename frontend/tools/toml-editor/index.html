@@ -3,32 +3,35 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="/assets/theme-init.js"></script>
 <title>TOML Editor & Validator — virt.tools</title>
 <link rel="stylesheet" href="/assets/style.css">
+<style>
+@media(max-width:760px){.toml-grid{grid-template-columns:1fr!important}}
+</style>
 </head>
 <body>
 <header id="site-header"></header>
 <main>
 <h1>TOML Editor & Validator</h1>
 <p class="subtitle">Validate TOML syntax, parse to JSON, and detect common syntax errors. 100% client-side.</p>
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:1.5rem;">
+<div class="toml-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:1.5rem;">
 <div>
-<label style="font-weight:bold;">TOML Input</label>
-<textarea id="input" rows="20" style="width:100%;font-family:monospace;font-size:.85rem;padding:.5rem;border:2px solid #ddd;border-radius:8px;" placeholder='[package]
+<label for="input" style="font-weight:bold;">TOML Input</label>
+<textarea id="input" rows="20" style="width:100%;font-family:monospace;font-size:.85rem;padding:.5rem;border:2px solid var(--border,#ddd);border-radius:8px;" placeholder='[package]
 name = "myapp"
 version = "1.0.0"
 
 [dependencies]
 serde = "1.0"
-tokio = { version = "1", features = ["full"] }' aria-label="[Package]
-Name ="></textarea>
-<button id="validate" style="margin-top:.5rem;padding:.5rem 1.5rem;border:none;border-radius:8px;cursor:pointer;font-weight:bold;background:#2563eb;color:#fff;" type="button">Validate & Parse</button>
+tokio = { version = "1", features = ["full"] }' aria-label="TOML input"></textarea>
+<button id="validate" style="margin-top:.5rem;padding:.5rem 1.5rem;border:none;border-radius:8px;cursor:pointer;font-weight:bold;background:var(--accent,#2563eb);color:var(--on-accent,#fff);" type="button">Validate & Parse</button>
 </div>
 <div>
-<label style="font-weight:bold;">Output</label>
-<div id="status" style="margin-bottom:.5rem;padding:.5rem;border-radius:8px;font-weight:bold;display:none;"></div>
-<textarea id="output" rows="20" readonly style="width:100%;font-family:monospace;font-size:.85rem;padding:.5rem;border:2px solid #ddd;border-radius:8px;background:#f9fafb;" placeholder="Results..." aria-label="Results..."></textarea>
-<button id="copy" style="margin-top:.5rem;padding:.5rem 1.5rem;border:none;border-radius:8px;cursor:pointer;font-weight:bold;background:#10b981;color:#fff;display:none;" type="button">Copy JSON</button>
+<label for="output" style="font-weight:bold;">Output</label>
+<div id="status" style="margin-bottom:.5rem;padding:.5rem;border-radius:8px;font-weight:bold;display:none;" role="status" aria-live="polite"></div>
+<textarea id="output" rows="20" readonly style="width:100%;font-family:monospace;font-size:.85rem;padding:.5rem;border:2px solid var(--border,#ddd);border-radius:8px;background:var(--bg-elev,#f9fafb);" placeholder="Results..." aria-label="Parsed JSON output"></textarea>
+<button id="copy" style="margin-top:.5rem;padding:.5rem 1.5rem;border:none;border-radius:8px;cursor:pointer;font-weight:bold;background:var(--ok,#10b981);color:var(--on-accent,#fff);display:none;" type="button">Copy JSON</button>
 </div>
 </div>
 </main>
@@ -40,13 +43,52 @@ const output=document.getElementById('output');
 const status=document.getElementById('status');
 const copyBtn=document.getElementById('copy');
 
+function stripComment(line){
+  let q='';
+  for(let i=0;i<line.length;i++){
+    const c=line[i];
+    if(q){if(c===q)q='';continue}
+    if(c==='"'||c==="'"){q=c;continue}
+    if(c==='#')return line.slice(0,i);
+  }
+  return line;
+}
+function splitTop(str){
+  const parts=[];let cur='',depth=0,q='';
+  for(let i=0;i<str.length;i++){
+    const c=str[i];
+    if(q){cur+=c;if(c===q&&str[i-1]!=='\\')q='';continue}
+    if(c==='"'||c==="'"){q=c;cur+=c;continue}
+    if(c==='['||c==='{'){depth++;cur+=c;continue}
+    if(c===']'||c==='}'){depth--;cur+=c;continue}
+    if(c===','&&depth===0){parts.push(cur);cur='';continue}
+    cur+=c;
+  }
+  if(cur.trim()!=='')parts.push(cur);
+  return parts;
+}
 function parseTOML(text){
   const result={};
   let current=result;
   const lines=text.split('\n');
   for(let li=0;li<lines.length;li++){
-    const line=lines[li].trim();
+    const line=stripComment(lines[li]).trim();
     if(!line||line.startsWith('#'))continue;
+    if(line.startsWith('[[')&&line.endsWith(']]')){
+      const parts=line.substring(2,line.length-2).trim().split('.').map(s=>s.trim());
+      let target=result;
+      for(let i=0;i<parts.length-1;i++){
+        let t=target[parts[i]];
+        if(Array.isArray(t))t=t[t.length-1];
+        if(!t||typeof t!=='object')t=target[parts[i]]={};
+        target=t;
+      }
+      const last=parts[parts.length-1];
+      if(!Array.isArray(target[last]))target[last]=[];
+      target[last].push({});
+      current=target[last][target[last].length-1];
+      continue;
+    }
     if(line.startsWith('[')&&line.endsWith(']')){
       const sectionPath=line.substring(1,line.length-1).trim().split('.').map(s=>s.trim());
       let target=result;
@@ -55,13 +97,6 @@ function parseTOML(text){
         target=target[sec];
       }
       current=target;
-      continue;
-    }
-    if(line.startsWith('[[')&&line.endsWith(']]')){
-      const arrKey=line.substring(2,line.length-2).trim();
-      if(!current[arrKey])current[arrKey]=[];
-      current[arrKey].push({});
-      current=current[arrKey][current[arrKey].length-1];
       continue;
     }
     const eqIdx=line.indexOf('=');
@@ -78,14 +113,17 @@ function parseVal(val,line){
   if(val.startsWith("'")&&val.endsWith("'"))return val.substring(1,val.length-1);
   if(val==='true'||val==='false')return val==='true';
   if(val.startsWith('[')&&val.endsWith(']')){
-    return val.substring(1,val.length-1).split(',').map(s=>parseVal(s.trim(),line));
+    return splitTop(val.substring(1,val.length-1)).map(s=>parseVal(s.trim(),line));
   }
   if(val.startsWith('{')&&val.endsWith('}')){
     const obj={};
-    const pairs=val.substring(1,val.length-1).split(',');
+    const pairs=splitTop(val.substring(1,val.length-1));
     for(const p of pairs){
-      const [k,v]=p.split('=').map(s=>s.trim());
-      if(k&&v)obj[k.replace(/^["']|["']$/g,'')]=parseVal(v,line);
+      const eqIdx=p.indexOf('=');
+      if(eqIdx===-1)continue;
+      const k=p.substring(0,eqIdx).trim().replace(/^["']|["']$/g,'');
+      const v=p.substring(eqIdx+1).trim();
+      if(k&&v)obj[k]=parseVal(v,line);
     }
     return obj;
   }
@@ -108,7 +146,15 @@ document.getElementById('validate').addEventListener('click',function(){
   }
 });
 
-copyBtn.addEventListener('click',function(){navigator.clipboard.writeText(output.value);});
+copyBtn.addEventListener('click',function(){
+  if(!output.value)return;
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(output.value).then(function(){
+      copyBtn.textContent='Copied!';
+      setTimeout(function(){copyBtn.textContent='Copy JSON';},1200);
+    },function(){showStatus('Copy failed. Select the output and copy manually.','error');});
+  }else{output.focus();output.select();showStatus('Clipboard unavailable; the output is selected for you.','error');}
+});
 
 function showStatus(msg,type){
   status.textContent=msg;

@@ -67,9 +67,9 @@
       </div>
 
       <button id="go" type="button">Compute</button>
-      <div class="err" id="err"></div>
+      <div class="err" id="err" role="alert" aria-live="polite"></div>
 
-      <div class="mxblock" id="resBlock" hidden>
+      <div class="mxblock" id="resBlock" hidden aria-live="polite">
         <h3>Result</h3>
         <div id="resGrid"></div>
       </div>
@@ -98,7 +98,7 @@
 
     function clampDim(v) { v = parseInt(v, 10); if (!isFinite(v) || v < 1) v = 1; if (v > 6) v = 6; return v; }
 
-    function buildGrid(container, store, rows, cols) {
+    function buildGrid(container, store, rows, cols, name) {
       rows = clampDim(rows); cols = clampDim(cols);
       var html = '<table class="mx">';
       for (var r = 0; r < rows; r++) {
@@ -106,7 +106,7 @@
         for (var c = 0; c < cols; c++) {
           var key = r + "," + c;
           var val = store[key] !== undefined ? store[key] : (r === c ? "1" : "0");
-          html += '<td><input type="number" step="any" data-k="' + key + '" value="' + val + '" aria-label="Input"></td>';
+          html += '<td><input type="number" step="any" data-k="' + key + '" value="' + val + '" aria-label="Matrix ' + name + ' row ' + (r + 1) + ' column ' + (c + 1) + '"></td>';
         }
         html += "</tr>";
       }
@@ -135,9 +135,11 @@
     }
 
     function fmtNum(n) {
-      if (!isFinite(n)) return String(n);
+      if (isNaN(n)) return "—";
+      if (!isFinite(n)) return "out of range";
       // Round to 1e-9 to absorb float noise, then trim.
       var r = Math.round(n * 1e9) / 1e9;
+      if (!isFinite(r)) return String(parseFloat(n.toPrecision(10)));
       if (Object.is(r, -0)) r = 0;
       if (Math.abs(r - Math.round(r)) < 1e-9) return String(Math.round(r));
       return String(parseFloat(r.toPrecision(10)));
@@ -202,12 +204,15 @@
       var n = a.length;
       if (a[0].length !== n) return null; // not square
       var m = a.map(function (row) { return row.slice(); });
+      var matrixMax = 0;
+      for (var i0 = 0; i0 < n; i0++) for (var j0 = 0; j0 < n; j0++) { var av0 = Math.abs(m[i0][j0]); if (av0 > matrixMax) matrixMax = av0; }
+      var tol = 1e-12 * matrixMax;
       var det = 1;
       for (var k = 0; k < n; k++) {
         // partial pivot
         var p = k, max = Math.abs(m[k][k]);
         for (var i = k + 1; i < n; i++) { if (Math.abs(m[i][k]) > max) { max = Math.abs(m[i][k]); p = i; } }
-        if (max < 1e-12) return { det: 0, singular: true };
+        if (max <= tol) return { det: 0, singular: true };
         if (p !== k) { var tmp = m[p]; m[p] = m[k]; m[k] = tmp; det = -det; }
         det *= m[k][k];
         for (var i = k + 1; i < n; i++) {
@@ -230,10 +235,13 @@
         for (var j = 0; j < n; j++) row.push(i === j ? 1 : 0);
         m.push(row);
       }
+      var matrixMax = 0;
+      for (var i0 = 0; i0 < n; i0++) for (var j0 = 0; j0 < n; j0++) { var av0 = Math.abs(a[i0][j0]); if (av0 > matrixMax) matrixMax = av0; }
+      var tol = 1e-12 * matrixMax;
       for (var k = 0; k < n; k++) {
         var p = k, max = Math.abs(m[k][k]);
         for (var i = k + 1; i < n; i++) { if (Math.abs(m[i][k]) > max) { max = Math.abs(m[i][k]); p = i; } }
-        if (max < 1e-12) return null; // singular
+        if (max <= tol) return null; // singular
         if (p !== k) { var tmp = m[p]; m[p] = m[k]; m[k] = tmp; }
         var piv = m[k][k];
         for (var j = 0; j < 2 * n; j++) m[k][j] /= piv;
@@ -252,11 +260,14 @@
     function rref(a) {
       var m = a.map(function (row) { return row.slice(); });
       var rows = m.length, cols = m[0].length;
+      var matrixMax = 0;
+      for (var i0 = 0; i0 < rows; i0++) for (var j0 = 0; j0 < cols; j0++) { var av0 = Math.abs(m[i0][j0]); if (av0 > matrixMax) matrixMax = av0; }
+      var tol = 1e-12 * matrixMax;
       var r = 0;
       for (var c = 0; c < cols && r < rows; c++) {
         var p = r, max = Math.abs(m[r][c]);
         for (var i = r + 1; i < rows; i++) { if (Math.abs(m[i][c]) > max) { max = Math.abs(m[i][c]); p = i; } }
-        if (max < 1e-12) continue;
+        if (max <= tol) continue;
         if (p !== r) { var tmp = m[p]; m[p] = m[r]; m[r] = tmp; }
         var piv = m[r][c];
         for (var j = 0; j < cols; j++) m[r][j] /= piv;
@@ -311,7 +322,9 @@
             if (M[0].length !== N.length) return showErr("A columns must equal B rows for multiplication (A is " + M.length + "×" + M[0].length + ", B is " + N.length + "×" + N[0].length + ").");
             return showMatrix(mulMM(M, N));
           case "scalar":
-            return showMatrix(scalarMul(M, parseFloat(scalarEl.value)));
+            var sc = parseFloat(scalarEl.value);
+            if (!isFinite(sc)) return showErr("Enter a valid scalar.");
+            return showMatrix(scalarMul(M, sc));
           case "transpose":
             return showMatrix(transpose(M));
           case "det":
@@ -335,8 +348,8 @@
       }
     }
 
-    function rebuildA() { buildGrid(aGrid, A, aR.value, aC.value); }
-    function rebuildB() { buildGrid(bGrid, B, bR.value, bC.value); }
+    function rebuildA() { buildGrid(aGrid, A, aR.value, aC.value, "A"); }
+    function rebuildB() { buildGrid(bGrid, B, bR.value, bC.value, "B"); }
 
     aR.addEventListener("input", rebuildA); aC.addEventListener("input", rebuildA);
     bR.addEventListener("input", rebuildB); bC.addEventListener("input", rebuildB);

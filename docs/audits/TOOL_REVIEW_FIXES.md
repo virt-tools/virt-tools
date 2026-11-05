@@ -3,6 +3,65 @@
 This historical report records confirmed defects fixed during tool reviews. Counts
 and verification results reflect the workspace at the time of each fix.
 
+## 2026-10-09 stabilization fix pass
+
+Scope: the seven quarantined pages recorded as unresolved `findings` in the
+individual audit ledger. All seven were repaired directly and their ledger
+records changed from `findings` to `fixed`. This is a defect repair pass, not a
+qualified domain review; all seven pages remain quarantined and unlisted, and
+relisting still requires the policy process.
+
+### Confirmed repairs
+
+- `solar-time-calculator` — the declination formula applied the
+  degree-to-radian conversion twice, collapsing declination to near zero and
+  making sunrise/sunset effectively season-invariant. Now uses Cooper's
+  formula correctly, with a refraction-corrected hour angle (zenith 90.833°),
+  explicit polar day/night results, calendar-date arithmetic instead of
+  timezone-sensitive `Date` parsing, minute-rounding rollover handling, and
+  range validation with explicit errors. Spot-checked against almanac values
+  for New York (solar noon within ~2 min, sunset exact, sunrise within ~5 min).
+- `timezone-converter` — the selected source timezone was ignored: the
+  `datetime-local` value was parsed in the browser's own zone. The page now
+  resolves the wall time in the chosen source zone using `Intl` offset probing
+  with round-trip verification; DST gap times (skipped by the clock) are
+  rejected with an explanation, and ambiguous fold times produce both
+  earlier/later-offset conversions. Verified against known transitions in
+  `America/New_York`, `Australia/Sydney`, and `Australia/Lord_Howe`
+  (half-hour fold). Theme-inconsistent hardcoded dark styles were replaced
+  with the shared theme system.
+- `wire-gauge-calculator` — the ampacity/resistance table mixed NEC columns
+  and contained a mislabeled duplicate AWG 0 row. Replaced with a consistent
+  NEC 75 °C copper table (with small-conductor limits) through 4/0. Selection
+  now enforces a chosen voltage-drop limit (3/5/10%) in addition to
+  ampacity and reports the governing constraint. Over-range current is
+  refused with an explicit message instead of silently recommending an
+  undersized conductor.
+- `bmi-calculator` — invalid Navy-method measurements (waist ≤ neck) produced
+  `NaN` body-fat output; now validated with an explanation. Strict
+  finite/positive input validation added. Fat/lean mass labels were swapped
+  in the body-fat card; `'cal'` corrected to `'kcal'`; adult cutoffs are now
+  explicitly flagged as not applicable under 18 (BMI and body-fat categories);
+  the weight-change advice line now carries a professional-consultation
+  caveat.
+- `beam-deflection-calculator` — the imperial units button was labeled `ksi`
+  while the entered Young's modulus values were `psi`; label corrected.
+  Removed dead code (unused `bindSeg`); zero-load input no longer produces an
+  `L/Infinity` span ratio; the verdict now states it is a deflection
+  serviceability check only, not a strength or code-compliance result.
+- `speech-to-text` / `text-to-speech` — both pages claimed `100% client-side`
+  operation. Browser Web Speech recognition and synthesis voices are
+  OS/browser-provided and may use network services; the pages now disclose
+  that audio/text may leave the device. `text-to-speech` additionally moved
+  voice selection from a fragile array-index mapping to `voiceURI` lookup and
+  handles the no-voices and empty-text cases.
+
+Verification: `validate_tools.py`, `validate_javascript.mjs`,
+`validate_tool_design.py`, `validate_browser_security.py`,
+`validate_risk_policy.py`, and `validate_operations.py` all pass on the
+repaired tree; the timezone and solar algorithms were exercised with
+independent Node fixtures against known DST transitions and almanac values.
+
 ## 2026-10-08 catalog UI and correctness pass
 
 Scope: 3,416 retained source pages, of which 1,739 are public. The initial

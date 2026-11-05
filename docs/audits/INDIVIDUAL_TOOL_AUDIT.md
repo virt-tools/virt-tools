@@ -17,40 +17,36 @@ materialized. It contains **3,416** unique page records.
 | Pending | 3,293 | No completed individual audit is recorded. |
 | Auditing | 0 | No review is represented as in progress in the saved ledger. |
 | Clean | 0 | No page was recorded as reviewed with no changes required. |
-| Findings | 7 | A direct review found unresolved defects; these pages are quarantined/unlisted. |
-| Fixed | 15 | A prior individual review recorded confirmed repairs; independent recheck is not implied by this status. |
+| Findings | 0 | No page currently records unresolved defects. |
+| Fixed | 22 | A review recorded confirmed repairs; independent recheck is not implied by this status. |
 | Rechecked | 101 | Documented fixes or corrected behavior were rechecked. |
 | **Total** | **3,416** | Every physical page is represented exactly once. |
 
 This is **123 pages with a recorded audit outcome (3.60%)** and **3,293 pages
 still pending (96.40%)**. The completed evidence consists of 100 explicit
 second-wave page reviews documented in
-[the second-wave report](SECOND_WAVE_INDIVIDUAL_AUDIT.md), 15
-earlier fixed records (see [confirmed repairs](TOOL_REVIEW_FIXES.md)), and eight
-targeted stabilization reviews. These figures do
+[the second-wave report](SECOND_WAVE_INDIVIDUAL_AUDIT.md), 22
+fixed records (see [confirmed repairs](TOOL_REVIEW_FIXES.md)), and one
+rechecked record. These figures do
 not support a claim that every tool in the project has been individually
 audited.
 
-## Stabilization findings
+## Stabilization findings — status
 
-The following direct audits remain open and are represented as `findings`:
+The seven pages previously listed here as unresolved `findings` were repaired
+in the 2026-10-09 third-wave fix pass (details in
+[confirmed repairs](TOOL_REVIEW_FIXES.md)); their ledger records now read
+`fixed`:
 
-- `bmi-calculator` — pediatric/adult interpretation, unit, body-composition,
-  energy-label, validation, and advice defects.
-- `wire-gauge-calculator` — critically under-specified conductor sizing,
-  inconsistent table data, unsafe over-range selection, and voltage-drop
-  selection defects.
-- `beam-deflection-calculator` — code-check overclaiming, omitted structural
-  limit states, modulus-unit mismatch, and weak numerical/unit handling.
-- `solar-time-calculator` — double angle conversion, timezone-sensitive date
-  parsing, polar/non-finite handling, horizon-model, validation, and formatting
-  defects.
-- `timezone-converter` — the selected source timezone is ignored; browser-zone
-  parsing and missing DST gap/fold handling make conversions unreliable.
-- `speech-to-text` — browser Web Speech recognition can use a remote service,
-  contradicting the public promise that microphone input is always local.
-- `text-to-speech` — browser-selected synthesis voices can be network-backed,
-  contradicting the page's unconditional local-only claim.
+- `bmi-calculator`, `wire-gauge-calculator`, `beam-deflection-calculator`,
+  `solar-time-calculator`, `timezone-converter`, `speech-to-text`,
+  `text-to-speech`.
+
+The health/safety/electrical pages (`bmi-calculator`, `wire-gauge-calculator`,
+`beam-deflection-calculator`, `solar-time-calculator`) remain quarantined and
+unlisted: per the risk policy, relisting requires a qualified domain review,
+which this fix pass does not provide. `speech-to-text` and `text-to-speech`
+remain quarantined pending the same relisting process.
 
 `moon-phase` is recorded as `rechecked` after correction. It is deliberately a
 low-risk mean-cycle estimate, not an ephemeris; sampled 2026 phase times can

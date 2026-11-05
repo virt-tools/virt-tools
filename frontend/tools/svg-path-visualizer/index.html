@@ -61,7 +61,7 @@
           <svg id="svg" viewBox="0 0 300 200" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:520px;"></svg>
         </div>
         <div>
-          <div class="stats" id="stats"></div>
+          <div class="stats" id="stats" role="status" aria-live="polite"></div>
           <div class="toolbar">
             <button id="copyPath" class="secondary" type="button">Copy path</button>
             <button id="downloadSvg" class="secondary" type="button">Download SVG</button>
@@ -98,7 +98,6 @@
       if (!tokens) return [];
       var cmds = [];
       var i = 0;
-      var cur = null;
       var argCounts = { M:2, L:2, H:1, V:1, C:6, S:4, Q:4, T:2, A:7, Z:0 };
       while (i < tokens.length) {
         var t = tokens[i];
@@ -106,25 +105,24 @@
           var upper = t.toUpperCase();
           var count = argCounts[upper];
           if (count === undefined) { i++; continue; }
-          // For M followed by implicit L (lineTo) pairs
-          if (upper === "M" || upper === "L" || upper === "C" || upper === "S" || upper === "Q" || upper === "T" || upper === "H" || upper === "V" || upper === "A") {
+          if (upper === "Z") { cmds.push({ cmd: t, args: [] }); i++; continue; }
+          // Repeated groups of the same command are implicit repeats
+          // (e.g. "L 10 10 20 20" is two lineTo commands; extra pairs after M become lineto)
+          var rep = upper === "M" ? (t === "M" ? "L" : "l") : t;
+          var first = true;
+          while (i + (first ? 1 : 0) < tokens.length) {
+            var off = first ? 1 : 0;
             var args = [];
-            for (var j = 0; j < count && i+1+j < tokens.length && !/[a-zA-Z]/.test(tokens[i+1+j]); j++) {
-              args.push(parseFloat(tokens[i+1+j]));
+            for (var j = 0; j < count && i + off + j < tokens.length && !/[a-zA-Z]/.test(tokens[i + off + j]); j++) {
+              args.push(parseFloat(tokens[i + off + j]));
             }
-            cmds.push({ cmd: t, args: args });
-            i += 1 + args.length;
-            // Handle repeated coordinate pairs (implicit moveto -> lineto)
-            if (upper === "M") {
-              while (i+1 < tokens.length && !/[a-zA-Z]/.test(tokens[i]) && !/[a-zA-Z]/.test(tokens[i+1])) {
-                cmds.push({ cmd: t === "M" ? "L" : "l", args: [parseFloat(tokens[i]), parseFloat(tokens[i+1])] });
-                i += 2;
-              }
-            }
-          } else {
-            cmds.push({ cmd: t, args: [] });
-            i++;
+            if (args.length === 0) break;
+            i += off + args.length;
+            if (args.length < count) break; // incomplete trailing group: browsers ignore it
+            cmds.push({ cmd: first ? t : rep, args: args });
+            first = false;
           }
+          if (first) i++; // command letter with no arguments
         } else {
           i++;
         }
@@ -220,11 +218,12 @@
       }
 
       if (showHandles) {
-        pts.forEach(function (p) {
+        pts.forEach(function (p, pi) {
+          var prev = pi > 0 ? pts[pi-1] : { x: p.x, y: p.y };
           if (p.c1 && p.c2) {
             [[p.c1,"#ffd27a"],[p.c2,"#ffd27a"]].forEach(function (h) {
               var l = document.createElementNS(NS, "line");
-              l.setAttribute("x1", p.type === "C" ? (pts[pts.indexOf(p)-1]||{x:p.c1.x}).x : p.x); l.setAttribute("y1", p.y);
+              l.setAttribute("x1", prev.x); l.setAttribute("y1", prev.y);
               l.setAttribute("x2", h[0].x); l.setAttribute("y2", h[0].y);
               l.setAttribute("stroke", h[1]); l.setAttribute("stroke-width", "0.7"); l.setAttribute("opacity", "0.6");
               svgEl.appendChild(l);
@@ -235,7 +234,7 @@
           }
           if (p.cp) {
             var l2 = document.createElementNS(NS, "line");
-            l2.setAttribute("x1", p.x); l2.setAttribute("y1", p.y); l2.setAttribute("x2", p.cp.x); l2.setAttribute("y2", p.cp.y);
+            l2.setAttribute("x1", prev.x); l2.setAttribute("y1", prev.y); l2.setAttribute("x2", p.cp.x); l2.setAttribute("y2", p.cp.y);
             l2.setAttribute("stroke", "#ffd27a"); l2.setAttribute("stroke-width", "0.7"); l2.setAttribute("opacity", "0.6");
             svgEl.appendChild(l2);
             var cc2 = document.createElementNS(NS, "circle");
@@ -278,6 +277,7 @@
     document.getElementById("downloadSvg").addEventListener("click", function () {
       var d = pathInput.value.trim();
       var bb = ""; try { var p = document.createElementNS(NS,"path"); p.setAttribute("d",d); svgEl.appendChild(p); bb = p.getBBox(); svgEl.removeChild(p); } catch(e){}
+      if (!bb || !isFinite(bb.x) || !isFinite(bb.width)) bb = { x: 0, y: 0, width: 300, height: 200 };
       var pad = 10;
       var vb = (bb.x-pad) + " " + (bb.y-pad) + " " + (bb.width+pad*2) + " " + (bb.height+pad*2);
       var svgStr = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="' + vb + '"><path d="' + esc(d) + '" fill="none" stroke="' + document.getElementById("strokeColor").value + '" stroke-width="2"/></svg>';

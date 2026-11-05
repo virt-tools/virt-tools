@@ -43,7 +43,7 @@
       <div class="row"><span class="lbl">Input (bytes read by ,)</span><textarea id="input" rows="2" style="min-width:0" aria-label="Input"></textarea></div>
       <div class="row"><span class="lbl">Step limit</span><input id="limit" type="number" value="10000000" min="1" style="min-width:130px" aria-label="Limit"></div>
       <div class="row"><span class="lbl">Tape size</span><input id="tape" type="number" value="30000" min="1" style="min-width:130px" aria-label="Tape"></div>
-      <div class="err" id="err"></div>
+      <div class="err" id="err" aria-live="polite"></div>
       <div class="acts">
         <button id="b-run" class="primary" type="button">Run</button>
         <button id="b-hw" type="button">Hello World</button>
@@ -53,10 +53,10 @@
       </div>
 
       <h3>Output</h3>
-      <div class="out" id="out">—</div>
+      <div class="out" id="out" aria-live="polite">—</div>
 
       <h3>Details</h3>
-      <div class="out" id="details">—</div>
+      <div class="out" id="details" aria-live="polite">—</div>
 
       <p class="note" style="margin-top:14px"><strong>The math.</strong> Brainfuck models a single-tape Turing machine. The tape is an array of byte cells (here 8-bit, 0–255, wrapping), all initially zero; a data pointer starts at cell 0. The eight commands operate as: <code class="bf">&gt;</code> move the pointer right, <code class="bf">&lt;</code> move left, <code class="bf">+</code> increment the cell, <code class="bf">-</code> decrement the cell (wrapping mod 256), <code class="bf">.</code> output the cell as a byte, <code class="bf">,</code> read one byte from the input into the cell (0 at end-of-input), <code class="bf">[</code> jump forward to the matching <code class="bf">]</code> if the cell is zero, and <code class="bf">]</code> jump back to the matching <code class="bf">[</code> if the cell is non-zero. The interpreter pre-computes the bracket pairs so jumps are instant, counts every executed command as one step, and stops with an error if a bracket is unmatched, the pointer leaves the tape, or the step limit is reached (protecting the page from infinite loops). Because every non-command character is a comment, programs can be annotated freely. Everything runs locally — nothing leaves your browser.</p>
     </div>
@@ -107,6 +107,11 @@
         }
       }
       var tape = new Array(tapeSize);
+      // Map original code positions back to stripped program indices, so bracket
+      // jumps (keyed by original position) land on the right command even when
+      // the program contains comment characters.
+      var rev = [];
+      for (var r = 0; r < posMap.length; r++) rev[posMap[r]] = r;
       for (var k = 0; k < tapeSize; k++) tape[k] = 0;
       var ptr = 0, ip = 0, inIdx = 0, steps = 0;
       var outBytes = [];
@@ -124,8 +129,8 @@
         else if (cmd === '-') { tape[ptr] = (tape[ptr] - 1) & 0xFF; }
         else if (cmd === '.') { outBytes.push(tape[ptr]); }
         else if (cmd === ',') { tape[ptr] = inIdx < input.length ? input.charCodeAt(inIdx++) & 0xFF : 0; }
-        else if (cmd === '[') { if (tape[ptr] === 0) ip = jumps[srcPos]; }
-        else if (cmd === ']') { if (tape[ptr] !== 0) ip = jumps[srcPos]; }
+        else if (cmd === '[') { if (tape[ptr] === 0) ip = rev[jumps[srcPos]]; }
+        else if (cmd === ']') { if (tape[ptr] !== 0) ip = rev[jumps[srcPos]]; }
         ip++;
       }
       return { ok: true, output: bytesToStr(outBytes), outputBytes: outBytes, steps: steps, error: null, finalTape: tape, finalPtr: ptr };
@@ -165,9 +170,16 @@
 
     function run() {
       errEl.textContent = "";
+      var tapeSize = Math.max(1, Math.floor(Number(tapeEl.value) || 30000));
+      var stepLimit = Math.max(1, Math.floor(Number(limitEl.value) || 10000000));
+      if (tapeSize > 1000000) {
+        errEl.textContent = "Tape size is capped at 1,000,000 cells.";
+        outEl.textContent = "—"; detailsEl.textContent = "—";
+        return;
+      }
       var res = runBF(codeEl.value, inputEl.value, {
-        tapeSize: Math.max(1, Number(tapeEl.value) || 30000),
-        stepLimit: Math.max(1, Number(limitEl.value) || 10000000)
+        tapeSize: tapeSize,
+        stepLimit: stepLimit
       });
       var outText = res.output;
       var displayOut = outText === '' ? '(no output)' : outText;
@@ -193,8 +205,8 @@
       setCode(",[.,]", "Hello, Brainfuck!");
     });
     $("b-add2").addEventListener("click", function () {
-      // reads two digit characters, prints their sum as a digit (mod 10 wrap); e.g. 2+3=5
-      setCode(",>,[<+>-]<------------------------------------------------>++++++++++++++++++++++++++++++++++++++++++++++++.", "27");
+      // reads two digit characters, prints their sum as a digit character (e.g. 2+7 prints 9)
+      setCode(",>,[<+>-]<------------------------------------------------.", "27");
     });
     $("b-clear").addEventListener("click", function () { setCode("", ""); });
     [codeEl, inputEl, limitEl, tapeEl].forEach(function (el) { el.addEventListener("input", run); });
