@@ -36,16 +36,22 @@ The probes have different contracts:
 - `/api/ready` verifies SQLite can be read and can acquire a write transaction.
 - `/api/health` remains a backward-compatible alias of readiness.
 
-The runtime web image contains only public pages. Explicitly curated, high-risk,
-and redirect-source pages remain in Git for review but are safely removed from a
-disposable build tree. Exact nginx redirects are evaluated before static-file
-lookup and continue to work after their source pages are omitted.
+The repository contains only public tool pages. Explicitly curated, high-risk and
+redirect-source pages were removed; their mappings remain in `data/` and their
+markup in Git history. Exact nginx redirects are evaluated before static-file
+lookup, so old URLs keep working without a source page.
 
 The enforced CSP no longer permits JavaScript `eval`/`Function`; the narrowly
 scoped `wasm-unsafe-eval` token remains for the local sql.js WebAssembly runtime.
-`unsafe-inline` remains for the site's existing inline scripts and styles and is
-tracked as staged migration debt; the browser-security gate prevents reviewed
-dangerous sinks from returning while those inline blocks are moved to assets.
+The nginx header keeps `script-src 'unsafe-inline'` as a fallback, while every
+built page also carries a hash-pinned policy in a `meta` element: browsers that
+support hashes enforce it and reject any inline script or handler that was not
+present at build time. Pages that build markup strings containing `onclick="…"`
+keep `'unsafe-inline'` for `script-src-attr` only, because the handler text is
+known at runtime; their inline scripts stay hash-pinned. `scripts/generate_seo.py`
+regenerates those hashes, so a page edited after the build step must be rebuilt
+before it will run. `style-src` still allows inline styles; the browser-security
+gate prevents reviewed dangerous sinks from returning.
 
 ## Feedback privacy and abuse control
 
@@ -214,8 +220,10 @@ project-ownership warnings or accidental lifecycle coupling.
 
 Repository GitHub Actions workflows and scheduled Dependabot updates have been
 removed. No automatic GitHub test, build, or container-scan gate is configured.
-The local validators, browser suites, and Docker build checks are retained.
-Run the relevant checks before releasing; removing automation does not mean
+The local validators, browser suites, and Docker build checks are retained, and
+`bash scripts/preflight.sh` runs the complete source/unit list below in one pass
+(the local pre-push hook calls it). Run the relevant checks before releasing;
+removing automation does not mean
 unchecked changes are safe to deploy.
 
 Install the pinned API dependencies, then run the source and unit checks:
@@ -244,7 +252,7 @@ the UI suites and targeted correctness regressions, using a supervised static
 server with failure diagnostics:
 
 ```sh
-npm install --no-save --ignore-scripts --package-lock=false playwright@1.54.2
+npm ci --ignore-scripts
 npx playwright install --with-deps chromium
 python3 scripts/generate_seo.py frontend https://virt.tools
 bash scripts/run_browser_smoke.sh

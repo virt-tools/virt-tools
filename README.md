@@ -17,14 +17,15 @@ frontend/              Static site (served by nginx)
     tool-catalog.schema.json
                        JSON Schema for catalog records and trust metadata
     tools.js           Generated lean browser search index — do not edit
-    tool-meta/         Generated small public trust record per listed tool
-    app.js             Shared header, catalog, trust UI, local preferences
+    tool-meta/         Generated small public metadata record per listed tool
+    tool-css/          Shared form-layout stylesheets (deduplicated per tool)
+    app.js             Shared header, catalog, guidance, local preferences
     formula-workbench.js
                        Shared runtime for generated domain workbenches
     theme-init.js      Early theme bootstrap (applies saved theme before paint)
     style.css          Shared styles (dark/light, with manual override)
   vendor/              Locally vendored libraries (e.g. qrcode.min.js) — no runtime CDNs
-  tools/<slug>/        One folder per tool, each with an index.html
+  tools/<slug>/        One folder per public tool, each with an index.html
   feedback/            Submit + status lookup page
   privacy/             Privacy/trust center and browser storage controls
   service-worker.js    Bounded, privacy-aware offline caching
@@ -32,25 +33,28 @@ frontend/              Static site (served by nginx)
 api/                   Flask + SQLite feedback service
   app.py               POST /api/feedback, GET /api/feedback/<uuid>
   db.py                SQLite storage layer
-  Dockerfile            Non-root Gunicorn production image
 scripts/
+  preflight.sh         Runs every source and unit check in one pass
   generate_tool_catalog.py
                        Validates JSON and generates public browser artifacts
   generate_formula_workbenches.py
                        Validates formula manifest and generates static workbenches
+  generate_seo.py      Injects SEO metadata and per-page CSP hashes at build time
   manage_feedback.py   Offline admin CLI (review / reply / set status)
   backup_feedback.sh   WAL-safe encrypted backup wrapper
   restore_feedback.sh  Verified restore wrapper
-nginx/
-  nginx.conf           Serves frontend, proxies /api/ to the api service
-  Dockerfile
-docker-compose.yml     web (nginx) + api, exposed on port 8080
 docs/
   OPERATIONS.md        Deployment, privacy, backup and rollback runbook
   RISK_AND_TRUST_POLICY.md
                        Publication rules and review requirements
+  SECURITY.md          Vulnerability reporting
   audits/              Retained review evidence and audit-ledger instructions
 ```
+
+Host-only and untracked (present on the deployment host, absent from a clone):
+`nginx/` (nginx.conf, security-headers.conf, Dockerfile, generated
+tool-redirects.conf), `api/Dockerfile`, `api/gunicorn.conf.py`,
+`docker-compose.yml`, `deploy/`, `runtime/`, and the deploy/test shell wrappers.
 
 Personal AI/editor settings and installed skills are local-only and ignored by
 Git; they are not needed to build or run the app. Superseded proposals and
@@ -95,10 +99,12 @@ python3 scripts/validate_generated_conversions.py .
 python3 scripts/validate_tools.py frontend
 ```
 
-The one-time converter migration scripts have been retired. Preserve legacy
-route mappings and retained source pages; the build omits redirect-source and
-unlisted pages from the runtime image while nginx preserves old URLs through
-exact redirects. See [the operations guide](docs/OPERATIONS.md) for deployment details.
+The one-time converter migration scripts have been retired. Legacy route
+mappings live in `data/generated-conversion-tools.json` and
+`data/tool-curation.json`; nginx preserves old URLs through exact redirects.
+Unlisted, quarantined and redirect-source pages are not kept in the repository —
+Git history holds their former markup. See [the operations guide](docs/OPERATIONS.md)
+for deployment details.
 
 ## Catalog and search architecture
 
@@ -107,14 +113,14 @@ maturity, review date, method, sources, and test cases. Internal risk
 classifications enforce curation and quarantine but are omitted from public
 cards, metadata, and HTML. Search ranks exact names, aliases, tags, domains,
 descriptions, and small typo matches before rendering a bounded result window.
-Domain and review-status filters operate on data, not on thousands of
-pre-rendered hidden cards.
+The category filter and the domain browse groups operate on data, not on
+thousands of pre-rendered hidden cards.
 
 Tool pages load one small generated metadata document for their own route. The
-shared shell uses it to show review status, methodology/source coverage,
-plain-language verification guidance when warranted, favorites, related public
-tools, and a prefilled issue link. Quarantined entries have no public metadata
-document.
+shared shell uses it for plain-language verification guidance when warranted and
+for related public tools; favorites and the prefilled issue link come from the
+page itself. Review-status badges were removed because no public tool has a
+completed review yet. Quarantined entries have no public metadata document.
 
 ## Offline support
 
@@ -126,6 +132,10 @@ catalog, or every tool page. Users can inspect and clear these caches from
 
 ## Running locally with Docker
 
+The serving layer (`nginx/`, `api/Dockerfile`, `docker-compose.yml`) is host-local
+and deliberately not tracked in this repository: a fresh clone contains the tools
+and the application code, not a deployable stack. On the deployment host:
+
 ```bash
 docker compose build --pull
 docker compose up -d --no-build
@@ -135,17 +145,17 @@ Then open http://localhost:8080.
 
 ## Development checks and documentation
 
-GitHub Actions workflows and scheduled Dependabot updates are disabled.
-Run checks locally before a release; core checks include:
+GitHub Actions workflows and scheduled Dependabot updates are disabled, so the
+single gate is the local preflight script. It regenerates the ignored nginx
+redirect map, then runs every validator, syntax check and unit test:
 
 ```bash
-python3 scripts/generate_tool_catalog.py frontend --check
-python3 scripts/generate_formula_workbenches.py --check
-python3 scripts/validate_tools.py frontend
-python3 scripts/validate_generated_conversions.py .
-node scripts/validate_javascript.mjs frontend
-python3 -m unittest discover -s tests -p 'test_*.py' -v
+bash scripts/preflight.sh
 ```
+
+It needs only Python 3 and Node (no `npm install` for this step). Browser suites
+additionally need Playwright; see the operations guide. A pre-push hook that runs
+`bash scripts/preflight.sh` is the intended substitute for CI.
 
 API tests require the pinned dependencies in `api/requirements.txt`. Shared
 design checks live in `scripts/validate_tool_design.py`; the repeatable markup
@@ -154,8 +164,9 @@ through `bash scripts/run_browser_smoke.sh`; setup and the full manual release
 checklist are in [the operations guide](docs/OPERATIONS.md#release-checks).
 
 Use [the operations guide](docs/OPERATIONS.md) for production releases and rollback,
-[the risk policy](docs/RISK_AND_TRUST_POLICY.md) for publication requirements,
-and [the audit guide](docs/audits/INDIVIDUAL_TOOL_AUDIT.md) for review evidence and
+[the risk policy](docs/RISK_AND_TRUST_POLICY.md) for publication requirements, and
+[the security policy](docs/SECURITY.md) to report a vulnerability. The
+[audit guide](docs/audits/INDIVIDUAL_TOOL_AUDIT.md) covers review evidence and
 ledger maintenance. Automated validation does not imply every tool has been
 individually reviewed.
 

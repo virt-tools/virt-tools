@@ -61,8 +61,9 @@ evidence must support its claims.
 ## Quarantine and relisting
 
 `data/tool-risk-policy.json` contains the current conservative quarantine groups.
-`data/tool-curation.json` must also unlist every quarantined slug. Source pages and
-history are retained, but production images omit them. Relisting requires:
+`data/tool-curation.json` must also unlist every quarantined slug. Quarantined
+source pages are removed from the repository (Git history keeps the markup), and
+production images never contain them. Relisting requires:
 
 1. a scoped method and primary sources;
 2. strict input and cross-field validation;
@@ -75,6 +76,5 @@ history are retained, but production images omit them. Relisting requires:
 ## Release gate
 
 Every release runs `scripts/validate_risk_policy.py`. It fails when a
-quarantined tool is public, when quarantine and curation disagree, when a
-quarantine page is lost unexpectedly, or when the individual audit ledger no
-longer accounts for every physical tool page.
+quarantined tool is public, when quarantine and curation disagree, or when the
+individual audit ledger no longer accounts for every physical tool page.

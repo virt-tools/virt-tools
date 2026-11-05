@@ -48,11 +48,8 @@ def main() -> int:
         if any(slug.startswith(item) for item in policy["unlist_prefixes"]) and slug not in keep:
             unlisted.add(slug)
 
-    unknown = sorted(unlisted - pages)
-    if unknown:
-        print("Policy references missing pages: " + ", ".join(unknown), file=sys.stderr)
-        return 1
-
+    # Unlisted, quarantined and redirect-source slugs no longer have a page in
+    # the repository; the curation data is their only remaining record.
     # Preserve quarantined entries and their review metadata in the canonical
     # catalog, but make the publication decision explicit and durable.
     for tool in tools:
@@ -93,10 +90,11 @@ def main() -> int:
         redirect_lines.append(
             f"location = /tools/{source}/ {{ return 301 /tools/{target}/{suffix}; }}"
         )
+    (root / "nginx").mkdir(exist_ok=True)
     (root / "nginx" / "tool-redirects.conf").write_text(
         "\n".join(redirect_lines) + "\n", encoding="utf-8"
     )
-    print(f"Unlisted {len(unlisted)} retained pages; generated {len(redirects)} redirects")
+    print(f"Unlisted {len(unlisted)} curated slugs; generated {len(redirects)} redirects")
     return 0
 
 

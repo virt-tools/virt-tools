@@ -20,7 +20,6 @@ def main():
  if len(targets)!=37 or not targets<=registered: issues.append('consolidated targets are missing or duplicated')
  if set(redirects.values())!=targets: issues.append('legacy redirects do not cover every consolidated target')
  for source,target in redirects.items():
-  if not (frontend/'tools'/source/'index.html').is_file(): issues.append(f'{source}: retained legacy page missing')
   if target not in targets: issues.append(f'{source}: invalid target {target}')
  for tool in tools:
   slug=tool['slug']; page_path=frontend/'tools'/slug/'index.html'

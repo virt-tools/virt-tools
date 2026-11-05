@@ -105,10 +105,13 @@ class FeedbackAPITest(unittest.TestCase):
         old_limit = api.POST_LIMIT
         api.POST_LIMIT = 2
         try:
-            for expected in (201, 201, 429):
-                response = self.post('{"message":"rate"}', ip="198.51.100.77")
-                self.assertEqual(response.status_code, expected)
-            self.assertIn("Retry-After", response.headers)
+            # A fixed clock keeps all three requests inside one window; using
+            # wall time makes the assertion flaky at a minute boundary.
+            with mock.patch.object(db.time, "time", return_value=1_700_000_000):
+                for expected in (201, 201, 429):
+                    response = self.post('{"message":"rate"}', ip="198.51.100.77")
+                    self.assertEqual(response.status_code, expected)
+                self.assertIn("Retry-After", response.headers)
         finally:
             api.POST_LIMIT = old_limit
 

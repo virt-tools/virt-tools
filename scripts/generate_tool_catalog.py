@@ -367,6 +367,8 @@ def curated_slugs(project_root: Path, frontend: Path) -> set[str]:
 def validate_catalog(tools: list[dict[str, Any]], frontend: Path) -> list[str]:
     issues: list[str] = []
     seen: set[str] = set()
+    hidden = curated_slugs(frontend.parent, frontend)
+    public_slugs = {tool["slug"] for tool in public_tools(tools, hidden)}
     required_strings = ("slug", "name", "description", "category", "subcategory", "icon", "added")
     allowed_keys = {
         "slug", "name", "description", "category", "legacyCategory", "subcategory", "tags", "aliases",
@@ -392,7 +394,7 @@ def validate_catalog(tools: list[dict[str, Any]], frontend: Path) -> list[str]:
             if slug in seen:
                 issues.append(f"duplicate catalog slug: {slug}")
             seen.add(slug)
-            if not (frontend / "tools" / slug / "index.html").is_file():
+            if slug in public_slugs and not (frontend / "tools" / slug / "index.html").is_file():
                 issues.append(f"{label}: tool page is missing")
         for key in ("tags", "aliases"):
             values = tool.get(key)

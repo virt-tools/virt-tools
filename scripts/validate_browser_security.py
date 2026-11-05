@@ -212,7 +212,6 @@ def main() -> int:
 
     required_markers = {
         "frontend/tools/markdown-to-html/index.html": ["safeUrl", "setAttribute('sandbox','')", "escapeAttr"],
-        "frontend/tools/markdown-preview/index.html": ["safeUrl", "sandbox=\"\"", "escapeAttr"],
         "frontend/tools/markdown-to-pdf/index.html": ["safeUrl", "setAttribute('sandbox','')", "escapeAttr"],
         "frontend/tools/html-to-markdown/index.html": ["safeUrl", "output.value=value"],
         "frontend/feedback/index.html": [

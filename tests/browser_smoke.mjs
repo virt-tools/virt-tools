@@ -151,7 +151,6 @@ try {
   await homepage.waitForFunction(() => {
     return document.getElementById("tool-search")?.value === ""
       && document.getElementById("category-filter")?.value === ""
-      && document.getElementById("maturity-filter")?.value === ""
       && document.querySelectorAll("#tool-catalog .tool-card[data-slug]").length > 0;
   });
   assert.notEqual(
@@ -202,7 +201,7 @@ try {
     formulaLink.click(),
   ]);
   await assertSharedPage(workbenchPage, "Geometry Formula Workbench", "formula workbench");
-  await workbenchPage.locator(".tool-trust-panel").waitFor({ state: "visible", timeout: 10_000 });
+  await workbenchPage.locator(".tool-shell-actions").waitFor({ state: "visible", timeout: 10_000 });
   assert.equal(
     await workbenchPage.locator(".tool-decision-guidance").count(),
     0,
@@ -268,7 +267,7 @@ try {
     "consequential tool lost its plain-language verification guidance",
   );
   assert.doesNotMatch(
-    await guidancePage.locator(".tool-trust-panel").innerText(),
+    await guidancePage.locator(".tool-decision-guidance").innerText(),
     /moderate|high|critical|risk/i,
     "tool guidance exposes the internal risk taxonomy",
   );

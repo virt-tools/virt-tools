@@ -56,8 +56,6 @@ def main() -> int:
 
     catalog_by_slug = {tool["slug"]: tool for tool in catalog}
     for slug, (group_id, expected_risk) in sorted(quarantined.items()):
-        if slug not in pages:
-            issues.append(f"{slug}: quarantine page is missing ({group_id})")
         if slug not in unlisted:
             issues.append(f"{slug}: quarantine is absent from tool-curation.json")
         if slug in registry:

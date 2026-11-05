@@ -38,7 +38,7 @@ try {
   await expectResults(home);
   assert.deepEqual(await home.locator(".view-tab").allTextContents(), ["All tools", "Favorites", "Recent"]);
   assert.equal(await home.locator("#catalog-filters").getAttribute("open"), null);
-  assert.deepEqual(await home.locator("#maturity-filter option").allTextContents(), ["All statuses", "Draft", "Not reviewed"]);
+  assert.equal(await home.locator("#maturity-filter").count(), 0);
   assert.equal(await home.locator("#catalog-start [data-category-group]").count(), 10);
 
   for (const task of ["Format JSON", "Convert units", "Count words", "Create a QR code", "Calculate a loan"]) {
@@ -76,13 +76,10 @@ try {
   await home.locator("#formula-fields input").first().waitFor();
   assert.equal(await home.locator(".tool-header .back").count(), 0);
   assert.equal(await home.locator(".tool-breadcrumbs a").count(), 1);
-  assert.equal(await home.locator(".tool-trust-panel details").getAttribute("open"), null);
   assert.ok(await home.evaluate(() => {
     const picker = document.querySelector(".formula-picker");
     const actions = document.querySelector(".tool-shell-actions");
-    const trust = document.querySelector(".tool-trust-panel");
-    return Boolean(picker.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING)
-      && Boolean(picker.compareDocumentPosition(trust) & Node.DOCUMENT_POSITION_FOLLOWING);
+    return Boolean(picker.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING);
   }), "secondary actions precede the tool inputs");
   await home.locator("#formula-example").click();
   await home.locator("#formula-results").waitFor({ state: "visible" });

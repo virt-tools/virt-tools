@@ -284,10 +284,6 @@
     return "Added " + date.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
   }
 
-  function maturityLabel(value) {
-    return ({ unreviewed: "Not reviewed", draft: "Draft", reviewed: "Reviewed", verified: "Verified", deprecated: "Deprecated" })[value] || "Not reviewed";
-  }
-
   function formulaHref(tool, query) {
     var base = ROOT + "tools/" + tool.slug + "/";
     var normalized = normalizeSearch(query);
@@ -341,7 +337,6 @@
   var emptyNote = null;
   var countElement = null;
   var categoryFilter = null;
-  var maturityFilter = null;
   var loadMoreButton = null;
   var sortSelect = null;
   var searchAllButton = null;
@@ -392,11 +387,9 @@
   function filteredTools() {
     var query = normalizeSearch(searchInput ? searchInput.value : "");
     var category = categoryFilter ? categoryFilter.value : "";
-    var maturity = maturityFilter ? maturityFilter.value : "";
     var ranked = [];
     sourceForView().forEach(function (tool, order) {
       if (!matchesCategory(tool, category)) return;
-      if (maturity && tool.maturity !== maturity) return;
       var score = query ? scoreTool(tool, query) : 0;
       if (score < 0) return;
       ranked.push({ tool: tool, score: score, order: order });
@@ -416,7 +409,7 @@
     replace(emptyNote, []);
     if (query) {
       emptyNote.appendChild(document.createTextNode('No tools match "' + query + '". '));
-      if (currentView !== "all" || (categoryFilter && categoryFilter.value) || (maturityFilter && maturityFilter.value)) {
+      if (currentView !== "all" || (categoryFilter && categoryFilter.value)) {
         emptyNote.appendChild(document.createTextNode("Try searching all tools with filters cleared."));
         emptyNote.hidden = false;
         return;
@@ -464,8 +457,8 @@
     }
     var hasQuery = Boolean(searchInput && searchInput.value.trim());
     if (sortSelect) sortSelect.disabled = hasQuery;
-    if (searchAllButton) searchAllButton.hidden = !hasQuery || (currentView === "all" && !categoryFilter.value && !maturityFilter.value);
-    var selectedFilters = Number(Boolean(categoryFilter && categoryFilter.value)) + Number(Boolean(maturityFilter && maturityFilter.value));
+    if (searchAllButton) searchAllButton.hidden = !hasQuery || (currentView === "all" && !categoryFilter.value);
+    var selectedFilters = Number(Boolean(categoryFilter && categoryFilter.value));
     var filterLabel = document.getElementById("catalog-filter-label");
     if (filterLabel) filterLabel.textContent = selectedFilters ? "Filters (" + selectedFilters + ")" : "Filters";
     catalogMount.setAttribute("aria-label", currentView === "favorites" ? "Favorite tools" : currentView === "recently-used" ? "Recently used tools" : "All tools");
@@ -511,19 +504,12 @@
     Object.keys(counts).sort().filter(function (category) { return !grouped.has(category); }).forEach(function (category) {
       categoryFilter.appendChild(el("option", { value: category }, [categoryName(category) + " (" + counts[category] + ")"]));
     });
-    if (maturityFilter) {
-      var statuses = {};
-      (window.VIRTUAL_TOOLS || []).forEach(function (tool) { statuses[tool.maturity] = true; });
-      ["verified", "reviewed", "draft", "unreviewed", "deprecated"].filter(function (status) { return statuses[status]; }).forEach(function (status) {
-        maturityFilter.appendChild(el("option", { value: status }, [maturityLabel(status)]));
-      });
-    }
   }
 
   function renderStart() {
     var mount = document.getElementById("catalog-start");
     if (!mount) return;
-    mount.hidden = currentView !== "all" || Boolean(searchInput.value.trim() || categoryFilter.value || maturityFilter.value);
+    mount.hidden = currentView !== "all" || Boolean(searchInput.value.trim() || categoryFilter.value);
     if (mount.hidden) return;
     replace(mount, []);
     var favorites = favoritesSet();
@@ -583,7 +569,6 @@
     emptyNote = document.getElementById("search-empty");
     countElement = document.getElementById("tool-count");
     categoryFilter = document.getElementById("category-filter");
-    maturityFilter = document.getElementById("maturity-filter");
     loadMoreButton = document.getElementById("catalog-load-more");
     sortSelect = document.getElementById("catalog-sort");
     searchAllButton = document.getElementById("catalog-search-all");
@@ -605,7 +590,7 @@
       timer = setTimeout(renderCatalog, 90);
       try { sessionStorage.setItem("vt-search", searchInput.value); } catch (_) {}
     });
-    [categoryFilter, maturityFilter].forEach(function (control) {
+    [categoryFilter].forEach(function (control) {
       if (control) control.addEventListener("change", function () { displayLimit = PAGE_SIZE; renderCatalog(); });
     });
     if (sortSelect) sortSelect.addEventListener("change", function () {
@@ -615,7 +600,6 @@
     });
     if (searchAllButton) searchAllButton.addEventListener("click", function () {
       categoryFilter.value = "";
-      maturityFilter.value = "";
       switchView("all");
       searchInput.focus();
     });
@@ -623,7 +607,6 @@
     if (reset) reset.addEventListener("click", function () {
       if (searchInput) searchInput.value = "";
       if (categoryFilter) categoryFilter.value = "";
-      if (maturityFilter) maturityFilter.value = "";
       displayLimit = PAGE_SIZE;
       try { sessionStorage.removeItem("vt-search"); } catch (_) {}
       renderCatalog();
@@ -690,56 +673,12 @@
     return {
       slug: slug,
       guidance: metaContent("vt:guidance") || null,
-      maturity: metaContent("vt:maturity") || "unreviewed",
-      reviewedAt: metaContent("vt:reviewed-at") || null,
-      method: metaContent("vt:method") || null,
-      sources: [],
-      testCaseCount: Number(metaContent("vt:test-count")) || 0,
       related: []
     };
   }
 
-  function safeHttpURL(value) {
-    try {
-      var url = new URL(value, location.href);
-      return url.protocol === "http:" || url.protocol === "https:" ? url.href : null;
-    } catch (_) { return null; }
-  }
-
-  function renderTrustPanel(panel, metadata) {
-    var statusClass = "status-" + metadata.maturity;
-    var badges = el("div", { class: "tool-trust-badges" }, [
-      el("span", { class: "trust-badge privacy-ok" }, ["Browser-local inputs"]),
-      el("span", { class: "trust-badge " + statusClass }, [maturityLabel(metadata.maturity)])
-    ]);
+  function renderGuidance(metadata) {
     var guidance = typeof metadata.guidance === "string" ? metadata.guidance.trim() : "";
-    var details = el("details", { class: "tool-method" });
-    details.appendChild(el("summary", {}, ["About this tool: method & review status"]));
-    details.appendChild(badges);
-    details.appendChild(el("p", {}, [metadata.method || "A tool-specific method description has not been published yet."]));
-    if (metadata.reviewedAt) {
-      var reviewed = new Date(metadata.reviewedAt);
-      details.appendChild(el("p", {}, ["Last reviewed: " + (isNaN(reviewed.getTime()) ? metadata.reviewedAt : reviewed.toLocaleDateString()) + "."]));
-    } else {
-      details.appendChild(el("p", {}, ["Independent review date: not recorded."]));
-    }
-    var sources = Array.isArray(metadata.sources) ? metadata.sources : [];
-    if (sources.length) {
-      var list = el("ul", { class: "tool-source-list" });
-      sources.forEach(function (source) {
-        var item = el("li");
-        var href = source && safeHttpURL(source.url);
-        item.appendChild(href
-          ? el("a", { href: href, target: "_blank", rel: "noopener noreferrer" }, [source.title])
-          : document.createTextNode(source && source.title ? source.title : "Untitled source"));
-        list.appendChild(item);
-      });
-      details.appendChild(list);
-    } else {
-      details.appendChild(el("p", {}, ["Published sources: none recorded."]));
-    }
-    details.appendChild(el("p", {}, ["Recorded test cases: " + (Number(metadata.testCaseCount) || 0) + "."]));
-    replace(panel, [details]);
     var guidanceNote = document.querySelector(".tool-decision-guidance");
     if (!guidance) {
       if (guidanceNote) guidanceNote.remove();
@@ -777,9 +716,10 @@
     var slug = slugFromPath();
     if (!slug) return;
     var main = document.querySelector("main");
-    if (!main || main.querySelector(".tool-trust-panel")) return;
+    if (!main || main.dataset.vtShell === "1") return;
     var heading = main.querySelector("h1");
     var title = heading ? heading.textContent.trim() : slug;
+    main.dataset.vtShell = "1";
     main.classList.add("tool-page");
     // Fixed-cell boards retain playable target sizes on narrow screens. Scroll
     // just the board (also keyboard accessible), never the entire tool page.
@@ -834,11 +774,9 @@
     }, ["Report an issue"]));
     actions.appendChild(el("a", { class: "tool-privacy-link", href: ROOT + "privacy/" }, ["Privacy & local data"]));
 
-    var panel = el("aside", { class: "tool-trust-panel", "aria-label": "Tool trust and status" });
     var metadata = defaultToolMetadata(slug);
     main.appendChild(actions);
-    main.appendChild(panel);
-    renderTrustPanel(panel, metadata);
+    renderGuidance(metadata);
 
     fetch(ROOT + "assets/tool-meta/" + encodeURIComponent(slug) + ".json", {
       credentials: "same-origin", cache: "no-cache", headers: { Accept: "application/json" }
@@ -847,7 +785,7 @@
       return response.json();
     }).then(function (loaded) {
       metadata = Object.assign(metadata, loaded || {});
-      renderTrustPanel(panel, metadata);
+      renderGuidance(metadata);
       renderRelated(main, metadata);
     }).catch(function () {
       renderRelated(main, metadata);

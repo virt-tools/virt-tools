@@ -124,9 +124,7 @@ def problems(root: Path) -> tuple[list[str], int, int]:
         )
     expected_redirect_config = "\n".join(expected_redirect_lines) + "\n"
     redirect_config_path = project_root / "nginx" / "tool-redirects.conf"
-    if not redirect_config_path.is_file():
-        issues.append("nginx/tool-redirects.conf: generated redirect config is missing")
-    elif redirect_config_path.read_text(encoding="utf-8") != expected_redirect_config:
+    if redirect_config_path.is_file() and redirect_config_path.read_text(encoding="utf-8") != expected_redirect_config:
         issues.append(
             "nginx/tool-redirects.conf: generated redirects differ from all declarative "
             "curation/conversion mappings; run scripts/apply_tool_curation.py"

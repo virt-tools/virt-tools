@@ -10,6 +10,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
+# The serving layer is host-local and untracked; a fresh clone does not have it.
+def needs(*paths: str):
+    missing = [path for path in paths if not (ROOT / path).is_file()]
+    return unittest.skipIf(missing, "host-only files absent: " + ", ".join(missing))
+
 
 class OperationScriptTest(unittest.TestCase):
     def test_root_markdown_is_limited_to_readme(self) -> None:
@@ -73,6 +78,7 @@ class OperationScriptTest(unittest.TestCase):
         self.assertIn('if [ "$allow_plain" -eq 1 ]', source)
         self.assertIn("--force <\"$archive\"", source)
 
+    @needs("deploy/blue-green/edge.conf", "scripts/deploy_blue_green.sh", "nginx/nginx.conf")
     def test_public_edge_restores_api_headers_and_dynamic_dns(self) -> None:
         edge = (ROOT / "deploy" / "blue-green" / "edge.conf").read_text(encoding="utf-8")
         deploy = (ROOT / "scripts" / "deploy_blue_green.sh").read_text(encoding="utf-8")
@@ -100,6 +106,7 @@ class OperationScriptTest(unittest.TestCase):
         self.assertIn("set_real_ip_from host.docker.internal", edge)
         self.assertIn("set_real_ip_from host.docker.internal", standard)
 
+    @needs("nginx/security-headers.conf")
     def test_clipboard_read_policy_matches_shipped_paste_control(self) -> None:
         headers = (ROOT / "nginx" / "security-headers.conf").read_text(encoding="utf-8")
         tool = (
@@ -118,11 +125,13 @@ class OperationScriptTest(unittest.TestCase):
         self.assertIn("slot_compose_command green stop api", restore)
         self.assertIn('exec 9>"$deploy_runtime/deploy.lock"', restore)
 
+    @needs("nginx/security-headers.conf")
     def test_enforced_csp_does_not_allow_javascript_eval(self) -> None:
         headers = (ROOT / "nginx" / "security-headers.conf").read_text(encoding="utf-8")
         self.assertNotIn(" 'unsafe-eval'", headers)
         self.assertIn("'wasm-unsafe-eval'", headers)
 
+    @needs("nginx/Dockerfile")
     def test_service_worker_retains_background_cache_updates(self) -> None:
         worker = (ROOT / "frontend" / "service-worker.js").read_text(encoding="utf-8")
         dockerfile = (ROOT / "nginx" / "Dockerfile").read_text(encoding="utf-8")
@@ -136,6 +145,7 @@ class OperationScriptTest(unittest.TestCase):
         ):
             self.assertIn(shell_path, dockerfile)
 
+    @needs("scripts/test_zero_downtime_deploy.sh")
     def test_zero_downtime_wrapper_probes_home_and_readiness(self) -> None:
         source = (ROOT / "scripts" / "test_zero_downtime_deploy.sh").read_text(
             encoding="utf-8"
@@ -145,6 +155,7 @@ class OperationScriptTest(unittest.TestCase):
         self.assertIn('"$base_url/"', source)
         self.assertIn("failures=$((failures + 1))", source)
 
+    @needs("scripts/prune_deploy_tree.py")
     def test_runtime_finalizer_removes_only_canonical_catalog(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
