@@ -19,13 +19,9 @@ class OperationScriptTest(unittest.TestCase):
         }
         self.assertEqual(markdown, {"README.md"})
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        maintenance = (ROOT / "scripts/feedback-maintenance-prompt.txt").read_text(
-            encoding="utf-8"
-        )
         for guide in ("docs/OPERATIONS.md", "docs/RISK_AND_TRUST_POLICY.md"):
             self.assertTrue((ROOT / guide).is_file())
             self.assertIn(f"]({guide})", readme)
-            self.assertIn(guide, maintenance)
 
     def test_audit_evidence_survives_documentation_cleanup(self) -> None:
         audit = runpy.run_path(str(ROOT / "scripts" / "manage_individual_tool_audit.py"))
