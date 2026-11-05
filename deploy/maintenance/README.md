@@ -1,6 +1,6 @@
-# Half-hourly maintenance
+# Hourly maintenance
 
-This host-specific user timer runs one Codex cycle at :00 and :30 UTC. It checks
+This host-specific user timer runs one Codex cycle at :00 UTC every hour. It checks
 live feedback, addresses at most one actionable unresolved item, or adds one
 genuinely absent low-risk tool when the queue is empty. Every application release
 must pass tests, a scoped commit and push, a blue-green build/deploy, and health
@@ -28,7 +28,7 @@ systemctl --user list-timers virt-tools-maintenance.timer
 ```
 
 The timer does not run immediately on install or replay missed runs after an
-outage. If a cycle lasts more than 30 minutes, systemd skips overlapping ticks.
+outage. If a cycle lasts more than an hour, systemd skips overlapping ticks.
 The runner also holds a file lock so manual invocations cannot overlap it.
 There is no forced timeout that could interrupt a production traffic switch.
 
@@ -50,6 +50,23 @@ and `latest-preflight.txt` point to the most recent finished runs. These logs ca
 contain private feedback; do not publish them. Codex also keeps its normal local
 session records. There is no external notification delivery configured. Review
 the logs for `NEEDS_ATTENTION.txt`, failures, and disk usage regularly.
+
+## Daily pull-request review
+
+`virt-tools-pr-review.timer` runs one Codex cycle daily at 09:00 UTC. It audits
+every open pull request, merges only changes that pass the repository's local
+validation and container smoke checks, closes obsolete pull requests with an
+explanation, and deploys any merged change through the blue-green workflow.
+The durable instructions are in `scripts/pr-review-prompt.txt`; the runner uses
+the same sandbox, Docker group refresh, and automatic approval review as the
+hourly maintenance timer. Its state, lock, and private reports live under
+`runtime/pr-review/`. A `runtime/pr-review/PAUSED` file pauses it.
+
+```sh
+systemctl --user status virt-tools-pr-review.timer virt-tools-pr-review.service
+journalctl --user -u virt-tools-pr-review.service -n 30 --no-pager
+systemctl --user disable --now virt-tools-pr-review.timer
+```
 
 ## Source baseline and concurrent edits
 
