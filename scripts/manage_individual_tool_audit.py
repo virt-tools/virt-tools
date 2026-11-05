@@ -12,7 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 TOOLS_ROOT = ROOT / "frontend" / "tools"
-LEDGER = ROOT / "individual-tool-audit.json"
+LEDGER = ROOT / "data" / "individual-tool-audit.json"
 SECOND_WAVE_REPORT = ROOT / "docs" / "audits" / "SECOND_WAVE_INDIVIDUAL_AUDIT.md"
 SECOND_WAVE_AGENT = "documented second-wave individual audit"
 SECOND_WAVE_FINDING = (

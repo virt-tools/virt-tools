@@ -5,9 +5,9 @@ from pathlib import Path
 CONFIG_RE=re.compile(r'<script id="unit-config" type="application/json">(.*?)</script>',re.S)
 def main():
  root=Path(sys.argv[1] if len(sys.argv)>1 else '.').resolve(); frontend=root/'frontend'
- manifest=json.loads((root/'generated-conversion-tools.json').read_text(encoding='utf-8')); tools=manifest.get('tools',[]); redirects=manifest.get('legacy_redirects',{}); issues=[]
+ manifest=json.loads((root/'data'/'generated-conversion-tools.json').read_text(encoding='utf-8')); tools=manifest.get('tools',[]); redirects=manifest.get('legacy_redirects',{}); issues=[]
  catalog=json.loads((frontend/'assets/tool-catalog.json').read_text(encoding='utf-8'))
- policy=json.loads((root/'tool-curation.json').read_text(encoding='utf-8')); keep=set(policy.get('keep',[])); hidden=set(policy.get('unlist',[]))|set(policy.get('redirects',{}))|set(redirects)
+ policy=json.loads((root/'data'/'tool-curation.json').read_text(encoding='utf-8')); keep=set(policy.get('keep',[])); hidden=set(policy.get('unlist',[]))|set(policy.get('redirects',{}))|set(redirects)
  prefixes=tuple(policy.get('unlist_prefixes',[]))
  if prefixes:
   hidden.update(page.parent.name for page in (frontend/'tools').glob('*/index.html') if page.parent.name.startswith(prefixes) and page.parent.name not in keep)

@@ -346,12 +346,12 @@ def valid_datetime(value: str) -> bool:
 
 
 def curated_slugs(project_root: Path, frontend: Path) -> set[str]:
-    policy_path = project_root / "tool-curation.json"
+    policy_path = project_root / "data" / "tool-curation.json"
     if not policy_path.is_file():
         return set()
     policy = json.loads(policy_path.read_text(encoding="utf-8"))
     hidden = set(policy.get("unlist", [])) | set(policy.get("redirects", {}))
-    generated_path = project_root / "generated-conversion-tools.json"
+    generated_path = project_root / "data" / "generated-conversion-tools.json"
     if generated_path.is_file():
         generated = json.loads(generated_path.read_text(encoding="utf-8"))
         hidden.update(generated.get("legacy_redirects", {}))

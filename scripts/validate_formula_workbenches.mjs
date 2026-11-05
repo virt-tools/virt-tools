@@ -7,7 +7,7 @@ import vm from "node:vm";
 
 const root = path.resolve(process.argv[2] || ".");
 const manifest = JSON.parse(
-  fs.readFileSync(path.join(root, "formula-workbenches.json"), "utf8"),
+  fs.readFileSync(path.join(root, "data", "formula-workbenches.json"), "utf8"),
 );
 let formulaCount = 0;
 let goldenCount = 0;

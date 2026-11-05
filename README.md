@@ -71,14 +71,14 @@ release summaries remain available in Git history.
    ```
 
 `tools.js` and `assets/tool-meta/*.json` are deterministic outputs. Never edit
-them directly. Generation applies `tool-curation.json`, so unlisted and redirect
+them directly. Generation applies `data/tool-curation.json`, so unlisted and redirect
 source routes cannot be republished accidentally. The canonical record may be
 retained with `listed: false` for review history.
 
 Keep tools client-side. If you need a JS library, vendor it under
 `frontend/vendor/` rather than loading from a CDN, to preserve privacy.
 
-Small formula-only calculators are declared in `formula-workbenches.json` and
+Small formula-only calculators are declared in `data/formula-workbenches.json` and
 generated into domain workbenches. Their former routes remain in source and
 redirect to the exact replacement formula with `?formula=<legacy-slug>`; do not
 hand-edit the generated workbench pages or function assets.
@@ -87,7 +87,7 @@ hand-edit the generated workbench pages or function assets.
 
 The 37 quantity-level converters share `frontend/assets/unit-converter.js`.
 Their unit definitions and 1,047 legacy route mappings are recorded in
-`generated-conversion-tools.json`. When changing units, update both the manifest
+`data/generated-conversion-tools.json`. When changing units, update both the manifest
 and the corresponding page's embedded `unit-config`, then run:
 
 ```bash

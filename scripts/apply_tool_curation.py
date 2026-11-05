@@ -19,9 +19,9 @@ QUERY_KEY_RE = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 def main() -> int:
     root = Path(__file__).resolve().parents[1]
     frontend = root / "frontend"
-    policy = json.loads((root / "tool-curation.json").read_text(encoding="utf-8"))
-    risk_policy = json.loads((root / "tool-risk-policy.json").read_text(encoding="utf-8"))
-    generated = json.loads((root / "generated-conversion-tools.json").read_text(encoding="utf-8"))
+    policy = json.loads((root / "data" / "tool-curation.json").read_text(encoding="utf-8"))
+    risk_policy = json.loads((root / "data" / "tool-risk-policy.json").read_text(encoding="utf-8"))
+    generated = json.loads((root / "data" / "generated-conversion-tools.json").read_text(encoding="utf-8"))
     redirects = dict(policy["redirects"])
     redirects.update(generated.get("legacy_redirects", {}))
     redirect_queries = policy.get("redirect_queries", {})

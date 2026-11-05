@@ -36,7 +36,7 @@ def main() -> int:
     issues: list[str] = []
 
     try:
-        document = generator.load_manifest(root / "formula-workbenches.json")
+        document = generator.load_manifest(root / "data" / "formula-workbenches.json")
         issues.extend(generator.validate_manifest(document))
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(exc)
@@ -157,7 +157,7 @@ def main() -> int:
                 if token in text:
                     issues.append(f"{asset.relative_to(root)}: prohibited source token {token!r}")
 
-    curation = json.loads((root / "tool-curation.json").read_text(encoding="utf-8"))
+    curation = json.loads((root / "data" / "tool-curation.json").read_text(encoding="utf-8"))
     redirects = curation.get("redirects", {})
     redirect_queries = curation.get("redirect_queries", {})
     unlisted = set(curation.get("unlist", []))
@@ -217,7 +217,7 @@ def main() -> int:
         if record.get("maturity") != "draft" or record.get("reviewedAt") is not None:
             issues.append(f"{slug}: trust status overstates formula review")
 
-    ledger = json.loads((root / "individual-tool-audit.json").read_text(encoding="utf-8"))
+    ledger = json.loads((root / "data" / "individual-tool-audit.json").read_text(encoding="utf-8"))
     ledger_slugs = {item.get("slug") for item in ledger.get("tools", [])}
     missing_ledger = set(workbench_by_slug) - ledger_slugs
     if missing_ledger:

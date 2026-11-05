@@ -2,7 +2,7 @@
 
 ## Honest scope
 
-[The audit ledger](../../individual-tool-audit.json) accounts for every physical
+[The audit ledger](../../data/individual-tool-audit.json) accounts for every physical
 `frontend/tools/<slug>/index.html` page currently in the workspace. Accounting
 for a page is not the same as auditing it: a `pending` record means no completed
 individual review is claimed.

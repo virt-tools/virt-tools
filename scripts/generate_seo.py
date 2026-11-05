@@ -56,7 +56,7 @@ def load_catalog(root: Path) -> list[dict]:
         raise RuntimeError("canonical catalog has no tools array")
     project_root = root.parent
     hidden: set[str] = set()
-    policy_path = project_root / "tool-curation.json"
+    policy_path = project_root / "data" / "tool-curation.json"
     if policy_path.is_file():
         policy = json.loads(policy_path.read_text(encoding="utf-8"))
         keep = set(policy.get("keep", []))
@@ -70,7 +70,7 @@ def load_catalog(root: Path) -> list[dict]:
                 if page.parent.name.startswith(prefixes) and page.parent.name not in keep
             )
         hidden.difference_update(keep)
-    generated_path = project_root / "generated-conversion-tools.json"
+    generated_path = project_root / "data" / "generated-conversion-tools.json"
     if generated_path.is_file():
         generated = json.loads(generated_path.read_text(encoding="utf-8"))
         hidden.update(generated.get("legacy_redirects", {}))

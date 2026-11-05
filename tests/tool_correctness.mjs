@@ -51,7 +51,7 @@ try {
   await page.locator('#from').selectOption('K');await fill('#value',-1);await page.locator('#calc').click();assert.match(await text('#result'),/absolute zero/);
 
   // Exercise every shared configuration in the actual browser runtime.
-  const manifest=JSON.parse(fs.readFileSync('generated-conversion-tools.json','utf8'));
+  const manifest=JSON.parse(fs.readFileSync('data/generated-conversion-tools.json','utf8'));
   for(const tool of manifest.tools){
     await open(tool.slug);
     const first=tool.units[0];

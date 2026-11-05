@@ -60,8 +60,8 @@ evidence must support its claims.
 
 ## Quarantine and relisting
 
-`tool-risk-policy.json` contains the current conservative quarantine groups.
-`tool-curation.json` must also unlist every quarantined slug. Source pages and
+`data/tool-risk-policy.json` contains the current conservative quarantine groups.
+`data/tool-curation.json` must also unlist every quarantined slug. Source pages and
 history are retained, but production images omit them. Relisting requires:
 
 1. a scoped method and primary sources;

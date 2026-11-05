@@ -106,7 +106,7 @@ def main() -> int:
     # Web Speech implementations may delegate recognition or synthesis to a
     # browser/vendor service. Until trust metadata can disclose that capability
     # per tool, these pages must remain source-retained but absent from runtime.
-    curation = json.loads((ROOT / "tool-curation.json").read_text(encoding="utf-8"))
+    curation = json.loads((ROOT / "data" / "tool-curation.json").read_text(encoding="utf-8"))
     unlisted = set(curation.get("unlist", []))
     browser_service_markers = (
         "SpeechRecognition",

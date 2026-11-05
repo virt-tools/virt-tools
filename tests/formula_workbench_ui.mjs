@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { chromium } from 'playwright';
 
-const manifest=JSON.parse(fs.readFileSync('formula-workbenches.json','utf8'));
+const manifest=JSON.parse(fs.readFileSync('data/formula-workbenches.json','utf8'));
 const baseURL=process.env.BASE_URL || 'http://127.0.0.1:4173';
 const browser=await chromium.launch({headless:true});
 const context=await browser.newContext({serviceWorkers:'block',locale:'en-US'});

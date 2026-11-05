@@ -26,8 +26,8 @@ SCRIPT_PATH = Path(__file__).resolve()
 # Docker validation stage copies it directly into /build. Resolve the project
 # root correctly in both layouts instead of depending on an ambient cwd.
 ROOT = SCRIPT_PATH.parents[1] if SCRIPT_PATH.parent.name == "scripts" else SCRIPT_PATH.parent
-MANIFEST = ROOT / "formula-workbenches.json"
-SCHEMA = ROOT / "formula-workbenches.schema.json"
+MANIFEST = ROOT / "data" / "formula-workbenches.json"
+SCHEMA = ROOT / "data" / "formula-workbenches.schema.json"
 FRONTEND = ROOT / "frontend"
 ASSET_DIR = FRONTEND / "assets" / "formula-workbenches"
 ADDED = "2026-08-19T00:00:00Z"
@@ -611,7 +611,7 @@ def apply_manifest(document: dict[str, Any]) -> None:
         path.write_text(content, encoding="utf-8")
 
     mapping = redirect_mapping(document)
-    policy_path = ROOT / "tool-curation.json"
+    policy_path = ROOT / "data" / "tool-curation.json"
     policy = json.loads(policy_path.read_text(encoding="utf-8"))
     redirects = dict(policy.get("redirects", {}))
     excluded = {item["slug"] for item in document["excluded"]}
@@ -658,7 +658,7 @@ def check_generated(document: dict[str, Any]) -> list[str]:
         if not path.is_file() or path.read_text(encoding="utf-8") != content:
             issues.append(f"{path.relative_to(ROOT)}: missing or stale")
     mapping = redirect_mapping(document)
-    policy = json.loads((ROOT / "tool-curation.json").read_text(encoding="utf-8"))
+    policy = json.loads((ROOT / "data" / "tool-curation.json").read_text(encoding="utf-8"))
     redirects = policy.get("redirects", {})
     redirect_queries = policy.get("redirect_queries", {})
     for source, target in mapping.items():

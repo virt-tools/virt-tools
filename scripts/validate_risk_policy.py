@@ -15,8 +15,8 @@ ALLOWED_RISKS = {"high", "critical"}
 def main() -> int:
     root = Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
     frontend = root / "frontend"
-    policy = json.loads((root / "tool-risk-policy.json").read_text(encoding="utf-8"))
-    curation = json.loads((root / "tool-curation.json").read_text(encoding="utf-8"))
+    policy = json.loads((root / "data" / "tool-risk-policy.json").read_text(encoding="utf-8"))
+    curation = json.loads((root / "data" / "tool-curation.json").read_text(encoding="utf-8"))
     _, catalog = load_catalog(frontend / "assets" / "tool-catalog.json")
     registry = {
         tool["slug"]
@@ -71,7 +71,7 @@ def main() -> int:
             if record.get("listed", True):
                 issues.append(f"{slug}: canonical record is not explicitly unlisted")
 
-    ledger_path = root / "individual-tool-audit.json"
+    ledger_path = root / "data" / "individual-tool-audit.json"
     if ledger_path.is_file():
         ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
         records = ledger.get("tools", [])

@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const { test } = require('node:test');
 
-const manifest = JSON.parse(fs.readFileSync('generated-conversion-tools.json', 'utf8'));
+const manifest = JSON.parse(fs.readFileSync('data/generated-conversion-tools.json', 'utf8'));
 const source = fs.readFileSync('frontend/assets/unit-converter.js', 'utf8');
 // Independently stated reference conversions: SI decimal prefixes, exact
 // definitions, and NIST SP 811. These are not derived from manifest factors.
