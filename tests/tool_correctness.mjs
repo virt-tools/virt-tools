@@ -171,6 +171,48 @@ try {
     }
   }
   assert.equal(foods,22);assert.match(await page.locator('main').innerText(),/Smell and appearance cannot establish safety/);
+  await open('bip39-mnemonic');
+  await page.waitForFunction(()=>document.getElementById('mnemonic').textContent.trim().split(/\s+/).length===12);
+  const generatedMnemonic=await text('#mnemonic');
+  await page.locator('#mode button[data-m="validate"]').click();
+  await fill('#mnemonicInput',generatedMnemonic);await page.locator('#validate').click();
+  await page.waitForFunction(()=>/Valid|Invalid|checksum/.test(document.getElementById('valResult').textContent));
+  assert.match(await text('#valResult'),/✓ Valid — 12 words, 128 bits/);
+  await fill('#mnemonicInput','abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about');
+  await page.locator('#validate').click();
+  await page.waitForFunction(()=>document.getElementById('valResult').textContent.includes('✓ Valid'));
+  assert.equal(await text('#valSeed span.mono'),'5eb00bbddcf069084889a8ab9155568165f5c453ccb85e70811aaed6f6da5fc19a5ac40b389cd370d086206dec8aa6c43daea6690f20ad3d8d48b2d2ce9e38e4');
+  await fill('#passphraseInput','TREZOR');await page.locator('#validate').click();
+  await page.waitForFunction(()=>document.getElementById('valSeed').textContent.includes('c55257c360c07c72'));
+  assert.equal(await text('#valSeed span.mono'),'c55257c360c07c72029aebc1b53c05ed0362ada38ead3e3e9efa3708e53495531f09a6987599d18264c1e1c92f2cf141630c7a3c4ab7c81b2f001698e7463b04');
+  await fill('#passphraseInput','');
+  await fill('#mnemonicInput','abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon');
+  await page.locator('#validate').click();
+  await page.waitForFunction(()=>document.getElementById('valResult').textContent.includes('Invalid checksum'));
+  assert.match(await text('#valResult'),/Invalid checksum/);
+
+  await open('corbel-sizing-calculator');
+  await fill('#in-load',15);await fill('#in-proj',150);await fill('#in-width',300);await fill('#in-fv',2);
+  assert.equal(await text('#out .big'),'150 mm');
+  assert.match(await text('#out'),/Average shear stress\s+0\.33 MPa/);
+  await fill('#in-width','');
+  assert.match(await text('#err'),/positive values/);assert.match(await text('#out'),/No result/);
+
+  await open('mortgage-calculator');
+  const mortgage=await page.locator('#results .res-card').evaluateAll(cards=>Object.fromEntries(cards.map(card=>[card.querySelector('.lbl').textContent,card.querySelector('.big').textContent])));
+  assert.equal(await text('#mortgage-error'),'');
+  assert.equal(mortgage['Principal & Interest'],'$2022.62');
+  assert.equal(mortgage['+ Tax / Insurance / PMI'],'$500.00');
+  assert.equal(mortgage['Total Monthly'],'$2522.62');
+  assert.equal(mortgage['Loan Amount'],'$320000.00');
+  assert.equal(mortgage['Total Interest Paid'],'$408142.36');
+  await fill('#down',500000);
+  assert.match(await text('#mortgage-error'),/between zero and the home price/);assert.equal(await text('#results'),'');
+  await fill('#down',80000);await fill('#years',0);
+  assert.match(await text('#mortgage-error'),/between 1 and 50 years/);assert.equal(await text('#results'),'');
+  await fill('#years',30);await fill('#tax',-1);
+  assert.match(await text('#mortgage-error'),/cannot be negative/);assert.equal(await text('#results'),'');
+
   assert.deepEqual(errors,[]);
-  console.log('Correctness regressions passed: numeric boundaries, all shared converters, financial models, statistics, dates, algebra, PEM, journal, entities, XML, and food-storage display.');
+  console.log('Correctness regressions passed: numeric boundaries, all shared converters, financial models, statistics, dates, algebra, PEM, journal, entities, XML, food-storage display, BIP39, corbel, and mortgage.');
 }finally{await browser.close();}
