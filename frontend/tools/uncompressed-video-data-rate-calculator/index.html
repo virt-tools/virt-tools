@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Uncompressed Video Data Rate Calculator — Virtual Tools</title>
+<meta name="description" content="Work out the raw data rate and storage of uncompressed video from frame size, frame rate, chroma subsampling and bit depth, and see which SDI interface carries it.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:12px;margin:10px 0}
+label.f{font-size:13px;opacity:.85;display:block;margin-bottom:4px}
+.field{background:var(--bg,#14181f);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px}
+.field:focus-within{border-color:var(--accent,#6ea8fe);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#6ea8fe) 18%,transparent)}
+.field input,.field select{box-sizing:border-box;width:100%;background:transparent;color:var(--text,#e6e6e6);border:none;font-size:18px;font-family:ui-monospace,monospace;padding:2px 0;outline:none}
+.field select{font-size:15px}
+.field .unit{font-size:11px;color:var(--text-dim,#9aa3b2);margin-top:4px}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:14px 0}
+.out .big{font-size:clamp(1.6rem,6vw,2.15rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:4px 0 6px;overflow-wrap:anywhere}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45}
+.out .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:14px}
+.out .row:last-child{border-bottom:none}
+.out .row .k{color:var(--text-dim,#9aa3b2)}
+.out .row .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right}
+.out .warn{color:var(--warn,#f0b429);font-size:12.5px;margin:10px 0 0;line-height:1.45}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.err{color:var(--bad,#f87171);font-size:13px;margin:6px 0;min-height:1.2em}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;margin:10px 0 0;line-height:1.5}
+[hidden]{display:none !important}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>Uncompressed Video Data Rate Calculator</h1>
+<p>Turn a frame size, frame rate, chroma sampling and bit depth into the raw data rate and storage, and see which SDI interface carries it.</p>
+</div>
+<div class="panel">
+<form id="rate-form" novalidate>
+<div class="grid2">
+<div class="field"><label class="f" for="in-width">Frame width</label><input type="text" id="in-width" inputmode="numeric" autocomplete="off" value="3840"><div class="unit">pixels</div></div>
+<div class="field"><label class="f" for="in-height">Frame height</label><input type="text" id="in-height" inputmode="numeric" autocomplete="off" value="2160"><div class="unit">pixels</div></div>
+<div class="field"><label class="f" for="in-fps">Frame rate</label><input type="text" id="in-fps" inputmode="decimal" autocomplete="off" value="25"><div class="unit">fps, decimals allowed</div></div>
+<div class="field"><label class="f" for="in-chroma">Chroma sampling</label><select id="in-chroma"><option value="444">4:4:4 · 3 samples</option><option value="422" selected>4:2:2 · 2 samples</option><option value="420">4:2:0 · 1.5 samples</option><option value="mono">Monochrome · 1</option></select><div class="unit">samples per pixel</div></div>
+<div class="field"><label class="f" for="in-depth">Bit depth</label><select id="in-depth"><option value="8">8 bit</option><option value="10" selected>10 bit</option><option value="12">12 bit</option><option value="16">16 bit</option></select><div class="unit">bits per sample</div></div>
+<div class="field"><label class="f" for="in-minutes">Clip duration</label><input type="text" id="in-minutes" inputmode="decimal" autocomplete="off" value="60"><div class="unit">minutes</div></div>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions"><button type="submit">Calculate data rate</button></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"><span style="color:var(--text-dim,#9aa3b2)">Enter the frame format to see its raw data rate.</span></div>
+<p class="note">Raw video is counted per sample: each pixel carries one luma sample, and the chroma sampling sets how many colour samples accompany it, so 4:4:4 is three samples per pixel, 4:2:2 is two and 4:2:0 is one and a half. The rate is frames per second times pixels times samples times bits, before any compression, blanking, ancillary data or audio. SDI figures are nominal SMPTE payload rates; storage uses decimal units (1 GB = 10⁹ bytes). Everything is calculated in this page and nothing is uploaded or stored.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* uncompressed-video-core:start */
+var UncompressedVideoCore = (function(){
+  "use strict";
+  var CHROMA = {
+    "444": {label: "4:4:4", samples: 3},
+    "422": {label: "4:2:2", samples: 2},
+    "420": {label: "4:2:0", samples: 1.5},
+    "mono": {label: "Monochrome", samples: 1}
+  };
+  var DEPTHS = [8, 10, 12, 16];
+  var LEVELS = [
+    {name: "SD-SDI", mbps: 270},
+    {name: "HD-SDI", mbps: 1485},
+    {name: "3G-SDI", mbps: 2970},
+    {name: "6G-SDI", mbps: 5940},
+    {name: "12G-SDI", mbps: 11880}
+  ];
+  var LIMITS = {
+    width: [16, 16384, "px"],
+    height: [16, 16384, "px"],
+    fps: [1, 1000, "fps"],
+    minutes: [0.1, 10000, "min"]
+  };
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function text(value, label){
+    var raw = String(value == null ? "" : value).trim();
+    if (!raw) fail(label + " is required.");
+    return raw;
+  }
+
+  function whole(value, label, key){
+    var raw = text(value, label);
+    if (!/^\d+$/.test(raw)) fail(label + " must be a whole number of " + LIMITS[key][2] + ".");
+    var number = Number(raw);
+    if (number < LIMITS[key][0] || number > LIMITS[key][1]){
+      fail(label + " must be from " + LIMITS[key][0] + " to " + LIMITS[key][1] + " " + LIMITS[key][2] + ".");
+    }
+    return number;
+  }
+
+  function decimal(value, label, key){
+    var raw = text(value, label);
+    if (!/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(raw)) fail(label + " must be a number.");
+    var number = Number(raw);
+    if (!isFinite(number)) fail(label + " must be a number.");
+    if (number < LIMITS[key][0] || number > LIMITS[key][1]){
+      fail(label + " must be from " + LIMITS[key][0] + " to " + LIMITS[key][1] + " " + LIMITS[key][2] + ".");
+    }
+    return number;
+  }
+
+  function normalise(input){
+    var options = input || {};
+    var width = whole(options.width, "Frame width", "width");
+    var height = whole(options.height, "Frame height", "height");
+    var fps = decimal(options.fps, "Frame rate", "fps");
+    var minutes = decimal(options.minutes, "Clip duration", "minutes");
+    var chroma = String(options.chroma == null ? "" : options.chroma).trim();
+    if (!CHROMA[chroma]) fail("Choose a chroma sampling of 4:4:4, 4:2:2, 4:2:0 or monochrome.");
+    var depth = Number(options.depth);
+    if (DEPTHS.indexOf(depth) === -1) fail("Bit depth must be 8, 10, 12 or 16 bits per sample.");
+    return {
+      width: width,
+      height: height,
+      fps: fps,
+      minutes: minutes,
+      chroma: chroma,
+      chromaLabel: CHROMA[chroma].label,
+      samples: CHROMA[chroma].samples,
+      bitDepth: depth
+    };
+  }
+
+  function calculate(input){
+    var state = normalise(input);
+    var pixels = state.width * state.height;
+    var bitsPerPixel = state.samples * state.bitDepth;
+    var bitsPerFrame = pixels * bitsPerPixel;
+    if (!isFinite(bitsPerFrame) || bitsPerFrame > 9007199254740991) fail("These frame settings are too large to calculate exactly.");
+    var bitsPerSecond = bitsPerFrame * state.fps;
+    var mbps = bitsPerSecond / 1e6;
+    var megabytesPerSecond = mbps / 8;
+    var gigabytesPerMinute = megabytesPerSecond * 60 / 1000;
+    var level = null;
+    for (var i = 0; i < LEVELS.length; i += 1){
+      if (mbps <= LEVELS[i].mbps + 1e-9){
+        level = {name: LEVELS[i].name, mbps: LEVELS[i].mbps, utilisation: mbps / LEVELS[i].mbps * 100};
+        break;
+      }
+    }
+    return {
+      width: state.width,
+      height: state.height,
+      fps: state.fps,
+      minutes: state.minutes,
+      chroma: state.chroma,
+      chromaLabel: state.chromaLabel,
+      samples: state.samples,
+      bitDepth: state.bitDepth,
+      pixels: pixels,
+      bitsPerPixel: bitsPerPixel,
+      bitsPerFrame: bitsPerFrame,
+      megabytesPerFrame: bitsPerFrame / 8 / 1e6,
+      mbps: mbps,
+      megabytesPerSecond: megabytesPerSecond,
+      gigabytesPerMinute: gigabytesPerMinute,
+      gigabytesPerHour: gigabytesPerMinute * 60,
+      gigabytesTotal: gigabytesPerMinute * state.minutes,
+      level: level
+    };
+  }
+
+  return {
+    CHROMA: CHROMA,
+    DEPTHS: DEPTHS,
+    LEVELS: LEVELS,
+    LIMITS: LIMITS,
+    normalise: normalise,
+    calculate: calculate
+  };
+})();
+/* uncompressed-video-core:end */
+(function(){
+"use strict";
+
+var els = {
+  width: document.getElementById("in-width"),
+  height: document.getElementById("in-height"),
+  fps: document.getElementById("in-fps"),
+  chroma: document.getElementById("in-chroma"),
+  depth: document.getElementById("in-depth"),
+  minutes: document.getElementById("in-minutes"),
+  err: document.getElementById("err"),
+  out: document.getElementById("out")
+};
+
+function fmt(value, digits){
+  var rounded = Math.abs(value) < 0.5 * Math.pow(10, -digits) ? 0 : value;
+  return rounded.toLocaleString(undefined, {minimumFractionDigits: digits, maximumFractionDigits: digits});
+}
+function rateText(mbps){
+  return fmt(mbps, mbps >= 1000 ? 1 : 2) + " Mb/s";
+}
+function bytesText(mbps){
+  var mbs = mbps / 8;
+  return mbs >= 1000 ? fmt(mbs / 1000, 2) + " GB/s" : fmt(mbs, mbs < 10 ? 2 : 1) + " MB/s";
+}
+function storageText(gb){
+  if (gb >= 1000) return fmt(gb / 1000, 2) + " TB";
+  return fmt(gb, gb < 10 ? 2 : 1) + " GB";
+}
+function clear(node){
+  while (node.firstChild) node.removeChild(node.firstChild);
+}
+function addRow(parent, label, value){
+  var row = document.createElement("div");
+  row.className = "row";
+  var key = document.createElement("span");
+  key.className = "k";
+  key.textContent = label;
+  var val = document.createElement("span");
+  val.className = "v";
+  val.textContent = value;
+  row.appendChild(key);
+  row.appendChild(val);
+  parent.appendChild(row);
+}
+function addWarning(parent, message){
+  var p = document.createElement("p");
+  p.className = "warn";
+  p.textContent = message;
+  parent.appendChild(p);
+}
+function placeholder(node, message){
+  var span = document.createElement("span");
+  span.style.color = "var(--text-dim,#9aa3b2)";
+  span.textContent = message;
+  node.appendChild(span);
+}
+
+function render(result){
+  clear(els.out);
+  var big = document.createElement("div");
+  big.className = "big";
+  big.textContent = rateText(result.mbps);
+  var sub = document.createElement("div");
+  sub.className = "sub";
+  sub.textContent = result.width.toLocaleString() + " × " + result.height.toLocaleString() + " at " +
+    fmt(result.fps, String(result.fps).indexOf(".") > -1 ? 3 : 0) + " fps, " + result.chromaLabel + ", " +
+    result.bitDepth + "-bit";
+  els.out.appendChild(big);
+  els.out.appendChild(sub);
+
+  if (result.level){
+    var share = result.level.utilisation;
+    addRow(els.out, "SDI interface", result.level.name + " — " + fmt(share, share < 10 ? 1 : 0) + "% of " +
+      fmt(result.level.mbps, 0) + " Mb/s");
+  } else {
+    addRow(els.out, "SDI interface", "Above 12G-SDI");
+  }
+  addRow(els.out, "Bytes per second", bytesText(result.mbps));
+  addRow(els.out, "Bytes per frame", fmt(result.megabytesPerFrame, 2) + " MB");
+  addRow(els.out, "Storage per minute", storageText(result.gigabytesPerMinute));
+  addRow(els.out, "For " + fmt(result.minutes, result.minutes < 10 ? 1 : 0) + " min", storageText(result.gigabytesTotal));
+  addRow(els.out, "Storage per hour", storageText(result.gigabytesPerHour));
+  addRow(els.out, "Pixels per frame", result.pixels.toLocaleString());
+  addRow(els.out, "Bits per pixel", String(result.bitsPerPixel));
+
+  if (!result.level){
+    addWarning(els.out, "This raw rate is above 12G-SDI (" + fmt(11880, 0) +
+      " Mb/s). Carry it as dual-link, 24G-SDI or a compressed mezzanine.");
+  } else if (result.level.utilisation > 95){
+    addWarning(els.out, "That is within 5% of the " + result.level.name +
+      " payload rate, so blanking, ancillary data or embedded audio may not fit.");
+  }
+}
+
+function calculate(){
+  var result;
+  try {
+    result = UncompressedVideoCore.calculate({
+      width: els.width.value,
+      height: els.height.value,
+      fps: els.fps.value,
+      chroma: els.chroma.value,
+      depth: els.depth.value,
+      minutes: els.minutes.value
+    });
+  } catch (error){
+    els.err.textContent = error.message;
+    clear(els.out);
+    placeholder(els.out, "Check the highlighted field.");
+    return;
+  }
+
+  els.err.textContent = "";
+  render(result);
+}
+
+[els.width, els.height, els.fps, els.chroma, els.depth, els.minutes].forEach(function(input){
+  input.addEventListener("input", calculate);
+});
+els.chroma.addEventListener("change", calculate);
+els.depth.addEventListener("change", calculate);
+document.getElementById("rate-form").addEventListener("submit", function(event){
+  event.preventDefault();
+  calculate();
+});
+
+calculate();
+})();
+</script>
+</body>
+</html>
