@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Time-Lapse Interval Calculator — Virtual Tools</title>
+<meta name="description" content="Plan a time-lapse shoot: turn a shoot duration, a target clip length and a frame rate into the interval between frames, total frames, playback speed and the clip length for whole-second intervals.">
+<link rel="stylesheet" href="/assets/style.css">
+<link rel="stylesheet" href="/assets/tool-css/tool-form-3c8cf9e7.css">
+<style>
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.out .big{font-size:clamp(1.4rem,5vw,1.9rem);overflow-wrap:anywhere;padding:2px 0 4px}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 10px;line-height:1.45}
+.out .warn{color:var(--warn,#f0b429);font-size:12.5px;margin:8px 0 0;line-height:1.45}
+.field .hint{font-size:11px;color:var(--text-dim,#9aa3b2);margin-top:4px;line-height:1.35}
+.err{min-height:1.2em}
+.note{color:var(--text-dim,#9aa3b2);font-size:0.85rem;margin-top:10px;line-height:1.5}
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:6px}
+table.tl{width:100%;border-collapse:collapse;font-size:13.5px;font-variant-numeric:tabular-nums}
+.tl th,.tl td{padding:7px 8px;border-bottom:1px solid var(--border,#2a2f3a);text-align:right;white-space:nowrap}
+.tl th:first-child,.tl td:first-child{text-align:left}
+.tl thead th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim,#9aa3b2);font-weight:600}
+.tl td{font-family:ui-monospace,monospace}
+.tl tbody tr:last-child td{border-bottom:none}
+.tl tr.pick td{color:var(--accent,#6ea8fe);font-weight:700}
+h2.subhead{font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-dim,#9aa3b2);margin:0 0 2px;font-weight:600}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>Time-Lapse Interval Calculator</h1>
+<p>Work out how often to shoot so a long scene plays back as a short clip. Runs locally in your browser.</p>
+</div>
+<div class="panel">
+<form id="tl-form" novalidate>
+<div class="grid2">
+<div class="field"><label class="f" for="in-hours">Shoot hours</label><input type="text" id="in-hours" inputmode="numeric" autocomplete="off" value="1"><div class="unit">hours of real time to capture</div><div class="hint">whole number, 0–720</div></div>
+<div class="field"><label class="f" for="in-minutes">Shoot minutes</label><input type="text" id="in-minutes" inputmode="numeric" autocomplete="off" value="0"><div class="unit">extra minutes on top of the hours</div><div class="hint">whole number, 0–59</div></div>
+<div class="field"><label class="f" for="in-clip">Clip length</label><input type="text" id="in-clip" inputmode="decimal" autocomplete="off" value="30"><div class="unit">seconds of final footage</div><div class="hint">0.5–3600 s</div></div>
+<div class="field"><label class="f" for="in-fps">Frame rate</label><select id="in-fps"><option value="24">24 fps</option><option value="25">25 fps</option><option value="30" selected>30 fps</option><option value="60">60 fps</option></select><div class="unit">playback frame rate of the clip</div></div>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions"><button type="submit">Calculate interval</button></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"><span style="color:var(--text-dim,#9aa3b2)">Enter a shoot duration and clip length.</span></div>
+<p class="note">Interval = shoot time ÷ (clip length × frame rate). Frames are rounded to a whole number, so the finished clip can differ from the target by a fraction of a frame. Keep every exposure shorter than the interval and let the camera settle between frames; the table below shows what whole-second intervals give for this shoot.</p>
+</div>
+<div class="panel">
+<h2 class="subhead">Whole-second intervals</h2>
+<div class="table-wrap">
+<table class="tl" id="tl-table">
+<thead><tr><th scope="col">Interval</th><th scope="col">Frames</th><th scope="col">Clip at <span id="th-fps">30</span> fps</th></tr></thead>
+<tbody id="tl-body"><tr><td colspan="3" style="text-align:left;color:var(--text-dim,#9aa3b2)">Results appear here.</td></tr></tbody>
+</table>
+</div>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+(function(){
+"use strict";
+var MAX_HOURS = 720;
+var MIN_CLIP = 0.5;
+var MAX_CLIP = 3600;
+var COMMON_INTERVALS = [1, 2, 5, 10, 15, 30, 60];
+
+var els = {
+  hours: document.getElementById("in-hours"),
+  minutes: document.getElementById("in-minutes"),
+  clip: document.getElementById("in-clip"),
+  fps: document.getElementById("in-fps"),
+  err: document.getElementById("err"),
+  out: document.getElementById("out"),
+  body: document.getElementById("tl-body"),
+  thFps: document.getElementById("th-fps")
+};
+
+function parseNum(text){
+  var s = String(text == null ? "" : text).trim();
+  if (!s) return null;
+  if (!/^[+]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(s)) return NaN;
+  var v = Number(s);
+  return isFinite(v) ? v : NaN;
+}
+function fmt(x, n){
+  var value = Math.abs(x) < 0.5 * Math.pow(10, -n) ? 0 : x;
+  return value.toLocaleString(undefined, {minimumFractionDigits: n, maximumFractionDigits: n});
+}
+function fmtInt(x){
+  return Math.round(x).toLocaleString(undefined, {maximumFractionDigits: 0});
+}
+function durationText(sec){
+  var h = Math.floor(sec / 3600);
+  var m = Math.round((sec - h * 3600) / 60);
+  if (m === 60){ h += 1; m = 0; }
+  if (h && m) return h + " h " + m + " min";
+  if (h) return h + " h";
+  return m + " min";
+}
+function intervalText(sec){
+  return fmt(sec, sec < 10 ? 2 : 1) + " s";
+}
+function clearOut(){
+  while (els.out.firstChild) els.out.removeChild(els.out.firstChild);
+}
+function showPlaceholder(msg){
+  clearOut();
+  var span = document.createElement("span");
+  span.style.color = "var(--text-dim,#9aa3b2)";
+  span.textContent = msg;
+  els.out.appendChild(span);
+}
+function clearTable(fps){
+  els.body.replaceChildren();
+  var tr = document.createElement("tr");
+  var td = document.createElement("td");
+  td.colSpan = 3;
+  td.style.textAlign = "left";
+  td.style.color = "var(--text-dim,#9aa3b2)";
+  td.textContent = "No intervals to show.";
+  tr.appendChild(td);
+  els.body.appendChild(tr);
+  els.thFps.textContent = String(fps);
+}
+function fail(message, placeholder){
+  els.err.textContent = message;
+  showPlaceholder(placeholder);
+  clearTable(els.fps.value);
+}
+function addRow(label, value){
+  var row = document.createElement("div");
+  row.className = "row";
+  var k = document.createElement("span");
+  k.className = "k";
+  k.textContent = label;
+  var v = document.createElement("span");
+  v.className = "v";
+  v.textContent = value;
+  row.appendChild(k);
+  row.appendChild(v);
+  els.out.appendChild(row);
+}
+function renderTable(shoot, fps, ideal){
+  els.body.replaceChildren();
+  var items = COMMON_INTERVALS.slice();
+  var nearest = Math.max(1, Math.round(ideal));
+  if (items.indexOf(nearest) === -1) items.push(nearest);
+  items.sort(function(a, b){ return a - b; });
+  var frag = document.createDocumentFragment();
+  items.forEach(function(step){
+    var frames = Math.floor(shoot / step);
+    if (frames < 1) return;
+    var tr = document.createElement("tr");
+    if (step === nearest) tr.className = "pick";
+    var a = document.createElement("td");
+    a.textContent = step + " s";
+    var b = document.createElement("td");
+    b.textContent = fmtInt(frames);
+    var c = document.createElement("td");
+    c.textContent = fmt(frames / fps, 2) + " s";
+    tr.appendChild(a);
+    tr.appendChild(b);
+    tr.appendChild(c);
+    frag.appendChild(tr);
+  });
+  if (!frag.childNodes.length){
+    var tr = document.createElement("tr");
+    var td = document.createElement("td");
+    td.colSpan = 3;
+    td.style.textAlign = "left";
+    td.style.color = "var(--text-dim,#9aa3b2)";
+    td.textContent = "No whole-second interval fits this shoot.";
+    tr.appendChild(td);
+    frag.appendChild(tr);
+  }
+  els.body.appendChild(frag);
+  els.thFps.textContent = String(fps);
+}
+function calculate(){
+  var rawHours = parseNum(els.hours.value);
+  var rawMinutes = parseNum(els.minutes.value);
+  var rawClip = parseNum(els.clip.value);
+  var fps = Number(els.fps.value);
+
+  if (rawHours === null || rawMinutes === null || rawClip === null){
+    els.err.textContent = "";
+    showPlaceholder("Enter a shoot duration and clip length.");
+    clearTable(fps);
+    return;
+  }
+  if (isNaN(rawHours) || isNaN(rawMinutes) || isNaN(rawClip)){
+    fail("Shoot hours, minutes and clip length must be numbers.", "Check the numeric fields.");
+    return;
+  }
+  if (Math.abs(rawHours - Math.round(rawHours)) > 1e-9 || rawHours < 0 || rawHours > MAX_HOURS){
+    fail("Shoot hours must be a whole number from 0 to " + MAX_HOURS + ".", "Check the shoot hours.");
+    return;
+  }
+  if (Math.abs(rawMinutes - Math.round(rawMinutes)) > 1e-9 || rawMinutes < 0 || rawMinutes > 59){
+    fail("Shoot minutes must be a whole number from 0 to 59.", "Check the shoot minutes.");
+    return;
+  }
+  var shoot = Math.round(rawHours) * 3600 + Math.round(rawMinutes) * 60;
+  if (shoot < 1){
+    fail("The shoot must last at least 1 second.", "Check the shoot duration.");
+    return;
+  }
+  if (rawClip < MIN_CLIP || rawClip > MAX_CLIP){
+    fail("Clip length must be between " + MIN_CLIP + " and " + fmtInt(MAX_CLIP) + " seconds.", "Check the clip length.");
+    return;
+  }
+  if (fps !== 24 && fps !== 25 && fps !== 30 && fps !== 60){
+    fail("Choose a frame rate of 24, 25, 30 or 60 fps.", "Check the frame rate.");
+    return;
+  }
+
+  var frames = Math.max(1, Math.round(rawClip * fps));
+  var interval = shoot / frames;
+  var clipSeconds = frames / fps;
+  var speed = shoot / clipSeconds;
+
+  els.err.textContent = "";
+  clearOut();
+
+  var big = document.createElement("div");
+  big.className = "big";
+  big.textContent = "Every " + intervalText(interval);
+  var sub = document.createElement("div");
+  sub.className = "sub";
+  sub.textContent = durationText(shoot) + " of shooting becomes " + fmt(clipSeconds, 2) + " s at " + fps + " fps";
+
+  els.out.appendChild(big);
+  els.out.appendChild(sub);
+  addRow("Frames", fmtInt(frames));
+  addRow("Playback speed", (speed >= 1 ? fmt(speed, speed < 1000 ? 1 : 0) + "× real time" : fmt(speed, 3) + "× (slower than real time)"));
+  addRow("Frames per minute", fmt(60 / interval, 1));
+
+  var warnings = [];
+  if (interval < 1){
+    warnings.push("That is under one second between frames. Most intervalometers step in whole seconds, so check the table below for the clip length you would actually get.");
+  }
+  if (speed < 1){
+    warnings.push("The clip is longer than the shoot, so playback will be slower than real time. Shorten the clip or shoot for longer.");
+  }
+  if (interval > 86400){
+    warnings.push("Frames are more than a day apart; most cameras cap the interval at 24 hours, so add frames or shorten the shoot.");
+  }
+  warnings.forEach(function(text){
+    var p = document.createElement("p");
+    p.className = "warn";
+    p.textContent = text;
+    els.out.appendChild(p);
+  });
+
+  renderTable(shoot, fps, interval);
+}
+
+[els.hours, els.minutes, els.clip].forEach(function(input){
+  input.addEventListener("input", calculate);
+});
+els.fps.addEventListener("change", calculate);
+document.getElementById("tl-form").addEventListener("submit", function(event){
+  event.preventDefault();
+  calculate();
+});
+
+calculate();
+})();
+</script>
+</body>
+</html>
