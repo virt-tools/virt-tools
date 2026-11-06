@@ -32,6 +32,7 @@ node tests/uncompressed_video_data_rate_calculator.test.cjs
 node tests/rectangular_waveguide_calculator.test.cjs
 node tests/golf_course_handicap_calculator.test.cjs
 node tests/render_time_estimator.test.cjs
+node tests/practice_tempo_ramp_planner.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
