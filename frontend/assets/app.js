@@ -637,7 +637,7 @@
     // just the board (also keyboard accessible), never the entire tool page.
     var boardSelectors = {
       "checkers": "#board", "chess": "#board", "color-sequence-memory": "#board",
-      "crossword": "#grid", "game-2048": "#board", "game-of-life": "#grid",
+      "crossword": "#grid", "game-of-life": "#grid",
       "gomoku": "#board", "killer-sudoku": "#grid", "knights-tour": "#board",
       "nonogram": "#board", "reversi": "#board", "rubiks-cube": "#cube",
       "simon-says": ".pad-grid", "sliding-puzzle": "#board",

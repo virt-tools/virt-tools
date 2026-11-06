@@ -376,7 +376,25 @@ try {
   );
   await previewer.close();
 
-  for (const slug of ["piano", "peg-solitaire"]) {
+  const puzzle = await openPage("2048 layout", "/tools/game-2048/");
+  await puzzle.locator("#site-header[data-ready=\"true\"]").waitFor({ timeout: 10_000 });
+  const tilesAligned = async () =>
+    puzzle.evaluate(() => {
+      const cells = [...document.querySelectorAll(".grid-cell")].map((el) => el.getBoundingClientRect());
+      return [...document.querySelectorAll(".tile")].every((tile) => {
+        const r = tile.getBoundingClientRect();
+        return cells.some(
+          (c) => Math.abs(c.x - r.x) < 1 && Math.abs(c.y - r.y) < 1 && Math.abs(c.width - r.width) < 1,
+        );
+      });
+    });
+  assert.ok(await tilesAligned(), "2048 tiles do not sit on the grid cells");
+  await puzzle.locator("#board").press("ArrowLeft");
+  await puzzle.waitForTimeout(300);
+  assert.ok(await tilesAligned(), "2048 tiles drift off the grid after a move");
+  await puzzle.close();
+
+  for (const slug of ["piano", "peg-solitaire", "game-2048"]) {
     const game = await openPage(`${slug} mobile layout`, "/tools/" + slug + "/");
     await game.setViewportSize({ width: 320, height: 800 });
     await game.locator("#site-header[data-ready=\"true\"]").waitFor({ timeout: 10_000 });
