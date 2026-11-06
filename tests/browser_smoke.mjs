@@ -364,9 +364,48 @@ try {
   );
   await moonPage.close();
 
+  // Regressions fixed during the full-catalog audit.
+  const previewer = await openPage("markdown previewer regression", "/tools/markdown-previewer/");
+  await previewer.locator("#site-header[data-ready=\"true\"]").waitFor({ timeout: 10_000 });
+  await previewer.locator("#src").fill("# Audit\n\n- one");
+  await previewer.locator("#preview h1", { hasText: "Audit" }).waitFor({ timeout: 5_000 });
+  assert.match(
+    (await previewer.locator("#preview").innerText()).trim(),
+    /Audit\s+one/i,
+    "markdown previewer did not render its input",
+  );
+  await previewer.close();
+
+  for (const slug of ["piano", "peg-solitaire"]) {
+    const game = await openPage(`${slug} mobile layout`, "/tools/" + slug + "/");
+    await game.setViewportSize({ width: 320, height: 800 });
+    await game.locator("#site-header[data-ready=\"true\"]").waitFor({ timeout: 10_000 });
+    const overflow = await game.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth,
+    );
+    assert.ok(overflow <= 1, `${slug} overflows a 320px viewport by ${overflow}px`);
+    await game.close();
+  }
+
+  const remoteExampleRequests = [];
+  await context.route("https://example.com/**", (route) => {
+    remoteExampleRequests.push(route.request().url());
+    return route.abort();
+  });
+  const ogMeta = await openPage("og meta regression", "/tools/og-meta-generator/");
+  await ogMeta.locator("#site-header[data-ready=\"true\"]").waitFor({ timeout: 10_000 });
+  await ogMeta.waitForTimeout(500);
+  assert.deepEqual(
+    remoteExampleRequests,
+    [],
+    "og-meta-generator fetched the example image before the visitor edited it",
+  );
+  await ogMeta.close();
+  await context.unroute("https://example.com/**");
+
   if (errors.length) throw new Error(errors.join("\n"));
   console.log(
-    `Browser smoke passed: homepage/PWA, search/filter, formula deep link and calculation, privacy/feedback, ${representativeTools.length} representative tools, and moon phase regression`,
+    `Browser smoke passed: homepage/PWA, search/filter, formula deep link and calculation, privacy/feedback, ${representativeTools.length} representative tools, moon phase, and audit regressions`,
   );
 } finally {
   await context.close();

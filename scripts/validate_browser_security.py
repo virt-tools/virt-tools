@@ -80,6 +80,12 @@ def main() -> int:
         rel = path.relative_to(ROOT).as_posix()
         source = path.read_text(encoding="utf-8")
         sources[rel] = source
+        if "\x00" in source:
+            line = source.count("\n", 0, source.index("\x00")) + 1
+            errors.append(
+                f"{rel}:{line}: NUL byte in HTML source; browsers replace it with U+FFFD, "
+                "so inline-script CSP hashes cannot match"
+            )
         hashes[rel] = digest(path)
         for number, line in enumerate(source.splitlines(), 1):
             for rule, pattern in LINE_RULES.items():

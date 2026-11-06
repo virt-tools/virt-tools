@@ -1,3 +1,5 @@
+import base64
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -28,6 +30,18 @@ class CspGenerationTest(unittest.TestCase):
         self.assertIn("script-src-attr 'unsafe-hashes'", block)
         self.assertNotIn("ld+json", block)
         self.assertEqual(block.count("sha256-"), 2)
+
+    def test_nul_bytes_hash_as_the_browser_tokenizes_them(self) -> None:
+        body = 'var placeholder = "\x00BLOCK";'
+        page = (
+            "<!DOCTYPE html><html><head></head><body><script>"
+            + body
+            + "</script></body></html>"
+        )
+        block = generate_seo.csp_block(page)
+        raw_digest = hashlib.sha256(body.encode("utf-8")).digest()
+        self.assertIn(generate_seo._source_hash(body.replace("\x00", "\ufffd")), block)
+        self.assertNotIn(base64.b64encode(raw_digest).decode("ascii"), block)
 
     def test_pages_without_handlers_deny_inline_attributes(self) -> None:
         block = generate_seo.csp_block(

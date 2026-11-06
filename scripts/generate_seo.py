@@ -224,7 +224,9 @@ DYNAMIC_HANDLER_RE = re.compile(
 
 
 def _source_hash(value: str) -> str:
-    digest = hashlib.sha256(value.encode("utf-8")).digest()
+    # HTML tokenizers replace NUL with U+FFFD before a script executes, so the
+    # hash must cover the tokenized text rather than the raw bytes on disk.
+    digest = hashlib.sha256(value.replace("\x00", "\ufffd").encode("utf-8")).digest()
     return "'sha256-" + base64.b64encode(digest).decode("ascii") + "'"
 
 
