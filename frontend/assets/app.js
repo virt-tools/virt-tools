@@ -114,12 +114,6 @@
     return svg;
   }
 
-  function compactNumber(value) {
-    try {
-      return new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 }).format(value);
-    } catch (_) { return String(value); }
-  }
-
   function injectFavicon() {
     if (!document.querySelector('link[rel~="icon"]')) {
       document.head.appendChild(el("link", { rel: "icon", type: "image/svg+xml", href: ROOT + "favicon.svg" }));
@@ -163,21 +157,6 @@
       "aria-label": "Virtual Tools on GitHub"
     });
     githubLink.appendChild(githubIcon());
-    var githubCount = el("span", { class: "github-count", "aria-hidden": "true" });
-    githubLink.appendChild(githubCount);
-    // The star count is a same-origin snapshot refreshed at build time; no
-    // visitor request ever goes to GitHub.
-    fetch(ROOT + "assets/github-stars.json", { cache: "no-store", credentials: "same-origin" })
-      .then(function (response) { return response.ok ? response.json() : null; })
-      .then(function (data) {
-        if (!data || typeof data.count !== "number" || !isFinite(data.count)) return;
-        githubCount.textContent = compactNumber(data.count);
-        githubLink.setAttribute(
-          "aria-label",
-          "Virtual Tools on GitHub — " + data.count + (data.count === 1 ? " star" : " stars")
-        );
-      })
-      .catch(function () {});
 
     var actions = el("div", { class: "header-actions" }, [githubLink, themeButton]);
     mount.appendChild(brand);

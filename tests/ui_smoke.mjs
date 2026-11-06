@@ -47,16 +47,6 @@ try {
     "https://github.com/virt-tools/virt-tools",
     "navbar GitHub link points elsewhere",
   );
-  await home.waitForFunction(
-    () => (document.querySelector(".github-count")?.textContent || "").trim().length > 0,
-    null,
-    { timeout: 5000 },
-  );
-  assert.match(
-    (await home.locator(".github-count").innerText()).trim(),
-    /^[\d.,]+[KkMm]?$/,
-    "navbar star count did not render",
-  );
   assert.equal((await home.locator('.catalog-chip[aria-pressed="true"]').textContent()).trim(), "All");
   assert.equal(await home.locator("#maturity-filter").count(), 0);
   assert.equal(await home.locator("#catalog-filters").count(), 0);
