@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Round Robin Scheduler — Virtual Tools</title>
+<meta name="description" content="Build a round-robin fixture list for 2 to 24 teams: every pair meets once or home and away, byes are handled, home advantage stays balanced, and the schedule can be copied or downloaded.">
+<link rel="stylesheet" href="/assets/style.css">
+<link rel="stylesheet" href="/assets/tool-css/tool-form-3c8cf9e7.css">
+<style>
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button.ghost{background:transparent;color:var(--text,#e6e6e6);border-color:var(--border,#2a2f3a)}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.names{margin:2px 0 10px}
+.opt{font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-dim,#9aa3b2);font-size:11px}
+.hint{color:var(--text-dim,#9aa3b2);font-size:12.5px;margin-top:5px}
+.summary{font-size:13.5px;color:var(--text-dim,#9aa3b2);text-align:center;margin:0 0 2px;line-height:1.5}
+.summary b{color:var(--text,#e6e6e6);font-weight:600}
+.rounds{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:10px;margin-top:12px}
+.round{background:var(--bg,#14181f);border:1px solid var(--border,#2a2f3a);border-radius:9px;padding:10px 12px}
+.round h2{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim,#9aa3b2);margin:0 0 6px;display:flex;justify-content:space-between;gap:6px;align-items:baseline;font-weight:700}
+.round h2 .tag{font-size:10px;text-transform:none;letter-spacing:0;border:1px solid var(--border,#2a2f3a);border-radius:999px;padding:0 6px;font-weight:600}
+.fixtures{list-style:none;margin:0;padding:0}
+.fixtures li{font-size:13.5px;line-height:1.5;padding:2px 0;display:flex;gap:5px;flex-wrap:wrap;align-items:baseline}
+.fixtures .vs{color:var(--text-dim,#9aa3b2);font-size:11.5px}
+.fixtures .bye{color:var(--text-dim,#9aa3b2);font-style:italic}
+.fixtures .home{font-weight:650}
+.out .tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px;padding-top:10px;border-top:1px solid var(--border,#2a2f3a)}
+.out .tools button{font:inherit;font-size:13px;padding:6px 12px;border-radius:7px;border:1px solid var(--border,#2a2f3a);background:transparent;color:var(--text,#e6e6e6);cursor:pointer;min-height:36px}
+.out .tools button:hover{border-color:var(--accent,#6ea8fe)}
+.out .tools button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.status{font-size:12.5px;color:var(--text-dim,#9aa3b2)}
+.note{color:var(--text-dim,#9aa3b2);font-size:0.85rem;margin-top:10px;line-height:1.5}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>Round Robin Scheduler</h1>
+<p>Build a fixture list where every team plays every other team, once or home and away. Byes are handled and home advantage stays balanced, so no team gets a lopsided run. Runs locally in your browser.</p>
+</div>
+<div class="panel">
+<form id="rr-form" novalidate>
+<div class="grid2">
+<div class="field"><label class="f" for="in-teams">Teams</label><input type="number" id="in-teams" min="2" max="24" step="1" value="6" inputmode="numeric"><div class="unit">2 to 24</div></div>
+<div class="field"><label class="f" for="in-format">Format</label><select id="in-format"><option value="single">Single round robin</option><option value="double">Double — home and away</option></select><div class="unit">one meeting or two</div></div>
+</div>
+<div class="field names"><label class="f" for="in-names">Team names <span class="opt">optional</span></label><input type="text" id="in-names" autocomplete="off" spellcheck="false" placeholder="Reds, Blues, Greens, Yellows, Whites, Blacks"><div class="hint">Comma separated, in any order. Leave blank to use Team 1, Team 2, …</div></div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions"><button type="submit">Build schedule</button><button type="button" class="ghost" id="clear">Clear</button></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"><span class="hint">Enter the number of teams to build a schedule.</span></div>
+<p class="note">Fixtures come from the circle method, so every pair meets exactly once per leg and an odd team count gives each team one bye. The first-named team is at home; home games are spread as evenly as the round structure allows, and a double round robin reverses them so every team finishes with the same number of home games. Teams are unseeded — no strength balancing, travel, venue or date assignment.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+(function(){
+"use strict";
+var MIN_TEAMS = 2, MAX_TEAMS = 24;
+var form = document.getElementById("rr-form");
+var teamsEl = document.getElementById("in-teams");
+var formatEl = document.getElementById("in-format");
+var namesEl = document.getElementById("in-names");
+var errEl = document.getElementById("err");
+var outEl = document.getElementById("out");
+var HINT = "Enter the number of teams to build a schedule.";
+var current = null;
+
+function el(tag, className, text){
+  var node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+function clearNode(node){ while (node.firstChild) node.removeChild(node.firstChild); }
+function plural(n, one, many){ return n + " " + (n === 1 ? one : many); }
+
+function buildSchedule(n, double){
+  var m = n % 2 === 0 ? n : n + 1;
+  var dummy = n % 2 === 0 ? -1 : m - 1;
+  var slots = [], i, r;
+  for (i = 0; i < m; i++) slots.push(i);
+
+  var rounds = [];
+  for (r = 0; r < m - 1; r++){
+    var pairs = [], half = m >> 1;
+    for (i = 0; i < half; i++){
+      var a = slots[i], b = slots[m - 1 - i];
+      if (a === dummy || b === dummy) pairs.push([a === dummy ? b : a, -1]);
+      else pairs.push([a, b]);
+    }
+    rounds.push(pairs);
+    var next = [slots[0], slots[m - 1]];
+    for (i = 1; i < m - 1; i++) next.push(slots[i]);
+    slots = next;
+  }
+
+  var home = [], sched = [];
+  for (i = 0; i < n; i++) home.push(0);
+  for (r = 0; r < rounds.length; r++){
+    var round = [];
+    for (i = 0; i < rounds[r].length; i++){
+      var p = rounds[r][i], h, aw;
+      if (p[1] < 0){ round.push([p[0], -1]); continue; }
+      if (home[p[0]] < home[p[1]] || (home[p[0]] === home[p[1]] && (r + p[0]) % 2 === 0)){ h = p[0]; aw = p[1]; }
+      else { h = p[1]; aw = p[0]; }
+      home[h]++;
+      round.push([h, aw]);
+    }
+    sched.push(round);
+  }
+
+  /* Move a home game from a team that has too many to one that has too few. */
+  for (var pass = 0; pass < 50; pass++){
+    var improved = false;
+    for (r = 0; r < sched.length; r++){
+      for (i = 0; i < sched[r].length; i++){
+        var pair = sched[r][i], fh = pair[0], fa = pair[1];
+        if (fa < 0) continue;
+        if (home[fa] < home[fh] - 1){
+          sched[r][i] = [fa, fh];
+          home[fh]--; home[fa]++;
+          improved = true;
+        }
+      }
+    }
+    if (!improved) break;
+  }
+
+  var legs = sched.length;
+  if (double){
+    var second = [];
+    for (r = 0; r < legs; r++){
+      var back = [];
+      for (i = 0; i < sched[r].length; i++){
+        var q = sched[r][i];
+        back.push(q[1] < 0 ? [q[0], -1] : [q[1], q[0]]);
+      }
+      second.push(back);
+    }
+    sched = sched.concat(second);
+  }
+
+  /* List each round in team order for readability. */
+  for (r = 0; r < sched.length; r++){
+    sched[r].sort(function(x, y){
+      return Math.min(x[0], x[1] < 0 ? x[0] : x[1]) - Math.min(y[0], y[1] < 0 ? y[0] : y[1]);
+    });
+  }
+  return {rounds: sched, perLeg: legs};
+}
+
+function parseNames(raw, n){
+  var text = raw.trim();
+  if (!text) return {names: null, error: ""};
+  var parts = text.split(/[,\n]/), names = [], seen = {}, i;
+  for (i = 0; i < parts.length; i++){
+    var value = parts[i].trim();
+    if (!value) continue;
+    if (value.length > 40) return {names: null, error: "Keep each team name to 40 characters or fewer."};
+    var key = value.toLowerCase();
+    if (seen[key]) return {names: null, error: "“" + value + "” appears more than once — team names must be unique."};
+    seen[key] = true;
+    names.push(value);
+  }
+  if (!names.length) return {names: null, error: ""};
+  if (names.length !== n){
+    return {names: null, error: "You listed " + plural(names.length, "name", "names") + " but set Teams to " + n +
+      ". Give exactly " + n + " names, or clear the names field to use Team 1–" + n + "."};
+  }
+  return {names: names, error: ""};
+}
+
+function defaultNames(n){
+  var names = [];
+  for (var i = 1; i <= n; i++) names.push("Team " + i);
+  return names;
+}
+
+function scheduleText(state){
+  var lines = [];
+  state.rounds.forEach(function(round, idx){
+    var heading = "Round " + (idx + 1) + (state.double && idx >= state.perLeg ? " (return leg)" : "");
+    lines.push(heading);
+    round.forEach(function(pair){
+      lines.push("  " + (pair[1] < 0 ? state.names[pair[0]] + " — bye" : state.names[pair[0]] + " v " + state.names[pair[1]]));
+    });
+    lines.push("");
+  });
+  return lines.join("\n").replace(/\n+$/, "") + "\n";
+}
+
+function csvCell(value){
+  var text = String(value === undefined || value === null ? "" : value);
+  if (/^[=+\-@\t\r]/.test(text)) text = "'" + text;
+  return '"' + text.replace(/"/g, '""') + '"';
+}
+
+function scheduleCsv(state){
+  var rows = [["round", "leg", "home", "away"].join(",")];
+  state.rounds.forEach(function(round, idx){
+    var leg = state.double && idx >= state.perLeg ? 2 : 1;
+    round.forEach(function(pair){
+      rows.push([csvCell(idx + 1), csvCell(leg), csvCell(state.names[pair[0]]), csvCell(pair[1] < 0 ? "" : state.names[pair[1]])].join(","));
+    });
+  });
+  return rows.join("\r\n") + "\r\n";
+}
+
+function download(name, text){
+  var url = URL.createObjectURL(new Blob([text], {type: "text/csv;charset=utf-8"}));
+  var link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+}
+
+function legacyCopy(text){
+  var area = document.createElement("textarea");
+  area.value = text;
+  area.setAttribute("readonly", "readonly");
+  area.style.position = "fixed";
+  area.style.top = "-1000px";
+  document.body.appendChild(area);
+  area.select();
+  var ok = false;
+  try { ok = document.execCommand("copy"); } catch (err) { ok = false; }
+  area.remove();
+  return ok;
+}
+
+function showHint(){
+  current = null;
+  clearNode(outEl);
+  outEl.appendChild(el("span", "hint", HINT));
+}
+
+function render(state){
+  clearNode(outEl);
+  var matches = 0, byes = 0;
+  state.rounds.forEach(function(round){
+    round.forEach(function(pair){ if (pair[1] < 0) byes++; else matches++; });
+  });
+
+  var summary = el("p", "summary");
+  summary.appendChild(el("b", "", plural(state.names.length, "team", "teams")));
+  summary.appendChild(document.createTextNode(" · " + plural(state.rounds.length, "round", "rounds") +
+    " · " + plural(matches, "match", "matches") + (byes ? " · " + plural(byes, "bye", "byes") : "")));
+  outEl.appendChild(summary);
+
+  var grid = el("div", "rounds");
+  state.rounds.forEach(function(round, idx){
+    var card = el("section", "round");
+    var heading = el("h2", "", "Round " + (idx + 1));
+    if (state.double && idx >= state.perLeg) heading.appendChild(el("span", "tag", "return"));
+    card.appendChild(heading);
+
+    var list = el("ul", "fixtures");
+    round.forEach(function(pair){
+      var item = el("li");
+      if (pair[1] < 0){
+        item.appendChild(el("span", "bye", state.names[pair[0]] + " — bye"));
+      } else {
+        item.appendChild(el("span", "t home", state.names[pair[0]]));
+        item.appendChild(el("span", "vs", "v"));
+        item.appendChild(el("span", "t", state.names[pair[1]]));
+      }
+      list.appendChild(item);
+    });
+    card.appendChild(list);
+    grid.appendChild(card);
+  });
+  outEl.appendChild(grid);
+
+  var tools = el("div", "tools");
+  var copyBtn = el("button", "", "Copy schedule");
+  copyBtn.type = "button";
+  var csvBtn = el("button", "", "Download CSV");
+  csvBtn.type = "button";
+  var status = el("span", "status");
+  status.setAttribute("role", "status");
+  tools.appendChild(copyBtn);
+  tools.appendChild(csvBtn);
+  tools.appendChild(status);
+  outEl.appendChild(tools);
+
+  copyBtn.addEventListener("click", function(){
+    var text = scheduleText(state);
+    function done(){ status.textContent = "Schedule copied."; }
+    function failed(){ status.textContent = "Copy blocked by the browser — download the CSV instead."; }
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(done, function(){ if (legacyCopy(text)) done(); else failed(); });
+    } else if (legacyCopy(text)) done();
+    else failed();
+  });
+  csvBtn.addEventListener("click", function(){
+    download("round-robin-schedule.csv", scheduleCsv(state));
+    status.textContent = "CSV downloaded.";
+  });
+}
+
+form.addEventListener("submit", function(event){
+  event.preventDefault();
+  var rawTeams = String(teamsEl.value).trim();
+  if (!rawTeams){ errEl.textContent = "Enter the number of teams, from " + MIN_TEAMS + " to " + MAX_TEAMS + "."; showHint(); return; }
+  if (!/^\d+$/.test(rawTeams)){ errEl.textContent = "Enter a whole number of teams, from " + MIN_TEAMS + " to " + MAX_TEAMS + "."; showHint(); return; }
+  var n = Number(rawTeams);
+  if (n < MIN_TEAMS){ errEl.textContent = "A round robin needs at least " + MIN_TEAMS + " teams. Add a team or choose another format."; showHint(); return; }
+  if (n > MAX_TEAMS){ errEl.textContent = "This scheduler handles up to " + MAX_TEAMS + " teams; " + n + " would need " + (n * (n - 1) / 2) + " matches."; showHint(); return; }
+
+  var parsed = parseNames(String(namesEl.value), n);
+  if (parsed.error){ errEl.textContent = parsed.error; showHint(); return; }
+
+  var double = formatEl.value === "double";
+  var built = buildSchedule(n, double);
+  var state = {
+    names: parsed.names || defaultNames(n),
+    rounds: built.rounds,
+    perLeg: built.perLeg,
+    double: double
+  };
+  current = state;
+  errEl.textContent = "";
+  render(state);
+});
+
+form.addEventListener("input", function(){ if (errEl.textContent) errEl.textContent = ""; });
+formatEl.addEventListener("change", function(){
+  if (current && !errEl.textContent && String(teamsEl.value).trim() !== ""){
+    if (typeof form.requestSubmit === "function") form.requestSubmit();
+    else form.dispatchEvent(new Event("submit", {cancelable: true}));
+  }
+});
+
+document.getElementById("clear").addEventListener("click", function(){
+  teamsEl.value = "6";
+  formatEl.value = "single";
+  namesEl.value = "";
+  errEl.textContent = "";
+  showHint();
+  teamsEl.focus();
+});
+})();
+</script>
+</body>
+</html>
