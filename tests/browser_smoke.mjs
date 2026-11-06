@@ -433,6 +433,59 @@ try {
   assert.notEqual(await tileState(), beforeTaps, "a 2048 swipe did not move tiles");
   await puzzle.close();
 
+  // Landscape phones: the board must shrink to the viewport height instead of
+  // forcing a mid-game scroll, and pull-to-refresh must not reload the game.
+  const landscape = await browser.newContext({
+    viewport: { width: 844, height: 390 },
+    hasTouch: true,
+    isMobile: true,
+  });
+  const landscapePage = await landscape.newPage();
+  try {
+    await landscapePage.goto(routeURL("/tools/game-2048/"), { waitUntil: "domcontentloaded" });
+    await landscapePage.locator('#site-header[data-ready="true"]').waitFor({ timeout: 10_000 });
+    await landscapePage.evaluate(() =>
+      document.getElementById("board").scrollIntoView({ block: "center" }),
+    );
+    await landscapePage.waitForTimeout(200);
+    const landscapeFit = await landscapePage.evaluate(() => {
+      const board = document.getElementById("board").getBoundingClientRect();
+      const cells = [...document.querySelectorAll(".grid-cell")].map((el) => el.getBoundingClientRect());
+      const aligned = [...document.querySelectorAll(".tile")].every((tile) => {
+        const r = tile.getBoundingClientRect();
+        return cells.some(
+          (c) => Math.abs(c.x - r.x) < 1 && Math.abs(c.y - r.y) < 1 && Math.abs(c.width - r.width) < 1,
+        );
+      });
+      return {
+        top: board.top,
+        bottom: board.bottom,
+        height: board.height,
+        viewport: window.innerHeight,
+        aligned,
+        overscrollY: getComputedStyle(document.body).overscrollBehaviorY,
+        scrollRange: document.documentElement.scrollHeight - window.innerHeight,
+      };
+    });
+    assert.ok(
+      landscapeFit.top >= -0.5 && landscapeFit.bottom <= landscapeFit.viewport + 0.5,
+      `2048 board does not fit a landscape viewport (${landscapeFit.height}px in ${landscapeFit.viewport}px)`,
+    );
+    assert.ok(landscapeFit.aligned, "2048 tiles do not sit on the grid cells in landscape");
+    assert.equal(
+      landscapeFit.overscrollY,
+      "contain",
+      "2048 page lets pull-to-refresh reload an in-progress game",
+    );
+    assert.ok(landscapeFit.scrollRange > 0, "2048 landscape page has no scrollable content");
+    await landscapePage.evaluate(() => window.scrollTo(0, 40));
+    await landscapePage.waitForTimeout(100);
+    const landscapeScrollY = await landscapePage.evaluate(() => window.scrollY);
+    assert.ok(landscapeScrollY >= 30, "2048 page can no longer scroll normally");
+  } finally {
+    await landscape.close();
+  }
+
   const sudoku = await openPage("sudoku grid", "/tools/sudoku-puzzle/");
   await sudoku.locator("#site-header[data-ready=\"true\"]").waitFor({ timeout: 10_000 });
   const cellsFit = await sudoku.evaluate(() => {
