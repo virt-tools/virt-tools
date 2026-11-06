@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Hiking Time Calculator — Virtual Tools</title>
+<meta name="description" content="Estimate hiking time from route distance and total ascent with Naismith's rule, including an optional start time and estimated arrival.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:12px;margin:10px 0}
+label.f{font-size:13px;opacity:.85;display:block;margin-bottom:4px}
+.field{background:var(--bg,#14181f);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px}
+.field:focus-within{border-color:var(--accent,#6ea8fe);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#6ea8fe) 18%,transparent)}
+.field .inline{display:flex;gap:8px;align-items:baseline}
+.field input{box-sizing:border-box;width:100%;min-width:0;background:transparent;color:var(--text,#e6e6e6);border:none;font-size:18px;font-family:ui-monospace,monospace;padding:2px 0;outline:none}
+.field select{font:inherit;font-size:13px;background:var(--bg-elev,#171a21);color:var(--text,#e6e6e6);border:1px solid var(--border,#2a2f3a);border-radius:6px;padding:4px 6px;min-height:32px}
+.field select:focus-visible{outline:2px solid var(--accent,#6ea8fe);outline-offset:1px}
+.field .unit{font-size:11px;color:var(--text-dim,#9aa3b2);margin-top:4px}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:14px 0}
+.out .big{font-size:clamp(1.8rem,7vw,2.4rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:4px 0 6px;overflow-wrap:anywhere}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45}
+.out .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:14px}
+.out .row:last-child{border-bottom:none}
+.out .row .k{color:var(--text-dim,#9aa3b2)}
+.out .row .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right}
+.out .warn{color:var(--warn,#f0b429);font-size:12.5px;margin:10px 0 0;line-height:1.45}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.err{color:var(--bad,#f87171);font-size:13px;margin:6px 0;min-height:1.2em}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;margin:10px 0 0;line-height:1.5}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>Hiking Time Calculator</h1>
+<p>Estimate how long a hike takes from its distance and total climb, and see when you would arrive from a chosen start time.</p>
+</div>
+<div class="panel">
+<form id="hike-form" novalidate>
+<div class="grid2">
+<div class="field"><label class="f" for="in-distance">Route distance</label>
+<div class="inline"><input type="text" id="in-distance" inputmode="decimal" autocomplete="off" value="15"><select id="unit-distance" aria-label="Distance unit"><option value="km" selected>km</option><option value="mi">mi</option></select></div>
+<div class="unit">total length of the route</div></div>
+<div class="field"><label class="f" for="in-ascent">Total ascent</label>
+<div class="inline"><input type="text" id="in-ascent" inputmode="decimal" autocomplete="off" value="720"><select id="unit-ascent" aria-label="Ascent unit"><option value="m" selected>m</option><option value="ft">ft</option></select></div>
+<div class="unit">all climbing added together</div></div>
+<div class="field"><label class="f" for="in-speed">Base speed</label><input type="text" id="in-speed" inputmode="decimal" autocomplete="off" value="5"><div class="unit">km/h on the flat</div></div>
+<div class="field"><label class="f" for="in-start">Start time</label><input type="text" id="in-start" inputmode="numeric" autocomplete="off" placeholder="optional, e.g. 08:30"><div class="unit">24-hour clock</div></div>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions"><button type="submit">Estimate hiking time</button></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"><span style="color:var(--text-dim,#9aa3b2)">Enter the distance, ascent and base speed to estimate the walking time.</span></div>
+<p class="note">Naismith's rule: time = distance ÷ base speed + 1 hour for every 600 m of ascent (A. A. Naismith, 1892), which assumes steady walking on firm, open ground. Descents, rests, rough terrain, altitude, heat and group pace are not included, so treat the result as a moving-time floor and add margin before setting off. Distances are limited to 0.1–100 km and ascent to 0–10,000 m. Everything runs locally in your browser.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* hiking-time-core:start */
+var HikingTimeCore = (function(){
+  "use strict";
+  var KM_PER_MILE = 1.609344;
+  var M_PER_FOOT = 0.3048;
+  var ASCENT_M_PER_HOUR = 600;
+  var LIMITS = { distanceKm: [0.1, 100], ascentM: [0, 10000], speedKmh: [1, 8] };
+  var DISTANCE_RANGE = "Distance must be from 0.1 to 100 km (0.06 to 62.1 mi).";
+  var ASCENT_RANGE = "Ascent must be from 0 to 10,000 m (0 to 32,808 ft).";
+  var SPEED_RANGE = "Base speed must be from 1 to 8 km/h.";
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function decimal(value, label){
+    var raw = String(value == null ? "" : value).trim();
+    if (!raw) fail(label + " is required.");
+    if (!/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(raw)) fail(label + " must be a number.");
+    var parsed = Number(raw);
+    if (!isFinite(parsed)) fail(label + " must be a number.");
+    return parsed;
+  }
+
+  function clock(value){
+    var raw = String(value == null ? "" : value).trim();
+    if (!raw) return null;
+    var match = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(raw);
+    if (!match) fail("Start time must be 24-hour HH:MM, e.g. 08:30.");
+    return Number(match[1]) * 60 + Number(match[2]);
+  }
+
+  function plan(input){
+    var options = input || {};
+    var distance = decimal(options.distance, "Distance");
+    var ascent = decimal(options.ascent, "Ascent");
+    var speed = decimal(options.speed, "Base speed");
+    var distanceKm = options.distanceUnit === "mi" ? distance * KM_PER_MILE : distance;
+    var ascentM = options.ascentUnit === "ft" ? ascent * M_PER_FOOT : ascent;
+
+    if (distanceKm < LIMITS.distanceKm[0] || distanceKm > LIMITS.distanceKm[1]) fail(DISTANCE_RANGE);
+    if (ascentM < LIMITS.ascentM[0] || ascentM > LIMITS.ascentM[1]) fail(ASCENT_RANGE);
+    if (speed < LIMITS.speedKmh[0] || speed > LIMITS.speedKmh[1]) fail(SPEED_RANGE);
+
+    var startMinutes = clock(options.start);
+    var flatSeconds = distanceKm / speed * 3600;
+    var ascentSeconds = ascentM / ASCENT_M_PER_HOUR * 3600;
+    var totalSeconds = flatSeconds + ascentSeconds;
+    var totalMinutes = Math.round(totalSeconds / 60);
+    var arrivalMinutes = null;
+    var arrivalNextDay = false;
+    if (startMinutes !== null){
+      var raw = startMinutes + totalMinutes;
+      arrivalMinutes = raw % 1440;
+      arrivalNextDay = raw >= 1440;
+    }
+
+    return {
+      distanceKm: distanceKm,
+      distanceMiles: distanceKm / KM_PER_MILE,
+      ascentM: ascentM,
+      ascentFt: ascentM / M_PER_FOOT,
+      speedKmh: speed,
+      flatSeconds: flatSeconds,
+      ascentSeconds: ascentSeconds,
+      totalSeconds: totalSeconds,
+      totalMinutes: totalMinutes,
+      paceSecPerKm: totalSeconds / distanceKm,
+      paceSecPerMi: totalSeconds / (distanceKm / KM_PER_MILE),
+      startMinutes: startMinutes,
+      arrivalMinutes: arrivalMinutes,
+      arrivalNextDay: arrivalNextDay,
+      steep: ascentSeconds > flatSeconds,
+      longDay: totalSeconds > 10 * 3600
+    };
+  }
+
+  return {
+    LIMITS: LIMITS,
+    ASCENT_M_PER_HOUR: ASCENT_M_PER_HOUR,
+    KM_PER_MILE: KM_PER_MILE,
+    M_PER_FOOT: M_PER_FOOT,
+    clock: clock,
+    plan: plan
+  };
+})();
+/* hiking-time-core:end */
+(function(){
+"use strict";
+
+var els = {
+  distance: document.getElementById("in-distance"),
+  distanceUnit: document.getElementById("unit-distance"),
+  ascent: document.getElementById("in-ascent"),
+  ascentUnit: document.getElementById("unit-ascent"),
+  speed: document.getElementById("in-speed"),
+  start: document.getElementById("in-start"),
+  err: document.getElementById("err"),
+  out: document.getElementById("out")
+};
+
+function clear(node){
+  while (node.firstChild) node.removeChild(node.firstChild);
+}
+function placeholder(node, message){
+  var span = document.createElement("span");
+  span.style.color = "var(--text-dim,#9aa3b2)";
+  span.textContent = message;
+  node.appendChild(span);
+}
+function addRow(parent, label, value){
+  var row = document.createElement("div");
+  row.className = "row";
+  var key = document.createElement("span");
+  key.className = "k";
+  key.textContent = label;
+  var val = document.createElement("span");
+  val.className = "v";
+  val.textContent = value;
+  row.appendChild(key);
+  row.appendChild(val);
+  parent.appendChild(row);
+}
+function addWarning(parent, message){
+  var p = document.createElement("p");
+  p.className = "warn";
+  p.textContent = message;
+  parent.appendChild(p);
+}
+function pad(value){
+  return value < 10 ? "0" + value : String(value);
+}
+function formatDuration(seconds){
+  var minutes = Math.round(seconds / 60);
+  if (minutes < 1) return "under 1 min";
+  var hours = Math.floor(minutes / 60);
+  var rest = minutes % 60;
+  if (hours === 0) return rest + " min";
+  if (rest === 0) return hours + " h";
+  return hours + " h " + rest + " min";
+}
+function formatPace(seconds){
+  var whole = Math.round(seconds);
+  var hours = Math.floor(whole / 3600);
+  var minutes = Math.floor((whole % 3600) / 60);
+  var secs = whole % 60;
+  if (hours > 0) return hours + ":" + pad(minutes) + ":" + pad(secs);
+  return minutes + ":" + pad(secs);
+}
+function formatClock(minutes){
+  return pad(Math.floor(minutes / 60) % 24) + ":" + pad(minutes % 60);
+}
+function formatNumber(value, decimals){
+  var fixed = value.toFixed(decimals);
+  if (fixed.indexOf(".") === -1) return fixed;
+  return fixed.replace(/0+$/, "").replace(/\.$/, "");
+}
+
+function render(result){
+  clear(els.out);
+
+  var big = document.createElement("div");
+  big.className = "big";
+  big.textContent = formatDuration(result.totalSeconds);
+  var sub = document.createElement("div");
+  sub.className = "sub";
+  sub.textContent = formatNumber(result.distanceKm, 1) + " km (" + formatNumber(result.distanceMiles, 1) + " mi) with " +
+    formatNumber(Math.round(result.ascentM), 0) + " m of ascent at " + formatNumber(result.speedKmh, 2) + " km/h, Naismith's rule";
+  els.out.appendChild(big);
+  els.out.appendChild(sub);
+
+  addRow(els.out, "Flat walking", formatDuration(result.flatSeconds));
+  addRow(els.out, "Ascent allowance", formatDuration(result.ascentSeconds));
+  addRow(els.out, "Average pace", formatPace(result.paceSecPerKm) + " /km");
+  addRow(els.out, "Per mile", formatPace(result.paceSecPerMi) + " /mi");
+
+  if (result.startMinutes !== null){
+    addRow(els.out, "Start time", formatClock(result.startMinutes));
+    addRow(els.out, "Estimated arrival", formatClock(result.arrivalMinutes) + (result.arrivalNextDay ? " next day" : ""));
+  }
+
+  if (result.steep){
+    addWarning(els.out, "The ascent allowance is longer than the flat walking time. Steep or rough ground, rests and descents will add more than this estimate.");
+  }
+  if (result.longDay){
+    addWarning(els.out, "This is a long day out. Plan daylight, water, weather and a turnaround time before setting off.");
+  }
+}
+
+function calculate(){
+  var result;
+  try {
+    result = HikingTimeCore.plan({
+      distance: els.distance.value,
+      distanceUnit: els.distanceUnit.value,
+      ascent: els.ascent.value,
+      ascentUnit: els.ascentUnit.value,
+      speed: els.speed.value,
+      start: els.start.value
+    });
+  } catch (error){
+    els.err.textContent = error.message;
+    clear(els.out);
+    placeholder(els.out, "Check the highlighted field.");
+    return;
+  }
+  els.err.textContent = "";
+  render(result);
+}
+
+[els.distance, els.ascent, els.speed, els.start].forEach(function(input){
+  input.addEventListener("input", calculate);
+});
+[els.distanceUnit, els.ascentUnit].forEach(function(select){
+  select.addEventListener("change", calculate);
+});
+document.getElementById("hike-form").addEventListener("submit", function(event){
+  event.preventDefault();
+  calculate();
+});
+
+calculate();
+})();
+</script>
+</body>
+</html>
