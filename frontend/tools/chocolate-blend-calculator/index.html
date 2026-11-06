@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Chocolate Blend Calculator — Virtual Tools</title>
+<meta name="description" content="Blend two chocolates with different cacao percentages to reach a target: split a batch by weight or work out how much of the second chocolate to add.">
+<link rel="stylesheet" href="/assets/style.css">
+<link rel="stylesheet" href="/assets/tool-css/tool-form-3c8cf9e7.css">
+<style>
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.out .big{font-size:clamp(1.2rem,4.4vw,1.6rem);line-height:1.25;overflow-wrap:anywhere;padding:6px 0 6px}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:-2px 0 12px;line-height:1.4}
+.out .row{gap:12px}
+.out .row .k{flex:1 1 auto}
+.out .row .v{text-align:right;white-space:nowrap}
+.field .hint{font-size:11px;color:var(--text-dim,#9aa3b2);margin-top:4px;line-height:1.35}
+.err{min-height:1.2em}
+.note{color:var(--text-dim,#9aa3b2);font-size:0.85rem;margin-top:10px}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>Chocolate Blend Calculator</h1>
+<p>Blend two chocolates with different cacao percentages to reach a target. Runs locally in your browser.</p>
+</div>
+<div class="panel">
+<form id="blend-form" novalidate>
+<div class="grid2">
+<div class="field"><label class="f" for="in-mode">What are you solving?</label><select id="in-mode"><option value="batch">Split a target batch weight</option><option value="adjust">Add to a measured amount</option></select><div class="unit">choose the known quantity</div></div>
+<div class="field"><label class="f" for="in-a">Chocolate A cacao</label><input type="text" id="in-a" inputmode="decimal" autocomplete="off" value="70"><div class="unit">% printed on the label</div></div>
+<div class="field"><label class="f" for="in-b">Chocolate B cacao</label><input type="text" id="in-b" inputmode="decimal" autocomplete="off" value="35"><div class="unit">% printed on the label</div></div>
+<div class="field"><label class="f" for="in-target">Target cacao</label><input type="text" id="in-target" inputmode="decimal" autocomplete="off" value="55"><div class="unit">% for the finished blend</div></div>
+<div class="field" id="batch-field"><label class="f" for="in-batch">Batch weight</label><input type="text" id="in-batch" inputmode="decimal" autocomplete="off" value="1000"><div class="unit" id="batch-unit">grams</div><div class="hint">total chocolate to end up with</div></div>
+<div class="field" id="amount-field" hidden><label class="f" for="in-amount">Chocolate A on hand</label><input type="text" id="in-amount" inputmode="decimal" autocomplete="off" value="500"><div class="unit" id="amount-unit">grams</div><div class="hint">the amount you have already weighed</div></div>
+<div class="field"><label class="f" for="in-unit">Weight unit</label><select id="in-unit"><option value="g">grams</option><option value="oz">ounces</option></select><div class="unit">for the batch and amounts</div></div>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions"><button type="submit">Calculate blend</button></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"><span style="color:var(--text-dim,#9aa3b2)">Enter the cacao percentages to calculate.</span></div>
+<p class="note">The percentages are treated as exact shares of total weight, so the blend is a straight mass balance. Label values are rounded, and added cocoa butter, milk fat or inclusions change the real result — taste and temper the melted chocolate before using it.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+(function(){
+"use strict";
+var els = {
+  mode: document.getElementById("in-mode"),
+  a: document.getElementById("in-a"),
+  b: document.getElementById("in-b"),
+  target: document.getElementById("in-target"),
+  batch: document.getElementById("in-batch"),
+  amount: document.getElementById("in-amount"),
+  unit: document.getElementById("in-unit"),
+  batchField: document.getElementById("batch-field"),
+  amountField: document.getElementById("amount-field"),
+  batchUnit: document.getElementById("batch-unit"),
+  amountUnit: document.getElementById("amount-unit"),
+  err: document.getElementById("err"),
+  out: document.getElementById("out")
+};
+
+var G_PER_OZ = 28.349523125;
+var MAX_GRAMS = 100000;
+var EPS = 1e-9;
+var lastUnit = "g";
+
+function parseNum(text, allowBlank){
+  var s = String(text == null ? "" : text).trim();
+  if (!s) return allowBlank ? null : NaN;
+  if (!/^[+]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(s)) return NaN;
+  var v = Number(s);
+  return isFinite(v) ? v : NaN;
+}
+function round(x, n){
+  var p = Math.pow(10, n);
+  return Math.round(x * p) / p;
+}
+function fmt(x, n){
+  return round(x, n).toLocaleString(undefined, {maximumFractionDigits: n});
+}
+function pctText(p){
+  return fmt(p, 2) + "%";
+}
+function toGrams(value, unit){
+  return unit === "oz" ? value * G_PER_OZ : value;
+}
+function weightText(grams, unit){
+  var v = unit === "oz" ? grams / G_PER_OZ : grams;
+  var n = unit === "oz" ? (v < 10 ? 2 : 1) : 1;
+  return fmt(v, n) + (unit === "oz" ? " oz" : " g");
+}
+function row(key, value){
+  var wrap = document.createElement("div");
+  wrap.className = "row";
+  var k = document.createElement("span");
+  k.className = "k";
+  k.textContent = key;
+  var v = document.createElement("span");
+  v.className = "v";
+  v.textContent = value;
+  wrap.appendChild(k);
+  wrap.appendChild(v);
+  return wrap;
+}
+function showPlaceholder(msg){
+  clearOut();
+  var span = document.createElement("span");
+  span.style.color = "var(--text-dim,#9aa3b2)";
+  span.textContent = msg;
+  els.out.appendChild(span);
+}
+function clearOut(){
+  while (els.out.firstChild) els.out.removeChild(els.out.firstChild);
+}
+function setUnitLabels(){
+  var label = els.unit.value === "oz" ? "ounces" : "grams";
+  els.batchUnit.textContent = label;
+  els.amountUnit.textContent = label;
+}
+function syncMode(){
+  var adjust = els.mode.value === "adjust";
+  els.batchField.hidden = adjust;
+  els.amountField.hidden = !adjust;
+}
+function fail(message, placeholder){
+  els.err.textContent = message;
+  showPlaceholder(placeholder);
+}
+function calculate(){
+  var mode = els.mode.value === "adjust" ? "adjust" : "batch";
+  var unit = els.unit.value === "oz" ? "oz" : "g";
+  var a = parseNum(els.a.value, true);
+  var b = parseNum(els.b.value, true);
+  var target = parseNum(els.target.value, true);
+  var amountInput = mode === "batch" ? els.batch : els.amount;
+  var amount = parseNum(amountInput.value, true);
+
+  if (a === null || b === null || target === null || amount === null) {
+    els.err.textContent = "";
+    showPlaceholder("Enter the cacao percentages and a weight to calculate.");
+    return;
+  }
+  if (isNaN(a) || isNaN(b) || isNaN(target) || isNaN(amount)) {
+    fail("Cacao percentages and the weight must be numbers.", "Check the numeric fields.");
+    return;
+  }
+  if (a < 0 || a > 100 || b < 0 || b > 100) {
+    fail("Cacao percentages must be between 0 and 100.", "Check the cacao percentages.");
+    return;
+  }
+  if (target < 0 || target > 100) {
+    fail("The target must be between 0 and 100%.", "Check the target cacao.");
+    return;
+  }
+  if (Math.abs(a - b) < EPS) {
+    fail("Chocolate A and B have the same cacao percentage, so there is nothing to blend.", "Use two different percentages.");
+    return;
+  }
+  var low = Math.min(a, b);
+  var high = Math.max(a, b);
+  if (target < low - EPS || target > high + EPS) {
+    fail("The target must sit between " + pctText(low) + " and " + pctText(high) + " to blend these two chocolates.", "Check the target cacao.");
+    return;
+  }
+
+  var batchGrams = toGrams(parseNum(amountInput.value, true), unit);
+  if (!isFinite(batchGrams) || batchGrams <= 0) {
+    fail("The weight must be greater than zero.", "Check the weight.");
+    return;
+  }
+  if (batchGrams > MAX_GRAMS) {
+    fail("The weight must be no more than " + fmt(MAX_GRAMS, 0) + " g (" + fmt(MAX_GRAMS / G_PER_OZ, 0) + " oz).", "Check the weight.");
+    return;
+  }
+
+  var aGrams, bGrams, totalGrams, actual;
+  if (mode === "batch") {
+    totalGrams = batchGrams;
+    aGrams = totalGrams * (target - b) / (a - b);
+    if (aGrams < 0 && aGrams > -EPS) aGrams = 0;
+    if (aGrams > totalGrams && aGrams < totalGrams + EPS) aGrams = totalGrams;
+    bGrams = totalGrams - aGrams;
+    if (aGrams < -EPS || bGrams < -EPS) {
+      fail("That target cannot be reached with these two chocolates.", "Check the percentages.");
+      return;
+    }
+    if (Math.abs(aGrams) < EPS) aGrams = 0;
+    if (Math.abs(bGrams) < EPS) bGrams = 0;
+    actual = (a * aGrams + b * bGrams) / totalGrams;
+  } else {
+    var onHand = batchGrams;
+    if (Math.abs(target - a) < EPS) {
+      bGrams = 0;
+    } else if (target <= low + EPS || target >= high - EPS) {
+      fail("To add chocolate B, the target must be strictly between " + pctText(low) + " and " + pctText(high) + ".", "Check the target cacao.");
+      return;
+    } else {
+      bGrams = onHand * (target - a) / (b - target);
+      if (bGrams < 0 && bGrams > -EPS) bGrams = 0;
+      if (!isFinite(bGrams) || bGrams < 0) {
+        fail("That target cannot be reached by adding chocolate B.", "Check the percentages.");
+        return;
+      }
+    }
+    aGrams = onHand;
+    totalGrams = aGrams + bGrams;
+    if (totalGrams > MAX_GRAMS) {
+      fail("The finished blend would exceed " + fmt(MAX_GRAMS, 0) + " g; start with less chocolate A.", "Check the amount on hand.");
+      return;
+    }
+    actual = (a * aGrams + b * bGrams) / totalGrams;
+  }
+
+  els.err.textContent = "";
+  clearOut();
+
+  var big = document.createElement("div");
+  big.className = "big";
+  var sub = document.createElement("div");
+  sub.className = "sub";
+
+  if (mode === "batch") {
+    big.textContent = weightText(aGrams, unit) + " A + " + weightText(bGrams, unit) + " B";
+    sub.textContent = "yields " + weightText(totalGrams, unit) + " at " + pctText(actual) + " cacao";
+  } else if (bGrams === 0) {
+    big.textContent = "No chocolate B needed";
+    sub.textContent = weightText(aGrams, unit) + " of chocolate A is already at " + pctText(actual) + " cacao";
+  } else {
+    big.textContent = "Add " + weightText(bGrams, unit) + " of chocolate B";
+    sub.textContent = "to " + weightText(aGrams, unit) + " of chocolate A, giving " + weightText(totalGrams, unit) + " at " + pctText(actual) + " cacao";
+  }
+  els.out.appendChild(big);
+  els.out.appendChild(sub);
+
+  els.out.appendChild(row("Chocolate A (" + pctText(a) + ")", weightText(aGrams, unit)));
+  els.out.appendChild(row("Chocolate B (" + pctText(b) + ")", weightText(bGrams, unit)));
+  els.out.appendChild(row(mode === "batch" ? "Batch total" : "Finished blend", weightText(totalGrams, unit)));
+  els.out.appendChild(row("Cacao in the blend", weightText(totalGrams * actual / 100, unit)));
+}
+
+els.mode.addEventListener("change", function(){
+  syncMode();
+  calculate();
+});
+els.unit.addEventListener("change", function(){
+  var newUnit = els.unit.value === "oz" ? "oz" : "g";
+  var input = els.mode.value === "adjust" ? els.amount : els.batch;
+  var v = parseNum(input.value, true);
+  if (v !== null && !isNaN(v)) {
+    var grams = lastUnit === "oz" ? v * G_PER_OZ : v;
+    var shown = newUnit === "oz" ? grams / G_PER_OZ : grams;
+    input.value = String(round(shown, newUnit === "oz" ? 2 : 1));
+  }
+  lastUnit = newUnit;
+  setUnitLabels();
+  els.err.textContent = "";
+  calculate();
+});
+[els.a, els.b, els.target, els.batch, els.amount].forEach(function(input){
+  input.addEventListener("input", calculate);
+});
+document.getElementById("blend-form").addEventListener("submit", function(event){
+  event.preventDefault();
+  calculate();
+});
+
+setUnitLabels();
+syncMode();
+calculate();
+})();
+</script>
+</body>
+</html>
