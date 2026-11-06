@@ -19,6 +19,7 @@ var SHELL = [
   "/assets/app.js",
   "/assets/theme-init.js",
   "/assets/tools.js",
+  "/assets/github-stars.json",
   "/favicon.svg",
   "/manifest.webmanifest"
 ];

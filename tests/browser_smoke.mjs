@@ -185,7 +185,7 @@ try {
   });
   await workbenchPage.locator("#tool-search").fill("triangle area heron");
   const formulaLink = workbenchPage.locator(
-    '[data-slug="geometry-formula-workbench"] a.catalog-row-main',
+    '[data-slug="geometry-formula-workbench"] a.catalog-row-main[href*="formula=triangle-area-heron"]',
   );
   await formulaLink.waitFor({ state: "visible", timeout: 10_000 });
   assert.equal(

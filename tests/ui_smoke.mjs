@@ -37,6 +37,26 @@ try {
   const home = await open(context, "/");
   await expectResults(home);
   assert.equal(await home.locator(".catalog-chip").count(), 11);
+  assert.equal(
+    await home.locator('.catalog-sort-btn[data-sort="newest"]').getAttribute("aria-pressed"),
+    "true",
+    "catalog does not default to recent ordering",
+  );
+  assert.equal(
+    await home.locator(".github-link").getAttribute("href"),
+    "https://github.com/virt-tools/virt-tools",
+    "navbar GitHub link points elsewhere",
+  );
+  await home.waitForFunction(
+    () => (document.querySelector(".github-count")?.textContent || "").trim().length > 0,
+    null,
+    { timeout: 5000 },
+  );
+  assert.match(
+    (await home.locator(".github-count").innerText()).trim(),
+    /^[\d.,]+[KkMm]?$/,
+    "navbar star count did not render",
+  );
   assert.equal((await home.locator('.catalog-chip[aria-pressed="true"]').textContent()).trim(), "All");
   assert.equal(await home.locator("#maturity-filter").count(), 0);
   assert.equal(await home.locator("#catalog-filters").count(), 0);
@@ -68,8 +88,10 @@ try {
   await home.waitForFunction(() => document.querySelectorAll("#tool-catalog .catalog-row").length > 0);
 
   await home.locator("#tool-search").fill("triangle area heron");
+  await home
+    .locator('[data-slug="geometry-formula-workbench"] .catalog-row-name', { hasText: "Triangle Area (Heron)" })
+    .waitFor();
   const formulaLink = home.locator('[data-slug="geometry-formula-workbench"] .catalog-row-main');
-  await formulaLink.waitFor();
   assert.equal(await formulaLink.locator(".catalog-row-name").textContent(), "Triangle Area (Heron)");
   assert.match(await formulaLink.getAttribute("href"), /\?formula=triangle-area-heron$/);
   await formulaLink.click();
@@ -133,11 +155,11 @@ try {
 
   const sortContext = await browser.newContext({ serviceWorkers: "block" });
   const sortPage = await open(sortContext, "/");
-  await sortPage.locator('.catalog-sort-btn[data-sort="newest"]').click();
+  await sortPage.locator('.catalog-sort-btn[data-sort="name"]').click();
   await sortPage.reload();
   await expectResults(sortPage);
   assert.equal(
-    await sortPage.locator('.catalog-sort-btn[data-sort="newest"]').getAttribute("aria-pressed"),
+    await sortPage.locator('.catalog-sort-btn[data-sort="name"]').getAttribute("aria-pressed"),
     "true",
     "saved sort preference was not restored",
   );

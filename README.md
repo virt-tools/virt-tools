@@ -41,6 +41,8 @@ scripts/
   generate_formula_workbenches.py
                        Validates formula manifest and generates static workbenches
   generate_seo.py      Injects SEO metadata and per-page CSP hashes at build time
+  update_github_stars.py
+                       Refreshes the navbar star-count snapshot from GitHub
   manage_feedback.py   Offline admin CLI (review / reply / set status)
   backup_feedback.sh   WAL-safe encrypted backup wrapper
   restore_feedback.sh  Verified restore wrapper

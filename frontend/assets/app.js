@@ -102,6 +102,24 @@
     button.title = button.getAttribute("aria-label");
   }
 
+  function githubIcon() {
+    var ns = "http://www.w3.org/2000/svg";
+    var svg = document.createElementNS(ns, "svg");
+    [["width", "16"], ["height", "16"], ["viewBox", "0 0 24 24"],
+     ["fill", "currentColor"], ["aria-hidden", "true"], ["focusable", "false"]
+    ].forEach(function (pair) { svg.setAttribute(pair[0], pair[1]); });
+    var path = document.createElementNS(ns, "path");
+    path.setAttribute("d", "M12 .5C5.73.5.5 5.73.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.7-3.88-1.54-3.88-1.54-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.71.08-.71 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.23-1.28-5.23-5.7 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 0 1 5.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.43-2.69 5.41-5.25 5.69.41.35.78 1.05.78 2.12 0 1.53-.01 2.76-.01 3.14 0 .31.21.67.8.56A10.52 10.52 0 0 0 23.5 12C23.5 5.73 18.27.5 12 .5Z");
+    svg.appendChild(path);
+    return svg;
+  }
+
+  function compactNumber(value) {
+    try {
+      return new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 }).format(value);
+    } catch (_) { return String(value); }
+  }
+
   function injectFavicon() {
     if (!document.querySelector('link[rel~="icon"]')) {
       document.head.appendChild(el("link", { rel: "icon", type: "image/svg+xml", href: ROOT + "favicon.svg" }));
@@ -135,9 +153,36 @@
       applyTheme(currentTheme() === "dark" ? "light" : "dark");
       syncThemeButton(themeButton);
     });
+
+    var githubLink = el("a", {
+      class: "github-link",
+      href: "https://github.com/virt-tools/virt-tools",
+      target: "_blank",
+      rel: "noopener noreferrer",
+      title: "Virtual Tools on GitHub",
+      "aria-label": "Virtual Tools on GitHub"
+    });
+    githubLink.appendChild(githubIcon());
+    var githubCount = el("span", { class: "github-count", "aria-hidden": "true" });
+    githubLink.appendChild(githubCount);
+    // The star count is a same-origin snapshot refreshed at build time; no
+    // visitor request ever goes to GitHub.
+    fetch(ROOT + "assets/github-stars.json", { cache: "no-store", credentials: "same-origin" })
+      .then(function (response) { return response.ok ? response.json() : null; })
+      .then(function (data) {
+        if (!data || typeof data.count !== "number" || !isFinite(data.count)) return;
+        githubCount.textContent = compactNumber(data.count);
+        githubLink.setAttribute(
+          "aria-label",
+          "Virtual Tools on GitHub — " + data.count + (data.count === 1 ? " star" : " stars")
+        );
+      })
+      .catch(function () {});
+
+    var actions = el("div", { class: "header-actions" }, [githubLink, themeButton]);
     mount.appendChild(brand);
     mount.appendChild(nav);
-    mount.appendChild(themeButton);
+    mount.appendChild(actions);
 
     var currentPath = location.pathname.replace(/\/+$/, "/");
     nav.querySelectorAll("a").forEach(function (link) {
@@ -320,7 +365,7 @@
   var savedButton = null;
   var activeCategory = "";
   var savedOnly = false;
-  var sortMode = "name";
+  var sortMode = "newest";
   var displayLimit = PAGE_SIZE;
 
   function matchesCategory(tool, category) {
