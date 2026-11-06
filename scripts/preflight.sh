@@ -27,6 +27,7 @@ node tests/bingo_card_generator.test.cjs
 node tests/printable_paper_generator.test.cjs
 node tests/packing_list_generator.test.cjs
 node tests/audio_sync_drift_calculator.test.cjs
+node tests/fishing_line_capacity_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
