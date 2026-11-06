@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Render Time Estimator — Virtual Tools</title>
+<meta name="description" content="Estimate how long a video or 3D render will take from clip length, frame rate, seconds per frame, the number of machines and a safety margin.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:12px;margin:10px 0}
+label.f{font-size:13px;opacity:.85;display:block;margin-bottom:4px}
+.field{background:var(--bg,#14181f);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px}
+.field:focus-within{border-color:var(--accent,#6ea8fe);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#6ea8fe) 18%,transparent)}
+.field input{box-sizing:border-box;width:100%;background:transparent;color:var(--text,#e6e6e6);border:none;font-size:18px;font-family:ui-monospace,monospace;padding:2px 0;outline:none}
+.field .unit{font-size:11px;color:var(--text-dim,#9aa3b2);margin-top:4px}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:14px 0}
+.out .big{font-size:clamp(1.8rem,7vw,2.4rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:4px 0 6px;overflow-wrap:anywhere}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45}
+.out .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:14px}
+.out .row:last-child{border-bottom:none}
+.out .row .k{color:var(--text-dim,#9aa3b2)}
+.out .row .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right}
+.out .warn{color:var(--warn,#f0b429);font-size:12.5px;margin:10px 0 0;line-height:1.45}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.err{color:var(--bad,#f87171);font-size:13px;margin:6px 0;min-height:1.2em}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;margin:10px 0 0;line-height:1.5}
+@media (max-width:360px){.out .row{display:block}.out .row .v{display:block;text-align:left;margin-top:2px}}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>Render Time Estimator</h1>
+<p>Estimate how long a video or 3D render will take from the clip length, frame rate, per-frame cost and the machines doing the work.</p>
+</div>
+<div class="panel">
+<form id="render-form" novalidate>
+<div class="grid2">
+<div class="field"><label class="f" for="in-clip">Clip length</label><input type="text" id="in-clip" inputmode="numeric" autocomplete="off" value="2:30"><div class="unit">seconds, mm:ss or h:mm:ss — e.g. 2:30</div></div>
+<div class="field"><label class="f" for="in-fps">Frame rate</label><input type="text" id="in-fps" inputmode="decimal" autocomplete="off" value="24"><div class="unit">frames per second, e.g. 24, 25, 29.97</div></div>
+<div class="field"><label class="f" for="in-spf">Seconds per frame</label><input type="text" id="in-spf" inputmode="decimal" autocomplete="off" value="0.5"><div class="unit">render time for one frame on one machine</div></div>
+<div class="field"><label class="f" for="in-machines">Machines</label><input type="text" id="in-machines" inputmode="numeric" autocomplete="off" value="4"><div class="unit">rendering in parallel</div></div>
+<div class="field"><label class="f" for="in-margin">Safety margin</label><input type="text" id="in-margin" inputmode="numeric" autocomplete="off" value="10"><div class="unit">percent added to the estimate</div></div>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions"><button type="submit">Estimate render time</button></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"><span style="color:var(--text-dim,#9aa3b2)">Enter the clip length and render settings.</span></div>
+<p class="note">Frames = clip length × frame rate, rounded to the nearest whole frame. One machine takes frames × seconds per frame; the wall clock divides that by the number of machines and then adds the safety margin. Footage per hour is the finished clip length divided by the wall clock. The estimate assumes a constant cost per frame, no upload or transfer time, and linear scaling across machines — real render farms rarely scale perfectly, so keep a margin. Frame rate is used exactly as entered, so 23.976 is not rounded to 24. Everything is calculated in this page.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* render-time-core:start */
+var RenderTimeCore = (function(){
+  "use strict";
+  var LIMITS = {
+    fps: [1, 240, "Frame rate"],
+    spf: [0.001, 600, "Seconds per frame"],
+    machines: [1, 512, "Machines"],
+    margin: [0, 100, "Safety margin"]
+  };
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function parseDuration(value){
+    var raw = String(value == null ? "" : value).trim();
+    if (!raw) fail("Clip length is required.");
+    var parts = raw.split(":");
+    if (parts.length > 3) fail("Clip length must be seconds, mm:ss or h:mm:ss.");
+    var total = 0;
+    var scale = 1;
+    for (var i = parts.length - 1; i >= 0; i--){
+      var piece = parts[i].trim();
+      if (!/^\d+$/.test(piece)) fail("Clip length must be seconds, mm:ss or h:mm:ss.");
+      var part = Number(piece);
+      if (i > 0 && part >= 60) fail("Clip length minutes and seconds must be under 60.");
+      total += part * scale;
+      scale *= 60;
+    }
+    if (total < 1 || total > 86400) fail("Clip length must be from 1 second to 24 hours.");
+    return total;
+  }
+
+  function number(value, key, whole){
+    var label = LIMITS[key][2];
+    var raw = String(value == null ? "" : value).trim();
+    if (!raw) fail(label + " is required.");
+    var pattern = whole ? /^\d+$/ : /^(?:\d+(?:\.\d*)?|\.\d+)$/;
+    if (!pattern.test(raw)) fail(label + " must be " + (whole ? "a whole number" : "a number") + ".");
+    var parsed = Number(raw);
+    if (!isFinite(parsed)) fail(label + " must be a number.");
+    if (whole && Math.floor(parsed) !== parsed) fail(label + " must be a whole number.");
+    if (parsed < LIMITS[key][0] || parsed > LIMITS[key][1]){
+      fail(label + " must be from " + LIMITS[key][0] + " to " + LIMITS[key][1] + ".");
+    }
+    return parsed;
+  }
+
+  function calculate(input){
+    var options = input || {};
+    var clipSeconds = parseDuration(options.clip);
+    var fps = number(options.fps, "fps", false);
+    var secondsPerFrame = number(options.secondsPerFrame, "spf", false);
+    var machines = number(options.machines, "machines", true);
+    var margin = number(options.margin, "margin", false);
+
+    var frames = Math.round(clipSeconds * fps);
+    var singleMachineSeconds = frames * secondsPerFrame;
+    var baseSeconds = singleMachineSeconds / machines;
+    var wallSeconds = baseSeconds * (1 + margin / 100);
+
+    return {
+      clipSeconds: clipSeconds,
+      fps: fps,
+      secondsPerFrame: secondsPerFrame,
+      machines: machines,
+      margin: margin,
+      frames: frames,
+      singleMachineSeconds: singleMachineSeconds,
+      baseSeconds: baseSeconds,
+      marginSeconds: wallSeconds - baseSeconds,
+      wallSeconds: wallSeconds,
+      footagePerHour: clipSeconds * 3600 / wallSeconds
+    };
+  }
+
+  return {
+    LIMITS: LIMITS,
+    parseDuration: parseDuration,
+    calculate: calculate
+  };
+})();
+/* render-time-core:end */
+(function(){
+"use strict";
+
+var els = {
+  clip: document.getElementById("in-clip"),
+  fps: document.getElementById("in-fps"),
+  spf: document.getElementById("in-spf"),
+  machines: document.getElementById("in-machines"),
+  margin: document.getElementById("in-margin"),
+  err: document.getElementById("err"),
+  out: document.getElementById("out")
+};
+
+function pad(value){
+  return value < 10 ? "0" + value : String(value);
+}
+function formatClock(seconds){
+  var total = Math.max(0, Math.round(seconds));
+  var hours = Math.floor(total / 3600);
+  if (hours > 0){
+    var minutes = Math.round(total / 60) % 60;
+    return hours + " h " + pad(minutes) + " min";
+  }
+  var mins = Math.floor(total / 60);
+  var secs = total % 60;
+  if (mins > 0) return mins + " min " + pad(secs) + " s";
+  return secs + " s";
+}
+function fmt(value, digits){
+  return value.toLocaleString(undefined, {minimumFractionDigits: digits, maximumFractionDigits: digits});
+}
+function clear(node){
+  while (node.firstChild) node.removeChild(node.firstChild);
+}
+function addRow(parent, label, value){
+  var row = document.createElement("div");
+  row.className = "row";
+  var key = document.createElement("span");
+  key.className = "k";
+  key.textContent = label;
+  var val = document.createElement("span");
+  val.className = "v";
+  val.textContent = value;
+  row.appendChild(key);
+  row.appendChild(val);
+  parent.appendChild(row);
+}
+function addWarning(parent, message){
+  var p = document.createElement("p");
+  p.className = "warn";
+  p.textContent = message;
+  parent.appendChild(p);
+}
+function placeholder(node, message){
+  var span = document.createElement("span");
+  span.style.color = "var(--text-dim,#9aa3b2)";
+  span.textContent = message;
+  node.appendChild(span);
+}
+
+function render(result){
+  clear(els.out);
+  var big = document.createElement("div");
+  big.className = "big";
+  big.textContent = formatClock(result.wallSeconds);
+  var sub = document.createElement("div");
+  sub.className = "sub";
+  sub.textContent = result.machines + (result.machines === 1 ? " machine" : " machines") + " × " +
+    fmt(result.secondsPerFrame, result.secondsPerFrame < 0.01 ? 3 : 2) + " s per frame · " +
+    formatClock(result.clipSeconds) + " clip at " + result.fps + " fps";
+  els.out.appendChild(big);
+  els.out.appendChild(sub);
+
+  addRow(els.out, "Total frames", result.frames.toLocaleString());
+  addRow(els.out, "One machine", formatClock(result.singleMachineSeconds));
+  addRow(els.out, "Across " + result.machines + (result.machines === 1 ? " machine" : " machines"),
+    formatClock(result.baseSeconds));
+  addRow(els.out, "Safety margin (+" + result.margin + "%)", "+" + formatClock(result.marginSeconds));
+  addRow(els.out, "Finished video per hour",
+    result.footagePerHour >= 3600
+      ? fmt(result.footagePerHour / 3600, 1) + " h"
+      : fmt(result.footagePerHour / 60, 1) + " min");
+
+  if (Math.abs(result.fps - Math.round(result.fps)) > 1e-9){
+    addWarning(els.out, "Frame rate " + result.fps + " is used as entered; broadcast rates such as 23.976 and 29.97 are not rounded to 24 or 30.");
+  }
+  if (result.machines >= 8 && result.margin < 5){
+    addWarning(els.out, "Linear scaling rarely holds across many machines; a margin under 5% is likely optimistic.");
+  }
+  if (result.wallSeconds > 7 * 86400){
+    addWarning(els.out, "This estimate is longer than a week — split the job or add machines.");
+  }
+  if (result.frames > 200000){
+    addWarning(els.out, "That is a lot of frames; check the clip length and the frame rate.");
+  }
+}
+
+function calculate(){
+  var result;
+  try {
+    result = RenderTimeCore.calculate({
+      clip: els.clip.value,
+      fps: els.fps.value,
+      secondsPerFrame: els.spf.value,
+      machines: els.machines.value,
+      margin: els.margin.value
+    });
+  } catch (error){
+    els.err.textContent = error.message;
+    clear(els.out);
+    placeholder(els.out, "Check the highlighted field.");
+    return;
+  }
+
+  els.err.textContent = "";
+  render(result);
+}
+
+[els.clip, els.fps, els.spf, els.machines, els.margin].forEach(function(input){
+  input.addEventListener("input", calculate);
+});
+document.getElementById("render-form").addEventListener("submit", function(event){
+  event.preventDefault();
+  calculate();
+});
+
+calculate();
+})();
+</script>
+</body>
+</html>
