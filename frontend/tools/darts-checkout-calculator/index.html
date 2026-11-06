@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Darts Checkout Calculator — Virtual Tools</title>
+<meta name="description" content="Find a double-out darts checkout for any score from 2 to 170: the darts to throw, what each one leaves, and alternative routes. Runs locally in your browser.">
+<link rel="stylesheet" href="/assets/style.css">
+<link rel="stylesheet" href="/assets/tool-css/tool-form-3c8cf9e7.css">
+<style>
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button.ghost{background:transparent;color:var(--text,#e6e6e6);border-color:var(--border,#2a2f3a)}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.out .big{font-size:clamp(1.35rem,6.2vw,2rem);letter-spacing:.01em;line-height:1.25;overflow-wrap:anywhere}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:-2px 0 10px}
+.out .row .v{white-space:nowrap}
+.out .alts{color:var(--text-dim,#9aa3b2);font-size:13px;margin:12px 0 0;line-height:1.6;text-align:center}
+.out .alts b{display:block;color:var(--text-dim,#9aa3b2);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px}
+.out .alt-route{font-family:ui-monospace,monospace;color:var(--text,#e6e6e6);font-size:13.5px}
+.hint{color:var(--text-dim,#9aa3b2);font-size:14px}
+.warn{color:var(--warn,#fbbf24);font-size:13px;margin:10px 0 0;line-height:1.45;text-align:center}
+.note{color:var(--text-dim,#9aa3b2);font-size:0.85rem;margin-top:10px;line-height:1.5}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>Darts Checkout Calculator</h1>
+<p>Enter the score you still need and get a double-out finish: which darts to throw, what each one leaves, and the other routes that work. Runs locally in your browser.</p>
+</div>
+<div class="panel">
+<form id="checkout-form" novalidate>
+<div class="grid2">
+<div class="field"><label class="f" for="in-score">Score remaining</label><input type="text" id="in-score" inputmode="numeric" autocomplete="off" placeholder="e.g. 170"><div class="unit">2 to 170</div><div class="hint">the last dart must be a double or the bull</div></div>
+<div class="field"><label class="f" for="in-darts">Darts in hand</label><select id="in-darts"><option value="3">3 darts</option><option value="2">2 darts</option><option value="1">1 dart</option></select><div class="unit">this visit to the oche</div></div>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions"><button type="submit">Find checkout</button><button type="button" class="ghost" id="clear">Clear</button></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"><span class="hint">Enter a score to see the checkout.</span></div>
+<p class="note">T = treble, D = double, S = single, Bull = 50. Routes use the fewest darts, taking the highest-scoring trebles and singles first, and always finish on a double or the bull. A score of 1 has no finish, and 159, 162, 163, 165, 166, 168 and 169 cannot be taken out in three darts — score down first. Double-out only: double-in and straight-out games are not modelled.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+(function(){
+"use strict";
+var form = document.getElementById("checkout-form");
+var scoreEl = document.getElementById("in-score");
+var dartsEl = document.getElementById("in-darts");
+var errEl = document.getElementById("err");
+var outEl = document.getElementById("out");
+var HINT = "Enter a score to see the checkout.";
+
+function seg(label, score, pref, order, n){
+  return {label: label, score: score, pref: pref, order: order, n: n};
+}
+function buildAll(){
+  var list = [], i;
+  for (i = 1; i <= 20; i++) list.push(seg("S" + i, i, 0, 0, i));
+  for (i = 1; i <= 20; i++) list.push(seg("T" + i, 3 * i, 0, 1, i));
+  for (i = 1; i <= 20; i++) list.push(seg("D" + i, 2 * i, 1, 2, i));
+  list.push(seg("25", 25, 1, 3, 25));
+  list.push(seg("Bull", 50, 1, 3, 25));
+  return list;
+}
+var ALL = buildAll();
+var INTER = ALL.slice().sort(function(a, b){ return cmp(a, b); });
+var FINISH = ALL.filter(function(s){ return s.label.charAt(0) === "D" || s.label === "Bull"; })
+  .sort(function(a, b){ return b.score - a.score || a.order - b.order || a.n - b.n; });
+
+function cmp(a, b){
+  return a.pref - b.pref || b.score - a.score || a.order - b.order || a.n - b.n;
+}
+function cmpRoute(a, b){
+  var len = Math.min(a.length, b.length);
+  for (var i = 0; i < len; i++){
+    var d = cmp(a[i], b[i]);
+    if (d) return d;
+  }
+  return a.length - b.length;
+}
+
+function solve(score){
+  var routes = [], a, b, f, i;
+  for (i = 0; i < FINISH.length; i++){
+    if (FINISH[i].score === score) routes.push([FINISH[i]]);
+  }
+  if (routes.length){
+    routes.sort(cmpRoute);
+    return routes;
+  }
+  for (i = 0; i < INTER.length; i++){
+    a = INTER[i];
+    if (a.score > score - 2) continue;
+    for (var j = 0; j < FINISH.length; j++){
+      f = FINISH[j];
+      if (a.score + f.score === score) routes.push([a, f]);
+    }
+  }
+  if (routes.length){
+    routes.sort(cmpRoute);
+    return routes;
+  }
+  for (i = 0; i < INTER.length; i++){
+    a = INTER[i];
+    if (a.score > score - 2) continue;
+    for (var k = 0; k < INTER.length; k++){
+      b = INTER[k];
+      var rest = score - a.score - b.score;
+      if (rest < 2) continue;
+      for (var m = 0; m < FINISH.length; m++){
+        f = FINISH[m];
+        if (f.score === rest) routes.push([a, b, f]);
+      }
+    }
+  }
+  routes.sort(cmpRoute);
+  return routes;
+}
+
+function naturalAlts(routes, skip){
+  var out = [];
+  for (var i = 1; i < routes.length && out.length < 3; i++){
+    if (i === skip) continue;
+    var route = routes[i], ok = true;
+    for (var j = 0; j < route.length - 1; j++){
+      if (route[j].pref !== 0){ ok = false; break; }
+    }
+    if (ok) out.push(route);
+  }
+  return out;
+}
+
+function dartsWord(n){ return n === 1 ? "one dart" : n === 2 ? "two darts" : "three darts"; }
+function routeText(route){
+  var parts = [];
+  for (var i = 0; i < route.length; i++) parts.push(route[i].label);
+  return parts.join(" · ");
+}
+function clearNode(node){ while (node.firstChild) node.removeChild(node.firstChild); }
+function el(tag, className, text){
+  var node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function showHint(){
+  clearNode(outEl);
+  outEl.appendChild(el("span", "hint", HINT));
+}
+
+function render(score, routes, inHand){
+  var best = routes[0];
+  clearNode(outEl);
+  outEl.appendChild(el("div", "big", routeText(best)));
+  outEl.appendChild(el("div", "sub", score + " · " + dartsWord(best.length) + " · double out"));
+
+  var left = score;
+  for (var i = 0; i < best.length; i++){
+    left -= best[i].score;
+    var row = el("div", "row");
+    row.appendChild(el("span", "k", "Dart " + (i + 1)));
+    row.appendChild(el("span", "v", best[i].label + (left === 0 ? " · finish" : " · leaves " + left)));
+    outEl.appendChild(row);
+  }
+
+  if (best.length > inHand){
+    var need = best.length === 2 ? "two" : "three";
+    outEl.appendChild(el("p", "warn",
+      "This needs " + need + " darts and you have " + (inHand === 1 ? "one" : "two") +
+      " in hand — set up a finish rather than going for it."));
+  }
+
+  var alts = naturalAlts(routes, 0);
+  if (alts.length){
+    var box = el("div", "alts");
+    box.appendChild(el("b", "", "Other ways"));
+    for (var a = 0; a < alts.length; a++) box.appendChild(el("div", "alt-route", routeText(alts[a])));
+    outEl.appendChild(box);
+  }
+}
+
+function fail(message){
+  errEl.textContent = message;
+  showHint();
+}
+
+form.addEventListener("submit", function(event){
+  event.preventDefault();
+  var raw = String(scoreEl.value).trim();
+  if (!raw){ fail("Enter the score you still need, from 2 to 170."); return; }
+  if (!/^\d{1,3}$/.test(raw)){ fail("Enter a whole number from 2 to 170."); return; }
+  var score = Number(raw);
+  if (score === 0){ fail("0 means the leg is already won — enter the score you still need."); return; }
+  if (score === 1){ fail("1 cannot be checked out, because the last dart has to be a double."); return; }
+  if (score > 170){ fail(score + " is above 170, so no three-dart checkout exists. Score down to 170 or less first."); return; }
+  var routes = solve(score);
+  if (!routes.length){
+    fail(score + " is a bogey number: no three-dart checkout exists. Score down to 158 or less first.");
+    return;
+  }
+  errEl.textContent = "";
+  render(score, routes, Number(dartsEl.value));
+});
+
+form.addEventListener("input", function(){ if (errEl.textContent) errEl.textContent = ""; });
+dartsEl.addEventListener("change", function(){
+  if (!errEl.textContent && String(scoreEl.value).trim() !== ""){
+    if (typeof form.requestSubmit === "function") form.requestSubmit();
+    else form.dispatchEvent(new Event("submit", {cancelable: true}));
+  }
+});
+
+document.getElementById("clear").addEventListener("click", function(){
+  scoreEl.value = "";
+  dartsEl.value = "3";
+  errEl.textContent = "";
+  showHint();
+  scoreEl.focus();
+});
+})();
+</script>
+</body>
+</html>
