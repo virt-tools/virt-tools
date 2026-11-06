@@ -24,7 +24,9 @@
       padding: 10px;
       box-sizing: border-box;
       touch-action: none;
+      overscroll-behavior: contain;
       user-select: none;
+      -webkit-tap-highlight-color: transparent;
       outline: none;
     }
     .game-board:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
@@ -154,7 +156,11 @@
       addRandom();
       addRandom();
       render();
-      board.focus({ preventScroll: true });
+      // Touch devices should not land on a permanent focus ring or scroll-jump;
+      // tapping the board still focuses it for an attached keyboard.
+      if (window.matchMedia && window.matchMedia("(pointer: fine)").matches) {
+        board.focus({ preventScroll: true });
+      }
     }
 
     function addRandom() {
@@ -169,6 +175,8 @@
     }
 
     function render(newPos, mergedCells) {
+      const m = metrics();
+      lastCell = m.cell;
       tilesEl.innerHTML = '';
       for (let r = 0; r < SIZE; r++) {
         for (let c = 0; c < SIZE; c++) {
@@ -178,7 +186,6 @@
           el.className = 'tile';
           el.dataset.v = v;
           el.textContent = v;
-          const m = metrics();
           const digits = String(v).length;
           el.style.left = (c * m.step) + 'px';
           el.style.top = (r * m.step) + 'px';
@@ -317,23 +324,39 @@
 
     let touchStart = null;
     board.addEventListener('touchstart', e => {
-      touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      const t = e.changedTouches[0];
+      touchStart = { x: t.clientX, y: t.clientY, id: t.identifier };
     }, { passive: true });
     board.addEventListener('touchend', e => {
       if (!touchStart) return;
-      const dx = e.changedTouches[0].clientX - touchStart.x;
-      const dy = e.changedTouches[0].clientY - touchStart.y;
+      const t = [...e.changedTouches].find((touch) => touch.identifier === touchStart.id)
+        || e.changedTouches[0];
+      const dx = t.clientX - touchStart.x;
+      const dy = t.clientY - touchStart.y;
+      // Clear the origin for taps as well: a stale start made the next tap
+      // read as a long swipe.
+      touchStart = null;
       const absX = Math.abs(dx), absY = Math.abs(dy);
       if (Math.max(absX, absY) < 20) return;
       if (absX > absY) move(dx > 0 ? 'right' : 'left');
       else move(dy > 0 ? 'down' : 'up');
-      touchStart = null;
     });
+    board.addEventListener('touchcancel', () => { touchStart = null; });
+    // touch-action is enough in modern browsers; this also stops iOS from
+    // rubber-banding the page when a swipe starts on the board.
+    board.addEventListener('touchmove', (e) => { if (touchStart) e.preventDefault(); }, { passive: false });
 
     let resizeFrame = 0;
+    let lastCell = 0;
+    // Mobile browser chrome changes only the viewport height. Rebuilding the
+    // board then makes every tile wink out mid-scroll, so re-render only when
+    // the cell actually changed size (rotation, split view, desktop resize).
     window.addEventListener('resize', function () {
       cancelAnimationFrame(resizeFrame);
-      resizeFrame = requestAnimationFrame(function () { render(); });
+      resizeFrame = requestAnimationFrame(function () {
+        if (Math.abs(metrics().cell - lastCell) < 0.5) return;
+        render();
+      });
     });
 
     document.getElementById('newBtn').addEventListener('click', init);

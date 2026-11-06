@@ -392,6 +392,45 @@ try {
   await puzzle.locator("#board").press("ArrowLeft");
   await puzzle.waitForTimeout(300);
   assert.ok(await tilesAligned(), "2048 tiles drift off the grid after a move");
+  const tileState = () =>
+    puzzle.evaluate(() =>
+      [...document.querySelectorAll(".tile")]
+        .map((t) => `${t.textContent}@${t.style.left},${t.style.top}`)
+        .sort()
+        .join("|"),
+    );
+  const beforeTaps = await tileState();
+  await puzzle.evaluate(() => {
+    const board = document.getElementById("board");
+    const fire = (type, x, y) =>
+      board.dispatchEvent(
+        new TouchEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          changedTouches: [new Touch({ identifier: 1, target: board, clientX: x, clientY: y })],
+        }),
+      );
+    fire("touchstart", 100, 300);
+    fire("touchend", 100, 300);
+    fire("touchstart", 300, 300);
+    fire("touchend", 300, 300);
+  });
+  assert.equal(await tileState(), beforeTaps, "two taps queued a phantom 2048 swipe");
+  await puzzle.evaluate(() => {
+    const board = document.getElementById("board");
+    const fire = (type, x, y) =>
+      board.dispatchEvent(
+        new TouchEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          changedTouches: [new Touch({ identifier: 2, target: board, clientX: x, clientY: y })],
+        }),
+      );
+    fire("touchstart", 300, 300);
+    fire("touchmove", 200, 300);
+    fire("touchend", 200, 300);
+  });
+  assert.notEqual(await tileState(), beforeTaps, "a 2048 swipe did not move tiles");
   await puzzle.close();
 
   const sudoku = await openPage("sudoku grid", "/tools/sudoku-puzzle/");
