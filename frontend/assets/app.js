@@ -3,8 +3,6 @@
   "use strict";
 
   var ROOT = (window.VT_ROOT = window.VT_ROOT || "/");
-  var USAGE_KEY = "vt-tool-usage";
-  var RECENT_KEY = "vt-recent-tools";
   var FAVORITES_KEY = "vt-favorites";
   var SORT_KEY = "vt-sort";
   var PAGE_SIZE = 40;
@@ -151,11 +149,6 @@
     });
   }
 
-  function usageMap() {
-    var value = readJSON(USAGE_KEY, {});
-    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
-  }
-
   function favoritesSet() {
     var value = readJSON(FAVORITES_KEY, []);
     return new Set(Array.isArray(value) ? value.filter(function (item) { return typeof item === "string"; }) : []);
@@ -169,30 +162,10 @@
     saveJSON(FAVORITES_KEY, Array.from(values).sort());
   }
 
-  function recentTools() {
-    var value = readJSON(RECENT_KEY, []);
-    return Array.isArray(value) ? value.filter(function (item) { return item && typeof item.slug === "string"; }) : [];
-  }
-
   function slugFromPath() {
     var match = location.pathname.match(/\/tools\/([^/]+)\/?/);
     if (!match) return null;
     try { return decodeURIComponent(match[1]); } catch (_) { return match[1]; }
-  }
-
-  function recordVisit() {
-    var slug = slugFromPath();
-    if (!slug) return;
-    var usage = usageMap();
-    usage[slug] = Math.max(0, Number(usage[slug]) || 0) + 1;
-    saveJSON(USAGE_KEY, usage);
-
-    var heading = document.querySelector("main h1, .tool-header h1, h1");
-    var name = heading ? heading.textContent.trim() : "";
-    if (!name) name = document.title.replace(/\s*[—|-].*$/, "").trim() || slug;
-    var recent = recentTools().filter(function (item) { return item.slug !== slug; });
-    recent.unshift({ slug: slug, name: name, ts: Date.now() });
-    saveJSON(RECENT_KEY, recent.slice(0, 20));
   }
 
   function normalizeSearch(value) {
@@ -730,7 +703,7 @@
     replace(mount, []);
     var keys = virtualToolsStorageKeys();
     if (!keys.length) {
-      mount.appendChild(el("p", { class: "note" }, ["No Virtual Tools preferences or history are stored in this browser."]));
+      mount.appendChild(el("p", { class: "note" }, ["No Virtual Tools preferences are stored in this browser."]));
       return;
     }
     keys.forEach(function (key) {
@@ -763,7 +736,7 @@
         return caches.open(name).then(function (cache) { return cache.keys(); });
       })).then(function (entries) {
         var count = entries.reduce(function (sum, list) { return sum + list.length; }, 0);
-        status.textContent = online + " · " + count + " offline entries across " + ours.length + " Virtual Tools caches.";
+        status.textContent = online + " · " + count + (count === 1 ? " cached page · " : " cached pages · ") + ours.length + (ours.length === 1 ? " cache." : " caches.");
       });
     }).catch(function () { status.textContent = online + " · Offline cache details are unavailable."; });
   }
@@ -837,7 +810,6 @@
 
   ready(injectFavicon);
   ready(injectHeader);
-  ready(recordVisit);
   ready(initCatalog);
   ready(injectToolShell);
   ready(initPrivacyCenter);
@@ -847,7 +819,6 @@
     el: el,
     ready: ready,
     ROOT: ROOT,
-    recentTools: recentTools,
     isFavorite: isFavorite,
     setFavorite: setFavorite
   };
