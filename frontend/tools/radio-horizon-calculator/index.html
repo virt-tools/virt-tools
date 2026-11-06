@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Radio Horizon Calculator — Virtual Tools</title>
+<meta name="description" content="Estimate the maximum line-of-sight distance between two antennas from their heights, and the height one end needs for a target path, using standard atmospheric refraction.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px;margin:10px 0}
+label.f{font-size:13px;opacity:.85;display:block;margin-bottom:4px}
+.field{background:var(--bg,#14181f);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px}
+.field:focus-within{border-color:var(--accent,#6ea8fe);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#6ea8fe) 18%,transparent)}
+.field input{box-sizing:border-box;width:100%;background:transparent;color:var(--text,#e6e6e6);border:none;font-size:18px;font-family:ui-monospace,monospace;padding:2px 0;outline:none}
+.field .unit{font-size:11px;color:var(--text-dim,#9aa3b2);margin-top:4px}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:14px 0}
+.out .big{font-size:clamp(1.8rem,7vw,2.4rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:4px 0 6px;overflow-wrap:anywhere}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45}
+.out .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:14px}
+.out .row:last-child{border-bottom:none}
+.out .row .k{color:var(--text-dim,#9aa3b2)}
+.out .row .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right}
+.out .warn{color:var(--warn,#f0b429);font-size:12.5px;margin:10px 0 0;line-height:1.45}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.err{color:var(--bad,#f87171);font-size:13px;margin:6px 0;min-height:1.2em}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;margin:10px 0 0;line-height:1.5}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>Radio Horizon Calculator</h1>
+<p>Work out how far two antennas can see each other, and how high one end must be to reach a target distance.</p>
+</div>
+<div class="panel">
+<form id="horizon-form" novalidate>
+<div class="grid2">
+<div class="field"><label class="f" for="in-a">Antenna A height</label><input type="text" id="in-a" inputmode="decimal" autocomplete="off" value="10"><div class="unit">metres above ground</div></div>
+<div class="field"><label class="f" for="in-b">Antenna B height</label><input type="text" id="in-b" inputmode="decimal" autocomplete="off" value="2"><div class="unit">metres above ground</div></div>
+<div class="field"><label class="f" for="in-target">Target link distance</label><input type="text" id="in-target" inputmode="decimal" autocomplete="off" placeholder="optional, e.g. 40"><div class="unit">km; leave blank for horizon only</div></div>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions"><button type="submit">Calculate horizon</button></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"><span style="color:var(--text-dim,#9aa3b2)">Enter the two antenna heights to find the horizon.</span></div>
+<p class="note">Horizon per antenna = √(2 × k × R × h), with k = 4/3 for standard atmospheric refraction and R = 6,371 km: about 4.12 × √h kilometres for h in metres. The two horizons add for a link, and a target beyond A's horizon gives the height B needs to close the gap. The model assumes a smooth spherical earth with no terrain, buildings or Fresnel-zone clearance, so real paths are usually shorter — check obstructions before deploying. Everything runs locally in your browser.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* radio-horizon-core:start */
+var RadioHorizonCore = (function(){
+  "use strict";
+  var EARTH_RADIUS_KM = 6371;
+  var REFRACTION_K = 4 / 3;
+  var HEIGHT_LIMIT = 2000;
+  var TARGET_LIMIT = 1000;
+  var LIMITS = {
+    heightA: [0, HEIGHT_LIMIT, "Antenna A height"],
+    heightB: [0, HEIGHT_LIMIT, "Antenna B height"],
+    target: [0.1, TARGET_LIMIT, "Target distance"]
+  };
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function number(value, key, optional){
+    var label = LIMITS[key][2];
+    var raw = String(value == null ? "" : value).trim();
+    if (!raw){
+      if (optional) return null;
+      fail(label + " is required.");
+    }
+    if (!/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(raw)) fail(label + " must be a number.");
+    var parsed = Number(raw);
+    if (!isFinite(parsed)) fail(label + " must be a number.");
+    if (parsed < LIMITS[key][0] || parsed > LIMITS[key][1]){
+      fail(label + " must be from " + LIMITS[key][0] + " to " + LIMITS[key][1] + ".");
+    }
+    return parsed;
+  }
+
+  function horizon(heightM){
+    return Math.sqrt(2 * REFRACTION_K * EARTH_RADIUS_KM * heightM / 1000);
+  }
+
+  function heightFor(distanceKm){
+    return distanceKm * distanceKm * 1000 / (2 * REFRACTION_K * EARTH_RADIUS_KM);
+  }
+
+  function plan(input){
+    var options = input || {};
+    var heightA = number(options.heightA, "heightA", false);
+    var heightB = number(options.heightB, "heightB", false);
+    var target = number(options.target, "target", true);
+
+    var horizonA = horizon(heightA);
+    var horizonB = horizon(heightB);
+    var maxDistance = horizonA + horizonB;
+
+    var requiredHeight = null;
+    var coveredByA = false;
+    if (target !== null){
+      if (target <= horizonA){
+        requiredHeight = 0;
+        coveredByA = true;
+      } else {
+        requiredHeight = heightFor(target - horizonA);
+      }
+    }
+
+    return {
+      heightA: heightA,
+      heightB: heightB,
+      horizonA: horizonA,
+      horizonB: horizonB,
+      maxDistance: maxDistance,
+      maxDistanceMiles: maxDistance * 0.621371,
+      target: target,
+      requiredHeight: requiredHeight,
+      coveredByA: coveredByA,
+      beyondMax: target !== null && target > maxDistance,
+      requiredBeyondLimit: requiredHeight !== null && requiredHeight > HEIGHT_LIMIT,
+      heightLimit: HEIGHT_LIMIT
+    };
+  }
+
+  return {
+    LIMITS: LIMITS,
+    HEIGHT_LIMIT: HEIGHT_LIMIT,
+    TARGET_LIMIT: TARGET_LIMIT,
+    horizon: horizon,
+    heightFor: heightFor,
+    plan: plan
+  };
+})();
+/* radio-horizon-core:end */
+(function(){
+"use strict";
+
+var els = {
+  a: document.getElementById("in-a"),
+  b: document.getElementById("in-b"),
+  target: document.getElementById("in-target"),
+  err: document.getElementById("err"),
+  out: document.getElementById("out")
+};
+
+function clear(node){
+  while (node.firstChild) node.removeChild(node.firstChild);
+}
+function placeholder(node, message){
+  var span = document.createElement("span");
+  span.style.color = "var(--text-dim,#9aa3b2)";
+  span.textContent = message;
+  node.appendChild(span);
+}
+function addRow(parent, label, value){
+  var row = document.createElement("div");
+  row.className = "row";
+  var key = document.createElement("span");
+  key.className = "k";
+  key.textContent = label;
+  var val = document.createElement("span");
+  val.className = "v";
+  val.textContent = value;
+  row.appendChild(key);
+  row.appendChild(val);
+  parent.appendChild(row);
+}
+function addWarning(parent, message){
+  var p = document.createElement("p");
+  p.className = "warn";
+  p.textContent = message;
+  parent.appendChild(p);
+}
+function formatKm(value){
+  if (value === 0) return "0 km";
+  return value.toFixed(1) + " km";
+}
+function formatMetres(value){
+  return value.toFixed(1) + " m";
+}
+function formatHeight(value){
+  return value === 1 ? "1 m" : value + " m";
+}
+
+function render(result){
+  clear(els.out);
+
+  var big = document.createElement("div");
+  big.className = "big";
+  big.textContent = formatKm(result.maxDistance);
+  var sub = document.createElement("div");
+  sub.className = "sub";
+  sub.textContent = "Maximum line of sight for antennas at " + formatHeight(result.heightA) +
+    " and " + formatHeight(result.heightB) + ", standard refraction (k = 4/3)";
+  els.out.appendChild(big);
+  els.out.appendChild(sub);
+
+  addRow(els.out, "Antenna A horizon", formatKm(result.horizonA));
+  addRow(els.out, "Antenna B horizon", formatKm(result.horizonB));
+  addRow(els.out, "In miles", result.maxDistanceMiles.toFixed(1) + " mi");
+
+  if (result.target !== null){
+    addRow(els.out, "Target distance", formatKm(result.target));
+    addRow(els.out, "Height needed at B", result.coveredByA ? "none" : formatMetres(result.requiredHeight));
+  }
+
+  if (result.coveredByA){
+    addWarning(els.out, "Antenna A's own horizon already covers " + formatKm(result.target) +
+      ", so B needs no height for a clear geometric path.");
+  } else if (result.requiredBeyondLimit){
+    addWarning(els.out, "A " + formatKm(result.target) + " path needs B at about " +
+      Math.round(result.requiredHeight) + " m, above this tool's " + result.heightLimit +
+      " m limit. Shorten the path or raise site A.");
+  } else if (result.beyondMax){
+    addWarning(els.out, "This path is longer than the " + formatKm(result.maxDistance) +
+      " combined horizon; raise one or both antennas.");
+  }
+
+  if (result.heightA < 1 || result.heightB < 1){
+    addWarning(els.out, "A height under 1 m leaves almost no clearance — trees, buildings and terrain shorten the real path.");
+  }
+}
+
+function calculate(){
+  var result;
+  try {
+    result = RadioHorizonCore.plan({
+      heightA: els.a.value,
+      heightB: els.b.value,
+      target: els.target.value
+    });
+  } catch (error){
+    els.err.textContent = error.message;
+    clear(els.out);
+    placeholder(els.out, "Check the highlighted field.");
+    return;
+  }
+  els.err.textContent = "";
+  render(result);
+}
+
+[els.a, els.b, els.target].forEach(function(input){
+  input.addEventListener("input", calculate);
+});
+document.getElementById("horizon-form").addEventListener("submit", function(event){
+  event.preventDefault();
+  calculate();
+});
+
+calculate();
+})();
+</script>
+</body>
+</html>
