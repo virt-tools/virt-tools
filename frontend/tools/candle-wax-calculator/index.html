@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Candle Wax Calculator — Virtual Tools</title>
+<meta name="description" content="Estimate the wax and fragrance needed for container candles from the weight of water that fills the jar, the wax density and the fragrance load. Runs locally in your browser.">
+<link rel="stylesheet" href="/assets/style.css">
+<link rel="stylesheet" href="/assets/tool-css/tool-form-3c8cf9e7.css">
+<style>
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.out .big{line-height:1.2}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:-4px 0 10px}
+.out .row{gap:12px}
+.out .row .v{text-align:right}
+.field .hint{font-size:11px;color:var(--text-dim,#9aa3b2);margin-top:4px;line-height:1.35}
+.err{min-height:1.2em}
+.warn{color:var(--warn,#fbbf24);font-size:13px;margin:8px 0 0}
+.note{color:var(--text-dim,#9aa3b2);font-size:0.85rem;margin-top:10px}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>Candle Wax Calculator</h1>
+<p>Estimate the wax and fragrance for container candles from the weight of water that fills the jar. Runs locally in your browser.</p>
+</div>
+<div class="panel">
+<form id="wax-form" novalidate>
+<div class="grid2">
+<div class="field"><label class="f" for="in-unit">Weight unit</label><select id="in-unit"><option value="g">grams</option><option value="oz">ounces</option></select><div class="unit">for the water weight</div></div>
+<div class="field"><label class="f" for="in-water">Water weight</label><input type="text" id="in-water" inputmode="decimal" autocomplete="off" placeholder="e.g. 200"><div class="unit" id="water-unit">grams (g)</div><div class="hint">weigh the jar empty, fill to the pour line with water, weigh again and subtract</div></div>
+<div class="field"><label class="f" for="in-type">Wax type</label><select id="in-type"><option value="soy">Soy container blend</option><option value="paraffin">Paraffin container wax</option><option value="coconut">Coconut-soy blend</option><option value="beeswax">Beeswax</option><option value="custom">Custom / supplier value</option></select><div class="unit">sets a typical density</div></div>
+<div class="field"><label class="f" for="in-density">Wax density</label><input type="text" id="in-density" inputmode="decimal" autocomplete="off" value="0.86"><div class="unit">grams per millilitre</div><div class="hint">use the figure on your wax data sheet if you have one</div></div>
+<div class="field"><label class="f" for="in-load">Fragrance load</label><input type="text" id="in-load" inputmode="decimal" autocomplete="off" value="6"><div class="unit">% of wax weight</div><div class="hint">most container waxes take 6–10%</div></div>
+<div class="field"><label class="f" for="in-jars">Containers</label><input type="text" id="in-jars" inputmode="numeric" autocomplete="off" value="1"><div class="unit">jars in the batch</div></div>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions"><button type="submit">Calculate</button></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"><span style="color:var(--text-dim,#9aa3b2)">Enter the water weight to calculate.</span></div>
+<div class="warn" id="warn" role="status" aria-live="polite"></div>
+<p class="note">Wax weight = water weight × wax density, because 1 g of water is about 1 ml. Fragrance is a percentage of the wax weight and is added on top. These are estimates: densities vary by supplier, wax shrinks as it sets, and the first burn test shows whether the jar needs topping up.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+(function(){
+"use strict";
+var els = {
+  unit: document.getElementById("in-unit"),
+  water: document.getElementById("in-water"),
+  type: document.getElementById("in-type"),
+  density: document.getElementById("in-density"),
+  load: document.getElementById("in-load"),
+  jars: document.getElementById("in-jars"),
+  err: document.getElementById("err"),
+  out: document.getElementById("out"),
+  warn: document.getElementById("warn"),
+  waterUnit: document.getElementById("water-unit")
+};
+
+var DENSITY_BY_TYPE = {
+  soy: 0.86,
+  paraffin: 0.90,
+  coconut: 0.90,
+  beeswax: 0.96
+};
+
+function parseNum(text, allowBlank){
+  var s = String(text == null ? "" : text).trim();
+  if (!s) return allowBlank ? null : NaN;
+  if (!/^[+]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(s)) return NaN;
+  var v = Number(s);
+  return isFinite(v) ? v : NaN;
+}
+function round(x, n){
+  var p = Math.pow(10, n);
+  return Math.round(x * p) / p;
+}
+function fmt(x, n){
+  return round(x, n).toLocaleString(undefined, {maximumFractionDigits: n});
+}
+function grams(value, unit){
+  return unit === "oz" ? value * 28.349523125 : value;
+}
+function weightPair(g){
+  return fmt(g, g < 100 ? 1 : 0) + " g (" + fmt(g / 28.349523125, 2) + " oz)";
+}
+function row(key, value){
+  var wrap = document.createElement("div");
+  wrap.className = "row";
+  var k = document.createElement("span");
+  k.className = "k";
+  k.textContent = key;
+  var v = document.createElement("span");
+  v.className = "v";
+  v.textContent = value;
+  wrap.appendChild(k);
+  wrap.appendChild(v);
+  return wrap;
+}
+function showPlaceholder(msg){
+  while (els.out.firstChild) els.out.removeChild(els.out.firstChild);
+  var span = document.createElement("span");
+  span.style.color = "var(--text-dim,#9aa3b2)";
+  span.textContent = msg;
+  els.out.appendChild(span);
+  els.warn.textContent = "";
+}
+function clearOut(){
+  while (els.out.firstChild) els.out.removeChild(els.out.firstChild);
+}
+
+function calculate(){
+  var water = parseNum(els.water.value, true);
+  var density = parseNum(els.density.value, true);
+  var load = parseNum(els.load.value, true);
+  var jars = parseNum(els.jars.value, true);
+  var unit = els.unit.value === "oz" ? "oz" : "g";
+
+  if (water === null) {
+    els.err.textContent = "";
+    showPlaceholder("Enter the water weight to calculate.");
+    return;
+  }
+  if (isNaN(water) || isNaN(density) || isNaN(load) || isNaN(jars) || density === null || load === null || jars === null) {
+    els.err.textContent = "Water weight, density, fragrance load and containers must be numbers.";
+    showPlaceholder("Check the numeric fields.");
+    return;
+  }
+
+  var waterG = grams(water, unit);
+  if (waterG < 5 || waterG > 5000) {
+    els.err.textContent = "Water weight must be between " + (unit === "oz" ? "0.2 and 176 oz" : "5 and 5,000 g") + ".";
+    showPlaceholder("Water weight is out of range.");
+    return;
+  }
+  if (density < 0.70 || density > 1.20) {
+    els.err.textContent = "Wax density must be between 0.70 and 1.20 g/ml.";
+    showPlaceholder("Check the wax density.");
+    return;
+  }
+  if (load < 0 || load > 12) {
+    els.err.textContent = "Fragrance load must be between 0 and 12% of the wax weight.";
+    showPlaceholder("Check the fragrance load.");
+    return;
+  }
+  if (jars < 1 || jars > 100 || Math.floor(jars) !== jars) {
+    els.err.textContent = "Containers must be a whole number from 1 to 100.";
+    showPlaceholder("Check the container count.");
+    return;
+  }
+
+  var volumeMl = waterG;
+  var wax = volumeMl * density;
+  var fragrance = wax * load / 100;
+  var total = wax + fragrance;
+  var batchWax = wax * jars;
+  var batchFragrance = fragrance * jars;
+  var batchTotal = total * jars;
+
+  els.err.textContent = "";
+  els.warn.textContent = "";
+  clearOut();
+
+  var big = document.createElement("div");
+  big.className = "big";
+  big.textContent = fmt(batchWax, batchWax < 100 ? 1 : 0) + " g wax to melt";
+  els.out.appendChild(big);
+
+  var sub = document.createElement("div");
+  sub.className = "sub";
+  sub.textContent = jars === 1
+    ? "for 1 container at " + fmt(load, 1) + "% fragrance"
+    : "for " + fmt(jars, 0) + " containers at " + fmt(load, 1) + "% fragrance";
+  els.out.appendChild(sub);
+
+  els.out.appendChild(row("Jar volume", fmt(volumeMl, volumeMl < 10 ? 1 : 0) + " ml (" + fmt(volumeMl / 29.5735295625, 1) + " fl oz)"));
+  els.out.appendChild(row("Wax per container", weightPair(wax)));
+  els.out.appendChild(row("Fragrance per container", weightPair(fragrance)));
+  els.out.appendChild(row("Mix per container", weightPair(total)));
+  if (jars > 1) {
+    els.out.appendChild(row("Batch wax", weightPair(batchWax)));
+    els.out.appendChild(row("Batch fragrance", weightPair(batchFragrance)));
+    els.out.appendChild(row("Batch mix", weightPair(batchTotal)));
+  }
+
+  if (load > 10) {
+    els.warn.textContent = "Above 10% fragrance is more than most container waxes hold; check the maximum load on your wax data sheet before pouring.";
+  } else if (load === 0) {
+    els.warn.textContent = "A 0% load pours plain wax; enter 6–10% if you are adding fragrance oil.";
+  } else if (density <= 0.80 || density >= 1.0) {
+    els.warn.textContent = "That density is unusual for candle wax; typical soy, paraffin and beeswax values are 0.86–0.96 g/ml.";
+  }
+}
+
+els.type.addEventListener("change", function(){
+  var chosen = els.type.value;
+  if (chosen !== "custom") els.density.value = DENSITY_BY_TYPE[chosen].toFixed(2);
+  calculate();
+});
+
+els.unit.addEventListener("change", function(){
+  var factor = els.unit.value === "oz" ? 1 / 28.349523125 : 28.349523125;
+  var v = parseNum(els.water.value, true);
+  if (v !== null && !isNaN(v)) els.water.value = String(round(v * factor, 2));
+  els.waterUnit.textContent = els.unit.value === "oz" ? "ounces (oz)" : "grams (g)";
+  els.err.textContent = "";
+  calculate();
+});
+
+document.getElementById("wax-form").addEventListener("submit", function(event){
+  event.preventDefault();
+  calculate();
+});
+
+[els.water, els.density, els.load, els.jars].forEach(function(input){
+  input.addEventListener("input", calculate);
+});
+
+calculate();
+})();
+</script>
+</body>
+</html>
