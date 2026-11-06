@@ -20,6 +20,7 @@ node scripts/validate_javascript.mjs frontend
 node scripts/validate_formula_workbenches.mjs .
 node tests/security/math-expression.test.cjs
 node tests/unit_converter.test.cjs
+node tests/chess_clock.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
