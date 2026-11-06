@@ -28,49 +28,49 @@ async function open(context, path) {
 }
 
 async function expectResults(page) {
-  await page.locator("#tool-catalog .tool-card").first().waitFor();
-  assert.ok(await page.locator("#tool-catalog .tool-card").count());
+  await page.locator("#tool-catalog .catalog-row").first().waitFor();
+  assert.ok(await page.locator("#tool-catalog .catalog-row").count());
 }
 
 try {
   const context = await browser.newContext({ serviceWorkers: "block" });
   const home = await open(context, "/");
   await expectResults(home);
-  assert.deepEqual(await home.locator(".view-tab").allTextContents(), ["All tools", "Favorites", "Recent"]);
-  assert.equal(await home.locator("#catalog-filters").getAttribute("open"), null);
+  assert.equal(await home.locator(".catalog-chip").count(), 11);
+  assert.equal((await home.locator('.catalog-chip[aria-pressed="true"]').textContent()).trim(), "All");
   assert.equal(await home.locator("#maturity-filter").count(), 0);
-  assert.equal(await home.locator("#catalog-start [data-category-group]").count(), 10);
+  assert.equal(await home.locator("#catalog-filters").count(), 0);
 
-  for (const task of ["Format JSON", "Convert units", "Count words", "Create a QR code", "Calculate a loan"]) {
-    await home.locator("#tool-search").fill("");
-    await home.getByRole("button", { name: task, exact: true }).click();
-    await expectResults(home);
-    assert.equal(await home.locator("#catalog-start").isVisible(), false);
-  }
-  await home.locator("#tool-search").fill("");
-  await home.locator(".catalog-browse > summary").click();
-  await home.locator('[data-category-group="developer-it"]').click();
-  assert.equal(await home.locator("#category-filter").inputValue(), "group:developer-it");
-  assert.equal(await home.locator("#catalog-filters").getAttribute("open"), "");
-  await home.locator("#catalog-reset").click();
+  await home.locator('.catalog-chip', { hasText: "Developer & IT" }).click();
+  await home.waitForFunction(() => {
+    const rows = [...document.querySelectorAll("#tool-catalog .catalog-row[data-slug]")];
+    const groups = ["Developer", "Networking", "IT & Networking", "Security", "System"];
+    return rows.length > 0 && rows.every((row) => {
+      const tool = window.VIRTUAL_TOOLS.find((entry) => entry.slug === row.dataset.slug);
+      return tool && groups.includes(tool.category);
+    });
+  });
+  assert.match((await home.locator("#tool-count").textContent()).trim(), /of [\d,]+ tools/);
+  await home.locator('.catalog-chip', { hasText: "All" }).first().click();
   await expectResults(home);
 
-  const firstSlug = await home.locator("#tool-catalog .tool-card").first().getAttribute("data-slug");
-  await home.locator(`#tool-catalog [data-slug="${firstSlug}"] .tool-favorite`).click();
-  assert.equal(new URL(home.url()).pathname, "/", "favorite click opened the tool");
-  await home.getByRole("tab", { name: "Favorites", exact: true }).click();
-  assert.equal(await home.locator("#tool-catalog .tool-card").count(), 1);
+  const firstSlug = await home.locator("#tool-catalog .catalog-row").first().getAttribute("data-slug");
+  await home.locator(`#tool-catalog [data-slug="${firstSlug}"] .catalog-star`).click();
+  assert.equal(new URL(home.url()).pathname, "/", "save click opened the tool");
+  await home.locator("#saved-filter").click();
+  assert.equal(await home.locator("#tool-catalog .catalog-row").count(), 1);
+  await home.locator("#saved-filter").click();
+  assert.equal(await home.locator("#saved-filter").getAttribute("aria-pressed"), "false");
+
   await home.locator("#tool-search").fill("JSON formatter");
-  await home.locator("#search-empty").waitFor({ state: "visible" });
-  await home.getByRole("button", { name: "Search all tools", exact: true }).click();
-  await expectResults(home);
-  assert.equal(await home.locator("#tool-search").inputValue(), "JSON formatter");
-  assert.equal(await home.getByRole("tab", { name: "All tools", exact: true }).getAttribute("aria-selected"), "true");
+  await home.waitForFunction(() => document.querySelectorAll("#tool-catalog .catalog-row").length > 0);
+  await home.locator("#tool-search").fill("");
+  await home.waitForFunction(() => document.querySelectorAll("#tool-catalog .catalog-row").length > 0);
 
   await home.locator("#tool-search").fill("triangle area heron");
-  const formulaLink = home.locator('[data-slug="geometry-formula-workbench"] .tool-card-link');
+  const formulaLink = home.locator('[data-slug="geometry-formula-workbench"] .catalog-row-main');
   await formulaLink.waitFor();
-  assert.equal(await formulaLink.locator(".tool-card-name").textContent(), "Triangle Area (Heron)");
+  assert.equal(await formulaLink.locator(".catalog-row-name").textContent(), "Triangle Area (Heron)");
   assert.match(await formulaLink.getAttribute("href"), /\?formula=triangle-area-heron$/);
   await formulaLink.click();
   await home.locator("#formula-fields input").first().waitFor();
@@ -102,15 +102,15 @@ try {
       const page = await open(responsive, "/");
       await expectResults(page);
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${colorScheme}/${width}: homepage overflows horizontally`);
-      const activeColors = await page.locator(".view-tab.active").evaluate((button) => {
+      const activeColors = await page.locator('.catalog-chip[aria-pressed="true"]').evaluate((button) => {
         const style = getComputedStyle(button);
         return { foreground: style.color, background: style.backgroundColor, height: button.getBoundingClientRect().height };
       });
-      assert.ok(contrast(activeColors.foreground, activeColors.background) >= 4.5, `${colorScheme}: active tab text contrast is too low`);
-      assert.ok(activeColors.height >= 44, "tab target is smaller than 44px");
+      assert.ok(contrast(activeColors.foreground, activeColors.background) >= 4.5, `${colorScheme}: active chip text contrast is too low`);
+      assert.ok(activeColors.height >= 32, "chip target is smaller than 32px");
       await page.locator("#tool-search").fill("JSON formatter");
       await expectResults(page);
-      await page.locator('[data-slug="json-formatter"] .tool-card-link').click();
+      await page.locator('[data-slug="json-formatter"] .catalog-row-main').click();
       await page.locator("#in").waitFor();
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${colorScheme}/${width}: tool overflows horizontally`);
       await page.locator("#in").fill('{"hello":"world"}');
@@ -131,21 +131,20 @@ try {
     }
   }
 
-  for (const legacyView of ["recent-added", "most-used"]) {
-    const legacy = await browser.newContext({ serviceWorkers: "block" });
-    const page = await open(legacy, "/");
-    await page.evaluate((value) => {
-      localStorage.setItem("vt-view", value);
-      localStorage.setItem("vt-tool-usage", JSON.stringify({ "json-formatter": 3 }));
-    }, legacyView);
-    await page.reload();
-    await expectResults(page);
-    assert.equal(await page.locator("#catalog-sort").inputValue(), legacyView === "recent-added" ? "newest" : "used");
-    assert.equal(await page.locator(".view-tab.active").textContent(), legacyView === "recent-added" ? "All tools" : "Recent");
-    await legacy.close();
-  }
+  const sortContext = await browser.newContext({ serviceWorkers: "block" });
+  const sortPage = await open(sortContext, "/");
+  await sortPage.locator('.catalog-sort-btn[data-sort="newest"]').click();
+  await sortPage.reload();
+  await expectResults(sortPage);
+  assert.equal(
+    await sortPage.locator('.catalog-sort-btn[data-sort="newest"]').getAttribute("aria-pressed"),
+    "true",
+    "saved sort preference was not restored",
+  );
+  await sortContext.close();
+
   assert.deepEqual(errors, [], "UI produced browser errors");
-  console.log("UI smoke passed: discovery, scoped search, favorites, formula results, guidance, legacy preferences, and 8 responsive/theme combinations");
+  console.log("UI smoke passed: catalog index, chips, saved filter, search, formula results, guidance, sort persistence, and 8 responsive/theme combinations");
 } finally {
   await browser.close();
 }

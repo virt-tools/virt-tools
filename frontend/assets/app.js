@@ -6,10 +6,8 @@
   var USAGE_KEY = "vt-tool-usage";
   var RECENT_KEY = "vt-recent-tools";
   var FAVORITES_KEY = "vt-favorites";
-  var VIEW_KEY = "vt-view";
   var SORT_KEY = "vt-sort";
-  var PAGE_SIZE = 36;
-  var TOOL_VIEWS = ["all", "favorites", "recently-used"];
+  var PAGE_SIZE = 40;
   var CATEGORY_GROUPS = [
     { id: "text-data", name: "Text & data", categories: ["Text", "Data", "Encoding"] },
     { id: "developer-it", name: "Developer & IT", categories: ["Developer", "Networking", "IT & Networking", "Security", "System"] },
@@ -59,35 +57,51 @@
     catch (_) { return false; }
   }
 
-  function wrenchIcon() {
+  function svgIcon(paths) {
     var ns = "http://www.w3.org/2000/svg";
     var svg = document.createElementNS(ns, "svg");
-    [
-      ["width", "20"], ["height", "20"], ["viewBox", "0 0 24 24"],
-      ["fill", "none"], ["stroke", "currentColor"], ["stroke-width", "2"],
-      ["stroke-linecap", "round"], ["stroke-linejoin", "round"], ["aria-hidden", "true"]
+    [["width", "16"], ["height", "16"], ["viewBox", "0 0 24 24"],
+     ["fill", "none"], ["stroke", "currentColor"], ["stroke-width", "1.7"],
+     ["stroke-linecap", "round"], ["stroke-linejoin", "round"],
+     ["aria-hidden", "true"], ["focusable", "false"]
     ].forEach(function (pair) { svg.setAttribute(pair[0], pair[1]); });
-    var path = document.createElementNS(ns, "path");
-    path.setAttribute("d", "M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z");
-    svg.appendChild(path);
+    paths.forEach(function (d) {
+      var path = document.createElementNS(ns, "path");
+      path.setAttribute("d", d);
+      svg.appendChild(path);
+    });
     return svg;
   }
 
+  function themeIcon(theme) {
+    return theme === "dark"
+      ? svgIcon([
+          "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z",
+          "M12 2v2", "M12 20v2", "M4.9 4.9l1.4 1.4", "M17.7 17.7l1.4 1.4",
+          "M2 12h2", "M20 12h2", "M4.9 19.1l1.4-1.4", "M17.7 6.3l1.4-1.4"
+        ])
+      : svgIcon(["M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"]);
+  }
+
   function inferredTheme() {
-    return window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   }
 
   function currentTheme() {
     return document.documentElement.getAttribute("data-theme") || inferredTheme();
   }
 
-  function themeIcon() { return currentTheme() === "dark" ? "☀️" : "🌙"; }
-
   function applyTheme(theme) {
     document.documentElement.setAttribute("data-theme", theme);
     try { localStorage.setItem("vt-theme", theme); } catch (_) {}
-    var button = document.querySelector(".theme-toggle");
-    if (button) button.textContent = themeIcon();
+  }
+
+  function syncThemeButton(button) {
+    if (!button) return;
+    var theme = currentTheme();
+    button.replaceChildren(themeIcon(theme));
+    button.setAttribute("aria-label", theme === "dark" ? "Switch to light theme" : "Switch to dark theme");
+    button.title = button.getAttribute("aria-label");
   }
 
   function injectFavicon() {
@@ -109,24 +123,19 @@
       document.body.insertBefore(el("a", { class: "skip-link", href: "#" + main.id }, ["Skip to main content"]), document.body.firstChild);
     }
 
-    var brand = el("a", { class: "brand", href: ROOT });
-    var mark = el("span", { class: "brand-mark" });
-    mark.appendChild(wrenchIcon());
-    brand.appendChild(mark);
-    brand.appendChild(el("span", {}, ["Virtual Tools"]));
-
+    var brand = el("a", { class: "brand", href: ROOT }, ["virt", el("span", {}, [".tools"])]);
     var nav = el("nav", { "aria-label": "Primary" }, [
-      el("a", { href: ROOT }, ["Tools"]),
-      el("a", { href: ROOT + "privacy/" }, ["Privacy & trust"]),
-      el("a", { href: ROOT + "feedback/" }, ["Feedback"]),
-      el("a", { href: "https://github.com/virt-tools/virt-tools", target: "_blank", rel: "noopener noreferrer" }, ["GitHub"])
+      el("a", { href: ROOT }, ["All tools"]),
+      el("a", { href: ROOT + "privacy/" }, ["Privacy"]),
+      el("a", { href: ROOT + "feedback/" }, ["Feedback"])
     ]);
     var themeButton = el("button", {
-      class: "theme-toggle", type: "button", "aria-label": "Toggle color theme",
-      title: "Toggle dark or light theme"
-    }, [themeIcon()]);
+      class: "theme-toggle", type: "button", "aria-label": "Toggle color theme"
+    });
+    syncThemeButton(themeButton);
     themeButton.addEventListener("click", function () {
       applyTheme(currentTheme() === "dark" ? "light" : "dark");
+      syncThemeButton(themeButton);
     });
     mount.appendChild(brand);
     mount.appendChild(nav);
@@ -308,74 +317,38 @@
     return category === "IT & Networking" ? "Networking" : category;
   }
 
-  function toolCard(tool, showAdded, query) {
-    var card = el("article", { class: "tool-card", "data-slug": tool.slug });
-    var matchedFormula = formulaName(tool, query);
-    var link = el("a", { class: "tool-card-link", href: formulaHref(tool, query) });
-    link.appendChild(el("span", { class: "tool-card-icon", "aria-hidden": "true" }, [tool.icon || "🛠️"]));
-    var content = el("div", { class: "tool-card-content" });
-    content.appendChild(el("span", { class: "tool-card-name" }, [matchedFormula || tool.name]));
-    if (matchedFormula) content.appendChild(el("span", { class: "tool-card-parent" }, [tool.name]));
-    content.appendChild(el("p", { class: "tool-card-desc" }, [tool.description]));
-    content.appendChild(el("span", { class: "tool-card-category" }, [categoryName(tool.category)]));
-    if (showAdded && tool.added) content.appendChild(el("span", { class: "tool-card-added" }, [formatAdded(tool.added)]));
-    link.appendChild(content);
-    card.appendChild(link);
+  function catalogRow(tool, query) {
+    var article = el("article", { class: "catalog-row", "data-slug": tool.slug });
+    var matched = formulaName(tool, query);
+    var link = el("a", { class: "catalog-row-main", href: formulaHref(tool, query) });
+    link.appendChild(el("span", { class: "catalog-row-name" }, [matched || tool.name]));
+    if (matched) link.appendChild(el("span", { class: "catalog-row-parent" }, [tool.name]));
+    link.appendChild(el("p", { class: "catalog-row-desc" }, [tool.description]));
+    article.appendChild(link);
+    article.appendChild(el("span", { class: "catalog-row-cat" }, [categoryName(tool.category)]));
     var favorite = isFavorite(tool.slug);
-    var favoriteButton = el("button", {
-      class: "tool-favorite" + (favorite ? " is-favorite" : ""), type: "button",
+    article.appendChild(el("button", {
+      class: "catalog-star" + (favorite ? " is-favorite" : ""),
+      type: "button",
       "data-favorite": tool.slug,
-      "aria-label": (favorite ? "Remove " : "Add ") + tool.name + (favorite ? " from favorites" : " to favorites"),
-      "aria-pressed": favorite ? "true" : "false", title: favorite ? "Remove from favorites" : "Add to favorites"
-    }, [favorite ? "★" : "☆"]);
-    card.appendChild(favoriteButton);
-    return card;
+      "aria-pressed": favorite ? "true" : "false",
+      "aria-label": (favorite ? "Remove " : "Save ") + tool.name,
+      title: favorite ? "Remove from saved" : "Save tool"
+    }, [favorite ? "★" : "☆"]));
+    return article;
   }
 
   var catalogMount = null;
   var searchInput = null;
   var emptyNote = null;
   var countElement = null;
-  var categoryFilter = null;
   var loadMoreButton = null;
-  var sortSelect = null;
-  var searchAllButton = null;
+  var chipsMount = null;
+  var savedButton = null;
+  var activeCategory = "";
+  var savedOnly = false;
+  var sortMode = "name";
   var displayLimit = PAGE_SIZE;
-  var currentView = "all";
-
-  function savedView() {
-    try {
-      var value = localStorage.getItem(VIEW_KEY) || "all";
-      if (value === "most-used") return "recently-used";
-      return TOOL_VIEWS.indexOf(value) === -1 ? "all" : value;
-    } catch (_) { return "all"; }
-  }
-
-  function sourceForView() {
-    var all = (window.VIRTUAL_TOOLS || []).slice();
-    if (currentView === "recently-used") {
-      all = recentTools().map(function (item) { return toolIndex[item.slug]; }).filter(Boolean);
-      var visited = new Set(all.map(function (tool) { return tool.slug; }));
-      var usage = usageMap();
-      all = all.concat((window.VIRTUAL_TOOLS || []).filter(function (tool) {
-        return Number(usage[tool.slug]) > 0 && !visited.has(tool.slug);
-      }).sort(function (a, b) { return Number(usage[b.slug]) - Number(usage[a.slug]); }));
-    }
-    if (currentView === "favorites") {
-      var favorites = favoritesSet();
-      all = all.filter(function (tool) { return favorites.has(tool.slug); });
-    }
-    var sort = sortSelect ? sortSelect.value : "name";
-    if (sort === "newest") return all.sort(function (a, b) { return (Date.parse(b.added) || 0) - (Date.parse(a.added) || 0); });
-    if (sort === "used") {
-      var counts = usageMap();
-      return all.sort(function (a, b) {
-        return (Number(counts[b.slug]) || 0) - (Number(counts[a.slug]) || 0) || a.name.localeCompare(b.name);
-      });
-    }
-    if (currentView === "recently-used") return all;
-    return all.sort(function (a, b) { return a.name.localeCompare(b.name); });
-  }
 
   function matchesCategory(tool, category) {
     if (!category) return true;
@@ -386,10 +359,10 @@
 
   function filteredTools() {
     var query = normalizeSearch(searchInput ? searchInput.value : "");
-    var category = categoryFilter ? categoryFilter.value : "";
     var ranked = [];
-    sourceForView().forEach(function (tool, order) {
-      if (!matchesCategory(tool, category)) return;
+    (window.VIRTUAL_TOOLS || []).forEach(function (tool, order) {
+      if (savedOnly && !isFavorite(tool.slug)) return;
+      if (!matchesCategory(tool, activeCategory)) return;
       var score = query ? scoreTool(tool, query) : 0;
       if (score < 0) return;
       ranked.push({ tool: tool, score: score, order: order });
@@ -398,10 +371,21 @@
       ranked.sort(function (a, b) {
         return b.score - a.score || a.tool.name.localeCompare(b.tool.name);
       });
+    } else if (sortMode === "newest") {
+      ranked.sort(function (a, b) { return (Date.parse(b.tool.added) || 0) - (Date.parse(a.tool.added) || 0); });
     } else {
-      ranked.sort(function (a, b) { return a.order - b.order; });
+      ranked.sort(function (a, b) { return a.tool.name.localeCompare(b.tool.name); });
     }
     return ranked.map(function (item) { return item.tool; });
+  }
+
+  function clearFilters() {
+    activeCategory = "";
+    savedOnly = false;
+    displayLimit = PAGE_SIZE;
+    if (savedButton) savedButton.setAttribute("aria-pressed", "false");
+    syncChips();
+    renderCatalog();
   }
 
   function renderEmpty(query) {
@@ -409,22 +393,27 @@
     replace(emptyNote, []);
     if (query) {
       emptyNote.appendChild(document.createTextNode('No tools match "' + query + '". '));
-      if (currentView !== "all" || (categoryFilter && categoryFilter.value)) {
-        emptyNote.appendChild(document.createTextNode("Try searching all tools with filters cleared."));
-        emptyNote.hidden = false;
-        return;
+      if (activeCategory) {
+        var clear = el("button", { class: "link-btn", type: "button" }, ["Search all categories"]);
+        clear.addEventListener("click", clearFilters);
+        emptyNote.appendChild(clear);
+        emptyNote.appendChild(document.createTextNode("."));
+      } else {
+        var message = 'I searched for "' + query + '" but could not find a matching tool. Could you add one for this?';
+        emptyNote.appendChild(el("a", {
+          href: ROOT + "feedback/?kind=suggestion&message=" + encodeURIComponent(message)
+        }, ["Suggest this tool"]));
+        emptyNote.appendChild(document.createTextNode("."));
       }
-      var message = 'I searched for "' + query + '" but could not find a matching tool. Could you add one for this?';
-      emptyNote.appendChild(el("a", {
-        href: ROOT + "feedback/?kind=suggestion&message=" + encodeURIComponent(message)
-      }, ["Suggest this tool"]));
-      emptyNote.appendChild(document.createTextNode("."));
-    } else if (currentView === "favorites") {
-      emptyNote.appendChild(document.createTextNode("You have no favorite tools yet. Select the star on any tool to add one."));
-    } else if (currentView === "recently-used") {
-      emptyNote.appendChild(document.createTextNode("Your local tool history is empty. It will appear here after you use a tool."));
+    } else if (savedOnly) {
+      emptyNote.appendChild(document.createTextNode("No saved tools yet. Select the star on any tool to keep it here."));
     } else {
-      emptyNote.appendChild(document.createTextNode("No tools match the selected filters."));
+      emptyNote.appendChild(document.createTextNode("No tools match the selected category."));
+      var reset = el("button", { class: "link-btn", type: "button" }, ["Show all tools"]);
+      reset.addEventListener("click", clearFilters);
+      emptyNote.appendChild(document.createTextNode(" "));
+      emptyNote.appendChild(reset);
+      emptyNote.appendChild(document.createTextNode("."));
     }
     emptyNote.hidden = false;
   }
@@ -435,11 +424,9 @@
     var shown = results.slice(0, displayLimit);
     replace(catalogMount, []);
     if (shown.length) {
-      var grid = el("div", { class: "tool-grid" + (searchInput && searchInput.value.trim() ? " tool-grid-search" : "") });
+      var grid = el("div", { class: "catalog-list" });
       var query = searchInput ? searchInput.value : "";
-      shown.forEach(function (tool) {
-        grid.appendChild(toolCard(tool, sortSelect && sortSelect.value === "newest", query));
-      });
+      shown.forEach(function (tool) { grid.appendChild(catalogRow(tool, query)); });
       catalogMount.appendChild(grid);
       if (emptyNote) emptyNote.hidden = true;
     } else {
@@ -452,113 +439,47 @@
     if (countElement) {
       var total = (window.VIRTUAL_TOOLS || []).length;
       countElement.textContent = results.length === shown.length
-        ? results.length + " matching tools · " + total + " available"
-        : "Showing " + shown.length + " of " + results.length + " matching tools · " + total + " available";
+        ? results.length.toLocaleString() + " of " + total.toLocaleString() + " tools"
+        : "Showing " + shown.length.toLocaleString() + " of " + results.length.toLocaleString() + " tools";
     }
-    var hasQuery = Boolean(searchInput && searchInput.value.trim());
-    if (sortSelect) sortSelect.disabled = hasQuery;
-    if (searchAllButton) searchAllButton.hidden = !hasQuery || (currentView === "all" && !categoryFilter.value);
-    var selectedFilters = Number(Boolean(categoryFilter && categoryFilter.value));
-    var filterLabel = document.getElementById("catalog-filter-label");
-    if (filterLabel) filterLabel.textContent = selectedFilters ? "Filters (" + selectedFilters + ")" : "Filters";
-    catalogMount.setAttribute("aria-label", currentView === "favorites" ? "Favorite tools" : currentView === "recently-used" ? "Recently used tools" : "All tools");
-    renderStart();
+    catalogMount.setAttribute("aria-label", savedOnly ? "Saved tools" : "All tools");
   }
 
-  function syncTabs() {
-    document.querySelectorAll(".view-tab").forEach(function (tab) {
-      var active = tab.getAttribute("data-view") === currentView;
-      tab.classList.toggle("active", active);
-      tab.setAttribute("aria-selected", active ? "true" : "false");
-      tab.tabIndex = active ? 0 : -1;
+  function syncChips() {
+    if (!chipsMount) return;
+    chipsMount.querySelectorAll(".catalog-chip").forEach(function (chip) {
+      chip.setAttribute("aria-pressed", chip.getAttribute("data-category") === activeCategory ? "true" : "false");
     });
   }
 
-  function switchView(view) {
-    if (TOOL_VIEWS.indexOf(view) === -1) return;
-    currentView = view;
-    displayLimit = PAGE_SIZE;
-    try { localStorage.setItem(VIEW_KEY, view); } catch (_) {}
-    syncTabs();
-    renderCatalog();
+  function syncSort() {
+    document.querySelectorAll(".catalog-sort-btn").forEach(function (button) {
+      button.setAttribute("aria-pressed", button.getAttribute("data-sort") === sortMode ? "true" : "false");
+    });
   }
 
-  function populateCategories() {
-    if (!categoryFilter) return;
+  function populateChips() {
+    if (!chipsMount) return;
     var counts = {};
     (window.VIRTUAL_TOOLS || []).forEach(function (tool) { counts[tool.category] = (counts[tool.category] || 0) + 1; });
-    var grouped = new Set();
+    chipsMount.appendChild(el("button", {
+      class: "catalog-chip", type: "button", "data-category": "", "aria-pressed": "true"
+    }, ["All"]));
     CATEGORY_GROUPS.forEach(function (group) {
-      var categories = group.categories.filter(function (category) { return counts[category]; });
-      if (!categories.length) return;
-      var options = el("optgroup", { label: group.name });
-      var total = categories.reduce(function (sum, category) { grouped.add(category); return sum + counts[category]; }, 0);
-      options.appendChild(el("option", { value: "group:" + group.id }, ["All " + group.name.toLowerCase() + " (" + total + ")"]));
-      categories.forEach(function (category) {
-        if (category === "IT & Networking" && counts.Networking) return;
-        var count = counts[category] + (category === "Networking" ? counts["IT & Networking"] || 0 : 0);
-        options.appendChild(el("option", { value: category }, [categoryName(category) + " (" + count + ")"]));
-      });
-      categoryFilter.appendChild(options);
+      var total = group.categories.reduce(function (sum, category) { return sum + (counts[category] || 0); }, 0);
+      if (!total) return;
+      chipsMount.appendChild(el("button", {
+        class: "catalog-chip", type: "button", "data-category": "group:" + group.id, "aria-pressed": "false"
+      }, [group.name]));
     });
-    Object.keys(counts).sort().filter(function (category) { return !grouped.has(category); }).forEach(function (category) {
-      categoryFilter.appendChild(el("option", { value: category }, [categoryName(category) + " (" + counts[category] + ")"]));
+    chipsMount.addEventListener("click", function (event) {
+      var chip = event.target.closest ? event.target.closest(".catalog-chip") : null;
+      if (!chip) return;
+      activeCategory = chip.getAttribute("data-category") || "";
+      displayLimit = PAGE_SIZE;
+      syncChips();
+      renderCatalog();
     });
-  }
-
-  function renderStart() {
-    var mount = document.getElementById("catalog-start");
-    if (!mount) return;
-    mount.hidden = currentView !== "all" || Boolean(searchInput.value.trim() || categoryFilter.value);
-    if (mount.hidden) return;
-    replace(mount, []);
-    var favorites = favoritesSet();
-    var shortcuts = (window.VIRTUAL_TOOLS || []).filter(function (tool) { return favorites.has(tool.slug); }).slice(0, 4);
-    recentTools().forEach(function (item) {
-      if (shortcuts.length < 6 && toolIndex[item.slug] && !shortcuts.some(function (tool) { return tool.slug === item.slug; })) shortcuts.push(toolIndex[item.slug]);
-    });
-    if (shortcuts.length) {
-      mount.appendChild(el("h2", {}, ["Pick up where you left off"]));
-      var links = el("div", { class: "catalog-shortcuts" });
-      shortcuts.forEach(function (tool) { links.appendChild(el("a", { href: ROOT + "tools/" + tool.slug + "/" }, [tool.name])); });
-      mount.appendChild(links);
-    }
-    mount.appendChild(el("h2", {}, ["Common tasks"]));
-    var tasks = el("div", { class: "catalog-shortcuts" });
-    [
-      { name: "Format JSON", query: "JSON formatter" },
-      { name: "Convert units", query: "unit converter" },
-      { name: "Count words", query: "word counter" },
-      { name: "Create a QR code", query: "QR code" },
-      { name: "Calculate a loan", query: "loan" }
-    ].forEach(function (task) {
-      var button = el("button", { class: "secondary", type: "button" }, [task.name]);
-      button.addEventListener("click", function () {
-        searchInput.value = task.query;
-        displayLimit = PAGE_SIZE;
-        renderCatalog();
-        searchInput.focus();
-      });
-      tasks.appendChild(button);
-    });
-    mount.appendChild(tasks);
-    var browse = el("details", { class: "catalog-browse" });
-    browse.appendChild(el("summary", {}, ["Browse by category"]));
-    var groups = el("div", { class: "catalog-groups" });
-    CATEGORY_GROUPS.forEach(function (group) {
-      if (!Array.prototype.some.call(categoryFilter.options, function (option) { return option.value === "group:" + group.id; })) return;
-      var button = el("button", { class: "secondary", type: "button", "data-category-group": group.id }, [group.name]);
-      button.addEventListener("click", function () {
-        categoryFilter.value = "group:" + group.id;
-        document.getElementById("catalog-filters").open = true;
-        displayLimit = PAGE_SIZE;
-        renderCatalog();
-        categoryFilter.focus();
-      });
-      groups.appendChild(button);
-    });
-    browse.appendChild(groups);
-    mount.appendChild(browse);
   }
 
   function initCatalog() {
@@ -566,22 +487,21 @@
     if (!catalogMount || !window.VIRTUAL_TOOLS) return;
     buildToolIndex();
     searchInput = document.getElementById("tool-search");
+    if (searchInput) {
+      searchInput.placeholder = "Search " + (window.VIRTUAL_TOOLS || []).length.toLocaleString() + " tools";
+    }
     emptyNote = document.getElementById("search-empty");
     countElement = document.getElementById("tool-count");
-    categoryFilter = document.getElementById("category-filter");
     loadMoreButton = document.getElementById("catalog-load-more");
-    sortSelect = document.getElementById("catalog-sort");
-    searchAllButton = document.getElementById("catalog-search-all");
-    currentView = savedView();
-    populateCategories();
+    chipsMount = document.getElementById("category-chips");
+    savedButton = document.getElementById("saved-filter");
+    populateChips();
+
     try {
-      var previousView = localStorage.getItem(VIEW_KEY);
       var savedSort = localStorage.getItem(SORT_KEY);
-      if (sortSelect && ["name", "newest", "used"].indexOf(savedSort) !== -1) sortSelect.value = savedSort;
-      else if (sortSelect && previousView === "recent-added") sortSelect.value = "newest";
-      else if (sortSelect && previousView === "most-used") sortSelect.value = "used";
+      if (savedSort === "newest" || savedSort === "name") sortMode = savedSort;
     } catch (_) {}
-    syncTabs();
+    syncSort();
 
     var timer = null;
     if (searchInput) searchInput.addEventListener("input", function () {
@@ -590,48 +510,34 @@
       timer = setTimeout(renderCatalog, 90);
       try { sessionStorage.setItem("vt-search", searchInput.value); } catch (_) {}
     });
-    [categoryFilter].forEach(function (control) {
-      if (control) control.addEventListener("change", function () { displayLimit = PAGE_SIZE; renderCatalog(); });
-    });
-    if (sortSelect) sortSelect.addEventListener("change", function () {
-      try { localStorage.setItem(SORT_KEY, sortSelect.value); } catch (_) {}
+
+    if (savedButton) savedButton.addEventListener("click", function () {
+      savedOnly = !savedOnly;
+      savedButton.setAttribute("aria-pressed", savedOnly ? "true" : "false");
       displayLimit = PAGE_SIZE;
       renderCatalog();
     });
-    if (searchAllButton) searchAllButton.addEventListener("click", function () {
-      categoryFilter.value = "";
-      switchView("all");
-      searchInput.focus();
+
+    document.querySelectorAll(".catalog-sort-btn").forEach(function (button) {
+      button.addEventListener("click", function () {
+        sortMode = button.getAttribute("data-sort") === "newest" ? "newest" : "name";
+        try { localStorage.setItem(SORT_KEY, sortMode); } catch (_) {}
+        syncSort();
+        displayLimit = PAGE_SIZE;
+        renderCatalog();
+      });
     });
-    var reset = document.getElementById("catalog-reset");
-    if (reset) reset.addEventListener("click", function () {
-      if (searchInput) searchInput.value = "";
-      if (categoryFilter) categoryFilter.value = "";
-      displayLimit = PAGE_SIZE;
-      try { sessionStorage.removeItem("vt-search"); } catch (_) {}
-      renderCatalog();
-      if (searchInput) searchInput.focus();
-    });
+
     if (loadMoreButton) loadMoreButton.addEventListener("click", function () {
       displayLimit += PAGE_SIZE;
       renderCatalog();
-      var firstNew = catalogMount.querySelectorAll(".tool-card")[displayLimit - PAGE_SIZE];
+      var firstNew = catalogMount.querySelectorAll(".catalog-row")[displayLimit - PAGE_SIZE];
       if (firstNew) {
         var link = firstNew.querySelector("a");
         if (link) link.focus();
       }
     });
-    document.querySelectorAll(".view-tab").forEach(function (tab) {
-      tab.addEventListener("click", function () { switchView(tab.getAttribute("data-view")); });
-      tab.addEventListener("keydown", function (event) {
-        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-        event.preventDefault();
-        var tabs = Array.prototype.slice.call(document.querySelectorAll(".view-tab"));
-        var next = (tabs.indexOf(tab) + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
-        tabs[next].focus();
-        switchView(tabs[next].getAttribute("data-view"));
-      });
-    });
+
     catalogMount.addEventListener("click", function (event) {
       var button = event.target.closest ? event.target.closest("button[data-favorite]") : null;
       if (!button) return;
@@ -643,15 +549,24 @@
       else if (searchInput) searchInput.focus();
     });
 
+    document.addEventListener("keydown", function (event) {
+      if (event.key !== "/" || event.ctrlKey || event.metaKey || event.altKey) return;
+      var active = document.activeElement;
+      if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable)) return;
+      event.preventDefault();
+      if (searchInput) searchInput.focus();
+    });
+
     try {
       var params = new URLSearchParams(location.search);
       var query = params.get("q");
       var category = params.get("category");
       if (category === "IT & Networking") category = "Networking";
       if (query && searchInput) searchInput.value = query;
-      if (query || category) currentView = "all";
-      if (category && categoryFilter && Array.prototype.some.call(categoryFilter.options, function (option) { return option.value === category; })) {
-        categoryFilter.value = category;
+      if (category && Array.prototype.some.call(chipsMount.querySelectorAll(".catalog-chip"), function (chip) {
+        return chip.getAttribute("data-category") === category;
+      })) {
+        activeCategory = category;
       }
       if (!query && performance.getEntriesByType) {
         var navigation = performance.getEntriesByType("navigation")[0];
@@ -660,7 +575,7 @@
         }
       }
     } catch (_) {}
-    syncTabs();
+    syncChips();
     renderCatalog();
   }
 

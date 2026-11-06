@@ -24,7 +24,8 @@ frontend/              Static site (served by nginx)
                        Shared runtime for generated domain workbenches
     theme-init.js      Early theme bootstrap (applies saved theme before paint)
     style.css          Shared styles (dark/light, with manual override)
-  vendor/              Locally vendored libraries (e.g. qrcode.min.js) — no runtime CDNs
+  vendor/              Vendored libraries (e.g. qrcode.min.js) and the self-hosted
+                       Instrument Sans webfont (OFL, licence alongside) — no runtime CDNs
   tools/<slug>/        One folder per public tool, each with an index.html
   feedback/            Submit + status lookup page
   privacy/             Privacy/trust center and browser storage controls
@@ -113,8 +114,10 @@ maturity, review date, method, sources, and test cases. Internal risk
 classifications enforce curation and quarantine but are omitted from public
 cards, metadata, and HTML. Search ranks exact names, aliases, tags, domains,
 descriptions, and small typo matches before rendering a bounded result window.
-The category filter and the domain browse groups operate on data, not on
-thousands of pre-rendered hidden cards.
+The catalog renders a two-column index; category chips, a saved filter and
+A–Z/recent sorting operate on data, not on thousands of pre-rendered hidden
+cards. The page loads Instrument Sans from `vendor/fonts/` so no request leaves
+the site for typography.
 
 Tool pages load one small generated metadata document for their own route. The
 shared shell uses it for plain-language verification guidance when warranted and

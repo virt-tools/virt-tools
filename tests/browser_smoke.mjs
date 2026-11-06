@@ -57,20 +57,20 @@ async function assertSharedPage(page, expectedHeading, label) {
 
 try {
   const homepage = await openPage("homepage", "/");
-  await assertSharedPage(homepage, "Virtual Tools", "homepage");
-  await homepage.locator("#tool-catalog .tool-card[data-slug]").first().waitFor({
+  await assertSharedPage(homepage, "All tools", "homepage");
+  await homepage.locator("#tool-catalog .catalog-row[data-slug]").first().waitFor({
     state: "visible",
     timeout: 10_000,
   });
 
   const initialCatalogState = await homepage.evaluate(() => ({
-    rendered: document.querySelectorAll("#tool-catalog .tool-card[data-slug]").length,
+    rendered: document.querySelectorAll("#tool-catalog .catalog-row[data-slug]").length,
     countText: document.getElementById("tool-count")?.textContent?.trim() || "",
     catalogSize: Array.isArray(window.VIRTUAL_TOOLS) ? window.VIRTUAL_TOOLS.length : 0,
   }));
-  assert.ok(initialCatalogState.rendered >= 5, "homepage rendered fewer than five tool cards");
+  assert.ok(initialCatalogState.rendered >= 5, "homepage rendered fewer than five tool rows");
   assert.ok(initialCatalogState.catalogSize >= initialCatalogState.rendered, "catalog size is inconsistent");
-  assert.match(initialCatalogState.countText, /available/i, "homepage tool count did not render");
+  assert.match(initialCatalogState.countText, /of [\d,]+ tools/i, "homepage tool count did not render");
   assert.equal(await homepage.locator("#risk-filter").count(), 0, "internal risk filter is publicly visible");
   assert.equal(await homepage.locator('[class*="risk-"]').count(), 0, "internal risk class is publicly rendered");
   assert.doesNotMatch(
@@ -135,23 +135,23 @@ try {
     "unexpected active service worker script",
   );
 
-  await homepage.locator("#catalog-filters > summary").click();
-  await homepage.locator("#category-filter").selectOption("Math");
+  await homepage.locator('.catalog-chip', { hasText: "Math & converters" }).click();
   await homepage.waitForFunction(() => {
-    const cards = [...document.querySelectorAll("#tool-catalog .tool-card[data-slug]")];
-    return cards.length > 0 && cards.every((card) => {
-      const tool = window.VIRTUAL_TOOLS.find((entry) => entry.slug === card.dataset.slug);
-      return tool?.category === "Math";
+    const rows = [...document.querySelectorAll("#tool-catalog .catalog-row[data-slug]")];
+    const allowed = ["Math", "Converters"];
+    return rows.length > 0 && rows.every((row) => {
+      const tool = window.VIRTUAL_TOOLS.find((entry) => entry.slug === row.dataset.slug);
+      return tool && allowed.includes(tool.category);
     });
   });
   const mathCountText = (await homepage.locator("#tool-count").textContent()).trim();
-  assert.match(mathCountText, /matching tools/i, "Math filter did not update the result count");
+  assert.match(mathCountText, /of [\d,]+ tools/i, "category chip did not update the result count");
 
-  await homepage.locator("#catalog-reset").click();
+  await homepage.locator('.catalog-chip', { hasText: "All" }).first().click();
   await homepage.waitForFunction(() => {
     return document.getElementById("tool-search")?.value === ""
-      && document.getElementById("category-filter")?.value === ""
-      && document.querySelectorAll("#tool-catalog .tool-card[data-slug]").length > 0;
+      && document.querySelectorAll("#tool-catalog .catalog-row[data-slug]").length > 0
+      && document.querySelector('.catalog-chip[aria-pressed="true"]')?.textContent.trim() === "All";
   });
   assert.notEqual(
     (await homepage.locator("#tool-count").textContent()).trim(),
@@ -163,7 +163,7 @@ try {
   await homepage.locator("#tool-search").fill(noMatchQuery);
   await homepage.locator("#search-empty").waitFor({ state: "visible", timeout: 10_000 });
   assert.equal(
-    await homepage.locator("#tool-catalog .tool-card[data-slug]").count(),
+    await homepage.locator("#tool-catalog .catalog-row[data-slug]").count(),
     0,
     "no-match search still rendered cards",
   );
@@ -179,13 +179,13 @@ try {
   await homepage.close();
 
   const workbenchPage = await openPage("formula deep link", "/");
-  await workbenchPage.locator("#tool-catalog .tool-card[data-slug]").first().waitFor({
+  await workbenchPage.locator("#tool-catalog .catalog-row[data-slug]").first().waitFor({
     state: "visible",
     timeout: 10_000,
   });
   await workbenchPage.locator("#tool-search").fill("triangle area heron");
   const formulaLink = workbenchPage.locator(
-    '[data-slug="geometry-formula-workbench"] a.tool-card-link',
+    '[data-slug="geometry-formula-workbench"] a.catalog-row-main',
   );
   await formulaLink.waitFor({ state: "visible", timeout: 10_000 });
   assert.equal(
