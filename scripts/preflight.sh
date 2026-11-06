@@ -37,6 +37,7 @@ node tests/radio_horizon_calculator.test.cjs
 node tests/hiking_time_calculator.test.cjs
 node tests/frame_rate_conform_calculator.test.cjs
 node tests/transposing_instrument_calculator.test.cjs
+node tests/receiver_sensitivity_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
