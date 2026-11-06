@@ -394,6 +394,20 @@ try {
   assert.ok(await tilesAligned(), "2048 tiles drift off the grid after a move");
   await puzzle.close();
 
+  const sudoku = await openPage("sudoku grid", "/tools/sudoku-puzzle/");
+  await sudoku.locator("#site-header[data-ready=\"true\"]").waitFor({ timeout: 10_000 });
+  const cellsFit = await sudoku.evaluate(() => {
+    const grid = document.querySelector("#grid");
+    const bounds = grid.getBoundingClientRect();
+    const cells = [...grid.children];
+    return cells.length === 81 && cells.every((cell) => {
+      const r = cell.getBoundingClientRect();
+      return r.right <= bounds.right + 0.5 && r.bottom <= bounds.bottom + 0.5;
+    });
+  });
+  assert.ok(cellsFit, "sudoku cells overflow the board");
+  await sudoku.close();
+
   for (const slug of ["piano", "peg-solitaire", "game-2048"]) {
     const game = await openPage(`${slug} mobile layout`, "/tools/" + slug + "/");
     await game.setViewportSize({ width: 320, height: 800 });
