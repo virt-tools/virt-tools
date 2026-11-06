@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Frame Rate Conform Calculator — Virtual Tools</title>
+<meta name="description" content="Convert a clip between frame rates: playback speed change, conformed duration, frames to duplicate or drop, and the audio pitch shift from a varispeed conform.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:12px;margin:10px 0}
+label.f{font-size:13px;opacity:.85;display:block;margin-bottom:4px}
+.field{background:var(--bg,#14181f);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px}
+.field:focus-within{border-color:var(--accent,#6ea8fe);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#6ea8fe) 18%,transparent)}
+.field input{box-sizing:border-box;width:100%;min-width:0;background:transparent;color:var(--text,#e6e6e6);border:none;font-size:18px;font-family:ui-monospace,monospace;padding:2px 0;outline:none}
+.field .unit{font-size:11px;color:var(--text-dim,#9aa3b2);margin-top:4px}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:14px 0}
+.out .big{font-size:clamp(1.8rem,7vw,2.4rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:4px 0 6px;overflow-wrap:anywhere}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45}
+.out .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:14px}
+.out .row:last-child{border-bottom:none}
+.out .row .k{color:var(--text-dim,#9aa3b2)}
+.out .row .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right;overflow-wrap:anywhere}
+.out .warn{color:var(--warn,#f0b429);font-size:12.5px;margin:10px 0 0;line-height:1.45}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.err{color:var(--bad,#f87171);font-size:13px;margin:6px 0;min-height:1.2em}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;margin:10px 0 0;line-height:1.5}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>Frame Rate Conform Calculator</h1>
+<p>Conform a clip from one frame rate to another and see the new running time, the speed change and what happens to the audio.</p>
+</div>
+<div class="panel">
+<form id="conform-form" novalidate>
+<div class="grid3">
+<div class="field"><label class="f" for="in-source">Source frame rate</label><input type="text" id="in-source" inputmode="decimal" autocomplete="off" spellcheck="false" value="24"><div class="unit">fps the clip was shot or edited at</div></div>
+<div class="field"><label class="f" for="in-target">Target frame rate</label><input type="text" id="in-target" inputmode="decimal" autocomplete="off" spellcheck="false" value="25"><div class="unit">fps of the delivery or timeline</div></div>
+<div class="field"><label class="f" for="in-duration">Clip duration</label><input type="text" id="in-duration" inputmode="decimal" autocomplete="off" spellcheck="false" value="60"><div class="unit">seconds at the source rate</div></div>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions"><button type="submit">Conform the clip</button></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"><span style="color:var(--text-dim,#9aa3b2)">Enter the source rate, target rate and clip duration to see the conform.</span></div>
+<p class="note">A speed conform keeps every frame and plays them at the new rate: the ratio is target ÷ source, so 24 → 25 fps runs 4.17% faster and a 60.000 s clip becomes 57.600 s. Audio left untouched shifts by 12 × log₂(target ÷ source) semitones. The second set of figures is for a same-length conform, which duplicates frames when the target rate is higher and drops them when it is lower. Frame counts are rounded to whole frames, which matters for very short clips. Frame rates are limited to 1–240 fps and duration to 0.1–86,400 s, and the clip must contain at least one whole frame at the source rate; drop-frame timecode, interlaced field order and 3:2 pulldown are not modelled. Everything runs locally in your browser.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* frame-rate-conform-core:start */
+var FrameRateConformCore = (function(){
+  "use strict";
+  var LIMITS = { fps: [1, 240], duration: [0.1, 86400] };
+  var PAL_SOURCE = [23.976, 24];
+  var PAL_TARGET = [25];
+  var PULL_FAMILIES = [[23.976, 24], [29.97, 30]];
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function decimal(value, label){
+    var raw = String(value == null ? "" : value).trim();
+    if (!raw) fail(label + " is required.");
+    if (!/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(raw)) fail(label + " must be a number.");
+    var parsed = Number(raw);
+    if (!isFinite(parsed)) fail(label + " must be a number.");
+    return parsed;
+  }
+
+  function near(value, target){
+    return Math.abs(value - target) < 0.002;
+  }
+
+  function fps(value, label){
+    var rate = decimal(value, label);
+    if (rate < LIMITS.fps[0] || rate > LIMITS.fps[1]) fail(label + " must be from 1 to 240 fps.");
+    return rate;
+  }
+
+  function palPair(source, target){
+    var up = PAL_SOURCE.some(function(rate){ return near(source, rate); }) && PAL_TARGET.some(function(rate){ return near(target, rate); });
+    var down = near(source, 25) && PAL_SOURCE.some(function(rate){ return near(target, rate); });
+    return up || down;
+  }
+
+  function pullPair(source, target){
+    return PULL_FAMILIES.some(function(family){
+      return family.some(function(rate){ return near(source, rate); }) && family.some(function(rate){ return near(target, rate); });
+    });
+  }
+
+  function plan(input){
+    var options = input || {};
+    var source = fps(options.source, "Source frame rate");
+    var target = fps(options.target, "Target frame rate");
+    var duration = decimal(options.duration, "Clip duration");
+    if (duration < LIMITS.duration[0] || duration > LIMITS.duration[1]) fail("Clip duration must be from 0.1 to 86,400 seconds.");
+
+    var ratio = target / source;
+    var sourceFrames = Math.round(duration * source);
+    if (sourceFrames < 1) fail("The clip must contain at least one frame at the source rate.");
+    var conformedSeconds = sourceFrames / target;
+    var sameTimeFrames = Math.round(duration * target);
+    var semitones = 12 * Math.log(ratio) / Math.LN2;
+
+    return {
+      source: source,
+      target: target,
+      duration: duration,
+      ratio: ratio,
+      speedPct: (ratio - 1) * 100,
+      sourceFrames: sourceFrames,
+      conformedSeconds: conformedSeconds,
+      savedSeconds: duration - conformedSeconds,
+      sameTimeFrames: sameTimeFrames,
+      frameDelta: sameTimeFrames - sourceFrames,
+      semitones: semitones,
+      cents: semitones * 100,
+      unchanged: Math.abs(ratio - 1) < 1e-9,
+      palSpeed: palPair(source, target) && Math.abs(ratio - 1) >= 1e-9,
+      pullUp: pullPair(source, target) && Math.abs(ratio - 1) >= 1e-9,
+      bigChange: Math.abs(ratio - 1) > 0.10,
+      slower: ratio < 1
+    };
+  }
+
+  return {
+    LIMITS: LIMITS,
+    plan: plan
+  };
+})();
+/* frame-rate-conform-core:end */
+(function(){
+"use strict";
+
+var els = {
+  source: document.getElementById("in-source"),
+  target: document.getElementById("in-target"),
+  duration: document.getElementById("in-duration"),
+  err: document.getElementById("err"),
+  out: document.getElementById("out")
+};
+
+function clear(node){
+  while (node.firstChild) node.removeChild(node.firstChild);
+}
+function placeholder(node, message){
+  var span = document.createElement("span");
+  span.style.color = "var(--text-dim,#9aa3b2)";
+  span.textContent = message;
+  node.appendChild(span);
+}
+function addRow(parent, label, value){
+  var row = document.createElement("div");
+  row.className = "row";
+  var key = document.createElement("span");
+  key.className = "k";
+  key.textContent = label;
+  var val = document.createElement("span");
+  val.className = "v";
+  val.textContent = value;
+  row.appendChild(key);
+  row.appendChild(val);
+  parent.appendChild(row);
+}
+function addWarning(parent, message){
+  var p = document.createElement("p");
+  p.className = "warn";
+  p.textContent = message;
+  parent.appendChild(p);
+}
+function pad(value, width){
+  var text = String(value);
+  while (text.length < width) text = "0" + text;
+  return text;
+}
+function group(value){
+  var text = String(value);
+  return text.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+function decimal(value, places){
+  var fixed = value.toFixed(places);
+  if (fixed.indexOf(".") === -1) return fixed;
+  return fixed.replace(/0+$/, "").replace(/\.$/, "");
+}
+function signed(value, places){
+  var rounded = Number(value.toFixed(places));
+  if (rounded === 0) return decimal(0, places);
+  return (rounded > 0 ? "+" : "-") + decimal(Math.abs(rounded), places);
+}
+function formatClock(seconds){
+  var millis = Math.round(seconds * 1000);
+  var hours = Math.floor(millis / 3600000);
+  var minutes = Math.floor((millis % 3600000) / 60000);
+  var secs = Math.floor((millis % 60000) / 1000);
+  var ms = millis % 1000;
+  var tail = pad(secs, 2) + "." + pad(ms, 3);
+  if (hours > 0) return hours + ":" + pad(minutes, 2) + ":" + tail;
+  return minutes + ":" + tail;
+}
+
+function render(result){
+  clear(els.out);
+
+  var big = document.createElement("div");
+  big.className = "big";
+  big.textContent = formatClock(result.conformedSeconds);
+  var sub = document.createElement("div");
+  sub.className = "sub";
+  sub.textContent = decimal(result.source, 3) + " → " + decimal(result.target, 3) + " fps · " +
+    decimal(result.ratio, 5) + "× real time · " + group(result.sourceFrames) + " frames";
+  els.out.appendChild(big);
+  els.out.appendChild(sub);
+
+  addRow(els.out, "Playback speed", decimal(Math.abs(result.speedPct), 2) + "% " + (result.unchanged ? "unchanged" : (result.slower ? "slower" : "faster")));
+  addRow(els.out, "Conformed duration", decimal(result.conformedSeconds, 3) + " s");
+  addRow(els.out, "Running time change", result.unchanged ? "none" : signed(result.savedSeconds, 3) + " s");
+  addRow(els.out, "Same-length frames", group(result.sameTimeFrames) + (result.frameDelta === 0 ? "" : " (" + (result.frameDelta > 0 ? "+" + group(result.frameDelta) + " duplicates" : group(-result.frameDelta) + " dropped") + ")"));
+  addRow(els.out, "Audio pitch if not retimed", signed(result.semitones, 2) + " semitones (" + signed(result.cents, 1) + " cents)");
+
+  if (result.unchanged){
+    addWarning(els.out, "Source and target rates are the same, so the clip needs no conform.");
+    return;
+  }
+  if (result.palSpeed){
+    addWarning(els.out, "This is the classic 24/25 PAL speed change. Untouched audio shifts by " + decimal(Math.abs(result.semitones), 2) + " semitones, so use a pitch-correcting retime if the original pitch must be kept.");
+  } else if (result.pullUp){
+    addWarning(els.out, "This is a 0.1% pull-up or pull-down. Durations change by about 3.6 seconds per hour and the pitch shift is only a few cents.");
+  }
+  if (result.bigChange){
+    addWarning(els.out, "A rate change this large is audibly faster or slower. Check that a speed change is intended rather than frame duplication or a different shooting rate.");
+  }
+}
+
+function calculate(){
+  var result;
+  try {
+    result = FrameRateConformCore.plan({
+      source: els.source.value,
+      target: els.target.value,
+      duration: els.duration.value
+    });
+  } catch (error){
+    els.err.textContent = error.message;
+    clear(els.out);
+    placeholder(els.out, "Check the highlighted field.");
+    return;
+  }
+  els.err.textContent = "";
+  render(result);
+}
+
+[els.source, els.target, els.duration].forEach(function(input){
+  input.addEventListener("input", calculate);
+});
+document.getElementById("conform-form").addEventListener("submit", function(event){
+  event.preventDefault();
+  calculate();
+});
+
+calculate();
+})();
+</script>
+</body>
+</html>
