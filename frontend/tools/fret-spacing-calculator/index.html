@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Fret Spacing Calculator — Virtual Tools</title>
+<meta name="description" content="Lay out fret positions for any scale length with 12-tone equal temperament: the distance from the nut and from the previous fret for every fret, in millimetres or inches.">
+<link rel="stylesheet" href="/assets/style.css">
+<link rel="stylesheet" href="/assets/tool-css/tool-form-3c8cf9e7.css">
+<style>
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.out .big{font-size:clamp(1.2rem,4.4vw,1.6rem);line-height:1.25;overflow-wrap:anywhere;padding:6px 0 6px}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:-2px 0 10px;line-height:1.4}
+.field .hint{font-size:11px;color:var(--text-dim,#9aa3b2);margin-top:4px;line-height:1.35}
+.err{min-height:1.2em}
+.note{color:var(--text-dim,#9aa3b2);font-size:0.85rem;margin-top:10px;line-height:1.5}
+.diagram{width:100%;height:auto;display:block;margin:4px 0 2px}
+.diagram text{fill:var(--text-dim,#9aa3b2);font-size:11px;font-family:ui-monospace,monospace}
+.diagram .board{fill:none;stroke:var(--border,#2a2f3a);stroke-width:1}
+.diagram .fret{stroke:var(--text-dim,#9aa3b2);stroke-width:1.2}
+.diagram .nut{stroke:var(--text,#e6e6e6);stroke-width:3}
+.diagram .dot{fill:var(--text-dim,#9aa3b2)}
+.diagram .dot.oct{fill:var(--accent,#6ea8fe)}
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:6px}
+table.fret-table{width:100%;border-collapse:collapse;font-size:13.5px;font-variant-numeric:tabular-nums}
+.fret-table th,.fret-table td{padding:7px 8px;border-bottom:1px solid var(--border,#2a2f3a);text-align:right;white-space:nowrap}
+.fret-table th:first-child,.fret-table td:first-child{text-align:left}
+.fret-table thead th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim,#9aa3b2);font-weight:600}
+.fret-table td{font-family:ui-monospace,monospace}
+.fret-table tbody tr:last-child td{border-bottom:none}
+.fret-table tr.oct td{color:var(--accent,#6ea8fe);font-weight:700}
+h2.subhead{font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-dim,#9aa3b2);margin:0 0 2px;font-weight:600}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>Fret Spacing Calculator</h1>
+<p>Work out every fret position for a scale length using 12-tone equal temperament. Runs locally in your browser.</p>
+</div>
+<div class="panel">
+<form id="fret-form" novalidate>
+<div class="grid2">
+<div class="field"><label class="f" for="in-scale">Scale length</label><input type="text" id="in-scale" inputmode="decimal" autocomplete="off" value="25.5"><div class="unit">nut to bridge, measured on the instrument</div></div>
+<div class="field"><label class="f" for="in-unit">Unit</label><select id="in-unit"><option value="in">inches</option><option value="mm">millimetres</option></select><div class="unit">for the scale length and results</div></div>
+<div class="field"><label class="f" for="in-frets">Frets</label><input type="text" id="in-frets" inputmode="numeric" autocomplete="off" value="22"><div class="unit">how many fret slots to lay out</div><div class="hint">whole number, 1–36</div></div>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions"><button type="submit">Calculate frets</button></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"><span style="color:var(--text-dim,#9aa3b2)">Enter a scale length and fret count.</span></div>
+<p class="note">Fret n sits at L × (1 − 2<sup>−n/12</sup>) from the nut, so the 12th fret falls at exactly half the scale length. Positions are theoretical slot centres with no saddle compensation or string action allowance; measure from the inside face of the nut on the real instrument and check the 12th fret against its harmonic before cutting.</p>
+</div>
+<div class="panel">
+<h2 class="subhead">Fret positions</h2>
+<div class="table-wrap">
+<table class="fret-table" id="fret-table">
+<thead><tr><th scope="col">Fret</th><th scope="col" id="th-nut">From nut</th><th scope="col" id="th-gap">Gap</th></tr></thead>
+<tbody id="fret-body"><tr><td colspan="3" style="text-align:left;color:var(--text-dim,#9aa3b2)">Results appear here.</td></tr></tbody>
+</table>
+</div>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+(function(){
+"use strict";
+var MM_PER_IN = 25.4;
+var MIN_MM = 100;
+var MAX_MM = 2000;
+var MAX_FRETS = 36;
+var MARKERS = {3:1, 5:1, 7:1, 9:1, 12:2, 15:1, 17:1, 19:1, 21:1, 24:2};
+
+var els = {
+  scale: document.getElementById("in-scale"),
+  unit: document.getElementById("in-unit"),
+  frets: document.getElementById("in-frets"),
+  err: document.getElementById("err"),
+  out: document.getElementById("out"),
+  body: document.getElementById("fret-body"),
+  thNut: document.getElementById("th-nut"),
+  thGap: document.getElementById("th-gap")
+};
+var lastUnit = "in";
+
+function parseNum(text){
+  var s = String(text == null ? "" : text).trim();
+  if (!s) return null;
+  if (!/^[+]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(s)) return NaN;
+  var v = Number(s);
+  return isFinite(v) ? v : NaN;
+}
+function toMm(value, unit){
+  return unit === "mm" ? value : value * MM_PER_IN;
+}
+function fromMm(mm, unit){
+  return unit === "mm" ? mm : mm / MM_PER_IN;
+}
+function fmt(x, n){
+  var p = Math.pow(10, n);
+  var r = Math.round(x * p) / p;
+  return r.toLocaleString(undefined, {minimumFractionDigits: n, maximumFractionDigits: n});
+}
+function unitLabel(unit){
+  return unit === "mm" ? "mm" : "in";
+}
+function decimals(unit){
+  return unit === "mm" ? 2 : 3;
+}
+function distMm(scaleMm, fret){
+  return scaleMm * (1 - Math.pow(2, -fret / 12));
+}
+function clearOut(){
+  while (els.out.firstChild) els.out.removeChild(els.out.firstChild);
+}
+function showPlaceholder(msg){
+  clearOut();
+  var span = document.createElement("span");
+  span.style.color = "var(--text-dim,#9aa3b2)";
+  span.textContent = msg;
+  els.out.appendChild(span);
+}
+function fail(message, placeholder){
+  els.err.textContent = message;
+  showPlaceholder(placeholder);
+  els.body.replaceChildren();
+  var tr = document.createElement("tr");
+  var td = document.createElement("td");
+  td.colSpan = 3;
+  td.style.textAlign = "left";
+  td.style.color = "var(--text-dim,#9aa3b2)";
+  td.textContent = "No positions to show.";
+  tr.appendChild(td);
+  els.body.appendChild(tr);
+}
+function drawDiagram(scaleMm, frets){
+  var NS = "http://www.w3.org/2000/svg";
+  var W = 640, H = 52, left = 22, right = 618, mid = 30;
+  var svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+  svg.setAttribute("class", "diagram");
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", "Fretboard diagram with " + frets + " fret" + (frets === 1 ? "" : "s") + " laid out along the scale length.");
+  function el(tag, attrs, text){
+    var node = document.createElementNS(NS, tag);
+    Object.keys(attrs).forEach(function(k){ node.setAttribute(k, String(attrs[k])); });
+    if (text) node.textContent = text;
+    svg.appendChild(node);
+    return node;
+  }
+  el("rect", {x: left, y: mid - 9, width: right - left, height: 18, rx: 2, "class": "board"});
+  el("line", {x1: left, y1: mid - 13, x2: left, y2: mid + 13, "class": "nut"});
+  el("line", {x1: right, y1: mid - 13, x2: right, y2: mid + 13, "class": "fret"});
+  el("text", {x: left, y: H - 4, "text-anchor": "start"}, "nut");
+  el("text", {x: right, y: H - 4, "text-anchor": "end"}, "bridge");
+  for (var n = 1; n <= frets; n++){
+    var x = left + (distMm(scaleMm, n) / scaleMm) * (right - left);
+    el("line", {x1: x, y1: mid - 9, x2: x, y2: mid + 9, "class": "fret"});
+    var dots = MARKERS[n] || 0;
+    for (var d = 0; d < dots; d++){
+      var cx = dots === 2 ? x - 4 + d * 8 : x;
+      el("circle", {cx: cx, cy: mid, r: dots === 2 ? 1.6 : 2.2, "class": "dot" + (n === 12 || n === 24 ? " oct" : "")});
+    }
+  }
+  return svg;
+}
+function renderTable(rows, unit){
+  els.body.replaceChildren();
+  var frag = document.createDocumentFragment();
+  rows.forEach(function(r){
+    var tr = document.createElement("tr");
+    if (r.n === 12 || r.n === 24) tr.className = "oct";
+    var a = document.createElement("td");
+    a.textContent = String(r.n);
+    var b = document.createElement("td");
+    b.textContent = fmt(fromMm(r.fromNut, unit), decimals(unit));
+    var c = document.createElement("td");
+    c.textContent = fmt(fromMm(r.gap, unit), decimals(unit));
+    tr.appendChild(a);
+    tr.appendChild(b);
+    tr.appendChild(c);
+    frag.appendChild(tr);
+  });
+  els.body.appendChild(frag);
+  els.thNut.textContent = "From nut (" + unitLabel(unit) + ")";
+  els.thGap.textContent = "Gap (" + unitLabel(unit) + ")";
+}
+function calculate(){
+  var unit = els.unit.value === "mm" ? "mm" : "in";
+  var rawScale = parseNum(els.scale.value);
+  var rawFrets = parseNum(els.frets.value);
+
+  if (rawScale === null || rawFrets === null){
+    els.err.textContent = "";
+    showPlaceholder("Enter a scale length and fret count.");
+    return;
+  }
+  if (isNaN(rawScale) || isNaN(rawFrets)){
+    fail("Scale length and fret count must be numbers.", "Check the numeric fields.");
+    return;
+  }
+  if (Math.abs(rawFrets - Math.round(rawFrets)) > 1e-9){
+    fail("The fret count must be a whole number.", "Check the fret count.");
+    return;
+  }
+  var frets = Math.round(rawFrets);
+  if (frets < 1 || frets > MAX_FRETS){
+    fail("Choose between 1 and " + MAX_FRETS + " frets.", "Check the fret count.");
+    return;
+  }
+  var scaleMm = toMm(rawScale, unit);
+  if (!isFinite(scaleMm) || scaleMm < MIN_MM || scaleMm > MAX_MM){
+    var shownDecimals = unit === "mm" ? 0 : 2;
+    fail("Scale length must be between " + fmt(fromMm(MIN_MM, unit), shownDecimals) + " and " + fmt(fromMm(MAX_MM, unit), shownDecimals) + " " + unitLabel(unit) + ".", "Check the scale length.");
+    return;
+  }
+
+  var rows = [];
+  for (var n = 1; n <= frets; n++){
+    var fromNut = distMm(scaleMm, n);
+    rows.push({n: n, fromNut: fromNut, gap: fromNut - distMm(scaleMm, n - 1)});
+  }
+
+  els.err.textContent = "";
+  clearOut();
+
+  var big = document.createElement("div");
+  big.className = "big";
+  big.textContent = "Fret 1: " + fmt(fromMm(rows[0].fromNut, unit), decimals(unit)) + " " + unitLabel(unit);
+
+  var sub = document.createElement("div");
+  sub.className = "sub";
+  var octave = frets >= 12 ? " · 12th fret at " + fmt(fromMm(scaleMm / 2, unit), decimals(unit)) + " " + unitLabel(unit) + " (half the scale length)" : " · fewer than 12 frets, so no octave check";
+  sub.textContent = frets + " fret" + (frets === 1 ? "" : "s") + " on a " + fmt(fromMm(scaleMm, unit), decimals(unit)) + " " + unitLabel(unit) + " scale" + octave;
+
+  els.out.appendChild(big);
+  els.out.appendChild(sub);
+  els.out.appendChild(drawDiagram(scaleMm, frets));
+  renderTable(rows, unit);
+}
+
+els.unit.addEventListener("change", function(){
+  var newUnit = els.unit.value === "mm" ? "mm" : "in";
+  var v = parseNum(els.scale.value);
+  if (v !== null && !isNaN(v)){
+    var mm = toMm(v, lastUnit);
+    els.scale.value = fromMm(mm, newUnit).toFixed(newUnit === "mm" ? 1 : 3).replace(/\.?0+$/, "");
+  }
+  lastUnit = newUnit;
+  els.err.textContent = "";
+  calculate();
+});
+[els.scale, els.frets].forEach(function(input){
+  input.addEventListener("input", calculate);
+});
+document.getElementById("fret-form").addEventListener("submit", function(event){
+  event.preventDefault();
+  calculate();
+});
+
+calculate();
+})();
+</script>
+</body>
+</html>
