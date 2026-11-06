@@ -22,6 +22,7 @@ node tests/security/math-expression.test.cjs
 node tests/unit_converter.test.cjs
 node tests/chess_clock.test.cjs
 node tests/interval_ear_trainer.test.cjs
+node tests/skyscraper_puzzle.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
