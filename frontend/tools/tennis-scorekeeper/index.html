@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Tennis Scorekeeper — Virtual Tools</title>
+<meta name="description" content="Keep a best-of-three tennis match score with advantage scoring, six-game sets, seven-point tiebreaks, set history and undo. Runs locally in your browser.">
+<link rel="stylesheet" href="/assets/style.css">
+<link rel="stylesheet" href="/assets/tool-css/tool-form-3c8cf9e7.css">
+<style>
+.scoreboard{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:14px}
+.player{min-width:0;min-height:160px;padding:14px 12px;border:2px solid var(--border,#2a2f3a);border-radius:12px;background:var(--bg,#14181f);color:var(--text,#e6e6e6);cursor:pointer;font:inherit;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;touch-action:manipulation}
+.player:hover{border-color:var(--accent,#6ea8fe)}
+.player:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.player:disabled{cursor:default;opacity:.72}
+.player:disabled:hover{border-color:var(--border,#2a2f3a)}
+.player .name{font-size:14px;font-weight:650;max-width:100%;overflow-wrap:anywhere;text-align:center}
+.player .points{font-size:clamp(2.8rem,12vw,4.4rem);font-weight:750;line-height:1;font-variant-numeric:tabular-nums}
+.player .meta{font-size:12px;color:var(--text-dim,#9aa3b2);text-align:center;line-height:1.35}
+.player .tap{font-size:12px;color:var(--accent,#6ea8fe);font-weight:600;margin-top:4px}
+.controls{display:flex;gap:9px;flex-wrap:wrap;margin:12px 0 0}
+.controls button{font:inherit;font-weight:600;min-height:44px;padding:9px 20px;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:transparent;color:var(--text,#e6e6e6);cursor:pointer}
+.controls button:hover{border-color:var(--accent,#6ea8fe)}
+.controls button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.controls button:disabled{opacity:.5;cursor:default}
+.status{font-size:14px;font-weight:600;line-height:1.5;min-height:1.5em;margin:14px 0 0}
+.status.prompt{color:var(--accent,#6ea8fe)}
+.history{margin-top:12px;border-top:1px solid var(--border,#2a2f3a);padding-top:8px}
+.history h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim,#9aa3b2);margin:4px 0 6px}
+.history-row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:7px 0;font-size:14px;border-bottom:1px solid var(--border,#2a2f3a)}
+.history-row:last-child{border-bottom:none}
+.history-row .label{min-width:0;overflow-wrap:anywhere}
+.history-row .result{font-family:ui-monospace,monospace;font-weight:700;white-space:nowrap;color:var(--accent,#6ea8fe)}
+.note{color:var(--text-dim,#9aa3b2);font-size:12.5px;line-height:1.55;margin:12px 0 0}
+@media (max-width:360px){.player{min-height:142px;padding:12px 8px}.player .points{font-size:3rem}.controls button{padding:9px 15px}.history-row{font-size:13px;gap:8px}}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>Tennis Scorekeeper</h1>
+<p>Tap the player who won each point. Track games, sets and tiebreaks through a best-of-three match.</p>
+</div>
+<div class="panel">
+<div class="grid2">
+<div class="field"><label class="f" for="name-a">Player A name</label><input id="name-a" type="text" value="Player A" maxlength="30" autocomplete="off"></div>
+<div class="field"><label class="f" for="name-b">Player B name</label><input id="name-b" type="text" value="Player B" maxlength="30" autocomplete="off"></div>
+</div>
+<div class="scoreboard" aria-label="Current tennis score">
+<button type="button" class="player" id="point-0" aria-label="Add a point to Player A">
+<span class="name" id="label-0">Player A</span><span class="points" id="score-0">0</span><span class="meta" id="meta-0">0 sets · 0 games this set</span><span class="tap">+ Point</span>
+</button>
+<button type="button" class="player" id="point-1" aria-label="Add a point to Player B">
+<span class="name" id="label-1">Player B</span><span class="points" id="score-1">0</span><span class="meta" id="meta-1">0 sets · 0 games this set</span><span class="tap">+ Point</span>
+</button>
+</div>
+<div class="controls"><button type="button" id="undo" disabled>Undo point</button><button type="button" id="reset">New match</button></div>
+<p class="status" id="status" role="status" aria-live="polite">Set 1 · Game 1</p>
+<section class="history" id="history" hidden aria-labelledby="history-title"><h2 id="history-title">Completed sets</h2><div id="history-rows"></div></section>
+<p class="note">Games use 0, 15, 30 and 40, with deuce and advantage; four points and a two-point lead win a game. Sets go to six games with a two-game lead, except that a tiebreak at 6-all goes to seven points with a two-point lead and decides the set 7–6. The match is best of three sets. Serving, changeovers, lets and officials’ decisions are not tracked. Names and scores stay only in this page’s memory.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* tennis-scorekeeper-core:start */
+var TennisScorekeeperCore = (function(){
+  "use strict";
+
+  function checkSide(side){
+    if (side !== 0 && side !== 1) throw new Error("Player must be A (0) or B (1).");
+  }
+
+  function makeState(){
+    return {
+      points: [0, 0],
+      games: [0, 0],
+      sets: [0, 0],
+      history: [],
+      matchWinner: null
+    };
+  }
+
+  function isTiebreak(state){
+    return state.matchWinner === null && state.games[0] === 6 && state.games[1] === 6;
+  }
+
+  function gameWinner(points, tiebreak){
+    var target = tiebreak ? 7 : 4;
+    if (points[0] >= target && points[0] - points[1] >= 2) return 0;
+    if (points[1] >= target && points[1] - points[0] >= 2) return 1;
+    return null;
+  }
+
+  function pointLabels(state){
+    if (isTiebreak(state)) return [String(state.points[0]), String(state.points[1])];
+    var a = state.points[0], b = state.points[1];
+    if (a >= 3 && b >= 3){
+      if (a === b) return ["40", "40"];
+      return a > b ? ["Ad", "40"] : ["40", "Ad"];
+    }
+    var labels = ["0", "15", "30", "40"];
+    return [labels[Math.min(a, 3)], labels[Math.min(b, 3)]];
+  }
+
+  function awardPoint(state, side){
+    checkSide(side);
+    if (state.matchWinner !== null) return null;
+    var tiebreak = isTiebreak(state);
+    state.points[side] += 1;
+    var event = {gameWinner: null, setWinner: null, matchWinner: null};
+    var winner = gameWinner(state.points, tiebreak);
+    if (winner === null) return event;
+
+    event.gameWinner = winner;
+    state.games[winner] += 1;
+    var lead = state.games[winner] - state.games[1 - winner];
+    var setOver = tiebreak ? state.games[winner] === 7 : state.games[winner] >= 6 && lead >= 2;
+    if (setOver){
+      state.history.push({
+        games: [state.games[0], state.games[1]],
+        tiebreak: tiebreak ? [state.points[0], state.points[1]] : null,
+        winner: winner
+      });
+      state.sets[winner] += 1;
+      state.games = [0, 0];
+      event.setWinner = winner;
+      if (state.sets[winner] === 2){
+        state.matchWinner = winner;
+        event.matchWinner = winner;
+      }
+    }
+    state.points = [0, 0];
+    return event;
+  }
+
+  return {
+    makeState: makeState,
+    isTiebreak: isTiebreak,
+    gameWinner: gameWinner,
+    pointLabels: pointLabels,
+    awardPoint: awardPoint
+  };
+})();
+/* tennis-scorekeeper-core:end */
+(function(){
+"use strict";
+var C = TennisScorekeeperCore;
+var nameEls = [document.getElementById("name-a"), document.getElementById("name-b")];
+var pointEls = [document.getElementById("point-0"), document.getElementById("point-1")];
+var labelEls = [document.getElementById("label-0"), document.getElementById("label-1")];
+var scoreEls = [document.getElementById("score-0"), document.getElementById("score-1")];
+var metaEls = [document.getElementById("meta-0"), document.getElementById("meta-1")];
+var undoEl = document.getElementById("undo");
+var statusEl = document.getElementById("status");
+var historyEl = document.getElementById("history");
+var historyRowsEl = document.getElementById("history-rows");
+var state = C.makeState();
+var undoStack = [];
+var lastEvent = null;
+
+function playerName(side){
+  return nameEls[side].value.trim() || (side === 0 ? "Player A" : "Player B");
+}
+function normalStatus(){
+  var setNumber = state.sets[0] + state.sets[1] + 1;
+  if (C.isTiebreak(state)) return "Set " + setNumber + " tiebreak · first to 7 points, win by 2.";
+  var gameNumber = state.games[0] + state.games[1] + 1;
+  var text = "Set " + setNumber + " · Game " + gameNumber;
+  var a = state.points[0], b = state.points[1];
+  if (a >= 3 && b >= 3){
+    if (a === b) text += " · Deuce — win by 2 points.";
+    else text += " · Advantage " + playerName(a > b ? 0 : 1) + ".";
+  }
+  return text;
+}
+function renderStatus(){
+  var text, prompt = false;
+  if (state.matchWinner !== null){
+    text = playerName(state.matchWinner) + " wins the match, " + state.sets[0] + "–" + state.sets[1] + " sets.";
+    prompt = true;
+  } else if (lastEvent && lastEvent.setWinner !== null){
+    var completed = state.history[state.history.length - 1];
+    text = playerName(lastEvent.setWinner) + " wins set " + state.history.length + ", " +
+      completed.games[0] + "–" + completed.games[1] + ". Next set starts at 0–0.";
+    prompt = true;
+  } else if (lastEvent && lastEvent.gameWinner !== null){
+    text = playerName(lastEvent.gameWinner) + " wins the game. " + normalStatus();
+  } else {
+    text = normalStatus();
+  }
+  statusEl.textContent = text;
+  statusEl.classList.toggle("prompt", prompt);
+}
+function renderHistory(){
+  while (historyRowsEl.firstChild) historyRowsEl.removeChild(historyRowsEl.firstChild);
+  historyEl.hidden = state.history.length === 0;
+  state.history.forEach(function(set, index){
+    var row = document.createElement("div");
+    row.className = "history-row";
+    var label = document.createElement("span");
+    label.className = "label";
+    label.textContent = "Set " + (index + 1) + " · " + playerName(set.winner);
+    var result = document.createElement("span");
+    result.className = "result";
+    result.textContent = set.games[0] + "–" + set.games[1] +
+      (set.tiebreak ? " · TB " + set.tiebreak[0] + "–" + set.tiebreak[1] : "");
+    row.appendChild(label);
+    row.appendChild(result);
+    historyRowsEl.appendChild(row);
+  });
+}
+function render(){
+  var labels = C.pointLabels(state);
+  for (var side = 0; side < 2; side += 1){
+    var name = playerName(side);
+    labelEls[side].textContent = name;
+    scoreEls[side].textContent = labels[side];
+    metaEls[side].textContent = state.sets[side] + (state.sets[side] === 1 ? " set · " : " sets · ") +
+      state.games[side] + (state.games[side] === 1 ? " game this set" : " games this set");
+    pointEls[side].disabled = state.matchWinner !== null;
+    pointEls[side].setAttribute("aria-label", "Add a point to " + name + ". Current points " +
+      labels[side] + "; " + state.games[side] + (state.games[side] === 1 ? " game and " : " games and ") +
+      state.sets[side] + (state.sets[side] === 1 ? " set." : " sets."));
+  }
+  undoEl.disabled = undoStack.length === 0;
+  renderStatus();
+  renderHistory();
+}
+function addPoint(side){
+  var snapshot = JSON.stringify(state);
+  var event = C.awardPoint(state, side);
+  if (!event) return;
+  undoStack.push(snapshot);
+  lastEvent = event;
+  render();
+}
+pointEls[0].addEventListener("click", function(){ addPoint(0); });
+pointEls[1].addEventListener("click", function(){ addPoint(1); });
+undoEl.addEventListener("click", function(){
+  if (!undoStack.length) return;
+  state = JSON.parse(undoStack.pop());
+  lastEvent = null;
+  render();
+});
+document.getElementById("reset").addEventListener("click", function(){
+  state = C.makeState();
+  undoStack = [];
+  lastEvent = null;
+  render();
+  pointEls[0].focus();
+});
+nameEls.forEach(function(input){ input.addEventListener("input", render); });
+render();
+})();
+</script>
+</body>
+</html>
