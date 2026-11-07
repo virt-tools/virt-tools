@@ -76,6 +76,7 @@ node tests/ofdm_symbol_timing_calculator.test.cjs
 node tests/cricket_net_run_rate_calculator.test.cjs
 node tests/end_credits_roll_planner.test.cjs
 node tests/utm_zone_calculator.test.cjs
+node tests/systemd_service_builder.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
