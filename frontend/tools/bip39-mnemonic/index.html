@@ -160,21 +160,32 @@
     var mode = "generate";
     var lastMnemonic = "";
     var lastSeed = "";
+    var validationRequest = 0;
+    var generationRequest = 0;
+    var generationSeedRequest = 0;
 
     async function generate() {
+      var request = ++generationRequest;
+      generationSeedRequest += 1;
+      seedEl.textContent = "—";
       var strength = parseInt(strengthEl.value, 10);
       var entropy = new Uint8Array(strength / 8);
       crypto.getRandomValues(entropy);
       var entropyArr = Array.from(entropy);
       var hash = await sha256(entropyArr);
+      if (request !== generationRequest) return;
       var csBits = strength / 32;
       var bits = bytesToBinary(entropyArr) + bytesToBinary(hash).substr(0, csBits);
       var words = [];
       for (var i = 0; i < bits.length; i += 11) words.push(WL[parseInt(bits.substr(i, 11), 2)]);
-      lastMnemonic = words.join(" ");
+      var mnemonic = words.join(" ");
+      var seedRequest = ++generationSeedRequest;
+      lastMnemonic = mnemonic;
+      seedEl.textContent = "—";
       renderMnemonic();
       entEl.textContent = bytesToHex(entropyArr);
-      var seed = await mnemonicToSeed(lastMnemonic, passphraseEl.value);
+      var seed = await mnemonicToSeed(mnemonic, passphraseEl.value);
+      if (request !== generationRequest || seedRequest !== generationSeedRequest) return;
       lastSeed = bytesToHex(seed);
       seedEl.textContent = lastSeed;
     }
@@ -209,8 +220,12 @@
     document.getElementById("regen").addEventListener("click", generate);
     numbersEl.addEventListener("change", renderMnemonic);
     passphraseEl.addEventListener("input", async function () {
+      var seedRequest = ++generationSeedRequest;
+      seedEl.textContent = "—";
       if (!lastMnemonic) return;
-      var seed = await mnemonicToSeed(lastMnemonic, passphraseEl.value);
+      var mnemonic = lastMnemonic;
+      var seed = await mnemonicToSeed(mnemonic, passphraseEl.value);
+      if (seedRequest !== generationSeedRequest || mnemonic !== lastMnemonic) return;
       lastSeed = bytesToHex(seed);
       seedEl.textContent = lastSeed;
     });
@@ -222,25 +237,45 @@
         : null;
     });
 
+    function invalidateValidation() {
+      validationRequest += 1;
+      valSeedEl.hidden = true;
+      valSeedEl.querySelector("span.mono").textContent = "";
+    }
+
+    function validationEdited() {
+      invalidateValidation();
+      valResultEl.textContent = "Input changed. Validate to derive a new seed.";
+    }
+
+    mnemonicInputEl.addEventListener("input", validationEdited);
+    passphraseInputEl.addEventListener("input", validationEdited);
+
     document.getElementById("validate").addEventListener("click", async function () {
+      invalidateValidation();
+      var request = validationRequest;
       var mn = mnemonicInputEl.value.trim().toLowerCase().replace(/\s+/g, " ");
-      if (!mn) { valResultEl.textContent = "Enter a mnemonic."; valSeedEl.hidden = true; return; }
+      if (!mn) { valResultEl.textContent = "Enter a mnemonic."; return; }
+      valResultEl.textContent = "Validating…";
       try {
         var info = mnemonicToEntropy(mn);
         var hash = await sha256(info.entropy);
+        if (request !== validationRequest) return;
         var entBits = info.entropy.length * 8;
         var csBits = entBits / 32;
         var expectedCs = bytesToBinary(hash).substr(0, csBits);
         if (info.checksumBits !== expectedCs) {
           valResultEl.textContent = "✗ Invalid checksum (word order or typo). Word count OK (" + info.words.length + ").";
-          valSeedEl.hidden = true;
           return;
         }
-        valResultEl.textContent = "✓ Valid — " + info.words.length + " words, " + entBits + " bits of entropy.";
+        valResultEl.textContent = "Checksum valid. Deriving seed…";
         var seed = await mnemonicToSeed(mn, passphraseInputEl.value);
-        valSeedEl.hidden = false;
+        if (request !== validationRequest) return;
         valSeedEl.querySelector("span.mono").textContent = bytesToHex(seed);
+        valSeedEl.hidden = false;
+        valResultEl.textContent = "✓ Valid — " + info.words.length + " words, " + entBits + " bits of entropy.";
       } catch (e) {
+        if (request !== validationRequest) return;
         valResultEl.textContent = "✗ " + (e.message || String(e));
         valSeedEl.hidden = true;
       }

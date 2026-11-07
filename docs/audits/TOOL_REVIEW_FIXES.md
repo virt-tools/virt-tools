@@ -3,6 +3,42 @@
 This historical report records confirmed defects fixed during tool reviews. Counts
 and verification results reflect the workspace at the time of each fix.
 
+## 2026-11-07 full public-catalog audit
+
+Scope: all 1,782 public tools in a disposable SEO/CSP-generated copy. The browser
+baseline visited every route at 320px/light and 1280px/dark, checked startup and
+asset errors, accessible input names, horizontal overflow, non-finite output, and
+bounded default actions where available. Source, unit, formula, numerical,
+UI/browser smoke, and game regressions supplemented the catalog scan; this is not
+independent professional certification of every specialized calculation.
+
+### Confirmed repairs
+
+- `bip39-mnemonic` — editing a mnemonic or passphrase now immediately removes the
+  previous seed. Generation and validation use request identities so stale or
+  out-of-order asynchronous SHA-256/PBKDF2 completions cannot publish a seed for
+  different input. Validation announces a final valid result only after its seed
+  is ready. Official empty-passphrase and `TREZOR` BIP39 vectors pass.
+- `tests/tool_correctness.mjs` — replaced the removed compound-interest route and
+  obsolete monthly-contribution expectations with the current consolidated tool's
+  per-period model. Replaced CSP-blocked BIP39 polling with locator waits and added
+  stale-output assertions for both validation and generation.
+- `tests/browser_smoke.mjs` — made the 2048 touch regression deterministic. After
+  the initial ArrowLeft, a second left swipe can correctly be a no-op; the test now
+  swipes right, which must move the left-packed tiles.
+
+The initial scan's only catalog finding was a missing Macramé Cord Calculator
+metadata file in a snapshot taken while that tool was being added by another job.
+A fresh generated build contained the file; Macramé and BIP39 both passed the
+targeted browser recheck with zero findings.
+
+Verification: the complete preflight passed (2,042 catalog entries, 1,782 public
+tools, 1,758 scripts, 160 formulas with 57 golden vectors, and 46 Python tests).
+All 160 formula UI examples, 57 browser golden vectors, 480 invalid-input checks,
+the corrected numerical/browser correctness suite, UI smoke, browser smoke, and
+four Farkle browser configurations passed. No additional explanatory
+documentation was added to individual tool interfaces.
+
 ## 2026-10-09 stabilization fix pass
 
 Scope: the seven quarantined pages recorded as unresolved `findings` in the

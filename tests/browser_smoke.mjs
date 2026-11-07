@@ -426,9 +426,9 @@ try {
           changedTouches: [new Touch({ identifier: 2, target: board, clientX: x, clientY: y })],
         }),
       );
-    fire("touchstart", 300, 300);
-    fire("touchmove", 200, 300);
-    fire("touchend", 200, 300);
+    fire("touchstart", 100, 300);
+    fire("touchmove", 300, 300);
+    fire("touchend", 300, 300);
   });
   assert.notEqual(await tileState(), beforeTaps, "a 2048 swipe did not move tiles");
   await puzzle.close();

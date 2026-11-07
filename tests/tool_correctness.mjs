@@ -84,18 +84,17 @@ try {
     await page.setViewportSize({width:1280,height:900});await page.emulateMedia({colorScheme:'dark'});
     await page.screenshot({path:`${process.env.SCREENSHOT_DIR}/loan-desktop-dark.png`,fullPage:true});
   }
-  await open('compound-interest-calculator');
-  await fill('#principal',1000);await fill('#monthly',100);await fill('#rate',0);await fill('#years',2);
+  await open('compound-interest');
+  await fill('#principal',1000);await fill('#pmt',100);await fill('#rate',0);await fill('#years',2);
   for(const frequency of ['1','2','4','12','365']){
-    await page.locator('#freq').selectOption(frequency);assert.match(await text('#results'),/\$3,400/);assert.doesNotMatch(await text('#results'),/NaN|Infinity/);
+    await page.locator('#freq').selectOption(frequency);
+    const expected=1000+100*Number(frequency)*2;
+    const shown=Number((await page.locator('#summary .stat-value').first().innerText()).replace(/[$,]/g,''));
+    assert.equal(shown,expected);assert.doesNotMatch(await text('#summary'),/NaN|Infinity/);
   }
-  await fill('#monthly',0);await fill('#years',2);await fill('#rate',10);await page.locator('#freq').selectOption('1');
-  assert.match(await text('#results'),/\$1,210/);
-  await fill('#monthly',100);await page.locator('#freq').selectOption('12');
-  const expected=1000*(1+0.1/12)**24+100*((1+0.1/12)**24-1)/(0.1/12);
-  const shown=Number((await page.locator('#results .big').first().innerText()).replace(/[$,]/g,''));
-  assert.ok(Math.abs(shown-expected)<0.01);
-  await fill('#principal','');assert.match(await text('#results'),/Enter non-negative/);
+  await fill('#pmt',0);await fill('#years',2);await fill('#rate',10);await page.locator('#freq').selectOption('1');
+  assert.match(await text('#summary'),/\$1,210/);
+  await fill('#principal','');assert.match(await text('#err'),/Enter finite non-negative/);assert.equal(await text('#summary'),'');
   await open('compound-interest');await fill('#years',1.5);assert.match(await text('#err'),/whole years/);
   assert.equal(await text('#summary'),'');
 
@@ -172,24 +171,78 @@ try {
   }
   assert.equal(foods,22);assert.match(await page.locator('main').innerText(),/Smell and appearance cannot establish safety/);
   await open('bip39-mnemonic');
-  await page.waitForFunction(()=>document.getElementById('mnemonic').textContent.trim().split(/\s+/).length===12);
+  await page.locator('#mnemonic').filter({hasText:/^\S+(?:\s+\S+){11}$/}).waitFor();
   const generatedMnemonic=await text('#mnemonic');
+  await page.locator('#seed').filter({hasText:/^[0-9a-f]{128}$/}).waitFor();
+  const preRegenerationMnemonic=generatedMnemonic;
+  await page.evaluate(()=>{
+    const subtle=crypto.subtle;
+    const digest=subtle.digest.bind(subtle);
+    const deriveBits=subtle.deriveBits.bind(subtle);
+    let releaseDigest;
+    let holdDerivation=false;
+    let derivationReleased=false;
+    let releaseDerivation;
+    Object.defineProperty(subtle,'digest',{configurable:true,value:(algorithm,data)=>new Promise((resolve,reject)=>{
+      releaseDigest=()=>digest(algorithm,data).then(resolve,reject);
+    })});
+    Object.defineProperty(subtle,'deriveBits',{configurable:true,value:(...args)=>{
+      if(!holdDerivation||derivationReleased)return deriveBits(...args);
+      return new Promise((resolve,reject)=>{releaseDerivation=()=>deriveBits(...args).then(resolve,reject);});
+    }});
+    window.__holdBip39Derivation=()=>{holdDerivation=true;};
+    window.__releaseBip39Digest=()=>releaseDigest();
+    window.__releaseBip39Derivation=()=>{derivationReleased=true;if(releaseDerivation)releaseDerivation();};
+    window.__restoreBip39Crypto=()=>{delete subtle.digest;delete subtle.deriveBits;};
+  });
+  await page.locator('#regen').click();
+  await fill('#passphrase','race-regeneration-passphrase');
+  await page.locator('#seed').filter({hasText:/^[0-9a-f]{128}$/}).waitFor();
+  const staleSeed=await text('#seed');
+  await page.evaluate(()=>{window.__holdBip39Derivation();window.__releaseBip39Digest();});
+  await page.locator('#mnemonic').filter({hasNotText:preRegenerationMnemonic}).waitFor();
+  assert.notEqual(await text('#mnemonic'),preRegenerationMnemonic);
+  assert.equal(await text('#seed'),'—',`new mnemonic rendered with stale previous-mnemonic seed ${staleSeed}`);
+  await page.evaluate(()=>{window.__releaseBip39Derivation();window.__restoreBip39Crypto();});
+  await page.locator('#seed').filter({hasText:/^[0-9a-f]{128}$/}).waitFor();
   await page.locator('#mode button[data-m="validate"]').click();
   await fill('#mnemonicInput',generatedMnemonic);await page.locator('#validate').click();
-  await page.waitForFunction(()=>/Valid|Invalid|checksum/.test(document.getElementById('valResult').textContent));
+  await page.locator('#valSeed span.mono').filter({hasText:/^[0-9a-f]{128}$/}).waitFor({state:'visible'});
   assert.match(await text('#valResult'),/✓ Valid — 12 words, 128 bits/);
   await fill('#mnemonicInput','abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about');
+  assert.equal(await page.locator('#valSeed').isVisible(),false,'edited mnemonic still shows the previous seed');
   await page.locator('#validate').click();
-  await page.waitForFunction(()=>document.getElementById('valResult').textContent.includes('✓ Valid'));
+  await page.locator('#valSeed span.mono', {hasText:'5eb00bbddcf069084889a8ab9155568165f5c453ccb85e70811aaed6f6da5fc19a5ac40b389cd370d086206dec8aa6c43daea6690f20ad3d8d48b2d2ce9e38e4'}).waitFor({state:'visible'});
   assert.equal(await text('#valSeed span.mono'),'5eb00bbddcf069084889a8ab9155568165f5c453ccb85e70811aaed6f6da5fc19a5ac40b389cd370d086206dec8aa6c43daea6690f20ad3d8d48b2d2ce9e38e4');
-  await fill('#passphraseInput','TREZOR');await page.locator('#validate').click();
-  await page.waitForFunction(()=>document.getElementById('valSeed').textContent.includes('c55257c360c07c72'));
+  await fill('#passphraseInput','TREZOR');
+  assert.equal(await page.locator('#valSeed').isVisible(),false,'edited passphrase still shows the previous seed');
+  await page.locator('#validate').click();
+  await page.locator('#valSeed span.mono', {hasText:'c55257c360c07c72029aebc1b53c05ed0362ada38ead3e3e9efa3708e53495531f09a6987599d18264c1e1c92f2cf141630c7a3c4ab7c81b2f001698e7463b04'}).waitFor({state:'visible'});
   assert.equal(await text('#valSeed span.mono'),'c55257c360c07c72029aebc1b53c05ed0362ada38ead3e3e9efa3708e53495531f09a6987599d18264c1e1c92f2cf141630c7a3c4ab7c81b2f001698e7463b04');
   await fill('#passphraseInput','');
   await fill('#mnemonicInput','abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon');
+  assert.equal(await page.locator('#valSeed').isVisible(),false,'invalid mnemonic still shows the previous seed');
   await page.locator('#validate').click();
-  await page.waitForFunction(()=>document.getElementById('valResult').textContent.includes('Invalid checksum'));
+  await page.locator('#valResult', {hasText:'Invalid checksum'}).waitFor();
   assert.match(await text('#valResult'),/Invalid checksum/);
+  assert.equal(await page.locator('#valSeed').isVisible(),false);
+  await page.locator('#mode button[data-m="generate"]').click();
+  await page.locator('#seed').filter({hasText:/^[0-9a-f]{128}$/}).waitFor();
+  await page.evaluate(()=>{
+    const subtle=crypto.subtle;
+    const deriveBits=subtle.deriveBits.bind(subtle);
+    let released=false;
+    let release;
+    Object.defineProperty(subtle,'deriveBits',{configurable:true,value:(...args)=>{
+      if(released)return deriveBits(...args);
+      return new Promise((resolve,reject)=>{release=()=>deriveBits(...args).then(resolve,reject);});
+    }});
+    window.__releaseChangedPassphraseDerivation=()=>{released=true;if(release)release();delete subtle.deriveBits;};
+  });
+  await fill('#passphrase','changed-generation-passphrase');
+  assert.equal(await text('#seed'),'—','edited generator passphrase still shows the previous seed');
+  await page.evaluate(()=>window.__releaseChangedPassphraseDerivation());
+  await page.locator('#seed').filter({hasText:/^[0-9a-f]{128}$/}).waitFor();
 
   await open('corbel-sizing-calculator');
   await fill('#in-load',15);await fill('#in-proj',150);await fill('#in-width',300);await fill('#in-fv',2);
