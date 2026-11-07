@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>CPU Affinity Mask Calculator — Virtual Tools</title>
+<meta name="description" content="Convert a hexadecimal CPU affinity mask to a CPU list and back, with ready-to-copy taskset, Docker --cpuset-cpus, systemd CPUAffinity and cgroup cpuset.cpus commands for up to 1024 logical CPUs.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,170px),1fr));gap:12px;margin:10px 0}
+label.f{font-size:13px;opacity:.85;display:block;margin-bottom:4px}
+.field{background:var(--bg,#14181f);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px}
+.field:focus-within{border-color:var(--accent,#6ea8fe);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#6ea8fe) 18%,transparent)}
+.field input{box-sizing:border-box;min-width:0;width:100%;background:transparent;color:var(--text,#e6e6e6);border:none;font-family:ui-monospace,monospace;font-size:17px;padding:2px 0;outline:none}
+.field .unit{font-size:11px;color:var(--text-dim,#9aa3b2);margin-top:4px}
+.picker{border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:10px 12px;margin:14px 0}
+.picker legend{padding:0 6px;font-size:13px;color:var(--text-dim,#9aa3b2)}
+.cpu-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(46px,1fr));gap:6px;margin:8px 0 4px}
+.cpu-grid button{min-height:44px;min-width:44px;font:inherit;font-family:ui-monospace,monospace;font-weight:700;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg,#14181f);color:var(--text,#e6e6e6);cursor:pointer}
+.cpu-grid button[aria-pressed="true"]{background:var(--accent,#6ea8fe);border-color:var(--accent,#6ea8fe);color:#0b1017}
+.cpu-grid button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:12px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 20px;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);color:var(--text,#e6e6e6);cursor:pointer;min-height:44px}
+.actions button.primary{background:var(--accent,#6ea8fe);border-color:var(--accent,#6ea8fe);color:#0b1017;padding:10px 24px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:14px 0}
+.out .big{font-size:clamp(1.7rem,7vw,2.4rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:4px 0 2px;overflow-wrap:anywhere;color:var(--accent,#6ea8fe)}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45;overflow-wrap:anywhere}
+.out .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:14px}
+.out .row:last-child{border-bottom:none}
+.out .row .k{color:var(--text-dim,#9aa3b2)}
+.out .row .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right;overflow-wrap:anywhere}
+.cmds{margin:14px 0 0}
+.cmds h2{font-size:1rem;margin:0 0 8px}
+.cmds .line{display:block;font-family:ui-monospace,monospace;font-size:13px;line-height:1.5;background:var(--bg,#14181f);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:9px 11px;margin:0 0 8px;overflow-wrap:anywhere}
+.cmds .line .tag{display:block;font-family:inherit;font-size:11px;color:var(--text-dim,#9aa3b2);margin-bottom:3px}
+.err{color:var(--bad,#f87171);font-size:13px;margin:6px 0;min-height:1.2em}
+.warn{font-size:13px;margin:8px 0;padding:8px 10px;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);line-height:1.45}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;margin:12px 0 0;line-height:1.5}
+.status{font-size:13px;color:var(--text-dim,#9aa3b2);margin:6px 0 0;min-height:1.2em}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>CPU Affinity Mask Calculator</h1>
+<p>Turn a hexadecimal CPU mask into a CPU list, or toggle CPUs to build the mask and copy the matching commands.</p>
+</div>
+<div class="panel">
+<form id="aff-form" novalidate>
+<div class="grid2">
+<div class="field">
+<label class="f" for="cpus">Logical CPUs</label>
+<input type="text" id="cpus" inputmode="numeric" autocomplete="off" spellcheck="false" value="8" aria-describedby="cpus-help">
+<div class="unit" id="cpus-help">1–1024, as the kernel numbers them (nproc)</div>
+</div>
+<div class="field">
+<label class="f" for="mask">Hex mask</label>
+<input type="text" id="mask" autocomplete="off" spellcheck="false" value="0xFF" aria-describedby="mask-help">
+<div class="unit" id="mask-help">Optional 0x prefix; bit 0 is CPU 0</div>
+</div>
+</div>
+<div class="field">
+<label class="f" for="list">CPU list or ranges</label>
+<input type="text" id="list" autocomplete="off" spellcheck="false" value="0-7" aria-describedby="list-help">
+<div class="unit" id="list-help">Comma-separated, e.g. 0-3,6,7</div>
+</div>
+<fieldset class="picker">
+<legend>Toggle CPUs</legend>
+<div id="grid" class="cpu-grid" role="group" aria-label="Logical CPU toggles"></div>
+<p class="unit" id="grid-note" hidden></p>
+<div class="actions">
+<button type="button" id="all">All CPUs</button>
+<button type="button" id="none">Clear</button>
+<button type="submit" class="primary">Convert</button>
+</div>
+</fieldset>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"></div>
+<p class="warn" id="warn" hidden></p>
+<div class="cmds" id="cmds" hidden>
+<h2>Copy-ready commands</h2>
+<span class="line"><span class="tag">taskset, CPU list form</span><code id="cmd-list"></code></span>
+<span class="line"><span class="tag">taskset, hex mask form</span><code id="cmd-mask"></code></span>
+<span class="line"><span class="tag">Docker or Compose CPU set</span><code id="cmd-docker"></code></span>
+<span class="line"><span class="tag">systemd service unit</span><code id="cmd-systemd"></code></span>
+<span class="line"><span class="tag">cgroup v2 cpuset controller</span><code id="cmd-cgroup"></code></span>
+<div class="actions"><button type="button" id="copy">Copy commands</button></div>
+<p class="status" id="status" role="status" aria-live="polite"></p>
+</div>
+<p class="note">A mask is a bitmap of logical CPUs: bit n set means CPU n is allowed, and <code>taskset -p</code> prints the mask as a bare hexadecimal number with the lowest bit last. Leading zeros do not change a mask. This page models up to 1024 logical CPUs, the kernel's <code>CPU_SETSIZE</code>, with exact big-integer arithmetic, so 64-bit and larger masks are not truncated. Hyperthread siblings count as separate logical CPUs, so allowing CPU 0 and CPU 1 may pin a process to one physical core. A parent cpuset, the cgroup v2 <code>cpuset.cpus</code> file (comma-separated, ranges allowed, as generated here) or <code>cpuset.effective_cpus</code> can still reduce the set, and <code>taskset</code> rejects an empty mask. CPU numbering and the accepted syntax also depend on the kernel version and the tool reading it, so check the command against your own system. Commands are shown as text only; nothing is executed and nothing leaves your browser.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* cpu-affinity-core:start */
+var CpuAffinityCore = (function(){
+  "use strict";
+  var MAX_CPUS = 1024;
+  var HEX_RE = /^(?:0x)?([0-9a-f]+)$/i;
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function parseCount(value){
+    var raw = String(value == null ? "" : value).trim();
+    if (!/^\d+$/.test(raw)) fail("Logical CPU count must be a whole number.");
+    if (raw.length > 4) fail("Logical CPU count must be 1024 or fewer.");
+    var count = Number(raw);
+    if (count < 1) fail("Logical CPU count must be at least 1.");
+    if (count > MAX_CPUS) fail("Logical CPU count must be 1024 or fewer.");
+    return count;
+  }
+
+  function fullMask(count){
+    return (BigInt(1) << BigInt(count)) - BigInt(1);
+  }
+
+  function maskFromIndices(indices){
+    var mask = BigInt(0);
+    indices.forEach(function(index){
+      mask = mask | (BigInt(1) << BigInt(index));
+    });
+    return mask;
+  }
+
+  function indicesFromMask(mask){
+    var bits = mask.toString(2);
+    var indices = [];
+    for (var offset = 0; offset < bits.length; offset++){
+      if (bits.charAt(bits.length - 1 - offset) === "1") indices.push(offset);
+    }
+    return indices;
+  }
+
+  function parseMask(text, count){
+    var raw = String(text == null ? "" : text).trim().replace(/[\s_]/g, "");
+    if (!raw) return { indices: [], mask: BigInt(0) };
+    var match = HEX_RE.exec(raw);
+    if (!match) fail("A hex mask may contain only hexadecimal digits and an optional 0x prefix.");
+    var mask = BigInt("0x" + match[1]);
+    if (mask > fullMask(count)){
+      var highest = mask.toString(2).length - 1;
+      fail("The mask sets CPU " + highest + ", but only " + count + " CPUs are configured. Raise the CPU count or clear those bits.");
+    }
+    return { indices: indicesFromMask(mask), mask: mask };
+  }
+
+  function parseList(text, count){
+    var raw = String(text == null ? "" : text).trim();
+    if (!raw) return { indices: [], mask: BigInt(0) };
+    var parts = raw.split(/[,\s]+/).filter(Boolean);
+    var seen = Object.create(null);
+    var indices = [];
+    parts.forEach(function(part){
+      var match = /^(\d+)(?:\s*-\s*(\d+))?$/.exec(part);
+      if (!match) fail('"' + part + '" is not a CPU index or a range like 3-7.');
+      var low = Number(match[1]);
+      var high = match[2] === undefined ? low : Number(match[2]);
+      if (!Number.isSafeInteger(low) || low >= count){
+        fail("The list includes CPU " + (Number.isSafeInteger(low) ? low : match[1]) + ", but only " + count + " CPUs are configured.");
+      }
+      if (!Number.isSafeInteger(high) || high >= count){
+        fail("The list includes CPU " + (Number.isSafeInteger(high) ? high : match[2]) + ", but only " + count + " CPUs are configured.");
+      }
+      if (high < low) fail("The range " + part + " is descending; write it low to high.");
+      for (var index = low; index <= high; index++){
+        if (seen[index]) continue;
+        seen[index] = true;
+        indices.push(index);
+      }
+    });
+    indices.sort(function(a, b){ return a - b; });
+    return { indices: indices, mask: maskFromIndices(indices) };
+  }
+
+  function formatRanges(indices, separator){
+    if (!indices.length) return "";
+    var parts = [];
+    var start = indices[0];
+    var previous = indices[0];
+    for (var position = 1; position <= indices.length; position++){
+      var value = indices[position];
+      if (value === previous + 1){
+        previous = value;
+        continue;
+      }
+      parts.push(start === previous ? String(start) : start + "-" + previous);
+      start = previous = value;
+    }
+    return parts.join(separator);
+  }
+
+  function formatHex(mask){
+    return "0x" + mask.toString(16).toUpperCase();
+  }
+
+  function formatBinary(mask){
+    if (mask === BigInt(0)) return "0";
+    var bits = mask.toString(2);
+    while (bits.length % 4 !== 0) bits = "0" + bits;
+    var groups = [];
+    for (var offset = 0; offset < bits.length; offset += 4) groups.push(bits.slice(offset, offset + 4));
+    return groups.join(" ");
+  }
+
+  function convert(options){
+    var count = parseCount(options.cpus);
+    var parsed = options.source === "list" ? parseList(options.value, count) : parseMask(options.value, count);
+    var indices = parsed.indices;
+    var list = formatRanges(indices, ",");
+    var spaced = formatRanges(indices, " ");
+    var warnings = [];
+    if (!indices.length) warnings.push("No CPUs are selected. An empty mask is rejected by taskset and removes all CPUs from a cpuset.");
+    return {
+      cpuCount: count,
+      count: indices.length,
+      indices: indices,
+      list: list,
+      spaced: spaced,
+      hex: formatHex(parsed.mask),
+      bare: parsed.mask.toString(16),
+      decimal: parsed.mask.toString(10),
+      binary: formatBinary(parsed.mask),
+      tasksetList: "taskset -c " + list + " ./app",
+      tasksetMask: "taskset " + parsed.mask.toString(16) + " ./app",
+      docker: "--cpuset-cpus=" + list,
+      systemd: "CPUAffinity=" + spaced,
+      cgroup: "cpuset.cpus = " + list,
+      warnings: warnings
+    };
+  }
+
+  return {
+    MAX_CPUS: MAX_CPUS,
+    parseCount: parseCount,
+    parseMask: parseMask,
+    parseList: parseList,
+    maskFromIndices: maskFromIndices,
+    indicesFromMask: indicesFromMask,
+    formatRanges: formatRanges,
+    convert: convert
+  };
+})();
+/* cpu-affinity-core:end */
+(function(){
+"use strict";
+
+var MAX_CHIPS = 128;
+var els = {
+  cpus: document.getElementById("cpus"),
+  mask: document.getElementById("mask"),
+  list: document.getElementById("list"),
+  grid: document.getElementById("grid"),
+  gridNote: document.getElementById("grid-note"),
+  err: document.getElementById("err"),
+  out: document.getElementById("out"),
+  warn: document.getElementById("warn"),
+  cmds: document.getElementById("cmds"),
+  cmdList: document.getElementById("cmd-list"),
+  cmdMask: document.getElementById("cmd-mask"),
+  cmdDocker: document.getElementById("cmd-docker"),
+  cmdSystemd: document.getElementById("cmd-systemd"),
+  cmdCgroup: document.getElementById("cmd-cgroup"),
+  copy: document.getElementById("copy"),
+  status: document.getElementById("status"),
+  form: document.getElementById("aff-form")
+};
+
+var state = { indices: [], count: 8 };
+var timer = null;
+var pressed = Object.create(null);
+
+function clear(node){
+  while (node.firstChild) node.removeChild(node.firstChild);
+}
+
+function addRow(parent, key, value){
+  var row = document.createElement("div");
+  row.className = "row";
+  var name = document.createElement("span");
+  name.className = "k";
+  name.textContent = key;
+  var val = document.createElement("span");
+  val.className = "v";
+  val.textContent = value;
+  row.appendChild(name);
+  row.appendChild(val);
+  parent.appendChild(row);
+}
+
+function renderGrid(){
+  var shown = Math.min(state.count, MAX_CHIPS);
+  clear(els.grid);
+  for (var index = 0; index < shown; index += 1){
+    var button = document.createElement("button");
+    button.type = "button";
+    button.dataset.cpu = String(index);
+    button.textContent = String(index);
+    button.setAttribute("aria-pressed", state.indices.indexOf(index) === -1 ? "false" : "true");
+    button.setAttribute("aria-label", "CPU " + index);
+    els.grid.appendChild(button);
+  }
+  els.gridNote.hidden = state.count <= MAX_CHIPS;
+  els.gridNote.textContent = state.count > MAX_CHIPS ? "Showing CPUs 0–" + (MAX_CHIPS - 1) + " of " + state.count + "; use the list or mask field for higher indices." : "";
+}
+
+function syncPressed(){
+  var buttons = els.grid.querySelectorAll("button[data-cpu]");
+  for (var position = 0; position < buttons.length; position += 1){
+    var index = Number(buttons[position].dataset.cpu);
+    buttons[position].setAttribute("aria-pressed", state.indices.indexOf(index) === -1 ? "false" : "true");
+  }
+}
+
+function showError(message){
+  els.err.textContent = message;
+  els.out.textContent = "";
+  var placeholder = document.createElement("span");
+  placeholder.className = "sub";
+  placeholder.textContent = "Fix the highlighted input to see the mask.";
+  els.out.appendChild(placeholder);
+  els.warn.hidden = true;
+  els.cmds.hidden = true;
+  els.copy.disabled = true;
+}
+
+function render(result){
+  els.err.textContent = "";
+  clear(els.out);
+  var big = document.createElement("div");
+  big.className = "big";
+  big.textContent = result.hex;
+  var sub = document.createElement("div");
+  sub.className = "sub";
+  sub.textContent = result.count + " of " + result.cpuCount + " logical CPUs selected";
+  els.out.appendChild(big);
+  els.out.appendChild(sub);
+  addRow(els.out, "CPU list", result.list || "none");
+  addRow(els.out, "Bare hex (taskset)", result.bare);
+  addRow(els.out, "Decimal", result.decimal);
+  addRow(els.out, "Binary", result.binary);
+  addRow(els.out, "CPU count", String(result.count));
+
+  if (result.warnings.length){
+    els.warn.hidden = false;
+    els.warn.textContent = result.warnings.join(" ");
+  } else {
+    els.warn.hidden = true;
+    els.warn.textContent = "";
+  }
+
+  var hasCpus = result.count > 0;
+  els.cmds.hidden = !hasCpus;
+  els.copy.disabled = !hasCpus;
+  els.status.textContent = "";
+  if (!hasCpus) return;
+  els.cmdList.textContent = result.tasksetList;
+  els.cmdMask.textContent = result.tasksetMask;
+  els.cmdDocker.textContent = "docker run " + result.docker + " <image>";
+  els.cmdSystemd.textContent = result.systemd;
+  els.cmdCgroup.textContent = result.cgroup;
+}
+
+function applyIndices(indices, options){
+  state.indices = indices.slice().sort(function(a, b){ return a - b; });
+  var mask = CpuAffinityCore.maskFromIndices(state.indices);
+  var hex = "0x" + mask.toString(16).toUpperCase();
+  var list = CpuAffinityCore.formatRanges(state.indices, ",");
+  if (!options || options.writeMask !== false) els.mask.value = hex;
+  if (!options || options.writeList !== false) els.list.value = list;
+  syncPressed();
+  render(CpuAffinityCore.convert({ cpus: String(state.count), source: "mask", value: hex }));
+}
+
+function readCount(){
+  var count = CpuAffinityCore.parseCount(els.cpus.value);
+  return count;
+}
+
+function runMask(){
+  try {
+    state.count = readCount();
+    var parsed = CpuAffinityCore.parseMask(els.mask.value, state.count);
+    els.list.value = CpuAffinityCore.formatRanges(parsed.indices, ",");
+    state.indices = parsed.indices;
+    renderGrid();
+    render(CpuAffinityCore.convert({ cpus: String(state.count), source: "mask", value: els.mask.value }));
+  } catch (error){
+    showError(error.message);
+  }
+}
+
+function runList(){
+  try {
+    state.count = readCount();
+    var parsed = CpuAffinityCore.parseList(els.list.value, state.count);
+    els.mask.value = "0x" + parsed.mask.toString(16).toUpperCase();
+    state.indices = parsed.indices;
+    renderGrid();
+    render(CpuAffinityCore.convert({ cpus: String(state.count), source: "list", value: els.list.value }));
+  } catch (error){
+    showError(error.message);
+  }
+}
+
+function debounced(handler){
+  return function(){
+    if (timer) window.clearTimeout(timer);
+    timer = window.setTimeout(handler, 260);
+  };
+}
+
+els.mask.addEventListener("input", debounced(runMask));
+els.list.addEventListener("input", debounced(runList));
+els.cpus.addEventListener("input", debounced(runMask));
+els.mask.addEventListener("change", runMask);
+els.list.addEventListener("change", runList);
+els.cpus.addEventListener("change", runMask);
+
+els.grid.addEventListener("click", function(event){
+  var button = event.target.closest("button[data-cpu]");
+  if (!button) return;
+  var index = Number(button.dataset.cpu);
+  var indices = state.indices.filter(function(value){ return value !== index; });
+  if (indices.length === state.indices.length) indices.push(index);
+  try {
+    state.count = readCount();
+    applyIndices(indices);
+  } catch (error){
+    showError(error.message);
+  }
+});
+
+document.getElementById("all").addEventListener("click", function(){
+  try {
+    state.count = readCount();
+    var indices = [];
+    for (var index = 0; index < state.count; index += 1) indices.push(index);
+    applyIndices(indices);
+  } catch (error){
+    showError(error.message);
+  }
+});
+
+document.getElementById("none").addEventListener("click", function(){
+  try {
+    state.count = readCount();
+    applyIndices([]);
+  } catch (error){
+    showError(error.message);
+  }
+});
+
+els.form.addEventListener("submit", function(event){
+  event.preventDefault();
+  if (timer) window.clearTimeout(timer);
+  runMask();
+  if (els.err.textContent) els.mask.focus();
+});
+
+els.copy.addEventListener("click", function(){
+  var lines = [
+    els.cmdList.textContent,
+    els.cmdMask.textContent,
+    els.cmdDocker.textContent,
+    els.cmdSystemd.textContent,
+    els.cmdCgroup.textContent
+  ];
+  var text = lines.join("\n");
+  function done(ok){
+    els.status.textContent = ok ? "Commands copied." : "Copy failed; select a command and copy it manually.";
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(function(){ done(true); }, function(){ done(false); });
+    return;
+  }
+  var area = document.createElement("textarea");
+  area.value = text;
+  area.setAttribute("readonly", "");
+  area.style.position = "fixed";
+  area.style.opacity = "0";
+  document.body.appendChild(area);
+  area.select();
+  var ok = false;
+  try {
+    ok = document.execCommand("copy");
+  } catch (error){
+    ok = false;
+  }
+  document.body.removeChild(area);
+  done(ok);
+});
+
+runMask();
+})();
+</script>
+</body>
+</html>
