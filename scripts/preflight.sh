@@ -95,6 +95,7 @@ node tests/leather_stitch_spacing_calculator.test.cjs
 node tests/string_harmonic_node_calculator.test.cjs
 node tests/satellite_look_angle_calculator.test.cjs
 node tests/bike_spoke_length_calculator.test.cjs
+node tests/anamorphic_desqueeze_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
