@@ -79,6 +79,7 @@ node tests/utm_zone_calculator.test.cjs
 node tests/systemd_service_builder.test.cjs
 node tests/origami_crease_pattern_generator.test.cjs
 node tests/chord_quality_ear_trainer.test.cjs
+node tests/scale_ear_trainer.test.cjs
 node tests/eye_diagram_explorer.test.cjs
 node tests/golf_stableford_scorecard.test.cjs
 node tests/video_transition_timeline_planner.test.cjs
