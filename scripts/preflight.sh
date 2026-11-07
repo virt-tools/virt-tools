@@ -48,6 +48,7 @@ node tests/gop_length_calculator.test.cjs
 node tests/weaving_warp_calculator.test.cjs
 node tests/string_tension_calculator.test.cjs
 node tests/erlang_b_trunking_calculator.test.cjs
+node tests/baseball_slash_line_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
