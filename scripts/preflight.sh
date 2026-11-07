@@ -54,6 +54,7 @@ node tests/macrame_cord_calculator.test.cjs
 node tests/song_form_duration_calculator.test.cjs
 node tests/coaxial_cable_impedance_calculator.test.cjs
 node tests/badminton_scorekeeper.test.cjs
+node tests/video_ycbcr_converter.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
