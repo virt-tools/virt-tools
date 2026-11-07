@@ -84,6 +84,7 @@ node tests/golf_stableford_scorecard.test.cjs
 node tests/video_transition_timeline_planner.test.cjs
 node tests/map_tile_coordinate_calculator.test.cjs
 node tests/process_scheduling_visualizer.test.cjs
+node tests/string_art_pattern_generator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
