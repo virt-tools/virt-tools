@@ -81,6 +81,7 @@ node tests/origami_crease_pattern_generator.test.cjs
 node tests/chord_quality_ear_trainer.test.cjs
 node tests/eye_diagram_explorer.test.cjs
 node tests/golf_stableford_scorecard.test.cjs
+node tests/video_transition_timeline_planner.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
