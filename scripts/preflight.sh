@@ -66,6 +66,7 @@ node tests/constellation_diagram_explorer.test.cjs
 node tests/basketball_shot_chart.test.cjs
 node tests/video_loop_planner.test.cjs
 node tests/friendship_bracelet_pattern.test.cjs
+node tests/sight_reading_exercise.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
