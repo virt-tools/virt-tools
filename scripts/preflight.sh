@@ -52,6 +52,7 @@ node tests/baseball_slash_line_calculator.test.cjs
 node tests/contact_sheet_planner.test.cjs
 node tests/macrame_cord_calculator.test.cjs
 node tests/song_form_duration_calculator.test.cjs
+node tests/coaxial_cable_impedance_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
