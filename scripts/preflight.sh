@@ -93,6 +93,7 @@ node tests/point_in_polygon_tester.test.cjs
 node tests/cpu_affinity_mask_calculator.test.cjs
 node tests/leather_stitch_spacing_calculator.test.cjs
 node tests/string_harmonic_node_calculator.test.cjs
+node tests/satellite_look_angle_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
