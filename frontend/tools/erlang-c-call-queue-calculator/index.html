@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Erlang C Call Queue Calculator — Virtual Tools</title>
+<meta name="description" content="Calculate Erlang C queue probability, average waiting time and service level, and find the agent count needed to answer calls within a target time.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,165px),1fr));gap:12px;margin:10px 0}
+label.f{font-size:13px;opacity:.85;display:block;margin-bottom:4px}
+.field{background:var(--bg,#14181f);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px;min-width:0}
+.field:focus-within{border-color:var(--accent,#6ea8fe);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#6ea8fe) 18%,transparent)}
+.field input{box-sizing:border-box;width:100%;min-width:0;background:transparent;color:var(--text,#e6e6e6);border:none;font-size:18px;font-family:ui-monospace,monospace;padding:2px 0;outline:none}
+.field input:focus{box-shadow:none}
+.field .unit{font-size:11px;color:var(--text-dim,#9aa3b2);margin-top:4px}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:14px 0}
+.out .big{font-size:clamp(1.8rem,7.5vw,2.5rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:4px 0 6px;overflow-wrap:anywhere}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45}
+.out .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:14px}
+.out .row:last-child{border-bottom:none}
+.out .row .k{color:var(--text-dim,#9aa3b2)}
+.out .row .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right;overflow-wrap:anywhere}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.err{color:var(--bad,#f87171);font-size:13px;margin:6px 0;min-height:1.2em}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;margin:10px 0 0;line-height:1.5}
+.staffing{margin:14px 0}
+.staffing h2{font-size:1.05rem;margin:0 0 8px}
+.staff-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,145px),1fr));gap:8px}
+.staff-card{border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px;min-width:0}
+.staff-card.required{border-color:var(--accent,#6ea8fe)}
+.staff-card h3{font-size:15px;margin:0 0 6px;color:var(--text,#e6e6e6)}
+.staff-card p{margin:3px 0;font-size:12.5px;color:var(--text-dim,#9aa3b2);overflow-wrap:anywhere}
+.staff-card strong{color:var(--text,#e6e6e6);font-family:ui-monospace,monospace}
+.staff-card .met{color:var(--accent,#6ea8fe);font-weight:700}
+@media (max-width:420px){.out{padding:13px}.out .row{align-items:flex-start;font-size:13px}}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>Erlang C Call Queue Calculator</h1>
+<p>Estimate how often calls wait, how long they wait and how many agents a service-level target needs.</p>
+</div>
+<div class="panel">
+<form id="queue-form" novalidate>
+<div class="grid2">
+<div class="field"><label class="f" for="in-calls">Calls per hour</label><input type="text" id="in-calls" inputmode="decimal" autocomplete="off" spellcheck="false" value="240"><div class="unit">busy-hour average, 0.01 to 36,000</div></div>
+<div class="field"><label class="f" for="in-handle">Average handle time</label><input type="text" id="in-handle" inputmode="decimal" autocomplete="off" spellcheck="false" value="180"><div class="unit">seconds, including after-call work</div></div>
+<div class="field"><label class="f" for="in-agents">Agents available</label><input type="text" id="in-agents" inputmode="numeric" autocomplete="off" spellcheck="false" value="15"><div class="unit">simultaneous agents, 1 to 1,500</div></div>
+<div class="field"><label class="f" for="in-answer">Answer within</label><input type="text" id="in-answer" inputmode="decimal" autocomplete="off" spellcheck="false" value="20"><div class="unit">seconds, 0 to 3,600</div></div>
+<div class="field"><label class="f" for="in-target">Target service level</label><input type="text" id="in-target" inputmode="decimal" autocomplete="off" spellcheck="false" value="80"><div class="unit">percent, 0.01 to 99.9</div></div>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions"><button type="submit">Calculate queue</button></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"></div>
+<section class="staffing" id="staffing" hidden>
+<h2 id="staffing-title">Agent counts around the target</h2>
+<div class="staff-grid" id="staff-grid"></div>
+</section>
+<p class="note">Erlang C assumes random call arrivals, exponentially distributed handle times, identical agents and an unlimited queue with no abandonment or retries. Results show scheduled concurrent agents before shrinkage, not roster headcount; all calculations stay in your browser.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* erlang-c-core:start */
+var ErlangCCore = (function(){
+  "use strict";
+  var MAX_AGENTS = 1500;
+  var MAX_TRAFFIC = 1000;
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function grouped(value){
+    return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  }
+
+  function parseDecimal(value, label, min, max, unit){
+    var raw = String(value == null ? "" : value).trim();
+    var range = grouped(min) + " and " + grouped(max) + (unit ? " " + unit : "");
+    if (!raw) fail(label + " is required.");
+    if (!/^-?(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)$/.test(raw)){
+      fail(label + " must be a number between " + range + ".");
+    }
+    var number = Number(raw);
+    if (!isFinite(number)) fail(label + " must be a number between " + range + ".");
+    if (number < min || number > max) fail(label + " must be between " + range + ".");
+    return number;
+  }
+
+  function parseAgents(value){
+    var raw = String(value == null ? "" : value).trim();
+    if (!raw) fail("Agents available is required.");
+    if (!/^[0-9]+$/.test(raw) || Number(raw) < 1 || Number(raw) > MAX_AGENTS){
+      fail("Agents available must be a whole number from 1 to " + grouped(MAX_AGENTS) + ".");
+    }
+    return Number(raw);
+  }
+
+  function erlangBSeries(traffic, count){
+    var blocking = [1];
+    for (var n = 1; n <= count; n++){
+      var previous = blocking[n - 1];
+      blocking[n] = traffic * previous / (n + traffic * previous);
+    }
+    return blocking;
+  }
+
+  function measure(traffic, handleSeconds, answerSeconds, targetPercent, agents, blocking){
+    if (agents <= traffic){
+      return {
+        agents: agents,
+        stable: false,
+        occupancyPercent: traffic / agents * 100,
+        probabilityQueued: null,
+        probabilityQueuedPercent: null,
+        averageWaitSeconds: null,
+        queuedWaitSeconds: null,
+        serviceLevel: null,
+        serviceLevelPercent: null,
+        meetsTarget: false
+      };
+    }
+    var occupancy = traffic / agents;
+    var blocked = blocking[agents];
+    var queued = blocked / (1 - occupancy * (1 - blocked));
+    var queuedWait = handleSeconds / (agents - traffic);
+    var service = 1 - queued * Math.exp(-(agents - traffic) * answerSeconds / handleSeconds);
+    return {
+      agents: agents,
+      stable: true,
+      occupancyPercent: occupancy * 100,
+      probabilityQueued: queued,
+      probabilityQueuedPercent: queued * 100,
+      averageWaitSeconds: queued * queuedWait,
+      queuedWaitSeconds: queuedWait,
+      serviceLevel: service,
+      serviceLevelPercent: service * 100,
+      meetsTarget: service * 100 >= targetPercent
+    };
+  }
+
+  function analyse(options){
+    var opts = options || {};
+    var calls = parseDecimal(opts.callsPerHour == null ? 240 : opts.callsPerHour, "Calls per hour", 0.01, 36000, "");
+    var handle = parseDecimal(opts.handleSeconds == null ? 180 : opts.handleSeconds, "Average handle time", 1, 3600, "seconds");
+    var agents = parseAgents(opts.agents == null ? 15 : opts.agents);
+    var answer = parseDecimal(opts.answerSeconds == null ? 20 : opts.answerSeconds, "Answer time", 0, 3600, "seconds");
+    var target = parseDecimal(opts.targetPercent == null ? 80 : opts.targetPercent, "Target service level", 0.01, 99.9, "percent");
+    var traffic = calls * handle / 3600;
+    if (traffic > MAX_TRAFFIC) fail("Offered load must not exceed 1,000 erlangs; reduce calls per hour or handle time.");
+
+    var blocking = erlangBSeries(traffic, MAX_AGENTS);
+    var current = measure(traffic, handle, answer, target, agents, blocking);
+    var required = null;
+    var firstStable = Math.max(1, Math.floor(traffic) + 1);
+    for (var n = firstStable; n <= MAX_AGENTS; n++){
+      if (measure(traffic, handle, answer, target, n, blocking).meetsTarget){
+        required = n;
+        break;
+      }
+    }
+
+    var staffing = [];
+    if (required !== null){
+      var lowest = Math.max(1, required - 2);
+      var highest = Math.min(MAX_AGENTS, required + 2);
+      for (var m = lowest; m <= highest; m++){
+        staffing.push(measure(traffic, handle, answer, target, m, blocking));
+      }
+    }
+
+    return {
+      callsPerHour: calls,
+      handleSeconds: handle,
+      answerSeconds: answer,
+      targetPercent: target,
+      traffic: traffic,
+      stable: current.stable,
+      agents: current.agents,
+      occupancyPercent: current.occupancyPercent,
+      probabilityQueued: current.probabilityQueued,
+      probabilityQueuedPercent: current.probabilityQueuedPercent,
+      averageWaitSeconds: current.averageWaitSeconds,
+      queuedWaitSeconds: current.queuedWaitSeconds,
+      serviceLevel: current.serviceLevel,
+      serviceLevelPercent: current.serviceLevelPercent,
+      requiredAgents: required,
+      staffing: staffing
+    };
+  }
+
+  return {
+    analyse: analyse,
+    maxAgents: MAX_AGENTS,
+    maxTraffic: MAX_TRAFFIC
+  };
+})();
+/* erlang-c-core:end */
+(function(){
+"use strict";
+
+var els = {
+  calls: document.getElementById("in-calls"),
+  handle: document.getElementById("in-handle"),
+  agents: document.getElementById("in-agents"),
+  answer: document.getElementById("in-answer"),
+  target: document.getElementById("in-target"),
+  err: document.getElementById("err"),
+  out: document.getElementById("out"),
+  staffing: document.getElementById("staffing"),
+  staffingTitle: document.getElementById("staffing-title"),
+  staffGrid: document.getElementById("staff-grid")
+};
+
+function clear(node){
+  while (node.firstChild) node.removeChild(node.firstChild);
+}
+function placeholder(node, message){
+  var span = document.createElement("span");
+  span.style.color = "var(--text-dim,#9aa3b2)";
+  span.textContent = message;
+  node.appendChild(span);
+}
+function grouped(value){
+  return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+function trimZeros(text){
+  return text.replace(/\.?0+$/, "");
+}
+function number(value, digits){
+  if (value >= 1000) return grouped(Math.round(value));
+  return trimZeros(value.toFixed(digits == null ? 2 : digits));
+}
+function percent(value){
+  if (value === null) return "no steady state";
+  if (value >= 1) return number(value, 2) + "%";
+  if (value >= 0.01) return number(value, 3) + "%";
+  return value.toExponential(2) + "%";
+}
+function seconds(value){
+  if (value === null) return "no steady state";
+  if (value === 0) return "0 s";
+  if (value < 0.01) return value.toExponential(2) + " s";
+  if (value < 60) return number(value, 2) + " s";
+  var minutes = Math.floor(value / 60);
+  var remainder = Math.round(value - minutes * 60);
+  if (remainder === 60){ minutes += 1; remainder = 0; }
+  return minutes + " min " + remainder + " s";
+}
+function addRow(parent, key, value){
+  var row = document.createElement("div");
+  row.className = "row";
+  var k = document.createElement("span");
+  k.className = "k";
+  k.textContent = key;
+  var v = document.createElement("span");
+  v.className = "v";
+  v.textContent = value;
+  row.appendChild(k);
+  row.appendChild(v);
+  parent.appendChild(row);
+}
+function targetLabel(result){
+  return trimZeros(Number(result.targetPercent).toFixed(2)) + "% within " + seconds(result.answerSeconds);
+}
+function renderStaffing(result){
+  clear(els.staffGrid);
+  if (!result.staffing.length){
+    els.staffing.hidden = true;
+    return;
+  }
+  els.staffingTitle.textContent = "Agent counts around the " + targetLabel(result) + " target";
+  result.staffing.forEach(function(row){
+    var card = document.createElement("div");
+    card.className = "staff-card" + (row.agents === result.requiredAgents ? " required" : "");
+    var heading = document.createElement("h3");
+    heading.textContent = row.agents + (row.agents === 1 ? " agent" : " agents") +
+      (row.agents === result.requiredAgents ? " — minimum" : "");
+    card.appendChild(heading);
+    var values = row.stable ? [
+      ["Queued", percent(row.probabilityQueuedPercent)],
+      ["Avg wait", seconds(row.averageWaitSeconds)],
+      ["Service", percent(row.serviceLevelPercent)]
+    ] : [["Queue", "unstable"], ["Offered load", number(result.traffic, 2) + " erlangs"]];
+    values.forEach(function(pair){
+      var line = document.createElement("p");
+      line.textContent = pair[0] + ": ";
+      var strong = document.createElement("strong");
+      strong.textContent = pair[1];
+      line.appendChild(strong);
+      card.appendChild(line);
+    });
+    var met = document.createElement("p");
+    met.className = "met";
+    met.textContent = row.meetsTarget ? "Target met" : "Target not met";
+    card.appendChild(met);
+    els.staffGrid.appendChild(card);
+  });
+  els.staffing.hidden = false;
+}
+function render(result){
+  clear(els.out);
+  var big = document.createElement("div");
+  big.className = "big";
+  big.textContent = result.stable ? percent(result.serviceLevelPercent) : "Unstable queue";
+  var sub = document.createElement("div");
+  sub.className = "sub";
+  sub.textContent = result.stable
+    ? "answered within " + seconds(result.answerSeconds) + " — " + number(result.callsPerHour, 2) + " calls/hour, " + result.agents + (result.agents === 1 ? " agent" : " agents")
+    : result.agents + (result.agents === 1 ? " agent cannot" : " agents cannot") + " keep up with " + number(result.traffic, 2) + " erlangs of offered load";
+  els.out.appendChild(big);
+  els.out.appendChild(sub);
+  addRow(els.out, "Offered load", number(result.traffic, 3) + " erlangs");
+  addRow(els.out, "Probability a call queues", percent(result.probabilityQueuedPercent));
+  addRow(els.out, "Average wait across all calls", seconds(result.averageWaitSeconds));
+  addRow(els.out, "Average wait once queued", seconds(result.queuedWaitSeconds));
+  addRow(els.out, "Agent occupancy", number(result.occupancyPercent, 2) + "%");
+  var required = result.requiredAgents === null ? "more than " + grouped(ErlangCCore.maxAgents) : String(result.requiredAgents);
+  if (result.requiredAgents !== null && result.requiredAgents > result.agents){
+    required += " (+" + (result.requiredAgents - result.agents) + ")";
+  } else if (result.requiredAgents !== null){
+    required += " (target met)";
+  }
+  addRow(els.out, "Agents for " + targetLabel(result), required);
+  renderStaffing(result);
+}
+function calculate(){
+  var result;
+  try {
+    result = ErlangCCore.analyse({
+      callsPerHour: els.calls.value,
+      handleSeconds: els.handle.value,
+      agents: els.agents.value,
+      answerSeconds: els.answer.value,
+      targetPercent: els.target.value
+    });
+  } catch (error){
+    els.err.textContent = error.message;
+    clear(els.out);
+    placeholder(els.out, "Check the call queue settings above.");
+    clear(els.staffGrid);
+    els.staffing.hidden = true;
+    return;
+  }
+  els.err.textContent = "";
+  render(result);
+}
+[els.calls, els.handle, els.agents, els.answer, els.target].forEach(function(control){
+  control.addEventListener("input", calculate);
+  control.addEventListener("change", calculate);
+});
+document.getElementById("queue-form").addEventListener("submit", function(event){
+  event.preventDefault();
+  calculate();
+});
+calculate();
+})();
+</script>
+</body>
+</html>
