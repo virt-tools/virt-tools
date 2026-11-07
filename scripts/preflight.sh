@@ -59,6 +59,7 @@ node tests/bead_loom_calculator.test.cjs
 node tests/round_entry_planner.test.cjs
 node tests/erlang_c_call_queue_calculator.test.cjs
 node tests/tennis_scorekeeper.test.cjs
+node tests/production_slate_generator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
