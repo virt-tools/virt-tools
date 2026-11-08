@@ -119,6 +119,7 @@ node tests/l_network_matching_calculator.test.cjs
 node tests/bowling_handicap_calculator.test.cjs
 node tests/wifi_channel_planner.test.cjs
 node tests/lat_lon_degree_length.test.cjs
+node tests/nice_value_cpu_share_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
