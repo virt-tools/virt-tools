@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Map Fit-Bounds Zoom Calculator — Virtual Tools</title>
+<meta name="description" content="Find the Web Mercator zoom level that fits a latitude/longitude bounding box into a given viewport, with the centre, ground resolution, map scale and tile range.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+[hidden]{display:none !important}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:12px;margin:10px 0}
+label.f{font-size:13px;opacity:.85;display:block;margin-bottom:4px}
+.field{background:var(--bg,#14181f);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px}
+.field:focus-within{border-color:var(--accent,#6ea8fe);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#6ea8fe) 18%,transparent)}
+.field input,.field select{box-sizing:border-box;min-width:0;width:100%;min-height:44px;background:transparent;color:var(--text,#e6e6e6);border:none;font-family:ui-monospace,monospace;font-size:17px;padding:2px 0;outline:none}
+.field select{cursor:pointer}
+.help{color:var(--text-dim,#9aa3b2);font-size:12px;line-height:1.45;margin:2px 0 8px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:12px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 20px;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);color:var(--text,#e6e6e6);cursor:pointer;min-height:44px}
+.actions button.primary{background:var(--accent,#6ea8fe);border-color:var(--accent,#6ea8fe);color:#0b1017;padding:10px 24px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:14px 0}
+.out .big{font-size:clamp(1.5rem,6.5vw,2.2rem);font-weight:800;text-align:center;padding:4px 0 2px;overflow-wrap:anywhere;color:var(--accent,#6ea8fe)}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45;overflow-wrap:anywhere}
+.out .verdict{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:10px 0 0;line-height:1.45;overflow-wrap:anywhere}
+.out .row{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:2px 12px;padding:7px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:14px}
+.out .row:last-child{border-bottom:none}
+.out .row .k{color:var(--text-dim,#9aa3b2)}
+.out .row .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right;overflow-wrap:anywhere;margin-left:auto}
+.err{color:var(--bad,#f87171);font-size:13px;margin:6px 0;min-height:1.2em;line-height:1.4}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;line-height:1.5;margin:14px 0 0}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>Map Fit-Bounds Zoom Calculator</h1>
+<p>The zoom level that fits a bounding box into a map viewport, with its centre, ground resolution and tiles.</p>
+</div>
+<div class="panel">
+<form id="fit-form" novalidate>
+<div class="grid2">
+<div class="field">
+<label class="f" for="north">North latitude</label>
+<input type="text" id="north" inputmode="decimal" autocomplete="off" value="51.55" aria-describedby="north-help">
+</div>
+<div class="field">
+<label class="f" for="south">South latitude</label>
+<input type="text" id="south" inputmode="decimal" autocomplete="off" value="51.45" aria-describedby="south-help">
+</div>
+<div class="field">
+<label class="f" for="west">West longitude</label>
+<input type="text" id="west" inputmode="decimal" autocomplete="off" value="-0.20" aria-describedby="west-help">
+</div>
+<div class="field">
+<label class="f" for="east">East longitude</label>
+<input type="text" id="east" inputmode="decimal" autocomplete="off" value="0" aria-describedby="east-help">
+</div>
+<div class="field">
+<label class="f" for="width">Viewport width (px)</label>
+<input type="text" id="width" inputmode="numeric" autocomplete="off" value="800" aria-describedby="width-help">
+</div>
+<div class="field">
+<label class="f" for="height">Viewport height (px)</label>
+<input type="text" id="height" inputmode="numeric" autocomplete="off" value="600" aria-describedby="height-help">
+</div>
+<div class="field">
+<label class="f" for="tile">Tile size</label>
+<select id="tile" aria-describedby="tile-help">
+<option value="256" selected>256 px</option>
+<option value="512">512 px</option>
+</select>
+</div>
+</div>
+<p class="help" id="north-help">Top edge in decimal degrees; it must be above the south edge.</p>
+<p class="help" id="south-help">Bottom edge in decimal degrees.</p>
+<p class="help" id="west-help">Left edge in decimal degrees, -180 to 180.</p>
+<p class="help" id="east-help">Right edge. A west value larger than east measures across the antimeridian.</p>
+<p class="help" id="width-help">Map area in CSS pixels, without headers or sidebars.</p>
+<p class="help" id="height-help">Map area height in CSS pixels.</p>
+<p class="help" id="tile-help">256 px is the usual tile; 512 px tile sets shift the zoom number by one.</p>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions">
+<button type="submit" class="primary">Find the zoom level</button>
+<button type="button" id="reset">Reset</button>
+</div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"></div>
+<p class="note" id="note">The box is projected onto the spherical Web Mercator plane (EPSG:3857), where west and east become x fractions of the world and latitude becomes a stretched y fraction, and the zoom that fits both the width and the height wins. Web Mercator only, so no other projections or datums are handled; the resolution and scale are those at the centre of the box, not at its edges; and tile counts assume the whole viewport is tiles with no overlap or padding. It runs entirely in your browser with no storage, uploads or network access.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* map-fit-bounds-zoom-core:start */
+var MapFitBoundsCore = (function(){
+  "use strict";
+  var MAX_LAT = 85.0511287798066;
+  var EARTH_CIRCUMFERENCE = 40075016.68557849;
+  var TILE_SIZES = { "256": 256, "512": 512 };
+  var LIMITS = {
+    latitude: [-90, 90],
+    longitude: [-180, 180],
+    width: [1, 10000],
+    height: [1, 10000],
+    maxZoom: 22
+  };
+  var MESSAGES = {
+    meridian: "The box crosses the antimeridian, so its width is measured eastward from the west edge through 180 degrees.",
+    clamped: "Latitudes beyond 85.0511 degrees are clamped to the Web Mercator limit.",
+    cappedHigh: "The box would fit beyond zoom 22, the usual maximum, so it is shown at 22.",
+    cappedLow: "The box is larger than the world at zoom 0, so it fills the view at zoom 0.",
+    exact: "The box fits this viewport exactly at that whole zoom.",
+    rounded: "Zoom levels are whole numbers, so the exact fit is rounded down and the whole box stays visible."
+  };
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function shown(value){
+    return String(Math.round(value * 10000) / 10000);
+  }
+
+  function label(name){
+    return name.charAt(0).toUpperCase() + name.slice(1);
+  }
+
+  function number(raw, name, low, high, unit){
+    var text = String(raw == null ? "" : raw).trim().replace(/,/g, ".");
+    if (text === "") fail("Enter " + name + ".");
+    if (!/^-?\d+(\.\d+)?$/.test(text)) fail(label(name) + " must be a number.");
+    var value = Number(text);
+    if (!isFinite(value)) fail(label(name) + " must be a number.");
+    if (value < low || value > high){
+      fail(label(name) + " must be between " + shown(low) + " and " + shown(high) + (unit ? " " + unit : "") + ".");
+    }
+    return value;
+  }
+
+  function whole(raw, name, low, high, unit){
+    var text = String(raw == null ? "" : raw).trim();
+    if (text === "") fail("Enter " + name + ".");
+    if (!/^\d+$/.test(text)) fail(label(name) + " must be a whole number.");
+    var value = Number(text);
+    if (value < low || value > high){
+      fail(label(name) + " must be between " + low + " and " + high + (unit ? " " + unit : "") + ".");
+    }
+    return value;
+  }
+
+  function radians(degrees){
+    return degrees * Math.PI / 180;
+  }
+
+  function degrees(radiansValue){
+    return radiansValue * 180 / Math.PI;
+  }
+
+  function mercatorY(latitude){
+    var clamped = Math.max(-MAX_LAT, Math.min(MAX_LAT, latitude));
+    return (1 - Math.log(Math.tan(Math.PI / 4 + radians(clamped) / 2)) / Math.PI) / 2;
+  }
+
+  function latitudeFromY(y){
+    return degrees(Math.atan(Math.sinh(Math.PI * (1 - 2 * y))));
+  }
+
+  function has(object, key){
+    return Object.prototype.hasOwnProperty.call(object, key);
+  }
+
+  function analyze(input){
+    input = input || {};
+    var north = number(input.north, "the north latitude", LIMITS.latitude[0], LIMITS.latitude[1], "degrees");
+    var south = number(input.south, "the south latitude", LIMITS.latitude[0], LIMITS.latitude[1], "degrees");
+    var west = number(input.west, "the west longitude", LIMITS.longitude[0], LIMITS.longitude[1], "degrees");
+    var east = number(input.east, "the east longitude", LIMITS.longitude[0], LIMITS.longitude[1], "degrees");
+    if (!(north > south)) fail("The north latitude must be greater than the south latitude.");
+    if (east === west) fail("The west and east longitude must differ: a box with no width has no fit zoom.");
+    var width = whole(input.width, "the viewport width", LIMITS.width[0], LIMITS.width[1], "pixels");
+    var height = whole(input.height, "the viewport height", LIMITS.height[0], LIMITS.height[1], "pixels");
+    var tileKey = String(input.tile == null ? "" : input.tile).trim();
+    if (!has(TILE_SIZES, tileKey)) fail("Choose a tile size from the list.");
+    var tile = TILE_SIZES[tileKey];
+
+    var northUsed = Math.max(-MAX_LAT, Math.min(MAX_LAT, north));
+    var southUsed = Math.max(-MAX_LAT, Math.min(MAX_LAT, south));
+    var clamped = northUsed !== north || southUsed !== south;
+    if (!(northUsed > southUsed)) fail("The box lies beyond the Web Mercator latitude limit, so it has no height to fit.");
+
+    var crosses = east < west;
+    var dx = crosses ? (east + 360 - west) / 360 : (east - west) / 360;
+    var yNorth = mercatorY(northUsed);
+    var ySouth = mercatorY(southUsed);
+    var dy = ySouth - yNorth;
+
+    var fitZoom = Math.min(
+      Math.log(width / (dx * tile)) / Math.LN2,
+      Math.log(height / (dy * tile)) / Math.LN2
+    );
+    var zoom = Math.floor(fitZoom + 1e-9);
+    var cappedHigh = false;
+    var cappedLow = false;
+    if (zoom > LIMITS.maxZoom){ zoom = LIMITS.maxZoom; cappedHigh = true; }
+    if (zoom < 0){ zoom = 0; cappedLow = true; }
+
+    var worldPixels = tile * Math.pow(2, zoom);
+    var spanX = dx * worldPixels;
+    var spanY = dy * worldPixels;
+    var centreX = (west + 180) / 360 + dx / 2;
+    centreX = centreX - Math.floor(centreX);
+    var centreY = yNorth + dy / 2;
+    var centreLon = centreX * 360 - 180;
+    var centreLat = latitudeFromY(centreY);
+
+    var metresPerPixel = EARTH_CIRCUMFERENCE * Math.cos(radians(centreLat)) / worldPixels;
+    var scaleDenominator = metresPerPixel * 96 / 0.0254;
+
+    var tilesAcross = Math.pow(2, zoom);
+    var eps = 1e-9;
+    var startF = (west + 180) / 360 * tilesAcross;
+    var columnStart = Math.floor(startF + eps);
+    var columnEnd = Math.floor(startF + dx * tilesAcross - eps);
+    var columns = columnEnd - columnStart + 1;
+    if (columns > tilesAcross) columns = tilesAcross;
+    if (columns < 1) columns = 1;
+    var rowStart = Math.floor(yNorth * tilesAcross + eps);
+    var rowEnd = Math.floor(ySouth * tilesAcross - eps);
+    var rows = rowEnd - rowStart + 1;
+    if (rows > tilesAcross) rows = tilesAcross;
+    if (rows < 1) rows = 1;
+    function wrap(value){
+      var mod = value % tilesAcross;
+      return mod < 0 ? mod + tilesAcross : mod;
+    }
+
+    return {
+      north: northUsed,
+      south: southUsed,
+      west: west,
+      east: east,
+      width: width,
+      height: height,
+      tile: tileKey,
+      tileSize: tile,
+      clamped: clamped,
+      crosses: crosses,
+      dx: dx,
+      dy: dy,
+      fitZoom: fitZoom,
+      zoom: zoom,
+      cappedHigh: cappedHigh,
+      cappedLow: cappedLow,
+      exact: !cappedHigh && !cappedLow && Math.abs(fitZoom - zoom) < 1e-9,
+      spanX: spanX,
+      spanY: spanY,
+      centreLat: centreLat,
+      centreLon: centreLon,
+      metresPerPixel: metresPerPixel,
+      scaleDenominator: scaleDenominator,
+      columnStart: wrap(columnStart),
+      columnEnd: wrap(columnStart + columns - 1),
+      columns: columns,
+      rowStart: rowStart,
+      rowEnd: rowStart + rows - 1,
+      rows: rows,
+      tiles: columns * rows
+    };
+  }
+
+  return {
+    MAX_LAT: MAX_LAT,
+    EARTH_CIRCUMFERENCE: EARTH_CIRCUMFERENCE,
+    TILE_SIZES: TILE_SIZES,
+    LIMITS: LIMITS,
+    MESSAGES: MESSAGES,
+    mercatorY: mercatorY,
+    latitudeFromY: latitudeFromY,
+    analyze: analyze
+  };
+})();
+/* map-fit-bounds-zoom-core:end */
+(function(){
+"use strict";
+
+var defaults = { north: "51.55", south: "51.45", west: "-0.20", east: "0", width: "800", height: "600", tile: "256" };
+var els = {
+  form: document.getElementById("fit-form"),
+  north: document.getElementById("north"),
+  south: document.getElementById("south"),
+  west: document.getElementById("west"),
+  east: document.getElementById("east"),
+  width: document.getElementById("width"),
+  height: document.getElementById("height"),
+  tile: document.getElementById("tile"),
+  err: document.getElementById("err"),
+  out: document.getElementById("out"),
+  reset: document.getElementById("reset")
+};
+var timer = null;
+
+function clear(node){
+  while (node.firstChild) node.removeChild(node.firstChild);
+}
+
+function fmt(value, digits){
+  var factor = Math.pow(10, digits);
+  var rounded = Math.round(value * factor) / factor;
+  return String(Object.is(rounded, -0) ? 0 : rounded);
+}
+
+function group(value){
+  return String(Math.round(value)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+function addRow(parent, key, value){
+  var row = document.createElement("div");
+  row.className = "row";
+  var name = document.createElement("span");
+  name.className = "k";
+  name.textContent = key;
+  var val = document.createElement("span");
+  val.className = "v";
+  val.textContent = value;
+  row.appendChild(name);
+  row.appendChild(val);
+  parent.appendChild(row);
+}
+
+function showError(message){
+  els.err.textContent = message;
+  clear(els.out);
+  var placeholder = document.createElement("div");
+  placeholder.className = "sub";
+  placeholder.textContent = "Fix the highlighted value to see the zoom level that fits the box.";
+  els.out.appendChild(placeholder);
+}
+
+function render(result){
+  els.err.textContent = "";
+  clear(els.out);
+
+  var big = document.createElement("div");
+  big.className = "big";
+  big.textContent = "Zoom " + result.zoom;
+  var sub = document.createElement("div");
+  sub.className = "sub";
+  sub.textContent = "Exact fit " + fmt(result.fitZoom, 2) + " for " + result.width + " × " + result.height
+    + " px at " + result.tileSize + " px tiles";
+  els.out.appendChild(big);
+  els.out.appendChild(sub);
+
+  addRow(els.out, "Box centre", fmt(result.centreLat, 5) + ", " + fmt(result.centreLon, 5));
+  addRow(els.out, "Box on screen", fmt(result.spanX, 0) + " × " + fmt(result.spanY, 0) + " px");
+  addRow(els.out, "Ground resolution", fmt(result.metresPerPixel, 1) + " m/px at the centre");
+  addRow(els.out, "Map scale at 96 dpi", "1 : " + group(result.scaleDenominator));
+  addRow(els.out, "Tile columns", result.columnStart === result.columnEnd
+    ? String(result.columnStart)
+    : result.columnStart + "–" + result.columnEnd);
+  addRow(els.out, "Tile rows", result.rowStart === result.rowEnd
+    ? String(result.rowStart)
+    : result.rowStart + "–" + result.rowEnd);
+  addRow(els.out, "Tiles to load", result.tiles + " (" + result.columns + " × " + result.rows + ")");
+
+  var messages = [];
+  if (result.crosses) messages.push(MapFitBoundsCore.MESSAGES.meridian);
+  if (result.clamped) messages.push(MapFitBoundsCore.MESSAGES.clamped);
+  if (result.cappedLow) messages.push(MapFitBoundsCore.MESSAGES.cappedLow);
+  if (result.cappedHigh) messages.push(MapFitBoundsCore.MESSAGES.cappedHigh);
+  if (result.exact) messages.push(MapFitBoundsCore.MESSAGES.exact);
+  messages.push(MapFitBoundsCore.MESSAGES.rounded);
+  var verdict = document.createElement("div");
+  verdict.className = "verdict";
+  verdict.textContent = messages.join(" ");
+  els.out.appendChild(verdict);
+}
+
+function run(){
+  try {
+    render(MapFitBoundsCore.analyze({
+      north: els.north.value,
+      south: els.south.value,
+      west: els.west.value,
+      east: els.east.value,
+      width: els.width.value,
+      height: els.height.value,
+      tile: els.tile.value
+    }));
+  } catch (error){
+    showError(error.message);
+  }
+}
+
+function later(){
+  if (timer) window.clearTimeout(timer);
+  timer = window.setTimeout(run, 220);
+}
+
+[els.north, els.south, els.west, els.east, els.width, els.height].forEach(function(field){
+  field.addEventListener("input", later);
+  field.addEventListener("change", function(){
+    if (timer) window.clearTimeout(timer);
+    run();
+  });
+});
+
+els.tile.addEventListener("change", function(){
+  if (timer) window.clearTimeout(timer);
+  run();
+});
+
+els.form.addEventListener("submit", function(event){
+  event.preventDefault();
+  if (timer) window.clearTimeout(timer);
+  run();
+  if (els.err.textContent) els.north.focus();
+});
+
+els.reset.addEventListener("click", function(){
+  els.north.value = defaults.north;
+  els.south.value = defaults.south;
+  els.west.value = defaults.west;
+  els.east.value = defaults.east;
+  els.width.value = defaults.width;
+  els.height.value = defaults.height;
+  els.tile.value = defaults.tile;
+  if (timer) window.clearTimeout(timer);
+  run();
+  els.north.focus();
+});
+
+run();
+})();
+</script>
+</body>
+</html>
