@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Rolling Shutter Skew Calculator — Virtual Tools</title>
+<meta name="description" content="Estimate rolling shutter skew from sensor readout time and pan speed, or find the fastest pan that keeps the lean within a chosen tolerance.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+[hidden]{display:none!important}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:12px;margin:10px 0}
+label.f{font-size:13px;opacity:.85;display:block;margin-bottom:4px}
+label.f .opt{font-weight:400;opacity:.6}
+.field{background:var(--bg,#14181f);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px;min-width:0}
+.field:focus-within{border-color:var(--accent,#6ea8fe);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#6ea8fe) 18%,transparent)}
+.field input,.field select{box-sizing:border-box;width:100%;min-width:0;background:transparent;color:var(--text,#e6e6e6);border:none;font-size:18px;font-family:ui-monospace,monospace;padding:2px 0;outline:none;min-height:44px}
+.field select{font-size:16px}
+.field .unit{font-size:11px;color:var(--text-dim,#9aa3b2);margin-top:4px;line-height:1.35}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:14px 0}
+.out .big{font-size:clamp(1.65rem,6vw,2.35rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:4px 0 6px;overflow-wrap:anywhere;color:var(--accent,#6ea8fe)}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45;overflow-wrap:anywhere}
+.out .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:14px}
+.out .row:last-child{border-bottom:none}
+.out .row .k{color:var(--text-dim,#9aa3b2)}
+.out .row .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right;overflow-wrap:anywhere}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:46px;white-space:nowrap}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.err{color:var(--bad,#f87171);font-size:13px;margin:6px 0;min-height:1.2em}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;margin:10px 0 0;line-height:1.5}
+@media (max-width:360px){.out .row{display:block}.out .row .v{display:block;text-align:left;margin-top:2px}}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>Rolling Shutter Skew Calculator</h1>
+<p>Estimate how far a pan slants vertical edges when the sensor reads out one row at a time, or find the fastest pan that stays inside a skew tolerance.</p>
+</div>
+<div class="panel">
+<form id="rs-form" novalidate>
+<div class="grid2">
+<div class="field"><label class="f" for="in-readout">Readout time</label><input type="text" id="in-readout" inputmode="decimal" autocomplete="off" value="12.5" aria-describedby="readout-help"><div class="unit" id="readout-help">milliseconds for a full frame, from the camera spec sheet</div></div>
+<div class="field"><label class="f" for="in-mode">Calculate</label><select id="in-mode"><option value="skew">Skew from pan speed</option><option value="limit">Pan limit for tolerance</option></select><div class="unit">one direction of the relation</div></div>
+<div class="field"><label class="f" for="in-width">Frame width</label><input type="text" id="in-width" inputmode="numeric" autocomplete="off" value="3840" aria-describedby="width-help"><div class="unit" id="width-help">pixels, as recorded — 3840 is UHD</div></div>
+<div class="field"><label class="f" for="in-height">Frame height</label><input type="text" id="in-height" inputmode="numeric" autocomplete="off" value="2160" aria-describedby="height-help"><div class="unit" id="height-help">pixels; sets the readout time per row</div></div>
+<div class="field" id="pan-field"><label class="f" for="in-pan">Pan speed</label><input type="text" id="in-pan" inputmode="decimal" autocomplete="off" value="0.5" aria-describedby="pan-help"><div class="unit" id="pan-help">frame widths per second — 0.5 is two seconds to cross the frame</div></div>
+<div class="field" id="vert-field"><label class="f" for="in-vert">Vertical speed <span class="opt">(optional)</span></label><input type="text" id="in-vert" inputmode="decimal" autocomplete="off" placeholder="e.g. 0.25" aria-describedby="vert-help"><div class="unit" id="vert-help">frame heights per second; adds the stretch or squash</div></div>
+<div class="field" id="tol-field" hidden><label class="f" for="in-tol">Skew tolerance</label><input type="text" id="in-tol" inputmode="decimal" autocomplete="off" value="1" aria-describedby="tol-help"><div class="unit" id="tol-help">percent of the frame width the top-to-bottom lean may reach</div></div>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions"><button type="submit" id="go">Calculate skew</button></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"><span style="color:var(--text-dim,#9aa3b2)">Enter a readout time and a pan speed to see the skew.</span></div>
+<p class="note">A rolling-shutter sensor exposes a frame row by row, so the last row records a moment later than the first. During a pan the scene slides across the sensor while that happens, which leans vertical edges by the distance travelled in one full readout: skew in pixels is the frame width multiplied by the pan speed in frame widths per second and by the readout time in seconds. Vertical motion is stretched or squashed by the same fraction, reported as a percentage of the frame height. Row time is the full readout divided by the frame height in rows. The tolerance mode inverts the relation to give the fastest pan that holds the lean to a chosen percentage of the frame width. Readout times come from camera specifications and change with crop, frame rate, binning and codec, and this model assumes a constant pan and evenly paced readout: it does not predict motion blur, uneven row timing, lens distortion or stabilisation. Everything runs in your browser with no storage, uploads or network access.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* rolling-shutter-core:start */
+var RollingShutterCore = (function(){
+  "use strict";
+  var DEFAULTS = {
+    mode: "skew", readoutMs: "12.5", width: "3840", height: "2160",
+    panSpeed: "0.5", verticalSpeed: "", tolerancePercent: "1"
+  };
+  var LIMITS = {
+    readoutMs: { min: 0.5, max: 200, unit: "ms" },
+    width: { min: 64, max: 16384, unit: "pixels", integer: true },
+    height: { min: 64, max: 16384, unit: "pixels", integer: true },
+    panSpeed: { min: 0, max: 20, unit: "frame widths per second" },
+    verticalSpeed: { min: 0, max: 20, unit: "frame heights per second" },
+    tolerancePercent: { min: 0.01, max: 50, unit: "percent of the frame width" }
+  };
+  function fail(message){
+    throw new Error(message);
+  }
+  function parseNumber(raw, label, limits){
+    var text = String(raw == null ? "" : raw).trim();
+    if (!text) fail(label + " is required.");
+    var message = label + " must be a " + (limits.integer ? "whole number" : "number")
+      + " from " + limits.min + " to " + limits.max + " " + limits.unit + ".";
+    if (!/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(text)) fail(message);
+    var value = Number(text);
+    if (!isFinite(value) || value < limits.min || value > limits.max) fail(message);
+    if (limits.integer && Math.floor(value) !== value) fail(message);
+    return value;
+  }
+  function optional(raw, label, limits){
+    var text = String(raw == null ? "" : raw).trim();
+    return text ? parseNumber(text, label, limits) : null;
+  }
+  function calculate(input){
+    var options = input || {};
+    var mode = options.mode == null ? DEFAULTS.mode : options.mode;
+    if (mode !== "skew" && mode !== "limit") fail("Choose whether to calculate skew or a pan-speed limit.");
+    var readoutMs = parseNumber(options.readoutMs == null ? DEFAULTS.readoutMs : options.readoutMs,
+      "Readout time", LIMITS.readoutMs);
+    var width = parseNumber(options.width == null ? DEFAULTS.width : options.width,
+      "Frame width", LIMITS.width);
+    var height = parseNumber(options.height == null ? DEFAULTS.height : options.height,
+      "Frame height", LIMITS.height);
+    var readoutSeconds = readoutMs / 1000;
+    var result = {
+      mode: mode,
+      readoutMs: readoutMs,
+      width: width,
+      height: height,
+      rowTimeUs: readoutMs * 1000 / height,
+      panSpeed: null,
+      verticalSpeed: null,
+      panTimeSeconds: null,
+      skewPx: null,
+      skewPercent: null,
+      skewAngleDeg: null,
+      wobblePercent: null,
+      tolerancePercent: null,
+      maxPanSpeed: null,
+      maxPanTimeSeconds: null
+    };
+    if (mode === "skew"){
+      var pan = parseNumber(options.panSpeed == null ? DEFAULTS.panSpeed : options.panSpeed,
+        "Pan speed", LIMITS.panSpeed);
+      var vertical = optional(options.verticalSpeed == null ? DEFAULTS.verticalSpeed : options.verticalSpeed,
+        "Vertical speed", LIMITS.verticalSpeed);
+      result.panSpeed = pan;
+      result.verticalSpeed = vertical;
+      result.skewPercent = pan * readoutSeconds * 100;
+      result.skewPx = width * result.skewPercent / 100;
+      result.skewAngleDeg = Math.atan(result.skewPx / height) * 180 / Math.PI;
+      result.panTimeSeconds = pan > 0 ? 1 / pan : null;
+      result.wobblePercent = vertical == null ? null : vertical * readoutSeconds * 100;
+    } else {
+      var tolerance = parseNumber(options.tolerancePercent == null ? DEFAULTS.tolerancePercent : options.tolerancePercent,
+        "Skew tolerance", LIMITS.tolerancePercent);
+      result.tolerancePercent = tolerance;
+      result.skewPercent = tolerance;
+      result.skewPx = width * tolerance / 100;
+      result.skewAngleDeg = Math.atan(result.skewPx / height) * 180 / Math.PI;
+      result.maxPanSpeed = (tolerance / 100) / readoutSeconds;
+      result.maxPanTimeSeconds = 1 / result.maxPanSpeed;
+      result.panSpeed = result.maxPanSpeed;
+      result.panTimeSeconds = result.maxPanTimeSeconds;
+    }
+    return result;
+  }
+  return {
+    calculate: calculate,
+    DEFAULTS: DEFAULTS,
+    LIMITS: LIMITS
+  };
+})();
+/* rolling-shutter-core:end */
+(function(){
+"use strict";
+var els = {
+  readout: document.getElementById("in-readout"), mode: document.getElementById("in-mode"),
+  width: document.getElementById("in-width"), height: document.getElementById("in-height"),
+  pan: document.getElementById("in-pan"), vert: document.getElementById("in-vert"),
+  tol: document.getElementById("in-tol"), err: document.getElementById("err"),
+  out: document.getElementById("out"), button: document.getElementById("go"),
+  panField: document.getElementById("pan-field"), vertField: document.getElementById("vert-field"),
+  tolField: document.getElementById("tol-field")
+};
+function clear(node){ while (node.firstChild) node.removeChild(node.firstChild); }
+function plain(value, digits){
+  var text = Number(value).toFixed(digits);
+  if (text.indexOf(".") > -1) text = text.replace(/0+$/, "").replace(/\.$/, "");
+  return text === "-0" ? "0" : text;
+}
+function group(value){
+  return Number(value).toLocaleString("en-US");
+}
+function addRow(parent, label, value){
+  var row = document.createElement("div"); row.className = "row";
+  var key = document.createElement("span"); key.className = "k"; key.textContent = label;
+  var val = document.createElement("span"); val.className = "v"; val.textContent = value;
+  row.appendChild(key); row.appendChild(val); parent.appendChild(row);
+}
+function placeholder(message){
+  var span = document.createElement("span");
+  span.style.color = "var(--text-dim,#9aa3b2)"; span.textContent = message;
+  els.out.appendChild(span);
+}
+function render(result){
+  clear(els.out);
+  var limited = result.mode === "limit";
+  var big = document.createElement("div"); big.className = "big";
+  big.textContent = limited
+    ? plain(result.maxPanSpeed, 3) + " frame widths/s"
+    : plain(result.skewPx, 2) + " px";
+  var sub = document.createElement("div"); sub.className = "sub";
+  sub.textContent = limited
+    ? "one frame width every " + plain(result.maxPanTimeSeconds, 2) + " s at "
+      + plain(result.tolerancePercent, 2) + "% skew tolerance"
+    : plain(result.skewPercent, 3) + "% of frame width · "
+      + plain(result.skewAngleDeg, 2) + "° lean · "
+      + (result.panSpeed > 0 ? plain(result.panSpeed, 3) + " frame widths/s" : "no pan");
+  els.out.appendChild(big); els.out.appendChild(sub);
+  addRow(els.out, "Readout, full frame", plain(result.readoutMs, 2) + " ms");
+  addRow(els.out, "Readout per row", plain(result.rowTimeUs, 2) + " µs");
+  addRow(els.out, "Frame", group(result.width) + " × " + group(result.height) + " px");
+  addRow(els.out, "Skew, top to bottom", plain(result.skewPx, 2) + " px");
+  addRow(els.out, "Skew as frame width", plain(result.skewPercent, 3) + " %");
+  addRow(els.out, "Edge lean from vertical", plain(result.skewAngleDeg, 2) + "°");
+  if (limited){
+    addRow(els.out, "Fastest pan", plain(result.maxPanSpeed, 3) + " frame widths/s");
+    addRow(els.out, "Time to cross one frame", plain(result.maxPanTimeSeconds, 2) + " s");
+  } else {
+    addRow(els.out, "Time to cross one frame", result.panTimeSeconds == null
+      ? "—" : plain(result.panTimeSeconds, 2) + " s");
+    if (result.wobblePercent != null){
+      addRow(els.out, "Vertical stretch at " + plain(result.verticalSpeed, 2) + " heights/s",
+        plain(result.wobblePercent, 4) + " % of height");
+    }
+  }
+}
+function syncMode(){
+  var limited = els.mode.value === "limit";
+  els.panField.hidden = limited;
+  els.vertField.hidden = limited;
+  els.tolField.hidden = !limited;
+  els.button.textContent = limited ? "Calculate fastest pan" : "Calculate skew";
+}
+function run(){
+  var result;
+  try {
+    result = RollingShutterCore.calculate({
+      mode: els.mode.value, readoutMs: els.readout.value,
+      width: els.width.value, height: els.height.value,
+      panSpeed: els.pan.value, verticalSpeed: els.vert.value,
+      tolerancePercent: els.tol.value
+    });
+  } catch (error){
+    els.err.textContent = error.message; clear(els.out);
+    placeholder("Check the readout time, frame size and motion above."); return;
+  }
+  els.err.textContent = ""; render(result);
+}
+[els.readout, els.width, els.height, els.pan, els.vert, els.tol].forEach(function(input){
+  input.addEventListener("input", run);
+});
+els.mode.addEventListener("change", function(){ syncMode(); run(); });
+document.getElementById("rs-form").addEventListener("submit", function(event){
+  event.preventDefault(); run();
+});
+syncMode();
+run();
+})();
+</script>
+</body>
+</html>
