@@ -141,6 +141,7 @@ node tests/embroidery_stitch_thread_estimator.test.cjs
 node tests/microstrip_trace_impedance_calculator.test.cjs
 node tests/football_passer_rating_calculator.test.cjs
 node tests/roux_thickening_calculator.test.cjs
+node tests/wake_on_lan_packet_builder.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
