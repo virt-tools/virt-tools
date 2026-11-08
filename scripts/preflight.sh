@@ -145,6 +145,7 @@ node tests/wake_on_lan_packet_builder.test.cjs
 node tests/gps_track_simplifier.test.cjs
 node tests/udev_rule_builder.test.cjs
 node tests/harmonic_mixing_key_finder.test.cjs
+node tests/gather_ruffle_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
