@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Linux Errno Decoder — Virtual Tools</title>
+<meta name="description" content="Decode a Linux errno number such as 13 into EACCES, its glibc message, category and likely cause, or look up a symbol such as EAGAIN and its aliases, with every assigned errno from 1 to 133 listed.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px;margin:10px 0}
+label.f{font-size:13px;opacity:.85;display:block;margin-bottom:4px}
+.field{background:var(--bg,#14181f);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px}
+.field:focus-within{border-color:var(--accent,#6ea8fe);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#6ea8fe) 18%,transparent)}
+.field input{box-sizing:border-box;min-width:0;width:100%;background:transparent;color:var(--text,#e6e6e6);border:none;font-family:ui-monospace,monospace;font-size:17px;padding:2px 0;outline:none}
+.field .unit{font-size:11px;color:var(--text-dim,#9aa3b2);margin-top:4px;line-height:1.4}
+.picker{border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:10px 12px;margin:14px 0}
+.picker legend{padding:0 6px;font-size:13px;color:var(--text-dim,#9aa3b2)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 2px}
+.chips button{min-height:44px;font:inherit;font-family:ui-monospace,monospace;font-size:12px;font-weight:600;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg,#14181f);color:var(--text,#e6e6e6);cursor:pointer;padding:6px 10px}
+.chips button .num{color:var(--text-dim,#9aa3b2);font-weight:400}
+.chips button:hover{border-color:var(--accent,#6ea8fe)}
+.chips button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:12px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 20px;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);color:var(--text,#e6e6e6);cursor:pointer;min-height:44px}
+.actions button.primary{background:var(--accent,#6ea8fe);border-color:var(--accent,#6ea8fe);color:#0b1017;padding:10px 24px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:14px 0}
+.out .big{font-size:clamp(1.45rem,6.6vw,2.5rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:4px 0 2px;overflow-wrap:anywhere;color:var(--accent,#6ea8fe)}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45}
+.out .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:7px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:13.5px}
+.out .row:last-child{border-bottom:none}
+.out .row .k{color:var(--text-dim,#9aa3b2);flex:0 0 auto}
+.out .row .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right;overflow-wrap:anywhere;word-break:break-word}
+.out .hint{margin:12px 0 0;padding:10px 12px;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg,#14181f);font-size:13.5px;line-height:1.5}
+.out .hint strong{color:var(--text,#e6e6e6)}
+.err{color:var(--bad,#f87171);font-size:13px;margin:6px 0;min-height:1.2em}
+.status{font-size:13px;color:var(--text-dim,#9aa3b2);margin:6px 0 0;min-height:1.2em}
+.details h2{font-size:1rem;margin:22px 0 8px}
+.ref{display:grid;grid-template-columns:3.1rem minmax(0,13rem) minmax(0,1fr);gap:10px;align-items:baseline;padding:7px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:13.5px}
+.ref:last-child{border-bottom:none}
+.ref .num{font-family:ui-monospace,monospace;color:var(--text-dim,#9aa3b2);text-align:right}
+.ref .name{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);overflow-wrap:anywhere}
+.ref .name .aka{display:block;font-weight:400;font-size:11.5px;color:var(--text-dim,#9aa3b2)}
+.ref .msg{color:var(--text,#e6e6e6);opacity:.9;line-height:1.45}
+@media (max-width:560px){.ref{grid-template-columns:2.6rem minmax(0,1fr)}.ref .msg{grid-column:1 / -1;opacity:.75;font-size:13px}.picker{padding:10px 8px}.out .row{flex-wrap:wrap;row-gap:2px}.out .row .v{flex:1 1 100%;text-align:left}}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;margin:18px 0 0;line-height:1.55}
+.note code{font-size:.95em}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>Linux Errno Decoder</h1>
+<p>Turn an errno number such as <code>13</code> into its symbol and message, or look up a symbol such as <code>EACCES</code>.</p>
+</div>
+<div class="panel">
+<form id="errno-form" novalidate>
+<div class="field">
+<label class="f" for="code">errno number or symbol</label>
+<input type="text" id="code" inputmode="text" autocomplete="off" spellcheck="false" value="13" aria-describedby="code-help">
+<div class="unit" id="code-help">13, -13, EACCES, eacces, or a pasted fragment such as errno 13</div>
+</div>
+<fieldset class="picker">
+<legend>Common values</legend>
+<div class="chips" aria-label="Common errno values">
+<button type="button" class="chip" data-code="ENOENT">ENOENT <span class="num">2</span></button>
+<button type="button" class="chip" data-code="EACCES">EACCES <span class="num">13</span></button>
+<button type="button" class="chip" data-code="EAGAIN">EAGAIN <span class="num">11</span></button>
+<button type="button" class="chip" data-code="EEXIST">EEXIST <span class="num">17</span></button>
+<button type="button" class="chip" data-code="ENOSPC">ENOSPC <span class="num">28</span></button>
+<button type="button" class="chip" data-code="EPIPE">EPIPE <span class="num">32</span></button>
+<button type="button" class="chip" data-code="EINTR">EINTR <span class="num">4</span></button>
+<button type="button" class="chip" data-code="ETIMEDOUT">ETIMEDOUT <span class="num">110</span></button>
+</div>
+<div class="actions">
+<button type="submit" class="primary">Decode</button>
+</div>
+</fieldset>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"></div>
+<p class="status" id="status" role="status" aria-live="polite"></p>
+<section class="details" aria-labelledby="details-title">
+<h2 id="details-title">All 131 assigned errno values</h2>
+<div class="field" style="margin:0 0 10px">
+<label class="f" for="filter">Filter by number, symbol, message or category</label>
+<input type="text" id="filter" autocomplete="off" spellcheck="false" placeholder="e.g. permission, network, ENOENT" aria-describedby="filter-help">
+<div class="unit" id="filter-help">Shows matching rows only; clears with an empty field</div>
+</div>
+<p class="status" id="count" role="status" aria-live="polite"></p>
+<div id="list"></div>
+</section>
+<p class="note">On Linux, a failing system call or C library function returns <code>-1</code> and stores a positive error number in the thread-local <code>errno</code>; a system call wrapper often returns the negated number directly, so <code>-13</code> is the same error as <code>13</code>. Symbols and numbers follow the kernel's <code>asm-generic/errno.h</code>, which x86-64, arm64 and other modern architectures share: values run from 1 to 133 with 41 and 58 unassigned. The message text is what glibc's <code>strerror</code> prints, which is why the kernel's own description sometimes differs by a word. <code>EWOULDBLOCK</code> is the same value as <code>EAGAIN</code> (11) on Linux, <code>EDEADLOCK</code> is <code>EDEADLK</code> (35) and <code>ENOTSUP</code> is <code>EOPNOTSUPP</code> (95); unlike some Unix systems, <code>EWOULDBLOCK</code> and <code>EAGAIN</code> can never be told apart here. Successful calls never clear <code>errno</code>, so only read it after a call reports failure, and use <code>strerror_r</code> in threaded C code. Some very old architectures number a few values differently. Decoding is a lookup in this page: nothing is executed, stored or sent anywhere.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* linux-errno-core:start */
+var ErrnoCore = (function(){
+  "use strict";
+  var MIN = 1;
+  var MAX = 133;
+  var UNUSED = [41, 58];
+  var TABLE = [
+    [1, "EPERM", "Operation not permitted", "Permission and access"],
+    [2, "ENOENT", "No such file or directory", "Files, paths and storage"],
+    [3, "ESRCH", "No such process", "Processes and signals"],
+    [4, "EINTR", "Interrupted system call", "Processes and signals"],
+    [5, "EIO", "Input/output error", "I/O and devices"],
+    [6, "ENXIO", "No such device or address", "I/O and devices"],
+    [7, "E2BIG", "Argument list too long", "Arguments and data"],
+    [8, "ENOEXEC", "Exec format error", "Programs and loaders"],
+    [9, "EBADF", "Bad file descriptor", "I/O and devices"],
+    [10, "ECHILD", "No child processes", "Processes and signals"],
+    [11, "EAGAIN", "Resource temporarily unavailable", "File descriptors and resources"],
+    [12, "ENOMEM", "Cannot allocate memory", "File descriptors and resources"],
+    [13, "EACCES", "Permission denied", "Permission and access"],
+    [14, "EFAULT", "Bad address", "Arguments and data"],
+    [15, "ENOTBLK", "Block device required", "I/O and devices"],
+    [16, "EBUSY", "Device or resource busy", "Files, paths and storage"],
+    [17, "EEXIST", "File exists", "Files, paths and storage"],
+    [18, "EXDEV", "Invalid cross-device link", "Files, paths and storage"],
+    [19, "ENODEV", "No such device", "Files, paths and storage"],
+    [20, "ENOTDIR", "Not a directory", "Files, paths and storage"],
+    [21, "EISDIR", "Is a directory", "Files, paths and storage"],
+    [22, "EINVAL", "Invalid argument", "Arguments and data"],
+    [23, "ENFILE", "Too many open files in system", "File descriptors and resources"],
+    [24, "EMFILE", "Too many open files", "File descriptors and resources"],
+    [25, "ENOTTY", "Inappropriate ioctl for device", "I/O and devices"],
+    [26, "ETXTBSY", "Text file busy", "Files, paths and storage"],
+    [27, "EFBIG", "File too large", "Files, paths and storage"],
+    [28, "ENOSPC", "No space left on device", "Files, paths and storage"],
+    [29, "ESPIPE", "Illegal seek", "I/O and devices"],
+    [30, "EROFS", "Read-only file system", "Files, paths and storage"],
+    [31, "EMLINK", "Too many links", "Files, paths and storage"],
+    [32, "EPIPE", "Broken pipe", "I/O and devices"],
+    [33, "EDOM", "Numerical argument out of domain", "Arguments and data"],
+    [34, "ERANGE", "Numerical result out of range", "Arguments and data"],
+    [35, "EDEADLK", "Resource deadlock avoided", "Locks and shared state"],
+    [36, "ENAMETOOLONG", "File name too long", "Files, paths and storage"],
+    [37, "ENOLCK", "No locks available", "Locks and shared state"],
+    [38, "ENOSYS", "Function not implemented", "Arguments and data"],
+    [39, "ENOTEMPTY", "Directory not empty", "Files, paths and storage"],
+    [40, "ELOOP", "Too many levels of symbolic links", "Files, paths and storage"],
+    [42, "ENOMSG", "No message of desired type", "Historical System V, STREAMS and RFS"],
+    [43, "EIDRM", "Identifier removed", "Historical System V, STREAMS and RFS"],
+    [44, "ECHRNG", "Channel number out of range", "Historical System V, STREAMS and RFS"],
+    [45, "EL2NSYNC", "Level 2 not synchronized", "Historical System V, STREAMS and RFS"],
+    [46, "EL3HLT", "Level 3 halted", "Historical System V, STREAMS and RFS"],
+    [47, "EL3RST", "Level 3 reset", "Historical System V, STREAMS and RFS"],
+    [48, "ELNRNG", "Link number out of range", "Historical System V, STREAMS and RFS"],
+    [49, "EUNATCH", "Protocol driver not attached", "Historical System V, STREAMS and RFS"],
+    [50, "ENOCSI", "No CSI structure available", "Historical System V, STREAMS and RFS"],
+    [51, "EL2HLT", "Level 2 halted", "Historical System V, STREAMS and RFS"],
+    [52, "EBADE", "Invalid exchange", "Historical System V, STREAMS and RFS"],
+    [53, "EBADR", "Invalid request descriptor", "Historical System V, STREAMS and RFS"],
+    [54, "EXFULL", "Exchange full", "Historical System V, STREAMS and RFS"],
+    [55, "ENOANO", "No anode", "Historical System V, STREAMS and RFS"],
+    [56, "EBADRQC", "Invalid request code", "Historical System V, STREAMS and RFS"],
+    [57, "EBADSLT", "Invalid slot", "Historical System V, STREAMS and RFS"],
+    [59, "EBFONT", "Bad font file format", "Historical System V, STREAMS and RFS"],
+    [60, "ENOSTR", "Device not a stream", "Historical System V, STREAMS and RFS"],
+    [61, "ENODATA", "No data available", "Historical System V, STREAMS and RFS"],
+    [62, "ETIME", "Timer expired", "Historical System V, STREAMS and RFS"],
+    [63, "ENOSR", "Out of streams resources", "Historical System V, STREAMS and RFS"],
+    [64, "ENONET", "Machine is not on the network", "Sockets and network"],
+    [65, "ENOPKG", "Package not installed", "Historical System V, STREAMS and RFS"],
+    [66, "EREMOTE", "Object is remote", "Sockets and network"],
+    [67, "ENOLINK", "Link has been severed", "Historical System V, STREAMS and RFS"],
+    [68, "EADV", "Advertise error", "Historical System V, STREAMS and RFS"],
+    [69, "ESRMNT", "Srmount error", "Historical System V, STREAMS and RFS"],
+    [70, "ECOMM", "Communication error on send", "Historical System V, STREAMS and RFS"],
+    [71, "EPROTO", "Protocol error", "Sockets and network"],
+    [72, "EMULTIHOP", "Multihop attempted", "Historical System V, STREAMS and RFS"],
+    [73, "EDOTDOT", "RFS specific error", "Historical System V, STREAMS and RFS"],
+    [74, "EBADMSG", "Bad message", "Arguments and data"],
+    [75, "EOVERFLOW", "Value too large for defined data type", "Files, paths and storage"],
+    [76, "ENOTUNIQ", "Name not unique on network", "Historical System V, STREAMS and RFS"],
+    [77, "EBADFD", "File descriptor in bad state", "Historical System V, STREAMS and RFS"],
+    [78, "EREMCHG", "Remote address changed", "Historical System V, STREAMS and RFS"],
+    [79, "ELIBACC", "Can not access a needed shared library", "Programs and loaders"],
+    [80, "ELIBBAD", "Accessing a corrupted shared library", "Programs and loaders"],
+    [81, "ELIBSCN", ".lib section in a.out corrupted", "Programs and loaders"],
+    [82, "ELIBMAX", "Attempting to link in too many shared libraries", "Programs and loaders"],
+    [83, "ELIBEXEC", "Cannot exec a shared library directly", "Programs and loaders"],
+    [84, "EILSEQ", "Invalid or incomplete multibyte or wide character", "Arguments and data"],
+    [85, "ERESTART", "Interrupted system call should be restarted", "Processes and signals"],
+    [86, "ESTRPIPE", "Streams pipe error", "Historical System V, STREAMS and RFS"],
+    [87, "EUSERS", "Too many users", "Processes and signals"],
+    [88, "ENOTSOCK", "Socket operation on non-socket", "Sockets and network"],
+    [89, "EDESTADDRREQ", "Destination address required", "Sockets and network"],
+    [90, "EMSGSIZE", "Message too long", "Sockets and network"],
+    [91, "EPROTOTYPE", "Protocol wrong type for socket", "Sockets and network"],
+    [92, "ENOPROTOOPT", "Protocol not available", "Sockets and network"],
+    [93, "EPROTONOSUPPORT", "Protocol not supported", "Sockets and network"],
+    [94, "ESOCKTNOSUPPORT", "Socket type not supported", "Sockets and network"],
+    [95, "EOPNOTSUPP", "Operation not supported", "Sockets and network"],
+    [96, "EPFNOSUPPORT", "Protocol family not supported", "Sockets and network"],
+    [97, "EAFNOSUPPORT", "Address family not supported by protocol", "Sockets and network"],
+    [98, "EADDRINUSE", "Address already in use", "Sockets and network"],
+    [99, "EADDRNOTAVAIL", "Cannot assign requested address", "Sockets and network"],
+    [100, "ENETDOWN", "Network is down", "Sockets and network"],
+    [101, "ENETUNREACH", "Network is unreachable", "Sockets and network"],
+    [102, "ENETRESET", "Network dropped connection on reset", "Sockets and network"],
+    [103, "ECONNABORTED", "Software caused connection abort", "Sockets and network"],
+    [104, "ECONNRESET", "Connection reset by peer", "Sockets and network"],
+    [105, "ENOBUFS", "No buffer space available", "File descriptors and resources"],
+    [106, "EISCONN", "Transport endpoint is already connected", "Sockets and network"],
+    [107, "ENOTCONN", "Transport endpoint is not connected", "Sockets and network"],
+    [108, "ESHUTDOWN", "Cannot send after transport endpoint shutdown", "Sockets and network"],
+    [109, "ETOOMANYREFS", "Too many references: cannot splice", "File descriptors and resources"],
+    [110, "ETIMEDOUT", "Connection timed out", "Sockets and network"],
+    [111, "ECONNREFUSED", "Connection refused", "Sockets and network"],
+    [112, "EHOSTDOWN", "Host is down", "Sockets and network"],
+    [113, "EHOSTUNREACH", "No route to host", "Sockets and network"],
+    [114, "EALREADY", "Operation already in progress", "Sockets and network"],
+    [115, "EINPROGRESS", "Operation now in progress", "Sockets and network"],
+    [116, "ESTALE", "Stale file handle", "Files, paths and storage"],
+    [117, "EUCLEAN", "Structure needs cleaning", "Files, paths and storage"],
+    [118, "ENOTNAM", "Not a XENIX named type file", "Historical System V, STREAMS and RFS"],
+    [119, "ENAVAIL", "No XENIX semaphores available", "Historical System V, STREAMS and RFS"],
+    [120, "EISNAM", "Is a named type file", "Historical System V, STREAMS and RFS"],
+    [121, "EREMOTEIO", "Remote I/O error", "Files, paths and storage"],
+    [122, "EDQUOT", "Disk quota exceeded", "Files, paths and storage"],
+    [123, "ENOMEDIUM", "No medium found", "Files, paths and storage"],
+    [124, "EMEDIUMTYPE", "Wrong medium type", "Files, paths and storage"],
+    [125, "ECANCELED", "Operation canceled", "Processes and signals"],
+    [126, "ENOKEY", "Required key not available", "Keys and credentials"],
+    [127, "EKEYEXPIRED", "Key has expired", "Keys and credentials"],
+    [128, "EKEYREVOKED", "Key has been revoked", "Keys and credentials"],
+    [129, "EKEYREJECTED", "Key was rejected by service", "Keys and credentials"],
+    [130, "EOWNERDEAD", "Owner died", "Locks and shared state"],
+    [131, "ENOTRECOVERABLE", "State not recoverable", "Locks and shared state"],
+    [132, "ERFKILL", "Operation not possible due to RF-kill", "I/O and devices"],
+    [133, "EHWPOISON", "Memory page has hardware error", "I/O and devices"],
+  ];
+  var ALIASES = {
+    "EWOULDBLOCK": 11,
+    "EDEADLOCK": 35,
+    "ENOTSUP": 95,
+  };
+  var HINTS = {
+    "EACCES": "Permission bits, ownership or a parent directory deny access; check mode, owner, ACLs and mount options.",
+    "EADDRINUSE": "Another socket already holds the address; list it with ss -lptn.",
+    "EAGAIN": "The operation would block, or a limit is currently reached; retry later or switch to blocking I/O.",
+    "EBUSY": "Another process holds the device, mount or resource; find the holder with fuser, lsof or mount.",
+    "ECONNREFUSED": "Nothing is listening on the remote port, or a firewall rejected the connection.",
+    "EEXIST": "The target already exists; remove it first or use a create-only operation such as O_EXCL.",
+    "EFAULT": "The kernel could not read or write the buffer passed to the call; check the pointer and its length.",
+    "EHWPOISON": "The page was taken offline after a hardware memory error; the affected process usually has to restart.",
+    "EINTR": "A signal arrived before the call finished; retry the call, handling EINTR in a loop.",
+    "EINVAL": "An argument is out of range or inconsistent with the call; check the man page for accepted values.",
+    "EIO": "The device or filesystem reported a hardware or transport failure; check dmesg and the underlying disk or mount.",
+    "ELOOP": "Too many symbolic links were followed; check for a symlink loop in the path.",
+    "EMFILE": "This process has reached its open file limit; raise the nofile rlimit or close descriptors.",
+    "ENFILE": "The system-wide open file limit is reached; check fs.file-max and how many files are open.",
+    "ENOENT": "The path does not exist: check a missing parent directory, a dangling symlink, or a file that was deleted.",
+    "ENOMEM": "Memory could not be allocated: check the cgroup or rlimit, overcommit settings and swap.",
+    "ENOSPC": "The filesystem is out of data blocks or inodes; check df -h and df -i.",
+    "ENOSYS": "The kernel or C library does not implement the call; check the kernel version and the syscall number.",
+    "ENOTTY": "The ioctl is not supported by that file descriptor; check that the device is a terminal or the right driver.",
+    "EOVERFLOW": "A value does not fit the type the interface uses, often a 32-bit inode or offset in a 64-bit call.",
+    "EPERM": "The caller lacks a privilege the kernel requires: check the user, group, capabilities and any LSM policy.",
+    "EPIPE": "The reader closed the pipe or socket; ignore SIGPIPE or handle the short write.",
+    "EROFS": "The filesystem is mounted read-only; remount it read-write, or check why it was remounted.",
+    "ETIMEDOUT": "No reply arrived before the timeout; check reachability, a firewall dropping packets and the timeout value.",
+  };
+
+  var ENTRIES = [];
+  var BY_NUMBER = Object.create(null);
+  var BY_NAME = Object.create(null);
+
+  TABLE.forEach(function(row){
+    var entry = {
+      number: row[0],
+      name: row[1],
+      message: row[2],
+      group: row[3],
+      aliases: [],
+      hint: HINTS[row[1]] || ""
+    };
+    ENTRIES.push(entry);
+    BY_NUMBER[entry.number] = entry;
+    BY_NAME[entry.name] = entry;
+  });
+
+  Object.keys(ALIASES).forEach(function(alias){
+    var entry = BY_NUMBER[ALIASES[alias]];
+    if (!entry) return;
+    entry.aliases.push(alias);
+    BY_NAME[alias] = entry;
+  });
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function describe(entry, viaAlias){
+    return {
+      number: entry.number,
+      name: entry.name,
+      message: entry.message,
+      group: entry.group,
+      aliases: entry.aliases.slice(),
+      hint: entry.hint,
+      negative: "-" + entry.number,
+      viaAlias: viaAlias || "",
+      success: false,
+      unused: false
+    };
+  }
+
+  function lookup(input){
+    var raw = String(input == null ? "" : input).trim();
+    if (!raw) fail("Enter an errno number such as 13, or a symbol such as EACCES.");
+    var cleaned = raw.replace(/^errno\s*[:#]?\s*/i, "").trim();
+    if (!cleaned) fail("Enter an errno number after the word errno, for example 13 or EACCES.");
+
+    if (/^[+-]?[0-9]+$/.test(cleaned)){
+      var signed = cleaned.charAt(0) === "-";
+      var digits = cleaned.replace(/^[+-]/, "").replace(/^0+(?=[0-9])/, "");
+      var number = Number(signed ? "-" + digits : digits);
+      if (!isFinite(number)) fail("Enter an errno number such as 13, or a symbol such as EACCES.");
+      if (number === 0) return {
+        number: 0,
+        name: "(success)",
+        message: "No error: the call returned normally.",
+        group: "Success",
+        aliases: [],
+        hint: "errno is only meaningful after a call reports failure; 0 means no error was recorded.",
+        negative: "0",
+        viaAlias: "",
+        success: true,
+        unused: false
+      };
+      var magnitude = number < 0 ? -number : number;
+      if (magnitude === 41 || magnitude === 58){
+        fail("errno " + magnitude + " is unassigned on Linux: the numbering runs 1 to 133 with 41 and 58 left out.");
+      }
+      if (magnitude < MIN || magnitude > MAX){
+        fail("Linux errno values run from 1 to 133, with 0 meaning success; " + magnitude + " is outside that range.");
+      }
+      var entry = BY_NUMBER[magnitude];
+      if (!entry) fail("errno " + magnitude + " is not an assigned Linux error number.");
+      return describe(entry, "");
+    }
+
+    var symbol = cleaned.toUpperCase().replace(/\s+/g, "_");
+    if (/^[A-Z][A-Z0-9_]*$/.test(symbol)){
+      var match = BY_NAME[symbol];
+      if (!match){
+        var withE = BY_NAME["E" + symbol];
+        if (withE && symbol.charAt(0) !== "E") match = withE;
+      }
+      if (match){
+        var alias = Object.prototype.hasOwnProperty.call(ALIASES, symbol) ? symbol : "";
+        return describe(match, alias);
+      }
+    }
+
+    fail('"' + raw + '" is not a Linux errno number or symbol; try 13, ENOENT or EACCES.');
+    return null;
+  }
+
+  function list(){
+    return ENTRIES.slice();
+  }
+
+  return {
+    MIN: MIN,
+    MAX: MAX,
+    UNUSED: UNUSED,
+    ENTRIES: ENTRIES,
+    ALIASES: ALIASES,
+    lookup: lookup,
+    list: list
+  };
+})();
+/* linux-errno-core:end */
+(function(){
+"use strict";
+
+var els = {
+  form: document.getElementById("errno-form"),
+  code: document.getElementById("code"),
+  err: document.getElementById("err"),
+  out: document.getElementById("out"),
+  status: document.getElementById("status"),
+  filter: document.getElementById("filter"),
+  list: document.getElementById("list"),
+  count: document.getElementById("count")
+};
+
+function clear(node){
+  while (node.firstChild) node.removeChild(node.firstChild);
+}
+
+function addRow(parent, key, value){
+  var row = document.createElement("div");
+  row.className = "row";
+  var name = document.createElement("span");
+  name.className = "k";
+  name.textContent = key;
+  var val = document.createElement("span");
+  val.className = "v";
+  val.textContent = value;
+  row.appendChild(name);
+  row.appendChild(val);
+  parent.appendChild(row);
+}
+
+function render(result){
+  clear(els.out);
+  var big = document.createElement("div");
+  big.className = "big";
+  big.textContent = result.success ? "0 · success" : result.name;
+  var sub = document.createElement("div");
+  sub.className = "sub";
+  sub.textContent = result.success
+    ? "no error was recorded"
+    : "errno " + result.number + " · " + result.message;
+  els.out.appendChild(big);
+  els.out.appendChild(sub);
+
+  addRow(els.out, "Number", String(result.number));
+  addRow(els.out, "Symbol", result.name);
+  addRow(els.out, "Message (strerror)", result.message);
+  addRow(els.out, "Category", result.group);
+  if (!result.success) addRow(els.out, "Syscall return", result.negative);
+  if (result.aliases.length) addRow(els.out, "Same value as", result.aliases.join(", "));
+  if (result.viaAlias) addRow(els.out, "Entered as", result.viaAlias);
+  if (result.hint){
+    var hint = document.createElement("p");
+    hint.className = "hint";
+    var strong = document.createElement("strong");
+    strong.textContent = "What to check: ";
+    hint.appendChild(strong);
+    hint.appendChild(document.createTextNode(result.hint));
+    els.out.appendChild(hint);
+  }
+}
+
+function showError(message){
+  els.err.textContent = message;
+  clear(els.out);
+  var placeholder = document.createElement("span");
+  placeholder.className = "sub";
+  placeholder.textContent = "Fix the input above to decode an errno value.";
+  els.out.appendChild(placeholder);
+  els.status.textContent = "";
+}
+
+function decode(){
+  try {
+    var result = ErrnoCore.lookup(els.code.value);
+    els.err.textContent = "";
+    render(result);
+    return result;
+  } catch (error){
+    showError(error.message);
+    return null;
+  }
+}
+
+function buildList(){
+  clear(els.list);
+  ErrnoCore.list().forEach(function(entry){
+    var row = document.createElement("div");
+    row.className = "ref";
+    row.dataset.search = (entry.number + " " + entry.name + " " + entry.message + " " + entry.group + " " + entry.aliases.join(" ")).toLowerCase();
+    var number = document.createElement("span");
+    number.className = "num";
+    number.textContent = String(entry.number);
+    var name = document.createElement("span");
+    name.className = "name";
+    name.textContent = entry.name;
+    if (entry.aliases.length){
+      var aka = document.createElement("span");
+      aka.className = "aka";
+      aka.textContent = "also " + entry.aliases.join(", ");
+      name.appendChild(aka);
+    }
+    var message = document.createElement("span");
+    message.className = "msg";
+    message.textContent = entry.message;
+    row.appendChild(number);
+    row.appendChild(name);
+    row.appendChild(message);
+    els.list.appendChild(row);
+  });
+}
+
+function applyFilter(){
+  var query = els.filter.value.trim().toLowerCase();
+  var rows = els.list.querySelectorAll(".ref");
+  var shown = 0;
+  for (var index = 0; index < rows.length; index += 1){
+    var match = !query || rows[index].dataset.search.indexOf(query) !== -1;
+    rows[index].hidden = !match;
+    if (match) shown += 1;
+  }
+  var total = ErrnoCore.ENTRIES.length;
+  els.count.textContent = query
+    ? shown + " of " + total + " values match"
+    : total + " assigned values, 41 and 58 unassigned";
+}
+
+els.form.addEventListener("submit", function(event){
+  event.preventDefault();
+  var result = decode();
+  if (result){
+    els.status.textContent = result.success
+      ? "errno 0 means the call succeeded."
+      : "Decoded errno " + result.number + ".";
+  }
+});
+
+els.code.addEventListener("input", function(){
+  if (els.code.value.trim() === ""){
+    els.err.textContent = "";
+    els.status.textContent = "";
+  }
+});
+
+els.list.addEventListener("click", function(event){
+  var row = event.target.closest(".ref");
+  if (!row) return;
+  var number = row.querySelector(".num");
+  if (!number) return;
+  els.code.value = number.textContent;
+  els.code.focus();
+  decode();
+  els.status.textContent = "Decoded errno " + number.textContent + ".";
+});
+
+document.querySelector(".chips").addEventListener("click", function(event){
+  var button = event.target.closest("button[data-code]");
+  if (!button) return;
+  els.code.value = button.dataset.code;
+  decode();
+  els.status.textContent = "Decoded " + button.dataset.code + ".";
+  els.code.focus();
+});
+
+els.filter.addEventListener("input", applyFilter);
+
+buildList();
+applyFilter();
+decode();
+})();
+</script>
+</body>
+</html>
