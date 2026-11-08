@@ -136,6 +136,7 @@ node tests/rice_cooking_ratio_calculator.test.cjs
 node tests/structured_cabling_run_estimator.test.cjs
 node tests/map_fit_bounds_zoom.test.cjs
 node tests/disk_io_throughput_calculator.test.cjs
+node tests/nashville_number_system_converter.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
