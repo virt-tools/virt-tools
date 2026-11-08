@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Route Elevation Profile Calculator — Virtual Tools</title>
+<meta name="description" content="Turn a list of latitude, longitude and elevation points into total distance, cumulative ascent and descent, steepest grades and an elevation profile — a noise threshold filters GPS jitter.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+[hidden]{display:none!important}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:12px;margin:10px 0}
+label.f{font-size:13px;opacity:.85;display:block;margin-bottom:4px}
+label.f .opt{font-weight:400;opacity:.6}
+.field{background:var(--bg,#14181f);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px;min-width:0}
+.field:focus-within{border-color:var(--accent,#6ea8fe);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#6ea8fe) 18%,transparent)}
+.field input{box-sizing:border-box;width:100%;min-width:0;background:transparent;color:var(--text,#e6e6e6);border:none;font-size:18px;font-family:ui-monospace,monospace;padding:2px 0;outline:none;min-height:44px}
+.field textarea{box-sizing:border-box;width:100%;min-width:0;background:transparent;color:var(--text,#e6e6e6);border:none;font-size:15px;line-height:1.6;font-family:ui-monospace,monospace;padding:2px 0;outline:none;resize:vertical;min-height:170px}
+.field .unit{font-size:11px;color:var(--text-dim,#9aa3b2);margin-top:4px;line-height:1.35}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:14px 0}
+.out .big{font-size:clamp(1.65rem,6vw,2.35rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:4px 0 6px;overflow-wrap:anywhere;color:var(--accent,#6ea8fe)}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45;overflow-wrap:anywhere}
+.out .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:14px}
+.out .row:last-child{border-bottom:none}
+.out .row .k{color:var(--text-dim,#9aa3b2)}
+.out .row .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right;overflow-wrap:anywhere}
+.profile{margin:14px 0 0;padding:0}
+.profile svg{display:block;width:100%;height:auto;max-width:100%}
+.profile .area{fill:var(--accent,#6ea8fe);fill-opacity:.16}
+.profile .line{fill:none;stroke:var(--accent,#6ea8fe);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.profile .base{stroke:var(--border,#2a2f3a);stroke-width:1}
+.profile .caption{margin:6px 0 0;font-size:12px;color:var(--text-dim,#9aa3b2);line-height:1.4}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:46px;white-space:nowrap}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.err{color:var(--bad,#f87171);font-size:13px;margin:6px 0;min-height:1.2em}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;margin:10px 0 0;line-height:1.5}
+@media (max-width:360px){.out .row{display:block}.out .row .v{display:block;text-align:left;margin-top:2px}}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>Route Elevation Profile Calculator</h1>
+<p>Turn a list of coordinates with elevations into the distance, the climbing and the shape of the route.</p>
+</div>
+<div class="panel">
+<form id="re-form" novalidate>
+<div class="field">
+<label class="f" for="in-rows">Route points — latitude, longitude, elevation</label>
+<textarea id="in-rows" spellcheck="false" autocomplete="off" aria-describedby="rows-help"></textarea>
+<div class="unit" id="rows-help">one point per line, in order along the route: decimal degrees and metres, separated by commas or spaces</div>
+</div>
+<div class="grid2">
+<div class="field"><label class="f" for="in-threshold">Ignore changes under <span class="opt">(optional)</span></label><input type="text" id="in-threshold" inputmode="decimal" autocomplete="off" value="3" aria-describedby="threshold-help"><div class="unit" id="threshold-help">metres of climb or drop smaller than this are treated as GPS noise — 0 counts every metre</div></div>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions"><button type="submit" id="go">Build the profile</button></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"><span style="color:var(--text-dim,#9aa3b2)">Paste at least two route points to see the profile.</span></div>
+<p class="note">Points are read in order: each line is a latitude, a longitude and an elevation in metres, in decimal degrees. Consecutive points are joined with the haversine great-circle distance on a sphere of radius 6,371 km, so the total distance is the sum of the legs and the profile is drawn against that running distance. Ascent and descent are accumulated with a hysteresis filter: an elevation change is only counted once it reaches the ignore threshold, and the reference elevation then moves to that point, so jitter smaller than the threshold never accumulates. A threshold of 0 counts every metre, which is why the same noisy track reports more climbing at 0 than at 3. Steepest grades are taken over individual legs that are at least 20 m long, because a few metres between two dense samples turns tiny elevation noise into enormous percentages; a route whose legs are all shorter than that reports no grade. Net change is the last elevation minus the first, the elevation range is the highest point minus the lowest, and ascent per kilometre divides the total climb by the route length. Everything runs locally in your browser: no uploads, no storage, no network access, and the coordinate list never leaves the page.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* route-elevation-core:start */
+var RouteElevationCore = (function(){
+  "use strict";
+  var EARTH_RADIUS_M = 6371000;
+  var MIN_GRADE_LEG_M = 20;
+  var MAX_POINTS = 2000;
+  var DEFAULTS = {
+    rows: [
+      "47.42150, -121.41300, 530",
+      "47.42410, -121.40920, 585",
+      "47.42730, -121.40540, 642",
+      "47.43040, -121.40190, 631",
+      "47.43360, -121.39820, 690",
+      "47.43690, -121.39460, 744",
+      "47.43980, -121.39100, 726",
+      "47.44220, -121.38730, 668"
+    ].join("\n"),
+    threshold: "3"
+  };
+  var LIMITS = { threshold: { min: 0, max: 100 } };
+  var NUMBER_RE = /^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/;
+  var TOKEN_SPLIT_RE = /[\s,;]+/;
+  function fail(message){ throw new Error(message); }
+  function round6(value){
+    var rounded = Math.round(Math.abs(value) * 1e6) / 1e6;
+    return value < 0 && rounded !== 0 ? -rounded : rounded;
+  }
+  function toRadians(value){ return value * Math.PI / 180; }
+  function haversine(lat1, lon1, lat2, lon2){
+    var p1 = toRadians(lat1), p2 = toRadians(lat2);
+    var dPhi = p2 - p1, dLambda = toRadians(lon2 - lon1);
+    var sinPhi = Math.sin(dPhi / 2), sinLambda = Math.sin(dLambda / 2);
+    var a = sinPhi * sinPhi + Math.cos(p1) * Math.cos(p2) * sinLambda * sinLambda;
+    if (a < 0) a = 0;
+    if (a > 1) a = 1;
+    return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(a));
+  }
+  function parseNumber(token, message){
+    if (!NUMBER_RE.test(token)) fail(message);
+    var value = Number(token);
+    if (!isFinite(value)) fail(message);
+    return value;
+  }
+  function parseRows(text){
+    var lines = String(text == null ? "" : text).split(/\r?\n/);
+    var points = [];
+    for (var i = 0; i < lines.length; i++){
+      var line = lines[i].replace(/^\s+|\s+$/g, "");
+      if (!line) continue;
+      var where = "Line " + (i + 1) + ": ";
+      var tokens = line.split(TOKEN_SPLIT_RE).filter(function(token){ return token !== ""; });
+      if (tokens.length !== 3) fail(where + "expected latitude, longitude and elevation.");
+      var lat = parseNumber(tokens[0], where + "latitude must be a decimal number from -90 to 90 degrees.");
+      if (lat < -90 || lat > 90) fail(where + "latitude must be a decimal number from -90 to 90 degrees.");
+      var lon = parseNumber(tokens[1], where + "longitude must be a decimal number from -180 to 180 degrees.");
+      if (lon < -180 || lon > 180) fail(where + "longitude must be a decimal number from -180 to 180 degrees.");
+      var elev = parseNumber(tokens[2], where + "elevation must be a number of metres from -500 to 9000.");
+      if (elev < -500 || elev > 9000) fail(where + "elevation must be a number of metres from -500 to 9000.");
+      points.push({ lat: lat, lon: lon, elev: elev });
+      if (points.length > MAX_POINTS) fail("A route can hold at most " + MAX_POINTS + " points.");
+    }
+    return points;
+  }
+  function calculate(input){
+    var options = input || {};
+    var rawRows = options.rows == null ? DEFAULTS.rows : options.rows;
+    var rawThreshold = options.threshold == null ? DEFAULTS.threshold : options.threshold;
+    var points = parseRows(rawRows);
+    if (!points.length) fail("Enter at least two rows of latitude, longitude and elevation.");
+    if (points.length < 2) fail("A route needs at least two points.");
+    var thresholdText = String(rawThreshold).replace(/^\s+|\s+$/g, "");
+    var threshold = 0;
+    if (thresholdText !== ""){
+      var limit = LIMITS.threshold;
+      var thresholdMessage = "Smoothing threshold must be a number from " + limit.min + " to " + limit.max + " metres.";
+      threshold = parseNumber(thresholdText, thresholdMessage);
+      if (threshold < limit.min || threshold > limit.max) fail(thresholdMessage);
+    }
+
+    var profile = [{ distanceM: 0, elevationM: points[0].elev }];
+    var distanceM = 0;
+    var anchorElev = points[0].elev;
+    var ascentM = 0, descentM = 0;
+    var climbs = [], drops = [];
+    for (var i = 1; i < points.length; i++){
+      var legM = haversine(points[i - 1].lat, points[i - 1].lon, points[i].lat, points[i].lon);
+      distanceM += legM;
+      profile.push({ distanceM: distanceM, elevationM: points[i].elev });
+      var elev = points[i].elev;
+      if (elev - anchorElev >= threshold){
+        ascentM += elev - anchorElev;
+        anchorElev = elev;
+      } else if (anchorElev - elev >= threshold){
+        descentM += anchorElev - elev;
+        anchorElev = elev;
+      }
+      if (legM >= MIN_GRADE_LEG_M){
+        var grade = (elev - points[i - 1].elev) / legM * 100;
+        var gain = elev - points[i - 1].elev;
+        if (gain > 0) climbs.push({ percent: grade, gain: gain, legM: legM });
+        if (gain < 0) drops.push({ percent: grade, drop: -gain, legM: legM });
+      }
+    }
+    var elevations = points.map(function(point){ return point.elev; });
+    var minM = Math.min.apply(null, elevations);
+    var maxM = Math.max.apply(null, elevations);
+    var steepestClimb = null, steepestDrop = null;
+    for (var c = 0; c < climbs.length; c++){
+      if (steepestClimb === null || climbs[c].percent > steepestClimb.percent) steepestClimb = climbs[c];
+    }
+    for (var d = 0; d < drops.length; d++){
+      if (steepestDrop === null || drops[d].percent < steepestDrop.percent) steepestDrop = drops[d];
+    }
+    var distanceKm = distanceM / 1000;
+    return {
+      pointCount: points.length,
+      thresholdM: threshold,
+      distanceM: round6(distanceM),
+      distanceKm: round6(distanceKm),
+      distanceMi: round6(distanceKm * 0.621371192237334),
+      ascentM: round6(ascentM),
+      descentM: round6(descentM),
+      netM: round6(points[points.length - 1].elev - points[0].elev),
+      minM: round6(minM),
+      maxM: round6(maxM),
+      rangeM: round6(maxM - minM),
+      ascentPerKmM: distanceM > 0 ? round6(ascentM / distanceKm) : null,
+      steepestClimbPercent: steepestClimb === null ? null : round6(steepestClimb.percent),
+      steepestClimbGainM: steepestClimb === null ? null : round6(steepestClimb.gain),
+      steepestClimbLegM: steepestClimb === null ? null : round6(steepestClimb.legM),
+      steepestDescentPercent: steepestDrop === null ? null : round6(steepestDrop.percent),
+      steepestDescentDropM: steepestDrop === null ? null : round6(steepestDrop.drop),
+      steepestDescentLegM: steepestDrop === null ? null : round6(steepestDrop.legM),
+      profile: profile
+    };
+  }
+  return {
+    calculate: calculate,
+    DEFAULTS: DEFAULTS,
+    LIMITS: LIMITS,
+    MIN_GRADE_LEG_M: MIN_GRADE_LEG_M,
+    MAX_POINTS: MAX_POINTS
+  };
+})();
+/* route-elevation-core:end */
+(function(){
+"use strict";
+var SVG_NS = "http://www.w3.org/2000/svg";
+var els = {
+  rows: document.getElementById("in-rows"),
+  threshold: document.getElementById("in-threshold"),
+  err: document.getElementById("err"),
+  out: document.getElementById("out")
+};
+var FEET_PER_METRE = 3.280839895013123;
+function clear(node){ while (node.firstChild) node.removeChild(node.firstChild); }
+function plain(value, digits){
+  var text = Number(value).toFixed(digits);
+  if (text.indexOf(".") > -1) text = text.replace(/0+$/, "").replace(/\.$/, "");
+  return text === "-0" ? "0" : text;
+}
+function group(value, digits){
+  return Number(value).toLocaleString("en-US", { maximumFractionDigits: digits == null ? 0 : digits });
+}
+function metres(value, digits){
+  return group(value, digits == null ? 1 : digits) + " m";
+}
+function feet(value){
+  return group(value * FEET_PER_METRE, 0) + " ft";
+}
+function addRow(parent, label, value){
+  var row = document.createElement("div"); row.className = "row";
+  var key = document.createElement("span"); key.className = "k"; key.textContent = label;
+  var val = document.createElement("span"); val.className = "v"; val.textContent = value;
+  row.appendChild(key); row.appendChild(val); parent.appendChild(row);
+}
+function placeholder(message){
+  var span = document.createElement("span");
+  span.style.color = "var(--text-dim,#9aa3b2)"; span.textContent = message;
+  els.out.appendChild(span);
+}
+function svgNode(name, attributes){
+  var node = document.createElementNS(SVG_NS, name);
+  Object.keys(attributes).forEach(function(key){ node.setAttribute(key, String(attributes[key])); });
+  return node;
+}
+function drawProfile(host, result){
+  if (result.pointCount < 2 || result.distanceM <= 0) return;
+  var width = 720, height = 200, padLeft = 10, padRight = 10, padTop = 16, padBottom = 24;
+  var plotWidth = width - padLeft - padRight;
+  var plotHeight = height - padTop - padBottom;
+  var baseY = padTop + plotHeight;
+  var range = result.rangeM > 0 ? result.rangeM : 1;
+  var points = result.profile.map(function(point){
+    var x = padLeft + (result.distanceM > 0 ? point.distanceM / result.distanceM : 0) * plotWidth;
+    var y = padTop + (1 - (point.elevationM - result.minM) / range) * plotHeight;
+    return [Math.round(x * 100) / 100, Math.round(y * 100) / 100];
+  });
+  var line = points.map(function(point, index){
+    return (index === 0 ? "M" : "L") + point[0] + " " + point[1];
+  }).join(" ");
+  var area = line + " L" + points[points.length - 1][0] + " " + baseY
+    + " L" + points[0][0] + " " + baseY + " Z";
+  var svg = svgNode("svg", {
+    viewBox: "0 0 " + width + " " + height,
+    role: "img",
+    "aria-label": "Elevation profile: lowest " + plain(result.minM, 0) + " metres, highest "
+      + plain(result.maxM, 0) + " metres over " + plain(result.distanceKm, 2) + " kilometres"
+  });
+  var baseline = svgNode("line", { x1: padLeft, y1: baseY, x2: width - padRight, y2: baseY });
+  baseline.setAttribute("class", "base");
+  svg.appendChild(baseline);
+  var areaPath = svgNode("path", { d: area });
+  areaPath.setAttribute("class", "area");
+  svg.appendChild(areaPath);
+  var linePath = svgNode("path", { d: line });
+  linePath.setAttribute("class", "line");
+  svg.appendChild(linePath);
+  var box = document.createElement("div"); box.className = "profile";
+  box.appendChild(svg);
+  // The scale is drawn, not lettered: captions stay at a readable size at any
+  // width instead of shrinking with the viewBox.
+  var caption = document.createElement("p"); caption.className = "caption";
+  caption.textContent = "Lowest " + plain(result.minM, 0) + " m · highest "
+    + plain(result.maxM, 0) + " m · " + plain(result.distanceKm, 2) + " km along the route";
+  box.appendChild(caption);
+  host.appendChild(box);
+}
+function render(result){
+  clear(els.out);
+  var big = document.createElement("div"); big.className = "big";
+  big.textContent = metres(result.ascentM, 1) + " of climbing";
+  var sub = document.createElement("div"); sub.className = "sub";
+  sub.textContent = plain(result.distanceKm, 2) + " km · " + plain(result.distanceMi, 2) + " mi · "
+    + result.pointCount + " points" + (result.thresholdM > 0
+      ? " · ignoring changes under " + plain(result.thresholdM, 1) + " m"
+      : " · counting every metre");
+  els.out.appendChild(big); els.out.appendChild(sub);
+  addRow(els.out, "Total ascent", metres(result.ascentM, 1) + " · " + feet(result.ascentM));
+  addRow(els.out, "Total descent", metres(result.descentM, 1) + " · " + feet(result.descentM));
+  addRow(els.out, "Net change", (result.netM > 0 ? "+" : result.netM < 0 ? "−" : "")
+    + metres(Math.abs(result.netM), 1));
+  addRow(els.out, "Elevation range", plain(result.minM, 0) + " to " + plain(result.maxM, 0)
+    + " m (" + metres(result.rangeM, 0) + ")");
+  addRow(els.out, "Distance", plain(result.distanceKm, 2) + " km · " + plain(result.distanceMi, 2) + " mi");
+  addRow(els.out, "Ascent per km", result.ascentPerKmM === null ? "—"
+    : plain(result.ascentPerKmM, 1) + " m/km");
+  addRow(els.out, "Steepest climb", result.steepestClimbPercent === null ? "—"
+    : plain(result.steepestClimbPercent, 1) + "% · " + metres(result.steepestClimbGainM, 0)
+      + " over " + metres(result.steepestClimbLegM, 0));
+  addRow(els.out, "Steepest descent", result.steepestDescentPercent === null ? "—"
+    : plain(Math.abs(result.steepestDescentPercent), 1) + "% · " + metres(result.steepestDescentDropM, 0)
+      + " over " + metres(result.steepestDescentLegM, 0));
+  drawProfile(els.out, result);
+}
+function run(){
+  var result;
+  try {
+    result = RouteElevationCore.calculate({
+      rows: els.rows.value,
+      threshold: els.threshold.value
+    });
+  } catch (error){
+    els.err.textContent = error.message; clear(els.out);
+    placeholder("Check the route points and the ignore threshold above."); return;
+  }
+  els.err.textContent = ""; render(result);
+}
+els.rows.value = RouteElevationCore.DEFAULTS.rows;
+[els.rows, els.threshold].forEach(function(input){
+  input.addEventListener("input", run);
+});
+document.getElementById("re-form").addEventListener("submit", function(event){
+  event.preventDefault(); run();
+});
+run();
+})();
+</script>
+</body>
+</html>
