@@ -123,6 +123,7 @@ node tests/nice_value_cpu_share_calculator.test.cjs
 node tests/musical_interval_calculator.test.cjs
 node tests/canvas_stretcher_calculator.test.cjs
 node tests/knife_edge_diffraction_calculator.test.cjs
+node tests/anchor_rode_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
