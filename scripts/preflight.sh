@@ -127,6 +127,7 @@ node tests/anchor_rode_calculator.test.cjs
 node tests/dough_temperature_calculator.test.cjs
 node tests/uplink_oversubscription_calculator.test.cjs
 node tests/mercator_scale_factor_calculator.test.cjs
+node tests/partition_alignment_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
