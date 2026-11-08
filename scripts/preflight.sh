@@ -131,6 +131,7 @@ node tests/partition_alignment_calculator.test.cjs
 node tests/swing_ratio_calculator.test.cjs
 node tests/pillow_cover_calculator.test.cjs
 node tests/antenna_downtilt_coverage_calculator.test.cjs
+node tests/billiards_cut_angle_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
