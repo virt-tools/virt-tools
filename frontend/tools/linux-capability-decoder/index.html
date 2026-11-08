@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Linux Capability Decoder — Virtual Tools</title>
+<meta name="description" content="Decode a hex or decimal Linux capability mask into cap_ names, or build the mask from a capability list, with a 64-bit explanation of every set bit and the /proc and capsh forms of the same value.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px;margin:10px 0}
+label.f{font-size:13px;opacity:.85;display:block;margin-bottom:4px}
+.field{background:var(--bg,#14181f);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px}
+.field:focus-within{border-color:var(--accent,#6ea8fe);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#6ea8fe) 18%,transparent)}
+.field input,.field select{box-sizing:border-box;min-width:0;width:100%;background:transparent;color:var(--text,#e6e6e6);border:none;font-family:ui-monospace,monospace;font-size:17px;padding:2px 0;outline:none}
+.field select{font-family:inherit;font-size:15px}
+.field select option{background:var(--bg,#14181f);color:var(--text,#e6e6e6)}
+.field .unit{font-size:11px;color:var(--text-dim,#9aa3b2);margin-top:4px;line-height:1.4}
+.picker{border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:10px 12px;margin:14px 0}
+.picker legend{padding:0 6px;font-size:13px;color:var(--text-dim,#9aa3b2)}
+.cap-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,110px),1fr));gap:6px;margin:8px 0 4px}
+.cap-grid button{min-height:44px;font:inherit;font-family:ui-monospace,monospace;font-size:12px;font-weight:600;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg,#14181f);color:var(--text,#e6e6e6);cursor:pointer;padding:6px 8px;overflow-wrap:break-word;text-align:left}
+.cap-grid button[aria-pressed="true"]{background:color-mix(in srgb,var(--accent,#6ea8fe) 22%,var(--bg,#14181f));border-color:var(--accent,#6ea8fe);color:var(--text,#fff)}
+.cap-grid button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:12px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 20px;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);color:var(--text,#e6e6e6);cursor:pointer;min-height:44px}
+.actions button.primary{background:var(--accent,#6ea8fe);border-color:var(--accent,#6ea8fe);color:#0b1017;padding:10px 24px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:disabled{opacity:.5;cursor:not-allowed;filter:none}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:14px 0}
+.out .big{font-size:clamp(1.35rem,6.2vw,2.4rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:4px 0 2px;overflow-wrap:anywhere;color:var(--accent,#6ea8fe)}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45}
+.out .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:7px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:13.5px}
+.out .row:last-child{border-bottom:none}
+.out .row .k{color:var(--text-dim,#9aa3b2);flex:0 0 auto}
+.out .row .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right;overflow-wrap:anywhere;word-break:break-word}
+.err{color:var(--bad,#f87171);font-size:13px;margin:6px 0;min-height:1.2em}
+.warn{font-size:13px;margin:10px 0;padding:9px 11px;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);line-height:1.5}
+.details h2{font-size:1rem;margin:18px 0 8px}
+.details .empty{color:var(--text-dim,#9aa3b2);font-size:13.5px;margin:0}
+.cap-row{display:grid;grid-template-columns:2.6rem 12.5rem minmax(0,1fr);gap:10px;align-items:baseline;padding:8px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:13.5px}
+.cap-row:last-child{border-bottom:none}
+.cap-row .num{font-family:ui-monospace,monospace;color:var(--text-dim,#9aa3b2);text-align:right}
+.cap-row .name{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);overflow-wrap:anywhere}
+.cap-row .desc{color:var(--text,#e6e6e6);opacity:.9;line-height:1.45}
+.cap-row.risk .name{color:var(--warn,#fbbf24)}
+@media (max-width:560px){.cap-row{grid-template-columns:2.2rem minmax(0,1fr)}.cap-row .desc{grid-column:1 / -1;opacity:.75;font-size:13px}.picker{padding:10px 8px}.cap-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.cap-grid button{padding:6px;font-size:11.5px}}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;margin:16px 0 0;line-height:1.55}
+.note code{font-size:.95em}
+.status{font-size:13px;color:var(--text-dim,#9aa3b2);margin:6px 0 0;min-height:1.2em}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>Linux Capability Decoder</h1>
+<p>Turn a hex or decimal capability mask into <code>cap_</code> names, or build the mask from a capability list.</p>
+</div>
+<div class="panel">
+<form id="cap-form" novalidate>
+<div class="grid2">
+<div class="field">
+<label class="f" for="mask">Capability mask</label>
+<input type="text" id="mask" inputmode="text" autocomplete="off" spellcheck="false" value="0x00000000a80425fb" aria-describedby="mask-help">
+<div class="unit" id="mask-help">Paste <code>CapEff</code> from /proc, or the 0x value from capsh</div>
+</div>
+<div class="field">
+<label class="f" for="base">Mask base</label>
+<select id="base">
+<option value="hex" selected>Hexadecimal</option>
+<option value="decimal">Decimal</option>
+</select>
+<div class="unit" id="base-help">A mask is 64 bits wide; hexadecimal is what the kernel prints</div>
+</div>
+</div>
+<div class="field">
+<label class="f" for="list">Capability list</label>
+<input type="text" id="list" autocomplete="off" spellcheck="false" value="cap_chown,cap_dac_override,cap_fowner,cap_fsetid,cap_kill,cap_setgid,cap_setuid,cap_setpcap,cap_net_bind_service,cap_net_raw,cap_sys_chroot,cap_mknod,cap_audit_write,cap_setfcap" aria-describedby="list-help">
+<div class="unit" id="list-help">Comma- or space-separated; <code>cap_</code> prefix optional, so <code>NET_ADMIN</code> works too</div>
+</div>
+<fieldset class="picker">
+<legend>Toggle capabilities</legend>
+<div id="grid" class="cap-grid" role="group" aria-label="Linux capability toggles"></div>
+<div class="actions">
+<button type="button" id="none">Clear</button>
+<button type="button" id="full">All 41</button>
+<button type="submit" class="primary">Decode</button>
+</div>
+</fieldset>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"></div>
+<div class="actions"><button type="button" id="copy">Copy name list</button></div>
+<p class="status" id="status" role="status" aria-live="polite"></p>
+<p class="warn" id="warn" hidden></p>
+<section class="details" aria-labelledby="details-title">
+<h2 id="details-title">Capabilities in this mask</h2>
+<div id="details"></div>
+</section>
+<p class="note">A Linux capability mask is a 64-bit bitmap: bit <em>n</em> set means capability <em>n</em> is present in that set. The kernel assigns 0 to 40 — <code>cap_chown</code> through <code>cap_checkpoint_restore</code> — while <code>cap_perfmon</code> (38) and <code>cap_bpf</code> (39) arrived in Linux 5.8 and <code>cap_checkpoint_restore</code> (40) in 5.9, so an older kernel knows fewer. The four sets read from <code>/proc/&lt;pid&gt;/status</code> are <code>CapInh</code>, <code>CapPrm</code>, <code>CapEff</code>, <code>CapBnd</code> and <code>CapAmb</code>; only <code>CapEff</code> is enforced, permitted limits what may be raised, and bounding limits what a process may ever gain. <code>capsh --decode=0x…</code> prints the same name list, and <code>getcap</code>/<code>setcap</code> read and write the <code>security.capability</code> attribute on a file. Decoding here is arithmetic only: it makes no judgement about whether a mask is safe, executes nothing, and sends nothing off this page.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* linux-capability-core:start */
+var LinuxCapabilityCore = (function(){
+  "use strict";
+  var BITS = 64;
+  var FULL = (BigInt(1) << BigInt(BITS)) - BigInt(1);
+  var TABLE = [
+    [0, "cap_chown", "Change the owner of a file (chown).", false],
+    [1, "cap_dac_override", "Bypass file read, write and execute permission checks.", true],
+    [2, "cap_dac_read_search", "Bypass file read permission and directory search checks.", true],
+    [3, "cap_fowner", "Bypass permission checks on operations that normally require ownership of the file, such as chmod.", false],
+    [4, "cap_fsetid", "Keep the set-user-ID and set-group-ID bits when a file is modified.", false],
+    [5, "cap_kill", "Send a signal to any process.", false],
+    [6, "cap_setgid", "Change process group IDs or the supplementary group list, and forge the group of a socket credential.", false],
+    [7, "cap_setuid", "Change process user IDs, and forge the user of a socket credential.", false],
+    [8, "cap_setpcap", "Raise or drop capabilities by modifying the process capability sets directly.", false],
+    [9, "cap_linux_immutable", "Set the immutable and append-only file attributes.", false],
+    [10, "cap_net_bind_service", "Bind a socket to an internet domain port below 1024.", false],
+    [11, "cap_net_broadcast", "Make socket broadcasts and listen to multicasts; currently unused.", false],
+    [12, "cap_net_admin", "Configure network interfaces, routing, firewall rules, socket marks and multicast membership.", true],
+    [13, "cap_net_raw", "Open raw and packet sockets, which allows sniffing and hand-built frames.", true],
+    [14, "cap_ipc_lock", "Lock memory into RAM (mlock, mlockall) so it cannot be swapped.", false],
+    [15, "cap_ipc_owner", "Bypass permission checks on System V IPC objects.", false],
+    [16, "cap_sys_module", "Load and unload kernel modules, which runs code in kernel space.", true],
+    [17, "cap_sys_rawio", "Perform raw I/O port access and read or write /dev/mem, /dev/kmem and /dev/port.", true],
+    [18, "cap_sys_chroot", "Change the root directory of the calling process (chroot).", false],
+    [19, "cap_sys_ptrace", "Trace and inspect other processes (ptrace, process_vm_readv, process_vm_writev).", true],
+    [20, "cap_sys_pacct", "Enable or disable process accounting.", false],
+    [21, "cap_sys_admin", "Perform the many privileged operations without their own capability: mount, swapon, sethostname, namespaces, most privileged ioctls.", true],
+    [22, "cap_sys_boot", "Reboot and halt the system, and set the real-time clock.", true],
+    [23, "cap_sys_nice", "Raise process priority, set real-time scheduling and change the CPU affinity of other processes.", false],
+    [24, "cap_sys_resource", "Set resource limits beyond the hard limit and raise limits for other processes.", false],
+    [25, "cap_sys_time", "Set the system clock and the real-time clock.", false],
+    [26, "cap_sys_tty_config", "Configure terminal devices, including vhangup.", false],
+    [27, "cap_mknod", "Create device special files with mknod, and create Unix domain sockets.", false],
+    [28, "cap_lease", "Establish leases on files (F_SETLEASE).", false],
+    [29, "cap_audit_write", "Write records to the kernel audit log.", false],
+    [30, "cap_audit_control", "Configure the kernel audit subsystem: change rules, enable or disable auditing.", true],
+    [31, "cap_setfcap", "Set the security.capability attribute that grants file capabilities.", true],
+    [32, "cap_mac_override", "Override Mandatory Access Control policy, for example on Smack.", false],
+    [33, "cap_mac_admin", "Configure Mandatory Access Control policy.", true],
+    [34, "cap_syslog", "Read the kernel ring buffer and configure kernel logging (privileged syslog).", false],
+    [35, "cap_wake_alarm", "Trigger a wake alarm that can bring the system out of suspend.", false],
+    [36, "cap_block_suspend", "Block the system from suspending or hibernating.", false],
+    [37, "cap_audit_read", "Read audit log records over netlink.", false],
+    [38, "cap_perfmon", "Use performance monitoring: perf_event_open and related interfaces (Linux 5.8 and later).", false],
+    [39, "cap_bpf", "Use the bpf system call and related BPF operations (Linux 5.8 and later).", true],
+    [40, "cap_checkpoint_restore", "Restore process state through checkpoint and restore (Linux 5.9 and later).", false]
+  ];
+
+  var CAPS = [];
+  var BY_NUMBER = Object.create(null);
+  var BY_KEY = Object.create(null);
+
+  TABLE.forEach(function(row){
+    var cap = {
+      number: row[0],
+      name: row[1],
+      constant: row[1].toUpperCase(),
+      label: row[1].slice(4),
+      summary: row[2],
+      dangerous: row[3]
+    };
+    CAPS.push(cap);
+    BY_NUMBER[cap.number] = cap;
+    BY_KEY[cap.label] = cap;
+  });
+
+  var LAST = CAPS[CAPS.length - 1].number;
+  var ROOT_EQUIVALENT = [2, 16, 17, 19, 21];
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function pad(text, width){
+    var value = String(text);
+    while (value.length < width) value = "0" + value;
+    return value;
+  }
+
+  function parseMask(text, base){
+    var raw = String(text == null ? "" : text).trim().replace(/[\s_]/g, "");
+    if (!raw) fail("Enter a capability mask, or toggle capabilities below.");
+    var value;
+    if (base === "decimal"){
+      if (!/^\d+$/.test(raw)) fail("A decimal mask may contain only the digits 0 to 9.");
+      var decimal = raw.replace(/^0+(?=\d)/, "");
+      if (decimal.length > 20) fail("The mask is wider than 64 bits; Linux capability masks are 64-bit.");
+      value = BigInt(decimal);
+    } else {
+      var match = /^(?:0x)?([0-9a-f]+)$/i.exec(raw);
+      if (!match) fail("A hex mask may contain only hexadecimal digits and an optional 0x prefix.");
+      var hex = match[1].replace(/^0+(?=[0-9a-f])/i, "");
+      if (hex.length > 16) fail("The mask is wider than 64 bits; Linux capability masks are 64-bit.");
+      value = BigInt("0x" + hex);
+    }
+    if (value > FULL) fail("The mask is wider than 64 bits; Linux capability masks are 64-bit.");
+    return value;
+  }
+
+  function parseList(text){
+    var raw = String(text == null ? "" : text).trim();
+    if (!raw) return [];
+    var parts = raw.split(/[,\s]+/).filter(Boolean);
+    var seen = Object.create(null);
+    var numbers = [];
+    parts.forEach(function(part){
+      var key = part.toLowerCase().replace(/^cap_/, "");
+      var cap = BY_KEY[key];
+      if (!cap){
+        fail('"' + part + '" is not a Linux capability name; use a name such as cap_chown or CAP_NET_ADMIN.');
+      }
+      if (seen[cap.number]) return;
+      seen[cap.number] = true;
+      numbers.push(cap.number);
+    });
+    numbers.sort(function(a, b){ return a - b; });
+    return numbers;
+  }
+
+  function maskFromNumbers(numbers){
+    var mask = BigInt(0);
+    numbers.forEach(function(number){
+      mask = mask | (BigInt(1) << BigInt(number));
+    });
+    return mask;
+  }
+
+  function numbersFromMask(mask){
+    var numbers = [];
+    for (var number = 0; number < BITS; number += 1){
+      if ((mask & (BigInt(1) << BigInt(number))) !== BigInt(0)) numbers.push(number);
+    }
+    return numbers;
+  }
+
+  function formatBinary(mask){
+    var bits = pad(mask.toString(2), BITS);
+    var groups = [];
+    for (var offset = 0; offset < BITS; offset += 8) groups.push(bits.slice(offset, offset + 8));
+    return groups.join(" ");
+  }
+
+  function describe(mask){
+    var numbers = numbersFromMask(mask);
+    var set = [];
+    var unknown = [];
+    numbers.forEach(function(number){
+      var cap = BY_NUMBER[number];
+      if (cap) set.push(cap);
+      else unknown.push(number);
+    });
+    var names = set.map(function(cap){ return cap.name; });
+    var warnings = [];
+    if (!set.length && !unknown.length){
+      warnings.push("The mask is empty: no capabilities are set.");
+    }
+    if (unknown.length){
+      warnings.push(
+        (unknown.length === 1 ? "Bit " : "Bits ") + unknown.join(", ") +
+        " lies above " + LAST + ", the highest number assigned in Linux 5.9 and later, so " +
+        (unknown.length === 1 ? "it carries" : "they carry") + " no decodable capability."
+      );
+    }
+    var rootLike = set.filter(function(cap){ return ROOT_EQUIVALENT.indexOf(cap.number) !== -1; });
+    if (rootLike.length){
+      warnings.push(
+        "This mask includes capabilities that are effectively unrestricted root: " +
+        rootLike.map(function(cap){ return cap.name; }).join(", ") + "."
+      );
+    }
+    return {
+      mask: mask,
+      set: set,
+      unknownBits: unknown,
+      count: set.length,
+      names: names,
+      symbolic: names.join(","),
+      hex: "0x" + pad(mask.toString(16), 16),
+      bareHex: mask.toString(16),
+      procHex: pad(mask.toString(16), 16),
+      decimal: mask.toString(10),
+      binary: formatBinary(mask),
+      highest: set.length ? set[set.length - 1].number : null,
+      warnings: warnings
+    };
+  }
+
+  function decode(options){
+    var settings = options || {};
+    var mask = parseMask(settings.value, settings.base === "decimal" ? "decimal" : "hex");
+    return describe(mask);
+  }
+
+  function decodeNumbers(numbers){
+    return describe(maskFromNumbers(numbers || []));
+  }
+
+  return {
+    BITS: BITS,
+    LAST: LAST,
+    CAPABILITIES: CAPS,
+    parseMask: parseMask,
+    parseList: parseList,
+    maskFromNumbers: maskFromNumbers,
+    numbersFromMask: numbersFromMask,
+    formatBinary: formatBinary,
+    describe: describe,
+    decode: decode,
+    decodeNumbers: decodeNumbers
+  };
+})();
+/* linux-capability-core:end */
+(function(){
+"use strict";
+
+var els = {
+  form: document.getElementById("cap-form"),
+  mask: document.getElementById("mask"),
+  base: document.getElementById("base"),
+  list: document.getElementById("list"),
+  grid: document.getElementById("grid"),
+  none: document.getElementById("none"),
+  full: document.getElementById("full"),
+  err: document.getElementById("err"),
+  out: document.getElementById("out"),
+  warn: document.getElementById("warn"),
+  details: document.getElementById("details"),
+  copy: document.getElementById("copy"),
+  status: document.getElementById("status")
+};
+
+var numbers = [];
+
+function clear(node){
+  while (node.firstChild) node.removeChild(node.firstChild);
+}
+
+function addRow(parent, key, value){
+  var row = document.createElement("div");
+  row.className = "row";
+  var name = document.createElement("span");
+  name.className = "k";
+  name.textContent = key;
+  var val = document.createElement("span");
+  val.className = "v";
+  val.textContent = value;
+  row.appendChild(name);
+  row.appendChild(val);
+  parent.appendChild(row);
+}
+
+function buildGrid(){
+  clear(els.grid);
+  LinuxCapabilityCore.CAPABILITIES.forEach(function(cap){
+    var button = document.createElement("button");
+    button.type = "button";
+    button.dataset.cap = String(cap.number);
+    button.setAttribute("aria-pressed", "false");
+    button.setAttribute("aria-label", cap.constant);
+    button.title = cap.constant + " (" + cap.number + ")";
+    var parts = cap.label.split("_");
+    parts.forEach(function(part, index){
+      var last = index === parts.length - 1;
+      button.appendChild(document.createTextNode(last ? part : part + "_"));
+      if (!last) button.appendChild(document.createElement("wbr"));
+    });
+    els.grid.appendChild(button);
+  });
+}
+
+function syncGrid(){
+  var buttons = els.grid.querySelectorAll("button[data-cap]");
+  for (var index = 0; index < buttons.length; index += 1){
+    var number = Number(buttons[index].dataset.cap);
+    buttons[index].setAttribute("aria-pressed", numbers.indexOf(number) === -1 ? "false" : "true");
+  }
+}
+
+function renderDetails(result){
+  clear(els.details);
+  if (!result.set.length){
+    var empty = document.createElement("p");
+    empty.className = "empty";
+    empty.textContent = "No capabilities are set in this mask.";
+    els.details.appendChild(empty);
+    return;
+  }
+  result.set.forEach(function(cap){
+    var row = document.createElement("div");
+    row.className = cap.dangerous ? "cap-row risk" : "cap-row";
+    var number = document.createElement("span");
+    number.className = "num";
+    number.textContent = String(cap.number);
+    var name = document.createElement("span");
+    name.className = "name";
+    name.textContent = cap.name;
+    var desc = document.createElement("span");
+    desc.className = "desc";
+    desc.textContent = cap.summary;
+    row.appendChild(number);
+    row.appendChild(name);
+    row.appendChild(desc);
+    els.details.appendChild(row);
+  });
+}
+
+function render(result){
+  els.err.textContent = "";
+  clear(els.out);
+  var big = document.createElement("div");
+  big.className = "big";
+  big.textContent = result.hex;
+  var sub = document.createElement("div");
+  sub.className = "sub";
+  sub.textContent = result.count + " of " + LinuxCapabilityCore.CAPABILITIES.length +
+    " capabilities set" +
+    (result.unknownBits.length ? " · " + result.unknownBits.length + " undefined bit" + (result.unknownBits.length === 1 ? "" : "s") : "");
+  els.out.appendChild(big);
+  els.out.appendChild(sub);
+  addRow(els.out, "Names (capsh order)", result.symbolic || "none");
+  addRow(els.out, "Hex mask", result.hex);
+  addRow(els.out, "/proc mask", result.procHex);
+  addRow(els.out, "Decimal", result.decimal);
+  addRow(els.out, "Binary", result.binary);
+  addRow(els.out, "Highest capability", result.highest === null ? "none" : String(result.highest));
+
+  if (result.warnings.length){
+    els.warn.hidden = false;
+    els.warn.textContent = result.warnings.join(" ");
+  } else {
+    els.warn.hidden = true;
+    els.warn.textContent = "";
+  }
+
+  els.copy.disabled = result.count === 0;
+  els.status.textContent = "";
+  renderDetails(result);
+}
+
+function showError(message){
+  els.err.textContent = message;
+  clear(els.out);
+  var placeholder = document.createElement("span");
+  placeholder.className = "sub";
+  placeholder.textContent = "Fix the highlighted input to see the mask.";
+  els.out.appendChild(placeholder);
+  els.warn.hidden = true;
+  els.warn.textContent = "";
+  els.copy.disabled = true;
+  clear(els.details);
+  var empty = document.createElement("p");
+  empty.className = "empty";
+  empty.textContent = "No readable mask.";
+  els.details.appendChild(empty);
+}
+
+function fromMask(){
+  try {
+    var result = LinuxCapabilityCore.decode({ value: els.mask.value, base: els.base.value });
+    numbers = result.set.map(function(cap){ return cap.number; });
+    els.list.value = result.symbolic;
+    syncGrid();
+    render(result);
+  } catch (error){
+    showError(error.message);
+  }
+}
+
+function fromList(){
+  try {
+    var parsed = LinuxCapabilityCore.parseList(els.list.value);
+    var result = LinuxCapabilityCore.decodeNumbers(parsed);
+    els.mask.value = result.hex;
+    numbers = parsed;
+    syncGrid();
+    render(result);
+  } catch (error){
+    showError(error.message);
+  }
+}
+
+function applyNumbers(next, options){
+  var sorted = next.slice().sort(function(a, b){ return a - b; });
+  var result = LinuxCapabilityCore.decodeNumbers(sorted);
+  numbers = sorted;
+  els.mask.value = result.hex;
+  if (!options || options.writeList !== false) els.list.value = result.symbolic;
+  syncGrid();
+  render(result);
+}
+
+els.grid.addEventListener("click", function(event){
+  var button = event.target.closest("button[data-cap]");
+  if (!button) return;
+  var number = Number(button.dataset.cap);
+  var position = numbers.indexOf(number);
+  var next = numbers.slice();
+  if (position === -1) next.push(number);
+  else next.splice(position, 1);
+  applyNumbers(next);
+});
+
+els.mask.addEventListener("input", fromMask);
+els.list.addEventListener("input", fromList);
+els.base.addEventListener("change", fromMask);
+
+els.form.addEventListener("submit", function(event){
+  event.preventDefault();
+  fromMask();
+  els.status.textContent = els.err.textContent ? "" : "Decoded the mask above.";
+});
+
+els.none.addEventListener("click", function(){
+  applyNumbers([]);
+});
+
+els.full.addEventListener("click", function(){
+  var all = LinuxCapabilityCore.CAPABILITIES.map(function(cap){ return cap.number; });
+  applyNumbers(all);
+});
+
+els.copy.addEventListener("click", function(){
+  var text = els.list.value;
+  if (!text || els.copy.disabled) return;
+  var button = els.copy;
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(function(){
+      button.textContent = "Copied";
+      setTimeout(function(){ button.textContent = "Copy name list"; }, 1200);
+    }, function(){
+      els.status.textContent = "Copy was blocked by the browser; select the names above instead.";
+    });
+  } else {
+    els.status.textContent = "Copy is unavailable in this browser; select the names above instead.";
+  }
+});
+
+buildGrid();
+fromList();
+})();
+</script>
+</body>
+</html>
