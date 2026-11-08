@@ -109,6 +109,7 @@ node tests/ansi_escape_sequence_decoder.test.cjs
 node tests/calligraphy_guideline_calculator.test.cjs
 node tests/guitar_capo_key_calculator.test.cjs
 node tests/phased_array_beam_pattern_calculator.test.cjs
+node tests/sailing_race_corrected_time_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
