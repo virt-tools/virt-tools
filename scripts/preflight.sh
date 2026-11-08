@@ -100,6 +100,7 @@ node tests/mgrs_coordinate_converter.test.cjs
 node tests/linux_capability_decoder.test.cjs
 node tests/half_square_triangle_calculator.test.cjs
 node tests/bpm_pitch_fader_calculator.test.cjs
+node tests/fm_deviation_bandwidth_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"

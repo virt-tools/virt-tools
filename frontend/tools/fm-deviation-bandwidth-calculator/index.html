@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>FM Deviation &amp; Bandwidth Calculator — Virtual Tools</title>
+<meta name="description" content="Turn FM peak deviation and the highest modulating frequency into the modulation index, Carson's rule bandwidth, the sideband spread and the fit inside a channel.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+[hidden]{display:none!important}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:12px;margin:10px 0}
+label.f{font-size:13px;opacity:.85;display:block;margin-bottom:4px}
+.field{background:var(--bg,#14181f);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px;min-width:0}
+.field:focus-within{border-color:var(--accent,#6ea8fe);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#6ea8fe) 18%,transparent)}
+.field input,.field select{box-sizing:border-box;width:100%;min-width:0;background:transparent;color:var(--text,#e6e6e6);border:none;font-size:18px;font-family:ui-monospace,monospace;padding:2px 0;outline:none;min-height:44px}
+.field .unit{font-size:11px;color:var(--text-dim,#9aa3b2);margin-top:4px;line-height:1.35}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:14px 0}
+.out .big{font-size:clamp(1.65rem,6vw,2.35rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:4px 0 6px;overflow-wrap:anywhere;color:var(--accent,#6ea8fe)}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45;overflow-wrap:anywhere}
+.out .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:14px}
+.out .row:last-child{border-bottom:none}
+.out .row .k{color:var(--text-dim,#9aa3b2)}
+.out .row .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right;overflow-wrap:anywhere}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:46px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.warn{font-size:13px;margin:8px 0;padding:9px 11px;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg,#14181f);line-height:1.45}
+.err{color:var(--bad,#f87171);font-size:13px;margin:6px 0;min-height:1.2em}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;margin:10px 0 0;line-height:1.5}
+@media (max-width:360px){.out .row{display:block}.out .row .v{display:block;text-align:left;margin-top:2px}}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>FM Deviation &amp; Bandwidth Calculator</h1>
+<p>Read an FM signal's modulation index and occupied bandwidth from its peak deviation, and check whether it fits a channel.</p>
+</div>
+<div class="panel">
+<form id="fm-form" novalidate>
+<div class="grid2">
+<div class="field"><label class="f" for="in-dev">Peak deviation</label><input type="text" id="in-dev" inputmode="decimal" autocomplete="off" value="75" aria-describedby="dev-help"><div class="unit" id="dev-help">how far the carrier swings each side of centre, in kHz</div></div>
+<div class="field"><label class="f" for="in-audio">Highest modulating frequency</label><input type="text" id="in-audio" inputmode="decimal" autocomplete="off" value="15" aria-describedby="audio-help"><div class="unit" id="audio-help">the top of the audio or baseband band, in kHz</div></div>
+<div class="field"><label class="f" for="in-spacing">Channel spacing</label><input type="text" id="in-spacing" inputmode="decimal" autocomplete="off" value="200" aria-describedby="spacing-help"><div class="unit" id="spacing-help">the channel the signal has to live in, in kHz</div></div>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions"><button type="submit">Calculate bandwidth</button></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"><span style="color:var(--text-dim,#9aa3b2)">Enter the deviation and audio band to see the bandwidth.</span></div>
+<p class="warn" id="warn" hidden></p>
+<p class="note">Peak deviation is compared with the highest modulating frequency to give the modulation index, and Carson's rule puts the bandwidth at twice their sum: the carrier plus its two nearest sideband groups, ignoring the small far-out tails. A single tone spreads the spectrum into sidebands whose amplitudes follow Bessel functions, so the number of strong sideband pairs is given as the usual index plus one and is an estimate, not a measured spectrum. Channel fit compares that bandwidth with the full spacing and allows no guard band; the largest deviation that still fits is half the spacing minus the top audio frequency. Narrowband FM is taken as an index of 0.3 or less. Stereo pilot, pre-emphasis, splatter filters and the exact occupancy definition of a particular service are not modelled. Everything runs in your browser with no storage, uploads or network access.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* fm-dev-core:start */
+var FmDeviationCore = (function(){
+  "use strict";
+  var DEFAULTS = { deviation: 75, audio: 15, spacing: 200 };
+  var LIMITS = {
+    deviation: { min: 0.1, max: 1000, label: "Peak deviation", unit: "kHz" },
+    audio: { min: 0.05, max: 100, label: "Highest modulating frequency", unit: "kHz" },
+    spacing: { min: 1, max: 2000, label: "Channel spacing", unit: "kHz" }
+  };
+  function fail(message){
+    throw new Error(message);
+  }
+  function value(options, key){
+    return options[key] == null ? DEFAULTS[key] : options[key];
+  }
+  function parseQuantity(raw, key){
+    var limit = LIMITS[key];
+    var text = String(raw == null ? "" : raw).trim();
+    if (!text) fail(limit.label + " is required.");
+    var message = limit.label + " must be a number from " + limit.min + " to " + limit.max
+      + " " + limit.unit + ".";
+    if (!/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(text)) fail(message);
+    var parsed = Number(text);
+    if (!isFinite(parsed) || parsed < limit.min || parsed > limit.max) fail(message);
+    return parsed;
+  }
+  function calculate(input){
+    var options = input || {};
+    var deviation = parseQuantity(value(options, "deviation"), "deviation");
+    var audio = parseQuantity(value(options, "audio"), "audio");
+    var spacing = parseQuantity(value(options, "spacing"), "spacing");
+    var index = deviation / audio;
+    /* Carson's rule: the carrier plus one top modulating frequency either side. */
+    var bandwidth = 2 * (deviation + audio);
+    /* A single-tone spectrum holds about index + 1 strong sideband pairs. */
+    var sidebandPairs = Math.floor(index) + 1;
+    var sidebandSpan = 2 * sidebandPairs * audio;
+    var narrowband = index <= 0.3;
+    var margin = spacing - bandwidth;
+    var fits = bandwidth <= spacing + 1e-9;
+    var maxDeviation = spacing / 2 - audio;
+    if (maxDeviation <= 0) maxDeviation = null;
+    return {
+      deviation: deviation,
+      audio: audio,
+      spacing: spacing,
+      index: index,
+      bandwidth: bandwidth,
+      sidebandPairs: sidebandPairs,
+      sidebandSpan: sidebandSpan,
+      narrowband: narrowband,
+      margin: margin,
+      fits: fits,
+      maxDeviation: maxDeviation,
+      share: (bandwidth / spacing) * 100
+    };
+  }
+  return { calculate: calculate, DEFAULTS: DEFAULTS, LIMITS: LIMITS };
+})();
+/* fm-dev-core:end */
+(function(){
+"use strict";
+var els = {
+  deviation: document.getElementById("in-dev"), audio: document.getElementById("in-audio"),
+  spacing: document.getElementById("in-spacing"), err: document.getElementById("err"),
+  out: document.getElementById("out"), warn: document.getElementById("warn")
+};
+function clear(node){ while (node.firstChild) node.removeChild(node.firstChild); }
+function plain(value, digits){
+  var text = Number(value).toFixed(digits);
+  if (text.indexOf(".") > -1) text = text.replace(/0+$/, "").replace(/\.$/, "");
+  return text === "-0" ? "0" : text;
+}
+function addRow(parent, label, value){
+  var row = document.createElement("div"); row.className = "row";
+  var key = document.createElement("span"); key.className = "k"; key.textContent = label;
+  var val = document.createElement("span"); val.className = "v"; val.textContent = value;
+  row.appendChild(key); row.appendChild(val); parent.appendChild(row);
+}
+function placeholder(message){
+  var span = document.createElement("span");
+  span.style.color = "var(--text-dim,#9aa3b2)"; span.textContent = message;
+  els.out.appendChild(span);
+}
+function render(result){
+  clear(els.out);
+  var big = document.createElement("div"); big.className = "big";
+  big.textContent = plain(result.bandwidth, 3) + " kHz";
+  var sub = document.createElement("div"); sub.className = "sub";
+  sub.textContent = (result.narrowband ? "Narrowband FM" : "Wideband FM")
+    + " · index " + plain(result.index, 3)
+    + " · " + (result.fits ? "fits the " + plain(result.spacing, 3) + " kHz channel"
+      : "wider than the " + plain(result.spacing, 3) + " kHz channel");
+  els.out.appendChild(big); els.out.appendChild(sub);
+  addRow(els.out, "Modulation index β", plain(result.index, 3) + " (deviation ÷ audio)");
+  addRow(els.out, "Carson bandwidth", plain(result.bandwidth, 3) + " kHz");
+  addRow(els.out, "Sideband pairs", "about " + result.sidebandPairs
+    + " (β + 1 estimate), spanning " + plain(result.sidebandSpan, 3) + " kHz");
+  addRow(els.out, "Channel use", plain(result.share, 1) + "% of "
+    + plain(result.spacing, 3) + " kHz");
+  addRow(els.out, "Channel margin", (result.margin >= 0 ? plain(result.margin, 3) + " kHz spare"
+    : plain(-result.margin, 3) + " kHz over"));
+  addRow(els.out, "Largest deviation that fits", result.maxDeviation == null
+    ? "none — the channel is too narrow for this audio band"
+    : plain(result.maxDeviation, 3) + " kHz peak");
+  if (!result.fits){
+    els.warn.hidden = false;
+    els.warn.textContent = "This signal needs " + plain(result.bandwidth, 3) + " kHz, "
+      + plain(-result.margin, 3) + " kHz more than the " + plain(result.spacing, 3)
+      + " kHz channel." + (result.maxDeviation == null
+        ? " Narrow the audio band or use a wider channel."
+        : " Cut peak deviation to " + plain(result.maxDeviation, 3)
+          + " kHz or less, narrow the audio band, or use a wider channel.");
+  } else {
+    els.warn.hidden = true; els.warn.textContent = "";
+  }
+}
+function run(){
+  var result;
+  try {
+    result = FmDeviationCore.calculate({
+      deviation: els.deviation.value, audio: els.audio.value, spacing: els.spacing.value
+    });
+  } catch (error){
+    els.err.textContent = error.message; els.warn.hidden = true; clear(els.out);
+    placeholder("Check the deviation, audio band and channel spacing."); return;
+  }
+  els.err.textContent = ""; render(result);
+}
+[els.deviation, els.audio, els.spacing].forEach(function(input){ input.addEventListener("input", run); });
+document.getElementById("fm-form").addEventListener("submit", function(event){ event.preventDefault(); run(); });
+run();
+})();
+</script>
+</body>
+</html>
