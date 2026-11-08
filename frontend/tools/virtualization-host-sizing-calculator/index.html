@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Virtualization Host Sizing Calculator — Virtual Tools</title>
+<meta name="description" content="Size a virtualization cluster from VM count, vCPU-per-core target and memory per host: hosts for CPU, hosts for memory, the binding constraint, an HA spare and the achieved consolidation ratio.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+[hidden]{display:none!important}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:12px;margin:10px 0}
+label.f{font-size:13px;opacity:.85;display:block;margin-bottom:4px}
+label.f .opt{font-weight:400;opacity:.6}
+.field{background:var(--bg,#14181f);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px;min-width:0}
+.field:focus-within{border-color:var(--accent,#6ea8fe);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#6ea8fe) 18%,transparent)}
+.field input{box-sizing:border-box;width:100%;min-width:0;background:transparent;color:var(--text,#e6e6e6);border:none;font-size:18px;font-family:ui-monospace,monospace;padding:2px 0;outline:none;min-height:44px}
+.field .unit{font-size:11px;color:var(--text-dim,#9aa3b2);margin-top:4px;line-height:1.35}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:14px 0}
+.out .big{font-size:clamp(1.65rem,6vw,2.35rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:4px 0 6px;overflow-wrap:anywhere;color:var(--accent,#6ea8fe)}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45;overflow-wrap:anywhere}
+.out .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:14px}
+.out .row:last-child{border-bottom:none}
+.out .row .k{color:var(--text-dim,#9aa3b2)}
+.out .row .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right;overflow-wrap:anywhere}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:46px;white-space:nowrap}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.err{color:var(--bad,#f87171);font-size:13px;margin:6px 0;min-height:1.2em}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;margin:10px 0 0;line-height:1.5}
+@media (max-width:360px){.out .row{display:block}.out .row .v{display:block;text-align:left;margin-top:2px}}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>Virtualization Host Sizing Calculator</h1>
+<p>Turn a VM workload into the number of hosts a cluster needs, and see whether CPU or memory decides it.</p>
+</div>
+<div class="panel">
+<form id="vh-form" novalidate>
+<div class="grid2">
+<div class="field"><label class="f" for="in-vms">VMs to place</label><input type="text" id="in-vms" inputmode="numeric" autocomplete="off" value="120" aria-describedby="vms-help"><div class="unit" id="vms-help">guest virtual machines in the cluster</div></div>
+<div class="field"><label class="f" for="in-vcpu">vCPUs per VM</label><input type="text" id="in-vcpu" inputmode="numeric" autocomplete="off" value="4" aria-describedby="vcpu-help"><div class="unit" id="vcpu-help">virtual processors assigned to each guest</div></div>
+<div class="field"><label class="f" for="in-cores">Cores per host</label><input type="text" id="in-cores" inputmode="numeric" autocomplete="off" value="32" aria-describedby="cores-help"><div class="unit" id="cores-help">physical cores, not threads</div></div>
+<div class="field"><label class="f" for="in-ratio">vCPU per core target</label><input type="text" id="in-ratio" inputmode="decimal" autocomplete="off" value="4" aria-describedby="ratio-help"><div class="unit" id="ratio-help">4 means four vCPUs scheduled per physical core</div></div>
+<div class="field"><label class="f" for="in-ramvm">RAM per VM</label><input type="text" id="in-ramvm" inputmode="decimal" autocomplete="off" value="16" aria-describedby="ramvm-help"><div class="unit" id="ramvm-help">gigabytes reserved for each guest</div></div>
+<div class="field"><label class="f" for="in-ramhost">Usable RAM per host</label><input type="text" id="in-ramhost" inputmode="decimal" autocomplete="off" value="512" aria-describedby="ramhost-help"><div class="unit" id="ramhost-help">gigabytes left after the hypervisor reserve</div></div>
+<div class="field"><label class="f" for="in-spare">HA spare hosts <span class="opt">(optional)</span></label><input type="text" id="in-spare" inputmode="numeric" autocomplete="off" value="1" aria-describedby="spare-help"><div class="unit" id="spare-help">empty hosts kept for failover — N+1 is one</div></div>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions"><button type="submit" id="go">Size the cluster</button></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"><span style="color:var(--text-dim,#9aa3b2)">Enter a VM count, host size and consolidation target to size the cluster.</span></div>
+<p class="note">Host sizing starts from the workload: the vCPUs to place are the VM count multiplied by the vCPUs per VM, and dividing that total by the target vCPU-per-core ratio gives the physical cores the scheduler needs, which is then spread over whole hosts. Memory is counted separately as VM count multiplied by RAM per VM against the usable RAM on each host, and the larger of the two host counts decides the cluster — that is the binding constraint. Spare hosts for HA carry no workload, so they are added after the base count and raise memory capacity and core headroom without lowering the achieved ratio. The achieved vCPU-per-core figure is the total vCPUs divided by every core in the sized cluster, including spare hosts, so it lands at or below the target after rounding up. Memory committed compares guest RAM with the memory of all hosts including spares. Cores are physical cores rather than hyperthreads, usable RAM excludes the hypervisor reservation, and the model assumes a uniform VM profile and no CPU reservations or limits: it is a first-pass planning estimate, not a vendor sizing certification, and per-VM demand, NUMA layout, storage and network bottlenecks, licensing and failure-domain placement are not modelled. Everything runs in your browser with no storage, uploads or network access.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* vm-host-sizing-core:start */
+var VmHostSizingCore = (function(){
+  "use strict";
+  var DEFAULTS = {
+    vmCount: "120", vcpusPerVm: "4", coresPerHost: "32", vcpuPerCore: "4",
+    ramPerVmGb: "16", ramPerHostGb: "512", haSpareHosts: "1"
+  };
+  var LIMITS = {
+    vmCount: { min: 1, max: 10000, unit: "VMs", integer: true },
+    vcpusPerVm: { min: 1, max: 64, unit: "vCPUs", integer: true },
+    coresPerHost: { min: 1, max: 256, unit: "cores", integer: true },
+    vcpuPerCore: { min: 1, max: 16, unit: "vCPUs per physical core" },
+    ramPerVmGb: { min: 0.25, max: 1024, unit: "GB" },
+    ramPerHostGb: { min: 1, max: 8192, unit: "GB" },
+    haSpareHosts: { min: 0, max: 8, unit: "hosts", integer: true }
+  };
+  function fail(message){
+    throw new Error(message);
+  }
+  function parseNumber(raw, label, limits){
+    var text = String(raw == null ? "" : raw).trim();
+    if (!text) fail(label + " is required.");
+    var message = label + " must be a " + (limits.integer ? "whole number" : "number")
+      + " from " + limits.min + " to " + limits.max + " " + limits.unit + ".";
+    if (!/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(text)) fail(message);
+    var value = Number(text);
+    if (!isFinite(value) || value < limits.min || value > limits.max) fail(message);
+    if (limits.integer && Math.floor(value) !== value) fail(message);
+    return value;
+  }
+  function calculate(input){
+    var options = input || {};
+    var vmCount = parseNumber(options.vmCount == null ? DEFAULTS.vmCount : options.vmCount,
+      "VMs to place", LIMITS.vmCount);
+    var vcpusPerVm = parseNumber(options.vcpusPerVm == null ? DEFAULTS.vcpusPerVm : options.vcpusPerVm,
+      "vCPUs per VM", LIMITS.vcpusPerVm);
+    var coresPerHost = parseNumber(options.coresPerHost == null ? DEFAULTS.coresPerHost : options.coresPerHost,
+      "Cores per host", LIMITS.coresPerHost);
+    var vcpuPerCore = parseNumber(options.vcpuPerCore == null ? DEFAULTS.vcpuPerCore : options.vcpuPerCore,
+      "vCPU per core", LIMITS.vcpuPerCore);
+    var ramPerVmGb = parseNumber(options.ramPerVmGb == null ? DEFAULTS.ramPerVmGb : options.ramPerVmGb,
+      "RAM per VM", LIMITS.ramPerVmGb);
+    var ramPerHostGb = parseNumber(options.ramPerHostGb == null ? DEFAULTS.ramPerHostGb : options.ramPerHostGb,
+      "Usable RAM per host", LIMITS.ramPerHostGb);
+    var spareRaw = options.haSpareHosts == null ? DEFAULTS.haSpareHosts : options.haSpareHosts;
+    var haSpareHosts = String(spareRaw).trim() === ""
+      ? 0
+      : parseNumber(spareRaw, "HA spare hosts", LIMITS.haSpareHosts);
+
+    var totalVcpus = vmCount * vcpusPerVm;
+    var coresRequired = Math.ceil(totalVcpus / vcpuPerCore);
+    var hostsForCpu = Math.ceil(coresRequired / coresPerHost);
+    var ramRequiredGb = vmCount * ramPerVmGb;
+    var hostsForRam = Math.ceil(ramRequiredGb / ramPerHostGb);
+    var baseHosts = Math.max(hostsForCpu, hostsForRam);
+    var totalHosts = baseHosts + haSpareHosts;
+    var provisionedCores = totalHosts * coresPerHost;
+    var memoryCapacityGb = totalHosts * ramPerHostGb;
+    var binding = hostsForCpu > hostsForRam ? "cpu"
+      : hostsForRam > hostsForCpu ? "memory" : "balanced";
+    return {
+      vmCount: vmCount,
+      vcpusPerVm: vcpusPerVm,
+      coresPerHost: coresPerHost,
+      vcpuPerCore: vcpuPerCore,
+      ramPerVmGb: ramPerVmGb,
+      ramPerHostGb: ramPerHostGb,
+      haSpareHosts: haSpareHosts,
+      totalVcpus: totalVcpus,
+      coresRequired: coresRequired,
+      hostsForCpu: hostsForCpu,
+      ramRequiredGb: ramRequiredGb,
+      hostsForRam: hostsForRam,
+      baseHosts: baseHosts,
+      totalHosts: totalHosts,
+      binding: binding,
+      vmsPerHost: vmCount / totalHosts,
+      provisionedCores: provisionedCores,
+      achievedVcpuPerCore: totalVcpus / provisionedCores,
+      memoryCapacityGb: memoryCapacityGb,
+      memoryPercent: ramRequiredGb / memoryCapacityGb * 100,
+      cpuHeadroomVcpus: provisionedCores * vcpuPerCore - totalVcpus,
+      ramHeadroomGb: memoryCapacityGb - ramRequiredGb
+    };
+  }
+  return {
+    calculate: calculate,
+    DEFAULTS: DEFAULTS,
+    LIMITS: LIMITS
+  };
+})();
+/* vm-host-sizing-core:end */
+(function(){
+"use strict";
+var els = {
+  vms: document.getElementById("in-vms"), vcpu: document.getElementById("in-vcpu"),
+  cores: document.getElementById("in-cores"), ratio: document.getElementById("in-ratio"),
+  ramvm: document.getElementById("in-ramvm"), ramhost: document.getElementById("in-ramhost"),
+  spare: document.getElementById("in-spare"), err: document.getElementById("err"),
+  out: document.getElementById("out")
+};
+function clear(node){ while (node.firstChild) node.removeChild(node.firstChild); }
+function plain(value, digits){
+  var text = Number(value).toFixed(digits);
+  if (text.indexOf(".") > -1) text = text.replace(/0+$/, "").replace(/\.$/, "");
+  return text === "-0" ? "0" : text;
+}
+function group(value){
+  return Number(value).toLocaleString("en-US", { maximumFractionDigits: 2 });
+}
+function addRow(parent, label, value){
+  var row = document.createElement("div"); row.className = "row";
+  var key = document.createElement("span"); key.className = "k"; key.textContent = label;
+  var val = document.createElement("span"); val.className = "v"; val.textContent = value;
+  row.appendChild(key); row.appendChild(val); parent.appendChild(row);
+}
+function placeholder(message){
+  var span = document.createElement("span");
+  span.style.color = "var(--text-dim,#9aa3b2)"; span.textContent = message;
+  els.out.appendChild(span);
+}
+function render(result){
+  clear(els.out);
+  var big = document.createElement("div"); big.className = "big";
+  big.textContent = group(result.totalHosts) + (result.totalHosts === 1 ? " host" : " hosts");
+  var sub = document.createElement("div"); sub.className = "sub";
+  var constraint = result.binding === "cpu" ? "CPU"
+    : result.binding === "memory" ? "memory" : "CPU and memory";
+  sub.textContent = result.baseHosts + " to cover " + constraint
+    + (result.haSpareHosts > 0
+      ? " · " + result.haSpareHosts + " spare for HA"
+      : " · no HA spare");
+  els.out.appendChild(big); els.out.appendChild(sub);
+  addRow(els.out, "vCPUs to place", group(result.totalVcpus));
+  addRow(els.out, "Physical cores at " + plain(result.vcpuPerCore, 2) + " vCPUs per core",
+    group(result.coresRequired));
+  addRow(els.out, "Hosts for CPU", group(result.hostsForCpu));
+  addRow(els.out, "Hosts for memory", group(result.hostsForRam));
+  addRow(els.out, "Binding constraint", constraint);
+  addRow(els.out, "Recommended hosts", group(result.totalHosts));
+  addRow(els.out, "Average VMs per host", plain(result.vmsPerHost, 2));
+  addRow(els.out, "Achieved vCPU per core", plain(result.achievedVcpuPerCore, 3));
+  addRow(els.out, "Memory committed", group(result.ramRequiredGb) + " of "
+    + group(result.memoryCapacityGb) + " GB (" + plain(result.memoryPercent, 2) + "%)");
+  addRow(els.out, "Spare capacity", group(result.cpuHeadroomVcpus) + " vCPUs · "
+    + group(result.ramHeadroomGb) + " GB RAM");
+}
+function run(){
+  var result;
+  try {
+    result = VmHostSizingCore.calculate({
+      vmCount: els.vms.value, vcpusPerVm: els.vcpu.value,
+      coresPerHost: els.cores.value, vcpuPerCore: els.ratio.value,
+      ramPerVmGb: els.ramvm.value, ramPerHostGb: els.ramhost.value,
+      haSpareHosts: els.spare.value
+    });
+  } catch (error){
+    els.err.textContent = error.message; clear(els.out);
+    placeholder("Check the VM count, host size and consolidation target above."); return;
+  }
+  els.err.textContent = ""; render(result);
+}
+[els.vms, els.vcpu, els.cores, els.ratio, els.ramvm, els.ramhost, els.spare].forEach(function(input){
+  input.addEventListener("input", run);
+});
+document.getElementById("vh-form").addEventListener("submit", function(event){
+  event.preventDefault(); run();
+});
+run();
+})();
+</script>
+</body>
+</html>

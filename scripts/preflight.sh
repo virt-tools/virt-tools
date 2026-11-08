@@ -103,6 +103,7 @@ node tests/bpm_pitch_fader_calculator.test.cjs
 node tests/fm_deviation_bandwidth_calculator.test.cjs
 node tests/rowing_split_calculator.test.cjs
 node tests/rolling_shutter_skew_calculator.test.cjs
+node tests/virtualization_host_sizing_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
