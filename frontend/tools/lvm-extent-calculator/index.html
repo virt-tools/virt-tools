@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>LVM Extent Calculator — Virtual Tools</title>
+<meta name="description" content="Plan an LVM volume group: the extents each disk contributes after its metadata area, the space a logical volume rounds up to, and what is left free.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.fields{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin:10px 0}
+label.f{font-size:13px;opacity:.85;display:block;margin-bottom:4px}
+.field{grid-column:span 2;background:var(--bg,#14181f);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px;min-width:0}
+.field.half{grid-column:span 3}
+.field:focus-within{border-color:var(--accent,#6ea8fe);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#6ea8fe) 18%,transparent)}
+.field input{box-sizing:border-box;width:100%;min-width:0;background:transparent;color:var(--text,#e6e6e6);border:none;font-size:17px;font-family:ui-monospace,monospace;padding:2px 0;outline:none}
+.field input:focus{box-shadow:none}
+.field .unit{font-size:11px;color:var(--text-dim,#9aa3b2);margin-top:4px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;min-height:44px;cursor:pointer}
+.actions .go{border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017}
+.actions .go:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.err{color:var(--bad,#f87171);font-size:13px;margin:6px 0;min-height:1.2em}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:14px 0}
+.out .big{font-size:clamp(1.6rem,7vw,2.2rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:4px 0 6px;overflow-wrap:anywhere}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45;overflow-wrap:anywhere}
+.out .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:14px}
+.out .row:last-child{border-bottom:none}
+.out .row .k{color:var(--text-dim,#9aa3b2);min-width:0}
+.out .row .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right;overflow-wrap:anywhere;white-space:nowrap}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;margin:10px 0 0;line-height:1.5}
+@media (max-width:640px){
+.fields{grid-template-columns:1fr}
+.field,.field.half{grid-column:auto}
+}
+@media (max-width:380px){
+.out .row{flex-direction:column;align-items:flex-start;gap:2px;padding:7px 0}
+.out .row .k{font-size:13px}
+.out .row .v{text-align:left;white-space:normal}
+}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>LVM Extent Calculator</h1>
+<p>See what a volume group of disks really holds: the extents each disk gives up after its metadata area, the space a logical volume rounds up to, and what stays free.</p>
+</div>
+<div class="panel">
+<form id="lvm-form" novalidate>
+<div class="fields">
+<div class="field"><label class="f" for="in-pe">Physical extent size</label><input id="in-pe" type="number" inputmode="numeric" min="1" max="1024" step="1" value="4"><div class="unit">MiB per extent, whole number</div></div>
+<div class="field"><label class="f" for="in-meta">Metadata area per disk</label><input id="in-meta" type="number" inputmode="decimal" min="0" max="1024" step="any" value="1"><div class="unit">MiB, LVM's own label and VG metadata</div></div>
+<div class="field"><label class="f" for="in-disk">Disk size</label><input id="in-disk" type="number" inputmode="decimal" min="0.5" max="262144" step="any" value="1000"><div class="unit">GiB per physical volume</div></div>
+<div class="field half"><label class="f" for="in-pvs">Physical volumes</label><input id="in-pvs" type="number" inputmode="numeric" min="1" max="128" step="1" value="4"><div class="unit">disks in the group</div></div>
+<div class="field half"><label class="f" for="in-lv">Logical volume size</label><input id="in-lv" type="number" inputmode="decimal" min="0.01" step="any" value="3000"><div class="unit">GiB you want to allocate</div></div>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions"><button type="submit" class="go">Plan the volume group</button></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"></div>
+<p class="note">A physical volume is carved into physical extents of one fixed size, so each disk contributes floor((size &minus; metadata) &divide; extent) whole extents and everything after the last one &mdash; the metadata area plus up to one extent of tail slack &mdash; is unusable. A volume group is those extents added together, and a logical volume is handed a whole number of them, so its size rounds up to the next extent boundary and the difference is lost. Four 1000 GiB disks with 1 MiB of metadata and 4 MiB extents give 255,999 extents each and 1,023,996 in the group (3,999.984 GiB, one extent per disk short of the raw 4000 GiB); a 3000 GiB logical volume takes 768,000 extents and leaves 255,996 free. This is arithmetic, not an instruction: the page never touches a disk, and thin pools, snapshots, mirrors, stripes, PV labels and the extra metadata volume LVM keeps are not modelled beyond the single metadata field. Sizes are GiB and MiB (powers of 1024), as LVM reports them.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* lvm-core:start */
+var LvmCore = (function(){
+  "use strict";
+  var MIN_PE = 1;
+  var MAX_PE = 1024;
+  var MIN_META = 0;
+  var MAX_META = 1024;
+  var MIN_DISK = 0.5;
+  var MAX_DISK = 262144;
+  var MIN_PVS = 1;
+  var MAX_PVS = 128;
+  var MIN_LV = 0.01;
+  var EPSILON = 1e-9;
+
+  function fail(message){ throw new Error(message); }
+  function round(value, digits){
+    var scale = Math.pow(10, digits);
+    return Math.round(value * scale) / scale;
+  }
+  function number(value, label){
+    var raw = value == null ? "" : String(value).trim();
+    if (!raw) fail(label + " is required.");
+    var parsed = Number(raw);
+    if (!isFinite(parsed)) fail(label + " must be a number.");
+    return parsed;
+  }
+  function whole(value){
+    return Math.abs(value - Math.round(value)) < EPSILON;
+  }
+  function fmt(value, digits){
+    var scale = Math.pow(10, digits);
+    var rounded = Math.round(value * scale) / scale;
+    if (rounded === 0) rounded = 0;
+    var text = rounded.toFixed(digits);
+    if (text.indexOf(".") > -1) text = text.replace(/0+$/, "").replace(/\.$/, "");
+    return text;
+  }
+
+  function plan(options){
+    var opts = options || {};
+    var pe = number(opts.pe, "Physical extent size");
+    if (pe < MIN_PE || pe > MAX_PE) fail("Physical extent size must be between 1 and 1024 MiB.");
+    if (!whole(pe)) fail("Physical extent size must be a whole number of MiB, such as 4 or 8.");
+    pe = Math.round(pe);
+
+    var meta = number(opts.meta, "Metadata area");
+    if (meta < MIN_META || meta > MAX_META) fail("Metadata area must be between 0 and 1024 MiB.");
+
+    var disk = number(opts.disk, "Disk size");
+    if (disk < MIN_DISK || disk > MAX_DISK) fail("Disk size must be between 0.5 and 262,144 GiB.");
+
+    var pvs = number(opts.pvs, "Physical volumes");
+    if (!whole(pvs)) fail("Physical volumes must be a whole number of disks.");
+    if (pvs < MIN_PVS || pvs > MAX_PVS) fail("Physical volumes must be between 1 and 128 disks.");
+    pvs = Math.round(pvs);
+
+    var lv = number(opts.lv, "Logical volume size");
+    if (lv < MIN_LV) fail("Logical volume size must be at least 0.01 GiB.");
+
+    var diskMib = round(disk * 1024, 6);
+    var metaMib = round(meta, 6);
+    var usableMib = diskMib - metaMib;
+    var perPv = Math.floor((usableMib + EPSILON) / pe);
+    if (perPv < 1){
+      fail("A " + fmt(disk, 3) + " GiB disk holds no whole " + pe + " MiB extent after its " + fmt(meta, 3) + " MiB metadata area: raise the disk size or lower the extent size.");
+    }
+
+    var vgExtents = perPv * pvs;
+    var vgMib = vgExtents * pe;
+    var unusableMib = diskMib - perPv * pe;
+    var rawMib = diskMib * pvs;
+    var lvMib = round(lv * 1024, 6);
+    if (lvMib > vgMib + EPSILON){
+      fail("The logical volume cannot be larger than the " + fmt(vgMib / 1024, 3) + " GiB this volume group holds: raise the disk count or size, or ask for less.");
+    }
+    var lvExtents = lvMib > 0 ? Math.ceil(lvMib / pe - EPSILON) : 0;
+    var allocatedMib = lvExtents * pe;
+    var wasteMib = allocatedMib - lvMib;
+    var freeExtents = vgExtents - lvExtents;
+    var freeMib = freeExtents * pe;
+
+    return {
+      pe: pe,
+      meta: round(meta, 3),
+      disk: round(disk, 3),
+      pvs: pvs,
+      lv: round(lv, 3),
+      diskMib: round(diskMib, 3),
+      usableMib: round(usableMib, 3),
+      perPv: perPv,
+      vgExtents: vgExtents,
+      vgMib: vgMib,
+      unusableMib: round(unusableMib, 3),
+      rawMib: round(rawMib, 3),
+      usablePct: round(vgMib / rawMib * 100, 4),
+      maxLvMib: vgMib,
+      lvMib: round(lvMib, 3),
+      lvExtents: lvExtents,
+      allocatedMib: allocatedMib,
+      wasteMib: round(wasteMib, 3),
+      freeExtents: freeExtents,
+      freeMib: freeMib,
+      full: freeExtents === 0
+    };
+  }
+
+  return {
+    plan: plan,
+    minPe: MIN_PE,
+    maxPe: MAX_PE,
+    minMeta: MIN_META,
+    maxMeta: MAX_META,
+    minDisk: MIN_DISK,
+    maxDisk: MAX_DISK,
+    minPvs: MIN_PVS,
+    maxPvs: MAX_PVS,
+    minLv: MIN_LV
+  };
+})();
+/* lvm-core:end */
+(function(){
+"use strict";
+
+var els = {
+  pe: document.getElementById("in-pe"),
+  meta: document.getElementById("in-meta"),
+  disk: document.getElementById("in-disk"),
+  pvs: document.getElementById("in-pvs"),
+  lv: document.getElementById("in-lv"),
+  err: document.getElementById("err"),
+  out: document.getElementById("out"),
+  form: document.getElementById("lvm-form")
+};
+
+function show(value, digits){
+  var scale = Math.pow(10, digits);
+  var rounded = Math.round(value * scale) / scale;
+  if (rounded === 0) rounded = 0;
+  var text = rounded.toFixed(digits);
+  if (text.indexOf(".") > -1) text = text.replace(/0+$/, "").replace(/\.$/, "");
+  return text;
+}
+function size(mib){
+  if (Math.abs(mib) >= 1024) return show(mib / 1024, 3) + " GiB";
+  return show(mib, 3) + " MiB";
+}
+function percent(value){
+  // Truncate instead of rounding so a group that is one extent short never
+  // prints as a full 100%.
+  var truncated = value >= 100 - 1e-9 ? 100 : Math.floor(value * 1000) / 1000;
+  return show(truncated, 3) + "%";
+}
+function clear(node){
+  while (node.firstChild) node.removeChild(node.firstChild);
+}
+function addRow(key, value){
+  var row = document.createElement("div");
+  row.className = "row";
+  var k = document.createElement("span");
+  k.className = "k";
+  k.textContent = key;
+  var v = document.createElement("span");
+  v.className = "v";
+  v.textContent = value;
+  row.appendChild(k);
+  row.appendChild(v);
+  els.out.appendChild(row);
+}
+
+function render(result){
+  clear(els.out);
+  var big = document.createElement("div");
+  big.className = "big";
+  big.textContent = size(result.vgMib);
+  var sub = document.createElement("div");
+  sub.className = "sub";
+  sub.textContent = "usable from " + result.pvs + (result.pvs === 1 ? " disk, " : " disks, ") +
+    percent(result.usablePct) + " of the raw " + size(result.rawMib);
+  els.out.appendChild(big);
+  els.out.appendChild(sub);
+
+  addRow("Extents per disk", String(result.perPv) + " \u00d7 " + result.pe + " MiB");
+  addRow("Extents in the volume group", String(result.vgExtents));
+  addRow("Metadata plus tail slack per disk", size(result.unusableMib));
+  addRow("Extents for the logical volume", String(result.lvExtents));
+  addRow("Space the logical volume is given", size(result.allocatedMib));
+  addRow("Lost to extent rounding", size(result.wasteMib));
+  addRow("Free extents left", String(result.freeExtents));
+  addRow("Free space left", size(result.freeMib));
+}
+
+function calculate(){
+  var raw = {
+    pe: els.pe.value,
+    meta: els.meta.value,
+    disk: els.disk.value,
+    pvs: els.pvs.value,
+    lv: els.lv.value
+  };
+  var result;
+  try {
+    result = LvmCore.plan(raw);
+  } catch (error){
+    els.err.textContent = error.message;
+    clear(els.out);
+    return;
+  }
+  els.err.textContent = "";
+  render(result);
+}
+
+els.form.addEventListener("submit", function(event){
+  event.preventDefault();
+  calculate();
+});
+var inputs = [els.pe, els.meta, els.disk, els.pvs, els.lv];
+for (var index = 0; index < inputs.length; index++){
+  inputs[index].addEventListener("input", calculate);
+  inputs[index].addEventListener("change", calculate);
+}
+calculate();
+})();
+</script>
+</body>
+</html>

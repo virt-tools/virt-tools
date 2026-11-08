@@ -152,6 +152,7 @@ node tests/video_rendition_ladder_planner.test.cjs
 node tests/multicam_sync_planner.test.cjs
 node tests/sourdough_starter_planner.test.cjs
 node tests/tonearm_alignment_calculator.test.cjs
+node tests/lvm_extent_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
