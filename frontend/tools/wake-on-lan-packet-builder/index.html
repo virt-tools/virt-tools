@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <script src="/assets/theme-init.js"></script>
 <title>Wake-on-LAN Packet Builder — Virtual Tools</title>
-<meta name="description" content="Build the 102-byte Wake-on-LAN magic packet for a network card: six 0xFF bytes plus the MAC repeated sixteen times, optionally with a SecureOn password, as copyable hex. Runs locally in your browser.">
+<meta name="description" content="Build the 102-byte Wake-on-LAN magic packet for a network card: six 0xFF bytes plus the MAC repeated sixteen times, optionally with a SecureOn password, as copyable hex and as downloadable shell, Python and C senders. Runs locally in your browser.">
 <link rel="stylesheet" href="/assets/style.css">
 <style>
 [hidden]{display:none!important}
@@ -34,6 +34,14 @@ textarea:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2p
 .err{color:var(--bad,#f87171);font-size:13px;margin:6px 0;min-height:1.2em}
 .copy-status{font-size:12px;color:var(--text-dim,#9aa3b2);margin-left:2px}
 .note{color:var(--text-dim,#9aa3b2);font-size:.85rem;margin:10px 0 0;line-height:1.5}
+.subhead{font-size:15px;margin:20px 0 4px}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 8px}
+.tabs button{font:inherit;font-size:13px;font-weight:600;padding:8px 16px;border-radius:999px;border:1px solid var(--border,#2a2f3a);background:transparent;color:var(--text-dim,#9aa3b2);cursor:pointer;min-height:44px}
+.tabs button[aria-pressed="true"]{border-color:var(--accent,#6ea8fe);color:var(--accent,#6ea8fe);background:color-mix(in srgb,var(--accent,#6ea8fe) 14%,transparent)}
+.tabs button:hover{filter:brightness(1.1)}
+.tabs button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+#script{min-height:200px;max-height:340px;resize:vertical;font-size:12px}
+.actions button[disabled]{opacity:.55;cursor:default}
 @media (max-width:360px){.out .row{display:block}.out .row .v{display:block;text-align:left;margin-top:2px}}
 </style>
 </head>
@@ -63,7 +71,20 @@ textarea:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2p
 <button type="button" class="secondary" id="copy">Copy hex</button>
 <span class="copy-status" id="copy-status" aria-live="polite"></span>
 </div>
-<p class="note">A magic packet is six <code>ff</code> bytes followed by the target MAC repeated sixteen times — 102 bytes, or 108 with a six-byte SecureOn password on the end. It is sent as a UDP datagram to the limited broadcast address <code>255.255.255.255</code> on port 9 (some equipment listens on port 7). Browsers cannot send raw UDP, so copy this hex into a wake tool, a switch or router wake action, or a script; the card only answers on the same Layer 2 segment, and Wake-on-LAN must be enabled in the firmware with standby power present. Separators in the MAC are optional, and the dotted Cisco form is accepted. Everything runs in your browser with no storage, uploads or network access.</p>
+<h2 class="subhead">Script versions</h2>
+<p class="note">Download a runnable sender for exactly this packet. Each file carries the MAC, the SecureOn tail if you set one, and the broadcast defaults, accepts an optional host and port, and uses only what the language ships with — no libraries to install beyond the shell one's <code>socat</code>.</p>
+<div class="tabs" role="group" aria-label="Script language">
+<button type="button" id="lang-sh" aria-pressed="true">Shell</button>
+<button type="button" id="lang-py" aria-pressed="false">Python</button>
+<button type="button" id="lang-c" aria-pressed="false">C</button>
+</div>
+<textarea id="script" readonly spellcheck="false" aria-label="Generated script source" aria-live="polite"></textarea>
+<div class="actions">
+<button type="button" class="secondary" id="download" disabled>Download source</button>
+<button type="button" class="secondary" id="copy-script">Copy source</button>
+<span class="copy-status" id="script-status" aria-live="polite"></span>
+</div>
+<p class="note">A magic packet is six <code>ff</code> bytes followed by the target MAC repeated sixteen times — 102 bytes, or 108 with a six-byte SecureOn password on the end. It is sent as a UDP datagram to the limited broadcast address <code>255.255.255.255</code> on port 9 (some equipment listens on port 7). Browsers cannot send raw UDP, so run one of these files, or copy the hex into a wake tool, a switch or router wake action. The card only answers on the same Layer 2 segment, and Wake-on-LAN must be enabled in the firmware with standby power present. Separators in the MAC are optional, and the dotted Cisco form is accepted. Everything runs in your browser with no storage, uploads or network access.</p>
 </div>
 </main>
 <script src="/assets/app.js"></script>
@@ -168,6 +189,214 @@ var WolCore = (function(){
   };
 })();
 /* wol-core:end */
+/* wol-sources:start */
+var WolSources = (function(){
+  "use strict";
+  var LANGS = [
+    { id: "sh", label: "Shell", ext: "sh", type: "text/x-shellscript" },
+    { id: "py", label: "Python", ext: "py", type: "text/x-python" },
+    { id: "c", label: "C", ext: "c", type: "text/x-csrc" }
+  ];
+  function fail(message){ throw new Error(message); }
+  function language(id){
+    for (var index = 0; index < LANGS.length; index += 1){
+      if (LANGS[index].id === id) return LANGS[index];
+    }
+    fail("Unknown script language.");
+  }
+  function checked(result){
+    if (!result || typeof result.packetHex !== "string" || !/^[0-9a-f]{204}([0-9a-f]{12})?$/.test(result.packetHex)) {
+      fail("Build a packet before generating a script.");
+    }
+    return result;
+  }
+  function filename(result, id){
+    return "wake-" + checked(result).macHex + "." + language(id).ext;
+  }
+  function octal(hex){
+    var text = "";
+    for (var index = 0; index < hex.length; index += 2){
+      text += "\\0" + ("00" + parseInt(hex.substr(index, 2), 16).toString(8)).slice(-3);
+    }
+    return text;
+  }
+  function byteList(hex){
+    var parts = [];
+    for (var index = 0; index < hex.length; index += 2){
+      parts.push("0x" + hex.substr(index, 2));
+    }
+    return parts.join(", ");
+  }
+  function shell(result){
+    var packet = checked(result);
+    var name = filename(packet, "sh");
+    return [
+      "#!/bin/sh",
+      "# Wake-on-LAN magic packet for " + packet.mac + " (" + packet.packetBytes + " bytes).",
+      "# Generated by the Wake-on-LAN Packet Builder at https://virt.tools/",
+      "#",
+      "# Usage: sh " + name + " [host] [port]",
+      "# Sends one UDP datagram with socat; it installs nothing and stores nothing.",
+      "set -eu",
+      "HOST=\"${1:-255.255.255.255}\"",
+      "PORT=\"${2:-9}\"",
+      "case \"$PORT\" in",
+      "  ''|*[!0-9]*) echo \"wake: port must be 1-65535\" >&2; exit 2 ;;",
+      "esac",
+      "if [ \"$PORT\" -lt 1 ] || [ \"$PORT\" -gt 65535 ]; then",
+      "  echo \"wake: port must be 1-65535\" >&2; exit 2",
+      "fi",
+      "PACKET='" + octal(packet.packetHex) + "'",
+      "",
+      "if ! command -v socat >/dev/null 2>&1; then",
+      "  echo \"wake: this script sends the datagram with socat; install socat or use the Python version\" >&2",
+      "  exit 1",
+      "fi",
+      "",
+      "printf '%b' \"$PACKET\" | socat -u - \"UDP-DATAGRAM:${HOST}:${PORT},broadcast\"",
+      "printf 'wake: sent %s bytes to %s:%s\\n' " + packet.packetBytes + " \"$HOST\" \"$PORT\"",
+      ""
+    ].join("\n");
+  }
+  function python(result){
+    var packet = checked(result);
+    var lines = [
+      "#!/usr/bin/env python3",
+      "\"\"\"Wake-on-LAN: send the " + packet.packetBytes + "-byte magic packet for " + packet.mac + ".",
+      "",
+      "Usage: python3 " + filename(packet, "py") + " [host] [port]",
+      "Defaults to 255.255.255.255:9 and uses only the standard library.",
+      "\"\"\"",
+      "import socket",
+      "import sys",
+      "",
+      "MAC = bytes.fromhex(\"" + packet.macHex + "\")",
+      packet.hasPassword
+        ? "SECUREON = bytes.fromhex(\"" + packet.passwordHex + "\")  # six-byte SecureOn password"
+        : "SECUREON = None  # no SecureOn password",
+      "",
+      "DEFAULT_HOST = \"255.255.255.255\"",
+      "DEFAULT_PORT = 9",
+      "",
+      "",
+      "def main(argv):",
+      "    host = argv[1] if len(argv) > 1 else DEFAULT_HOST",
+      "    try:",
+      "        port = int(argv[2]) if len(argv) > 2 else DEFAULT_PORT",
+      "    except ValueError:",
+      "        return \"wake: port must be a number\"",
+      "    if not 0 < port < 65536:",
+      "        return \"wake: port must be between 1 and 65535\"",
+      "",
+      "    payload = b\"\\xff\" * 6 + MAC * 16 + (SECUREON or b\"\")",
+      "    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:",
+      "        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)",
+      "        sock.sendto(payload, (host, port))",
+      "    print(\"wake: sent {} bytes to {}:{}\".format(len(payload), host, port))",
+      "    return 0",
+      "",
+      "",
+      "if __name__ == \"__main__\":",
+      "    sys.exit(main(sys.argv))",
+      ""
+    ];
+    return lines.join("\n");
+  }
+  function c(result){
+    var packet = checked(result);
+    var lines = [
+      "/* Wake-on-LAN: send the " + packet.packetBytes + "-byte magic packet for " + packet.mac + ".",
+      " *",
+      " * Build: cc -O2 -o wake " + filename(packet, "c"),
+      " * Usage: ./wake [host] [port]",
+      " *",
+      " * Defaults to 255.255.255.255:9; needs a C99 compiler and POSIX sockets.",
+      " */",
+      "#include <arpa/inet.h>",
+      "#include <netinet/in.h>",
+      "#include <stdio.h>",
+      "#include <stdlib.h>",
+      "#include <string.h>",
+      "#include <sys/socket.h>",
+      "#include <unistd.h>",
+      "",
+      "static const unsigned char mac[6] = {" + byteList(packet.macHex) + "};",
+      packet.hasPassword
+        ? "static const unsigned char secureon[6] = {" + byteList(packet.passwordHex) + "};"
+        : null,
+      "",
+      "int main(int argc, char **argv)",
+      "{",
+      "    const char *host = argc > 1 ? argv[1] : \"255.255.255.255\";",
+      "    long port = 9;",
+      "    unsigned char packet[" + packet.packetBytes + "];",
+      "    size_t length = sizeof packet;",
+      "    struct sockaddr_in target;",
+      "    int fd;",
+      "    int on = 1;",
+      "    ssize_t sent;",
+      "",
+      "    if (argc > 2) {",
+      "        char *end = NULL;",
+      "        port = strtol(argv[2], &end, 10);",
+      "        if (end == argv[2] || *end != '\\0' || port < 1 || port > 65535) {",
+      "            fprintf(stderr, \"wake: port must be 1-65535\\n\");",
+      "            return 2;",
+      "        }",
+      "    }",
+      "",
+      "    memset(packet, 0xff, 6);",
+      "    for (int repeat = 0; repeat < 16; repeat++)",
+      "        memcpy(packet + 6 + repeat * 6, mac, 6);",
+      packet.hasPassword
+        ? "    memcpy(packet + 102, secureon, 6);"
+        : null,
+      "",
+      "    memset(&target, 0, sizeof target);",
+      "    target.sin_family = AF_INET;",
+      "    target.sin_port = htons((unsigned short)port);",
+      "    if (inet_pton(AF_INET, host, &target.sin_addr) != 1) {",
+      "        fprintf(stderr, \"wake: %s is not an IPv4 address\\n\", host);",
+      "        return 2;",
+      "    }",
+      "",
+      "    fd = socket(AF_INET, SOCK_DGRAM, 0);",
+      "    if (fd < 0) {",
+      "        perror(\"wake: socket\");",
+      "        return 1;",
+      "    }",
+      "    if (setsockopt(fd, SOL_SOCKET, SO_BROADCAST, &on, sizeof on) < 0) {",
+      "        perror(\"wake: SO_BROADCAST\");",
+      "        close(fd);",
+      "        return 1;",
+      "    }",
+      "    sent = sendto(fd, packet, length, 0, (struct sockaddr *)&target, sizeof target);",
+      "    close(fd);",
+      "    if (sent < 0) {",
+      "        perror(\"wake: sendto\");",
+      "        return 1;",
+      "    }",
+      "    printf(\"wake: sent %zd bytes to %s:%ld\\n\", sent, host, port);",
+      "    return 0;",
+      "}",
+      ""
+    ];
+    var text = "";
+    for (var index = 0; index < lines.length; index += 1){
+      if (lines[index] === null) continue;
+      text += lines[index] + "\n";
+    }
+    return text;
+  }
+  function source(result, id){
+    if (id === "sh") return shell(result);
+    if (id === "py") return python(result);
+    if (id === "c") return c(result);
+    return fail("Unknown script language.");
+  }
+  return { LANGS: LANGS, language: language, filename: filename, source: source, shell: shell, python: python, c: c };
+})();
+/* wol-sources:end */
 (function(){
 "use strict";
 var els = {
@@ -175,9 +404,18 @@ var els = {
   password: document.getElementById("in-password"), err: document.getElementById("err"),
   out: document.getElementById("out"), warn: document.getElementById("warn"),
   copy: document.getElementById("copy"), copyStatus: document.getElementById("copy-status"),
-  reset: document.getElementById("reset")
+  reset: document.getElementById("reset"),
+  script: document.getElementById("script"), download: document.getElementById("download"),
+  copyScript: document.getElementById("copy-script"), scriptStatus: document.getElementById("script-status"),
+  tabs: {
+    sh: document.getElementById("lang-sh"),
+    py: document.getElementById("lang-py"),
+    c: document.getElementById("lang-c")
+  }
 };
 var current = "";
+var latest = null;
+var lang = "sh";
 function clear(node){ while (node.firstChild) node.removeChild(node.firstChild); }
 function addRow(parent, label, value){
   var row = document.createElement("div"); row.className = "row";
@@ -223,11 +461,57 @@ function run(){
   try {
     result = WolCore.build({ mac: els.mac.value, password: els.password.value });
   } catch (error){
-    current = "";
+    current = ""; latest = null;
     els.err.textContent = error.message; els.warn.hidden = true; clear(els.out);
-    placeholder("Check the MAC address and password above."); return;
+    placeholder("Check the MAC address and password above."); renderScript(); return;
   }
-  els.err.textContent = ""; els.copyStatus.textContent = ""; render(result);
+  els.err.textContent = ""; els.copyStatus.textContent = "";
+  latest = result; render(result); renderScript();
+}
+function setLanguage(id){
+  lang = WolSources.language(id).id;
+  var ids = ["sh", "py", "c"];
+  for (var index = 0; index < ids.length; index += 1){
+    els.tabs[ids[index]].setAttribute("aria-pressed", ids[index] === lang ? "true" : "false");
+  }
+  els.scriptStatus.textContent = "";
+  renderScript();
+}
+function renderScript(){
+  if (!latest){
+    els.script.value = "";
+    els.download.disabled = true;
+    els.download.textContent = "Download source";
+    return;
+  }
+  els.script.value = WolSources.source(latest, lang);
+  els.download.disabled = false;
+  els.download.textContent = "Download " + WolSources.filename(latest, lang);
+}
+function downloadScript(){
+  if (!latest) return;
+  var meta = WolSources.language(lang);
+  var name = WolSources.filename(latest, meta.id);
+  var blob = new Blob([els.script.value], { type: meta.type });
+  var url = URL.createObjectURL(blob);
+  var link = document.createElement("a");
+  link.href = url; link.download = name;
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 2000);
+  els.scriptStatus.textContent = "Downloaded " + name;
+}
+function copyScript(){
+  var note = function(){ els.scriptStatus.textContent = "Source copied"; };
+  var failed = function(){ els.script.focus(); els.script.select(); els.scriptStatus.textContent = "Selected — copy with Ctrl/Cmd+C"; };
+  if (!els.script.value) return;
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(els.script.value).then(note, failed);
+    } else { failed(); }
+  } catch (error){ failed(); }
 }
 function copyHex(){
   var area = document.getElementById("hex");
@@ -252,6 +536,11 @@ function reset(){
 els.form.addEventListener("submit", function(event){ event.preventDefault(); run(); });
 els.reset.addEventListener("click", reset);
 els.copy.addEventListener("click", copyHex);
+els.download.addEventListener("click", downloadScript);
+els.copyScript.addEventListener("click", copyScript);
+Object.keys(els.tabs).forEach(function(id){
+  els.tabs[id].addEventListener("click", function(){ setLanguage(id); });
+});
 run();
 })();
 </script>

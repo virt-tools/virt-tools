@@ -18,6 +18,13 @@ vm.createContext(sandbox);
 vm.runInContext(core + '\nmodule.exports = WolCore;', sandbox);
 const C = sandbox.module.exports;
 
+// The downloadable senders are generated in the page too, from the same bytes.
+const srcStart = html.indexOf('/* wol-sources:start */');
+const srcEnd = html.indexOf('/* wol-sources:end */');
+assert.ok(srcStart > -1 && srcEnd > srcStart, 'wol sources markers missing');
+vm.runInContext(html.slice(srcStart, html.indexOf('*/', srcEnd) + 2), sandbox);
+const S = vm.runInContext('WolSources', sandbox);
+
 const build = (input) => C.build(input);
 const failure = (input) => {
   try {
@@ -194,5 +201,85 @@ assert.ok(html.includes('id="reset"'), 'reset button missing');
 assert.ok(html.includes('type="button"'), 'secondary buttons must not submit the form');
 assert.ok(html.includes('area.readOnly = true'), 'hex output must be read-only');
 
+// --- Downloadable senders --------------------------------------------------
+assert.equal(JSON.stringify(S.LANGS.map((entry) => [entry.id, entry.ext])),
+  JSON.stringify([['sh', 'sh'], ['py', 'py'], ['c', 'c']]));
+assert.equal(S.filename(base, 'sh'), 'wake-0800271a2b3c.sh');
+assert.equal(S.filename(base, 'py'), 'wake-0800271a2b3c.py');
+assert.equal(S.filename(base, 'c'), 'wake-0800271a2b3c.c');
+assert.equal(S.filename(secured, 'py'), 'wake-0800271a2b3c.py');
+assert.throws(() => S.filename(base, 'rs'), /Unknown script language/);
+assert.throws(() => S.source(base, 'rs'), /Unknown script language/);
+assert.throws(() => S.shell(null), /Build a packet/);
+assert.throws(() => S.shell({ packetHex: '00', macHex: '0800271a2b3c' }), /Build a packet/);
+
+// The shell script carries the packet as printf octal escapes, exactly as shown.
+function octalBytes(text) {
+  return (text.match(/\\0[0-7]{3}/g) || []).map((token) => parseInt(token.slice(2), 8));
+}
+const shellText = S.shell(base);
+assert.ok(shellText.startsWith('#!/bin/sh\n'), 'shell shebang');
+assert.ok(shellText.endsWith('\n'), 'shell file ends with a newline');
+assert.equal(octalBytes(shellText).length, 102, 'shell literal must carry 102 bytes');
+assert.deepEqual(Buffer.from(octalBytes(shellText)), Buffer.from(base.packetHex, 'hex'));
+assert.ok(shellText.includes('UDP-DATAGRAM:${HOST}:${PORT},broadcast'), 'socat broadcast target');
+assert.ok(shellText.includes('PORT="${2:-9}"'), 'default port');
+assert.ok(shellText.includes('port must be 1-65535'), 'port guard');
+assert.ok(!/undefined|NaN/.test(shellText), 'no placeholder leaked');
+const shellSecured = S.shell(secured);
+assert.equal(octalBytes(shellSecured).length, 108, 'password packet is 108 bytes');
+assert.deepEqual(Buffer.from(octalBytes(shellSecured)), Buffer.from(secured.packetHex, 'hex'));
+
+// The Python file rebuilds the same layout from the MAC bytes.
+const pyText = S.python(base);
+assert.ok(pyText.startsWith('#!/usr/bin/env python3\n'), 'python shebang');
+assert.ok(pyText.includes('MAC = bytes.fromhex("0800271a2b3c")'), 'python MAC');
+assert.ok(pyText.includes('SECUREON = None'), 'python has no password by default');
+assert.ok(!pyText.includes('010203040506'), 'python must not carry an absent password');
+assert.ok(pyText.includes('b"\\xff" * 6 + MAC * 16 + (SECUREON or b"")'), 'python layout');
+assert.ok(pyText.includes('socket.SO_BROADCAST'), 'python sets SO_BROADCAST');
+assert.ok(pyText.includes('port must be between 1 and 65535'), 'python port guard');
+assert.ok(pyText.endsWith('sys.exit(main(sys.argv))\n'), 'python entry point');
+const pySecured = S.python(secured);
+assert.ok(pySecured.includes('SECUREON = bytes.fromhex("010203040506")'), 'python password');
+
+// The C file writes the same 102 or 108 bytes and keeps the compiler quiet.
+const cText = S.c(base);
+assert.ok(cText.includes('static const unsigned char mac[6] = {0x08, 0x00, 0x27, 0x1a, 0x2b, 0x3c};'), 'c MAC array');
+assert.ok(!cText.includes('secureon'), 'c has no password array without a password');
+assert.ok(cText.includes('unsigned char packet[102];'), 'c packet size');
+assert.ok(cText.includes('memset(packet, 0xff, 6);'), 'c sync prefix');
+assert.ok(cText.includes('memcpy(packet + 6 + repeat * 6, mac, 6);'), 'c MAC block');
+assert.ok(cText.includes('SO_BROADCAST'), 'c sets SO_BROADCAST');
+const cSecured = S.c(secured);
+assert.ok(cSecured.includes('static const unsigned char secureon[6] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06};'), 'c password array');
+assert.ok(cSecured.includes('unsigned char packet[108];'), 'c password packet size');
+assert.ok(cSecured.includes('memcpy(packet + 102, secureon, 6);'), 'c password tail');
+
+// Every generated file agrees with the page byte for byte, and is deterministic.
+for (const testCase of entry.testCases) {
+  if (testCase.kind === 'validation') continue;
+  const result = build(testCase.input);
+  const text = S.source(result, 'sh');
+  assert.deepEqual(Buffer.from(octalBytes(text)), Buffer.from(result.packetHex, 'hex'), 'shell bytes ' + testCase.name);
+  assert.equal(S.source(result, 'sh'), text, 'deterministic ' + testCase.name);
+  assert.equal(S.source(result, 'c'), S.c(result), 'deterministic C ' + testCase.name);
+  const declared = cTextMac(result).equals(Buffer.from(result.macHex, 'hex'));
+  assert.ok(declared, 'c MAC matches ' + testCase.name);
+}
+function cTextMac(result) {
+  const line = S.c(result).match(/static const unsigned char mac\[6\] = \{([^}]*)\};/);
+  assert.ok(line, 'c mac line missing');
+  return Buffer.from(line[1].split(',').map((value) => parseInt(value.trim(), 16)));
+}
+
+// The download controls exist and stay client-side.
+assert.ok(html.includes('id="script"'), 'source preview missing');
+assert.ok(html.includes('id="download"'), 'download button missing');
+assert.ok(html.includes('id="copy-script"'), 'source copy button missing');
+assert.ok(html.includes('aria-pressed="true"'), 'language toggle state missing');
+assert.ok(html.includes('URL.createObjectURL(blob)'), 'download must build a local blob');
+assert.ok(!/https?:\/\/(?!virt\.tools)/.test(html.replace(/https:\/\/virt\.tools\//g, '')), 'no foreign hosts');
+
 console.log('Wake-on-LAN packet builder: ' + entry.testCases.length + ' catalog cases, '
-  + rows + ' grid rows and invariants passed');
+  + rows + ' grid rows, three generated senders and invariants passed');
