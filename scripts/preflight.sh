@@ -143,6 +143,7 @@ node tests/football_passer_rating_calculator.test.cjs
 node tests/roux_thickening_calculator.test.cjs
 node tests/wake_on_lan_packet_builder.test.cjs
 node tests/gps_track_simplifier.test.cjs
+node tests/udev_rule_builder.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
