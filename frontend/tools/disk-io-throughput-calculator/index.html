@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Disk I/O Throughput Calculator — Virtual Tools</title>
+<meta name="description" content="Turn sustained IOPS, block size and average latency into throughput in MB/s, data per hour and per day, time per I/O, the queue depth Little's law needs, and the IOPS a given queue depth can sustain.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,160px),1fr));gap:12px;margin:10px 0}
+label.f{font-size:13px;opacity:.85;display:block;margin-bottom:4px}
+.field{background:var(--bg,#14181f);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px}
+.field:focus-within{border-color:var(--accent,#6ea8fe);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#6ea8fe) 18%,transparent)}
+.field input,.field select{box-sizing:border-box;min-width:0;width:100%;background:transparent;color:var(--text,#e6e6e6);border:none;font-family:ui-monospace,monospace;font-size:17px;padding:2px 0;outline:none}
+.field select{font-size:15px;min-height:44px}
+.field .unit{font-size:11px;color:var(--text-dim,#9aa3b2);margin-top:4px;line-height:1.4}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:12px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 20px;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);color:var(--text,#e6e6e6);cursor:pointer;min-height:44px}
+.actions button.primary{background:var(--accent,#6ea8fe);border-color:var(--accent,#6ea8fe);color:#0b1017;padding:10px 24px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:14px 0}
+.out .big{font-size:clamp(1.7rem,7.5vw,2.5rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:4px 0 2px;overflow-wrap:anywhere;color:var(--accent,#6ea8fe)}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45;overflow-wrap:anywhere}
+.out .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:7px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:14px}
+.out .row:last-child{border-bottom:none}
+.out .row.break{margin-top:8px;border-top:2px solid var(--border,#2a2f3a)}
+.out .row .k{color:var(--text-dim,#9aa3b2);flex:1 1 auto;min-width:0}
+.out .row .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right;overflow-wrap:anywhere;flex:0 1 auto}
+.err{color:var(--bad,#f87171);font-size:13px;margin:6px 0;min-height:1.2em;line-height:1.4}
+.warn{font-size:13px;margin:10px 0 0;padding:10px 12px;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);line-height:1.5}
+.warn.short{border-color:var(--bad,#f87171)}
+h2.sec{font-size:1.05rem;margin:24px 0 6px}
+.hint{color:var(--text-dim,#9aa3b2);font-size:13px;line-height:1.5;margin:0 0 10px}
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--border,#2a2f3a);border-radius:10px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+caption{text-align:left;color:var(--text-dim,#9aa3b2);font-size:12px;padding:10px 12px 6px;line-height:1.45}
+th,td{padding:7px 10px;text-align:right;border-bottom:1px solid var(--border,#2a2f3a);white-space:nowrap;font-variant-numeric:tabular-nums}
+th:first-child,td:first-child{text-align:left}
+thead th{position:sticky;top:0;background:var(--bg-elev,#171a21);font-size:12px;color:var(--text-dim,#9aa3b2);z-index:1}
+tbody tr:last-child td{border-bottom:none}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;line-height:1.5;margin:14px 0 0}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>Disk I/O Throughput Calculator</h1>
+<p>Convert sustained IOPS, block size and latency into MB/s, queue depth and time per I/O.</p>
+</div>
+<div class="panel">
+<form id="io-form" novalidate>
+<div class="grid3">
+<div class="field">
+<label class="f" for="iops">Sustained IOPS</label>
+<input type="text" id="iops" inputmode="decimal" autocomplete="off" spellcheck="false" value="10000" aria-describedby="iops-help">
+<div class="unit" id="iops-help">I/O operations per second the device handles</div>
+</div>
+<div class="field">
+<label class="f" for="block">Block size</label>
+<select id="block" aria-describedby="block-help">
+<option value="512">512 B</option>
+<option value="4096" selected>4 KiB</option>
+<option value="8192">8 KiB</option>
+<option value="16384">16 KiB</option>
+<option value="32768">32 KiB</option>
+<option value="65536">64 KiB</option>
+<option value="131072">128 KiB</option>
+<option value="262144">256 KiB</option>
+<option value="1048576">1 MiB</option>
+</select>
+<div class="unit" id="block-help">Bytes moved by each I/O</div>
+</div>
+<div class="field">
+<label class="f" for="latency">Average latency</label>
+<input type="text" id="latency" inputmode="decimal" autocomplete="off" spellcheck="false" value="0.2" aria-describedby="latency-help">
+<div class="unit" id="latency-help">Milliseconds per I/O, service plus queueing</div>
+</div>
+<div class="field">
+<label class="f" for="queue">Queue depth <span aria-hidden="true">(optional)</span></label>
+<input type="text" id="queue" inputmode="numeric" autocomplete="off" spellcheck="false" value="" placeholder="e.g. 8" aria-describedby="queue-help">
+<div class="unit" id="queue-help">Outstanding requests the device allows</div>
+</div>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions">
+<button type="submit" class="primary">Calculate throughput</button>
+<button type="button" id="reset">Reset</button>
+</div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"></div>
+<p class="warn" id="verdict" aria-live="polite"></p>
+
+<h2 class="sec">Throughput by IOPS and block size</h2>
+<p class="hint">Throughput is IOPS multiplied by block size, so the same device moves far more bytes with larger I/Os — but a bigger block usually costs more latency per operation.</p>
+<div class="table-wrap">
+<table id="combos">
+<caption>Decimal megabytes per second (1 MB = 1,000,000 bytes) for three IOPS levels across the offered block sizes.</caption>
+<thead>
+<tr><th scope="col">Block</th><th scope="col">1,000 IOPS</th><th scope="col">10,000 IOPS</th><th scope="col">100,000 IOPS</th></tr>
+</thead>
+<tbody id="combos-body"></tbody>
+</table>
+</div>
+<p class="note">Throughput in megabytes per second is the operation rate times the bytes per operation, with MB meaning 1,000,000 bytes and MiB meaning 1,048,576 bytes. Queue depth follows Little's law: the average number of outstanding I/Os is the completion rate times the average latency, so 10,000 IOPS at 0.2 ms need about two requests in flight, and a queue that is too shallow caps the IOPS the device can sustain at that latency. The figures describe a steady state — they do not model bursts, read/write mixes, sequential versus random access, RAID write penalties, controller caches, filesystem overhead or network storage. Everything is calculated in your browser; the page does not benchmark, store or upload anything.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* disk-io-throughput-core:start */
+var DiskIoCore = (function(){
+  "use strict";
+  var KIB = 1024;
+  var MIB = 1048576;
+  var TIB = 1099511627776;
+  var BLOCK_SIZES = {
+    "512": 512,
+    "4096": 4096,
+    "8192": 8192,
+    "16384": 16384,
+    "32768": 32768,
+    "65536": 65536,
+    "131072": 131072,
+    "262144": 262144,
+    "1048576": 1048576
+  };
+  var LIMITS = {
+    iops: [0.001, 100000000],
+    latency: [0.001, 60000],
+    queueDepth: [1, 65536]
+  };
+  var TABLE_IOPS = [1000, 10000, 100000];
+  var MESSAGES = {
+    iopsEmpty: "Enter the sustained IOPS.",
+    iopsNumber: "IOPS must be a number.",
+    iopsRange: "IOPS must be between 0.001 and 100000000.",
+    block: "Choose a block size from the list.",
+    latencyEmpty: "Enter the average latency.",
+    latencyNumber: "Latency must be a number of milliseconds.",
+    latencyRange: "Latency must be between 0.001 and 60000 ms.",
+    queueWhole: "Queue depth must be a whole number.",
+    queueRange: "Queue depth must be between 1 and 65536."
+  };
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function parseDecimal(value, empty, number, range, min, max){
+    var raw = String(value == null ? "" : value).trim();
+    if (!raw) fail(empty);
+    if (!/^\+?\d+(?:[.,]\d{1,6})?$/.test(raw)) fail(number);
+    var amount = Number(raw.replace(",", "."));
+    if (!isFinite(amount)) fail(number);
+    if (amount < min || amount > max) fail(range);
+    return amount;
+  }
+
+  function parseBlock(value){
+    var raw = String(value == null ? "" : value).trim();
+    if (!Object.prototype.hasOwnProperty.call(BLOCK_SIZES, raw)) fail(MESSAGES.block);
+    return BLOCK_SIZES[raw];
+  }
+
+  function parseQueue(value){
+    var raw = String(value == null ? "" : value).trim();
+    if (!raw) return null;
+    if (!/^\+?\d+$/.test(raw)) fail(MESSAGES.queueWhole);
+    var depth = Number(raw);
+    if (!Number.isSafeInteger(depth) || depth < LIMITS.queueDepth[0] || depth > LIMITS.queueDepth[1]){
+      fail(MESSAGES.queueRange);
+    }
+    return depth;
+  }
+
+  function analyze(options){
+    var input = options || {};
+    var iops = parseDecimal(input.iops, MESSAGES.iopsEmpty, MESSAGES.iopsNumber,
+      MESSAGES.iopsRange, LIMITS.iops[0], LIMITS.iops[1]);
+    var blockBytes = parseBlock(input.block);
+    var latencyMs = parseDecimal(input.latency, MESSAGES.latencyEmpty, MESSAGES.latencyNumber,
+      MESSAGES.latencyRange, LIMITS.latency[0], LIMITS.latency[1]);
+    var queueDepth = parseQueue(input.queue);
+
+    var bytesPerSecond = iops * blockBytes;
+    var latencySeconds = latencyMs / 1000;
+    var requiredQueueDepth = iops * latencySeconds;
+    var result = {
+      iops: iops,
+      blockBytes: blockBytes,
+      latencyMs: latencyMs,
+      queueDepth: queueDepth,
+      bytesPerSecond: bytesPerSecond,
+      megabytesPerSecond: bytesPerSecond / 1000000,
+      mebibytesPerSecond: bytesPerSecond / MIB,
+      gigabytesPerHour: bytesPerSecond * 3600 / 1000000000,
+      terabytesPerDay: bytesPerSecond * 86400 / 1000000000000,
+      secondsPerIO: 1 / iops,
+      microsecondsPerIO: 1000000 / iops,
+      latencySeconds: latencySeconds,
+      requiredQueueDepth: requiredQueueDepth,
+      hoursPerTiB: TIB / bytesPerSecond / 3600,
+      maxIopsAtQueueDepth: null,
+      queueHeadroom: null,
+      queueCovers: null,
+      queueUtilization: null
+    };
+
+    if (queueDepth !== null){
+      var maxIops = queueDepth / latencySeconds;
+      result.maxIopsAtQueueDepth = maxIops;
+      result.queueHeadroom = maxIops - iops;
+      result.queueCovers = iops <= maxIops * (1 + 1e-12);
+      result.queueUtilization = iops / maxIops;
+    }
+
+    return result;
+  }
+
+  function table(){
+    return Object.keys(BLOCK_SIZES).map(function(key){
+      var bytes = BLOCK_SIZES[key];
+      return {
+        blockBytes: bytes,
+        blockKiB: bytes / KIB,
+        throughput: TABLE_IOPS.map(function(rate){
+          return rate * bytes / 1000000;
+        })
+      };
+    });
+  }
+
+  return {
+    BLOCK_SIZES: BLOCK_SIZES,
+    LIMITS: LIMITS,
+    TABLE_IOPS: TABLE_IOPS,
+    MESSAGES: MESSAGES,
+    analyze: analyze,
+    table: table
+  };
+})();
+/* disk-io-throughput-core:end */
+(function(){
+"use strict";
+
+var defaults = { iops: "10000", block: "4096", latency: "0.2", queue: "" };
+var els = {
+  form: document.getElementById("io-form"),
+  iops: document.getElementById("iops"),
+  block: document.getElementById("block"),
+  latency: document.getElementById("latency"),
+  queue: document.getElementById("queue"),
+  err: document.getElementById("err"),
+  out: document.getElementById("out"),
+  verdict: document.getElementById("verdict"),
+  body: document.getElementById("combos-body"),
+  reset: document.getElementById("reset")
+};
+var timer = null;
+
+function clear(node){
+  while (node.firstChild) node.removeChild(node.firstChild);
+}
+
+function group(value){
+  return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+function trim(value, digits){
+  var fixed = Number(value).toFixed(digits);
+  if (fixed.indexOf(".") === -1) return fixed;
+  return fixed.replace(/0+$/, "").replace(/\.$/, "");
+}
+
+function fmtCount(value){
+  if (Math.abs(value - Math.round(value)) < 1e-9) return group(Math.round(value));
+  return group(trim(value, 2));
+}
+
+function fmtRate(bytesPerSecond){
+  if (bytesPerSecond >= 1e12) return trim(bytesPerSecond / 1e12, 2) + " TB/s";
+  if (bytesPerSecond >= 1e9) return trim(bytesPerSecond / 1e9, 2) + " GB/s";
+  if (bytesPerSecond >= 1e6) return trim(bytesPerSecond / 1e6, 2) + " MB/s";
+  if (bytesPerSecond >= 1e3) return trim(bytesPerSecond / 1e3, 2) + " kB/s";
+  return trim(bytesPerSecond, 2) + " B/s";
+}
+
+function fmtMiB(bytes){
+  if (bytes < 1024) return trim(bytes, 1) + " B";
+  if (bytes < 1048576) return trim(bytes / 1024, 2) + " KiB";
+  if (bytes < 1073741824) return trim(bytes / 1048576, 2) + " MiB";
+  return trim(bytes / 1073741824, 2) + " GiB";
+}
+
+function fmtPerIO(microseconds){
+  if (microseconds >= 1000) return trim(microseconds / 1000, 3) + " ms";
+  if (microseconds >= 1) return trim(microseconds, 2) + " µs";
+  return trim(microseconds * 1000, 1) + " ns";
+}
+
+function fmtHours(hours){
+  if (hours < 1) return trim(hours * 60, 1) + " min";
+  if (hours < 48) return trim(hours, 2) + " h";
+  return trim(hours / 24, 2) + " days";
+}
+
+function fmtPercent(value){
+  if (value >= 10) return trim(value, 1) + "%";
+  if (value >= 0.01) return trim(value, 2) + "%";
+  return trim(value, 4) + "%";
+}
+
+function addRow(parent, key, value, startGroup){
+  var row = document.createElement("div");
+  row.className = startGroup ? "row break" : "row";
+  var name = document.createElement("span");
+  name.className = "k";
+  name.textContent = key;
+  var val = document.createElement("span");
+  val.className = "v";
+  val.textContent = value;
+  row.appendChild(name);
+  row.appendChild(val);
+  parent.appendChild(row);
+}
+
+function buildTable(){
+  clear(els.body);
+  DiskIoCore.table().forEach(function(row){
+    var tr = document.createElement("tr");
+    var block = document.createElement("th");
+    block.scope = "row";
+    block.textContent = row.blockBytes < 1024
+      ? row.blockBytes + " B"
+      : (row.blockBytes < 1048576
+        ? trim(row.blockKiB, 2) + " KiB"
+        : trim(row.blockBytes / 1048576, 2) + " MiB");
+    tr.appendChild(block);
+    row.throughput.forEach(function(megabytes){
+      var cell = document.createElement("td");
+      cell.textContent = trim(megabytes, 2) + " MB/s";
+      tr.appendChild(cell);
+    });
+    els.body.appendChild(tr);
+  });
+}
+
+function showError(message){
+  els.err.textContent = message;
+  clear(els.out);
+  var placeholder = document.createElement("div");
+  placeholder.className = "sub";
+  placeholder.textContent = "Fix the input to see the throughput.";
+  els.out.appendChild(placeholder);
+  els.verdict.hidden = true;
+  els.verdict.textContent = "";
+  els.verdict.className = "warn";
+}
+
+function verdictText(result){
+  var need = "At " + trim(result.latencyMs, 3) + " ms per I/O, " + fmtCount(result.iops)
+    + " IOPS need about " + fmtCount(result.requiredQueueDepth)
+    + " outstanding I/Os (IOPS × latency).";
+  if (result.queueDepth === null){
+    return need + " Enter a queue depth to check whether the device's queue can sustain the rate.";
+  }
+  if (result.queueCovers){
+    return need + " A depth of " + fmtCount(result.queueDepth) + " covers it, with "
+      + fmtCount(result.queueHeadroom) + " IOPS of headroom at that latency.";
+  }
+  return "A queue depth of " + fmtCount(result.queueDepth) + " can sustain only "
+    + fmtCount(result.maxIopsAtQueueDepth) + " IOPS at " + trim(result.latencyMs, 3)
+    + " ms, so the " + fmtCount(result.iops) + " IOPS you entered would wait in the queue. "
+    + need + " Raise the depth or expect the latency to rise.";
+}
+
+function render(result){
+  els.err.textContent = "";
+  clear(els.out);
+
+  var big = document.createElement("div");
+  big.className = "big";
+  big.textContent = fmtRate(result.bytesPerSecond);
+  var sub = document.createElement("div");
+  sub.className = "sub";
+  sub.textContent = fmtCount(result.iops) + " IOPS × " + fmtMiB(result.blockBytes)
+    + " blocks · " + trim(result.latencyMs, 3) + " ms average latency";
+  els.out.appendChild(big);
+  els.out.appendChild(sub);
+
+  addRow(els.out, "Decimal rate", fmtRate(result.bytesPerSecond));
+  addRow(els.out, "Binary rate", trim(result.mebibytesPerSecond, 2) + " MiB/s");
+  addRow(els.out, "Bytes per second", group(Math.round(result.bytesPerSecond)) + " B/s");
+  addRow(els.out, "Data per hour", trim(result.gigabytesPerHour, 2) + " GB");
+  addRow(els.out, "Data per day", trim(result.terabytesPerDay, 3) + " TB");
+  addRow(els.out, "Time to move 1 TiB", fmtHours(result.hoursPerTiB));
+
+  addRow(els.out, "Time per I/O", fmtPerIO(result.microsecondsPerIO), true);
+  addRow(els.out, "Average latency", trim(result.latencyMs, 3) + " ms ("
+    + trim(result.latencySeconds * 1000000, 1) + " µs)");
+  addRow(els.out, "Queue depth needed", fmtCount(result.requiredQueueDepth)
+    + " outstanding I/Os");
+
+  if (result.queueDepth !== null){
+    addRow(els.out, "Queue depth provided", group(result.queueDepth) + " outstanding I/Os", true);
+    addRow(els.out, "IOPS at that depth", fmtCount(result.maxIopsAtQueueDepth));
+    addRow(els.out, "Queue utilization", fmtPercent(result.queueUtilization * 100));
+    addRow(els.out, "Headroom", (result.queueHeadroom >= 0 ? "+" : "")
+      + fmtCount(result.queueHeadroom) + " IOPS");
+  }
+
+  els.verdict.hidden = false;
+  els.verdict.className = result.queueDepth !== null && !result.queueCovers ? "warn short" : "warn";
+  els.verdict.textContent = verdictText(result);
+}
+
+function run(){
+  try {
+    render(DiskIoCore.analyze({
+      iops: els.iops.value,
+      block: els.block.value,
+      latency: els.latency.value,
+      queue: els.queue.value
+    }));
+  } catch (error){
+    showError(error.message);
+  }
+}
+
+function later(){
+  if (timer) window.clearTimeout(timer);
+  timer = window.setTimeout(run, 200);
+}
+
+[els.iops, els.latency, els.queue].forEach(function(node){
+  node.addEventListener("input", later);
+  node.addEventListener("change", run);
+});
+els.block.addEventListener("change", run);
+
+els.form.addEventListener("submit", function(event){
+  event.preventDefault();
+  if (timer) window.clearTimeout(timer);
+  run();
+  if (els.err.textContent) els.iops.focus();
+});
+
+els.reset.addEventListener("click", function(){
+  els.iops.value = defaults.iops;
+  els.block.value = defaults.block;
+  els.latency.value = defaults.latency;
+  els.queue.value = defaults.queue;
+  if (timer) window.clearTimeout(timer);
+  run();
+  els.iops.focus();
+});
+
+buildTable();
+run();
+})();
+</script>
+</body>
+</html>
