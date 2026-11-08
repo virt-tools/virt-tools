@@ -122,6 +122,7 @@ assert.ok(/<label class="f" for="code">/.test(html), 'the input is labelled');
 assert.ok(/<label class="f" for="filter">/.test(html), 'the filter is labelled');
 assert.equal((html.match(/class="chip"/g) || []).length, 8, 'eight common-value shortcuts');
 assert.ok(html.includes('[133, "EHWPOISON"'), 'the table ends with EHWPOISON');
+assert.ok(/\.ref\[hidden\]\{display:none\}/.test(html), 'the filter can hide reference rows');
 
 // Catalog record and test cases must agree with the core.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
