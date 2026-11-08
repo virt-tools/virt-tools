@@ -149,6 +149,7 @@ node tests/gather_ruffle_calculator.test.cjs
 node tests/rf_attenuator_pad_calculator.test.cjs
 node tests/basketball_possessions_calculator.test.cjs
 node tests/video_rendition_ladder_planner.test.cjs
+node tests/multicam_sync_planner.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
