@@ -159,7 +159,7 @@ assert.ok(/\/assets\/theme-init\.js/.test(html) && /\/assets\/app\.js/.test(html
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record missing');
-assert.equal(catalog.tools.at(-1).slug, slug, 'record appended at the end');
+assert.equal(catalog.tools.filter((tool) => tool.slug === slug).length, 1, 'catalog record must be unique');
 assert.equal(record.name, 'Quilling Coil Calculator');
 assert.equal(record.category, 'Crafts & Hobbies');
 assert.equal(record.subcategory, 'Estimation & calculation');

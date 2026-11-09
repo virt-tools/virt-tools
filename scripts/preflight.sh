@@ -184,6 +184,7 @@ node tests/microstrip_patch_antenna_designer.test.cjs
 node tests/systemd_network_builder.test.cjs
 node tests/volleyball_rotation_scorekeeper.test.cjs
 node tests/quilling_coil_calculator.test.cjs
+node tests/robots_txt_rule_tester.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
