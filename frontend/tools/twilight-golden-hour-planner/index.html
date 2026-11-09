@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Twilight &amp; Golden Hour Planner — Virtual Tools</title>
+<meta name="description" content="Plan a shoot or observing session: from a date, latitude, longitude and UTC offset, get astronomical, nautical and civil twilight, sunrise and sunset, solar noon, day length, and the golden and blue hour windows.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,215px),1fr));gap:12px;margin:10px 0}
+label.f{font-size:13px;opacity:.85;display:block;margin-bottom:4px}
+.field{background:var(--bg,#14181f);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px}
+.field:focus-within{border-color:var(--accent,#6ea8fe);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#6ea8fe) 18%,transparent)}
+.field input{box-sizing:border-box;width:100%;min-height:44px;background:transparent;color:var(--text,#e6e6e6);border:none;font-size:18px;font-family:ui-monospace,monospace;padding:2px 0;outline:none}
+.field .unit{font-size:11px;color:var(--text-dim,#9aa3b2);margin-top:4px;line-height:1.4}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:14px 0}
+.out .big{font-size:clamp(1.9rem,7vw,2.5rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:4px 0 6px;overflow-wrap:anywhere}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45}
+.out .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:14px}
+.out .row:last-child{border-bottom:none}
+.out .row .k{color:var(--text-dim,#9aa3b2)}
+.out .row .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right;overflow-wrap:anywhere;font-size:13px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.err{color:var(--bad,#f87171);font-size:13px;margin:6px 0;min-height:1.2em}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;margin:10px 0 0;line-height:1.5}
+@media (max-width:380px){.out .row{display:block}.out .row .v{display:block;text-align:left;margin-top:2px}}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>Twilight &amp; Golden Hour Planner</h1>
+<p>List every twilight stage, sunrise, sunset and golden-hour window for a date and place.</p>
+</div>
+<div class="panel">
+<form id="twilight-form" novalidate>
+<div class="grid2">
+<div class="field"><label class="f" for="in-lat">Latitude</label><input type="text" id="in-lat" inputmode="decimal" autocomplete="off" value="51.5074"><div class="unit">decimal degrees; south is negative</div></div>
+<div class="field"><label class="f" for="in-lon">Longitude</label><input type="text" id="in-lon" inputmode="decimal" autocomplete="off" value="-0.1278"><div class="unit">decimal degrees; west is negative</div></div>
+<div class="field"><label class="f" for="in-date">Date</label><input type="date" id="in-date"><div class="unit">calendar date at the place</div></div>
+<div class="field"><label class="f" for="in-tz">UTC offset</label><input type="text" id="in-tz" inputmode="decimal" autocomplete="off" value="1"><div class="unit">hours from UTC; 5.5 for India, -5 for New York</div></div>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions"><button type="submit">Show twilight times</button></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"><span style="color:var(--text-dim,#9aa3b2)">Enter a place and date.</span></div>
+<p class="note">Times are local clock times for the UTC offset you enter, morning first and evening second. Twilight is named by how far the sun sits below the horizon: civil at 6°, nautical at 12° and astronomical at 18°. The blue hour runs from 6° to 4° below and the golden hour from 4° below up to 6° above, so golden light starts before sunrise and lasts past sunset. Sunrise and sunset use the standard 0.833° horizon dip for refraction and the sun's disc. The solar position follows the NOAA solar equations for the date at 00:00 UTC, which are usually within a minute or two but neglect your elevation, terrain, atmospheric pressure and temperature. Where the sun never reaches the needed altitude, the row says so instead of inventing a time; at high latitudes that is a real midnight-sun or polar-night result. Daylight saving time is not applied, so use the offset in force on that date. Everything is calculated in the browser with no storage, uploads or network access.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* twilight-core:start */
+var TwilightCore = (function(){
+  "use strict";
+  var DEFAULTS = { date: "2026-06-21", lat: 51.5074, lon: -0.1278, tz: 1 };
+  var LIMITS = {
+    lat: { min: -89.9, max: 89.9 },
+    lon: { min: -180, max: 180 },
+    tz: { min: -12, max: 14 }
+  };
+  var ALTITUDES = { astronomical: -18, nautical: -12, civil: -6, blue: -4, golden: 6, horizon: -0.833 };
+  var RAD = Math.PI / 180;
+  var DEG = 180 / Math.PI;
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function numberText(value, limits){
+    return "a number from " + limits.min + " to " + limits.max;
+  }
+
+  function parseNumber(value, label, limits){
+    var raw = String(value == null ? "" : value).trim();
+    if (!raw) fail(label + " is required.");
+    if (!/^-?(?:\d+(?:\.\d*)?|\.\d+)$/.test(raw)) fail(label + " must be " + numberText(label, limits) + ".");
+    var parsed = Number(raw);
+    if (!isFinite(parsed) || parsed < limits.min || parsed > limits.max){
+      fail(label + " must be " + numberText(label, limits) + ".");
+    }
+    return parsed;
+  }
+
+  function parseDate(value){
+    var raw = String(value == null ? "" : value).trim();
+    if (!raw) fail("Date is required.");
+    var match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+    if (!match) fail("Date must be written as YYYY-MM-DD.");
+    var year = Number(match[1]);
+    var month = Number(match[2]);
+    var day = Number(match[3]);
+    var stamp = Date.UTC(year, month - 1, day);
+    var check = new Date(stamp);
+    if (check.getUTCFullYear() !== year || check.getUTCMonth() !== month - 1 || check.getUTCDate() !== day){
+      fail("Date must be a real calendar day.");
+    }
+    if (year < 1900 || year > 2100) fail("Date must be between 1900 and 2100.");
+    return { year: year, month: month, day: day, text: raw };
+  }
+
+  function round1(value){
+    return Math.round(value * 10) / 10;
+  }
+
+  function round2(value){
+    return Math.round(value * 100) / 100;
+  }
+
+  function round4(value){
+    return Math.round(value * 10000) / 10000;
+  }
+
+  function modulo360(value){
+    var out = value % 360;
+    return out < 0 ? out + 360 : out;
+  }
+
+  function geometry(date){
+    var jd = Date.UTC(date.year, date.month - 1, date.day, 0, 0, 0) / 86400000 + 2440587.5;
+    var T = (jd - 2451545.0) / 36525;
+    var L0 = modulo360(280.46646 + T * (36000.76983 + T * 0.0003032));
+    var M = 357.52911 + T * (35999.05029 - 0.0001537 * T);
+    var C = Math.sin(RAD * M) * (1.914602 - T * (0.004817 + 0.000014 * T))
+      + Math.sin(RAD * 2 * M) * (0.019993 - 0.000101 * T)
+      + Math.sin(RAD * 3 * M) * 0.000289;
+    var trueLongitude = L0 + C;
+    var omega = 125.04 - 1934.136 * T;
+    var apparentLongitude = trueLongitude - 0.00569 - 0.00478 * Math.sin(RAD * omega);
+    var meanObliquity = 23 + (26 + ((21.448 - T * (46.815 + T * (0.00059 - T * 0.001813))) / 60)) / 60;
+    var obliquity = meanObliquity + 0.00256 * Math.cos(RAD * omega);
+    var declination = DEG * Math.asin(Math.sin(RAD * obliquity) * Math.sin(RAD * apparentLongitude));
+    var doy = Math.floor((Date.UTC(date.year, date.month - 1, date.day) - Date.UTC(date.year, 0, 1)) / 86400000) + 1;
+    var g = 2 * Math.PI / 365 * (doy - 1);
+    var equationOfTime = 229.18 * (0.000075 + 0.001868 * Math.cos(g) - 0.032077 * Math.sin(g)
+      - 0.014615 * Math.cos(2 * g) - 0.040849 * Math.sin(2 * g));
+    return { declination: declination, equationOfTime: equationOfTime, dayOfYear: doy };
+  }
+
+  function crossing(noon, latRad, declRad, altitude){
+    var cosHourAngle = (Math.sin(RAD * altitude) - Math.sin(latRad) * Math.sin(declRad))
+      / (Math.cos(latRad) * Math.cos(declRad));
+    if (cosHourAngle > 1) return { status: "below", rise: null, set: null };
+    if (cosHourAngle < -1) return { status: "above", rise: null, set: null };
+    var hourAngle = Math.acos(cosHourAngle) * DEG;
+    return { status: "ok", rise: noon - 4 * hourAngle, set: noon + 4 * hourAngle };
+  }
+
+  function pick(supplied, key){
+    var value = supplied[key];
+    return value === undefined || value === null ? DEFAULTS[key] : value;
+  }
+
+  function calculate(input){
+    var supplied = input || {};
+    var date = parseDate(pick(supplied, "date"));
+    var latitude = parseNumber(pick(supplied, "lat"), "Latitude", LIMITS.lat);
+    var longitude = parseNumber(pick(supplied, "lon"), "Longitude", LIMITS.lon);
+    var offset = parseNumber(pick(supplied, "tz"), "UTC offset", LIMITS.tz);
+    var sky = geometry(date);
+    var latRad = latitude * RAD;
+    var declRad = sky.declination * RAD;
+    var noon = 720 - 4 * longitude - sky.equationOfTime + offset * 60;
+
+    var astronomical = crossing(noon, latRad, declRad, ALTITUDES.astronomical);
+    var nautical = crossing(noon, latRad, declRad, ALTITUDES.nautical);
+    var civil = crossing(noon, latRad, declRad, ALTITUDES.civil);
+    var blue = crossing(noon, latRad, declRad, ALTITUDES.blue);
+    var golden = crossing(noon, latRad, declRad, ALTITUDES.golden);
+    var horizon = crossing(noon, latRad, declRad, ALTITUDES.horizon);
+
+    var dayLength = horizon.status === "ok" ? horizon.set - horizon.rise
+      : horizon.status === "above" ? 1440 : 0;
+
+    function minutes(value){
+      return value === null ? null : round1(value);
+    }
+
+    return {
+      date: date.text,
+      latitude: latitude,
+      longitude: longitude,
+      tzOffsetHours: offset,
+      dayOfYear: sky.dayOfYear,
+      declinationDeg: round4(sky.declination),
+      equationOfTimeMin: round2(sky.equationOfTime),
+      solarNoon: round1(noon),
+      sunrise: minutes(horizon.rise),
+      sunset: minutes(horizon.set),
+      dayLengthMinutes: round1(dayLength),
+      astronomicalDawn: minutes(astronomical.rise),
+      astronomicalDusk: minutes(astronomical.set),
+      nauticalDawn: minutes(nautical.rise),
+      nauticalDusk: minutes(nautical.set),
+      civilDawn: minutes(civil.rise),
+      civilDusk: minutes(civil.set),
+      blueMorningStart: minutes(civil.rise),
+      blueMorningEnd: minutes(blue.rise),
+      blueEveningStart: minutes(blue.set),
+      blueEveningEnd: minutes(civil.set),
+      goldenMorningStart: minutes(blue.rise),
+      goldenMorningEnd: minutes(golden.rise),
+      goldenEveningStart: minutes(golden.set),
+      goldenEveningEnd: minutes(blue.set),
+      statuses: {
+        astronomical: astronomical.status,
+        nautical: nautical.status,
+        civil: civil.status,
+        blue: blue.status,
+        golden: golden.status,
+        sunrise: horizon.status
+      }
+    };
+  }
+
+  return {
+    DEFAULTS: DEFAULTS,
+    LIMITS: LIMITS,
+    ALTITUDES: ALTITUDES,
+    calculate: calculate
+  };
+})();
+/* twilight-core:end */
+(function(){
+"use strict";
+
+var els = {
+  lat: document.getElementById("in-lat"),
+  lon: document.getElementById("in-lon"),
+  date: document.getElementById("in-date"),
+  tz: document.getElementById("in-tz"),
+  err: document.getElementById("err"),
+  out: document.getElementById("out")
+};
+
+function pad(value){
+  return value < 10 ? "0" + value : String(value);
+}
+
+function clock(minutes){
+  var total = Math.round(minutes);
+  total = ((total % 1440) + 1440) % 1440;
+  return pad(Math.floor(total / 60)) + ":" + pad(total % 60);
+}
+
+function span(minutes){
+  return minutes === null ? null : clock(minutes);
+}
+
+function duration(minutes){
+  var total = Math.round(minutes);
+  if (total >= 1440) return "24h 00m";
+  return Math.floor(total / 60) + "h " + pad(total % 60) + "m";
+}
+
+function clear(node){
+  while (node.firstChild) node.removeChild(node.firstChild);
+}
+
+function addRow(parent, label, value){
+  var row = document.createElement("div");
+  row.className = "row";
+  var key = document.createElement("span");
+  key.className = "k";
+  key.textContent = label;
+  var val = document.createElement("span");
+  val.className = "v";
+  val.textContent = value;
+  row.appendChild(key);
+  row.appendChild(val);
+  parent.appendChild(row);
+}
+
+function waitText(status, altitude){
+  return status === "above"
+    ? "Sun stays above " + altitude + "°"
+    : "Sun stays below " + altitude + "°";
+}
+
+function pair(first, second, status, altitude){
+  if (status !== "ok") return waitText(status, altitude);
+  return span(first) + " · " + span(second);
+}
+
+function window(first, second, status, altitude){
+  if (status !== "ok") return waitText(status, altitude);
+  return span(first) + "–" + span(second);
+}
+
+function render(result){
+  clear(els.out);
+  var big = document.createElement("div");
+  big.className = "big";
+  var sub = document.createElement("div");
+  sub.className = "sub";
+
+  if (result.statuses.sunrise === "above"){
+    big.textContent = "No sunset";
+    sub.textContent = "The sun stays above the horizon all day at this latitude and date";
+  } else if (result.statuses.sunrise === "below"){
+    big.textContent = "No sunrise";
+    sub.textContent = "The sun stays below the horizon all day at this latitude and date";
+  } else {
+    big.textContent = duration(result.dayLengthMinutes);
+    sub.textContent = "Sunrise " + span(result.sunrise) + " · sunset " + span(result.sunset) +
+      " · UTC" + (result.tzOffsetHours >= 0 ? "+" : "") + result.tzOffsetHours;
+  }
+  els.out.appendChild(big);
+  els.out.appendChild(sub);
+
+  addRow(els.out, "Astronomical twilight (-18°)",
+    pair(result.astronomicalDawn, result.astronomicalDusk, result.statuses.astronomical, -18));
+  addRow(els.out, "Nautical twilight (-12°)",
+    pair(result.nauticalDawn, result.nauticalDusk, result.statuses.nautical, -12));
+  addRow(els.out, "Civil twilight (-6°)",
+    pair(result.civilDawn, result.civilDusk, result.statuses.civil, -6));
+  addRow(els.out, "Blue hour",
+    result.statuses.civil !== "ok"
+      ? waitText(result.statuses.civil, -6)
+      : window(result.blueMorningStart, result.blueMorningEnd, result.statuses.blue, -4) + " · " +
+        window(result.blueEveningStart, result.blueEveningEnd, result.statuses.blue, -4));
+  addRow(els.out, "Golden hour",
+    result.statuses.blue !== "ok"
+      ? waitText(result.statuses.blue, -4)
+      : result.statuses.golden !== "ok"
+        ? waitText(result.statuses.golden, 6)
+        : window(result.goldenMorningStart, result.goldenMorningEnd, "ok", 0) + " · " +
+          window(result.goldenEveningStart, result.goldenEveningEnd, "ok", 0));
+  addRow(els.out, "Sunrise · sunset (-0.833°)",
+    pair(result.sunrise, result.sunset, result.statuses.sunrise, -0.833));
+  addRow(els.out, "Solar noon", span(result.solarNoon));
+  addRow(els.out, "Day length", result.statuses.sunrise === "ok"
+    ? duration(result.dayLengthMinutes)
+    : result.statuses.sunrise === "above" ? "24h 00m" : "0h 00m");
+}
+
+function calculate(){
+  var result;
+  try {
+    result = TwilightCore.calculate({
+      lat: els.lat.value,
+      lon: els.lon.value,
+      date: els.date.value,
+      tz: els.tz.value
+    });
+  } catch (error){
+    els.err.textContent = error.message;
+    clear(els.out);
+    var hint = document.createElement("span");
+    hint.style.color = "var(--text-dim,#9aa3b2)";
+    hint.textContent = "Check the named field.";
+    els.out.appendChild(hint);
+    return;
+  }
+
+  els.err.textContent = "";
+  render(result);
+}
+
+[els.lat, els.lon, els.date, els.tz].forEach(function(input){
+  input.addEventListener("input", calculate);
+  input.addEventListener("change", calculate);
+});
+document.getElementById("twilight-form").addEventListener("submit", function(event){
+  event.preventDefault();
+  calculate();
+});
+
+var today = new Date();
+els.date.value = today.getFullYear() + "-" + pad(today.getMonth() + 1) + "-" + pad(today.getDate());
+calculate();
+})();
+</script>
+</body>
+</html>
