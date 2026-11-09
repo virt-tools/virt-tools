@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Polarization Mismatch Loss Calculator — Virtual Tools</title>
+<meta name="description" content="Work out the polarization mismatch loss between two linearly polarized antennas, or the cross-polar discrimination of a circular antenna from its axial ratio.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px;margin:10px 0}
+label.f{font-size:13px;opacity:.85;display:block;margin-bottom:4px}
+.field{background:var(--bg,#14181f);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px}
+.field:focus-within{border-color:var(--accent,#6ea8fe);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#6ea8fe) 18%,transparent)}
+.field input,.field select{box-sizing:border-box;width:100%;min-height:44px;background:transparent;color:var(--text,#e6e6e6);border:none;font-size:18px;font-family:ui-monospace,monospace;padding:2px 0;outline:none}
+.field select{font-family:inherit;font-size:16px;padding:8px 0}
+.field select option{background:#14181f;color:#e6e6e6}
+.field[hidden]{display:none}
+.field .unit{font-size:11px;color:var(--text-dim,#9aa3b2);margin-top:4px}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:14px 0}
+.out .big{font-size:clamp(1.9rem,7vw,2.5rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:4px 0 6px;overflow-wrap:anywhere}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45}
+.out .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:14px}
+.out .row:last-child{border-bottom:none}
+.out .row .k{color:var(--text-dim,#9aa3b2)}
+.out .row .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right;white-space:nowrap}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.err{color:var(--bad,#f87171);font-size:13px;margin:6px 0;min-height:1.2em}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;margin:10px 0 0;line-height:1.5}
+@media (max-width:360px){.out .row{display:block}.out .row .v{display:block;text-align:left;margin-top:2px}}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>Polarization Mismatch Loss Calculator</h1>
+<p>Find the loss between two linearly polarized antennas, or the cross-polar discrimination of a circular antenna.</p>
+</div>
+<div class="panel">
+<form id="polarization-form" novalidate>
+<div class="grid2">
+<div class="field"><label class="f" for="in-mode">Antenna pair</label><select id="in-mode"><option value="ll">Linear / linear</option><option value="lc">Linear / circular</option></select><div class="unit">which polarization case to solve</div></div>
+<div class="field" id="field-angle"><label class="f" for="in-angle">Tilt between the linear axes</label><input type="text" id="in-angle" inputmode="decimal" autocomplete="off" value="30"><div class="unit">degrees: 0 aligned, 90 orthogonal</div></div>
+<div class="field" id="field-ar" hidden><label class="f" for="in-ar">Circular antenna axial ratio</label><input type="text" id="in-ar" inputmode="decimal" autocomplete="off" value="1.0"><div class="unit">dB: 0 is perfect circular, 3 is typical</div></div>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions"><button type="submit">Calculate polarization loss</button></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"><span style="color:var(--text-dim,#9aa3b2)">Pick a pair and enter a value.</span></div>
+<p class="note">For two linear antennas, the polarization loss factor is cos²θ, where θ is the angle between their axes, so the mismatch loss is −10 log₁₀(cos²θ) dB and a signal in the orthogonal plane is rejected by −10 log₁₀(sin²θ) dB. A perfect circular wave couples half its power to a linear antenna at any orientation, a fixed 3.01 dB. For a circular antenna with axial ratio AR dB, the voltage ratio is r = 10^(AR/20), the cross-polar discrimination is 20 log₁₀((r+1)/(r−1)) dB, and the loss to a linear antenna lies between 10 log₁₀(1+1/r²) and 10 log₁₀(1+r²) dB depending on its orientation. The tool ignores ground reflection, multipath, Faraday rotation along the path and antenna pattern effects; everything is calculated in this page.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* polarization-core:start */
+var PolarizationCore = (function(){
+  "use strict";
+  var MODES = { LL: "ll", LC: "lc" };
+  var DEFAULTS = { mode: "ll", angle: 30, axialRatio: 1 };
+  var MIN_ANGLE = 0;
+  var MAX_ANGLE = 90;
+  var MIN_AR = 0;
+  var MAX_AR = 40;
+  var EPSILON = 1e-10;
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function number(value, label, min, max){
+    var raw = String(value == null ? "" : value).trim();
+    if (!raw) fail(label + " is required.");
+    if (!/^-?(?:\d+(?:\.\d*)?|\.\d+)$/.test(raw)){
+      fail(label + " must be a number from " + min + " to " + max + ".");
+    }
+    var parsed = Number(raw);
+    if (!isFinite(parsed) || parsed < min || parsed > max){
+      fail(label + " must be a number from " + min + " to " + max + ".");
+    }
+    return parsed;
+  }
+
+  function round2(value){ return Math.round(value * 100) / 100; }
+  function round3(value){ return Math.round(value * 1000) / 1000; }
+  function round4(value){ return Math.round(value * 10000) / 10000; }
+
+  function calculate(input){
+    var supplied = input || {};
+    var mode = supplied.mode === undefined || supplied.mode === null ? DEFAULTS.mode : String(supplied.mode).trim().toLowerCase();
+    if (mode !== MODES.LL && mode !== MODES.LC){
+      fail("Antenna pair must be linear / linear or linear / circular.");
+    }
+
+    if (mode === MODES.LL){
+      var angle = number(supplied.angle === undefined || supplied.angle === null ? DEFAULTS.angle : supplied.angle,
+        "Tilt angle", MIN_ANGLE, MAX_ANGLE);
+      var radians = angle * Math.PI / 180;
+      var cosine = Math.cos(radians);
+      var sine = Math.sin(radians);
+      var plf = cosine * cosine;
+      var cross = sine * sine;
+      if (plf < EPSILON) plf = 0;
+      if (cross < EPSILON) cross = 0;
+      return {
+        mode: MODES.LL,
+        angleDeg: angle,
+        voltageCoupling: round4(Math.sqrt(plf)),
+        plf: round4(plf),
+        lossDb: plf === 0 ? null : round2(-10 * Math.log(plf) / Math.LN10),
+        crossPolRejectionDb: cross === 0 ? null : round2(-10 * Math.log(cross) / Math.LN10),
+        axialRatioDb: null,
+        axialRatioLinear: null,
+        xpdDb: null,
+        bestCaseLossDb: null,
+        worstCaseLossDb: null
+      };
+    }
+
+    var axialRatio = number(supplied.axialRatio === undefined || supplied.axialRatio === null ? DEFAULTS.axialRatio : supplied.axialRatio,
+      "Axial ratio", MIN_AR, MAX_AR);
+    var ratio = Math.pow(10, axialRatio / 20);
+    var squared = ratio * ratio;
+    return {
+      mode: MODES.LC,
+      angleDeg: null,
+      voltageCoupling: null,
+      plf: null,
+      lossDb: null,
+      crossPolRejectionDb: null,
+      axialRatioDb: axialRatio,
+      axialRatioLinear: round4(ratio),
+      xpdDb: axialRatio <= 0 ? null : round2(20 * Math.log((ratio + 1) / (ratio - 1)) / Math.LN10),
+      bestCaseLossDb: round2(10 * Math.log(1 + 1 / squared) / Math.LN10),
+      worstCaseLossDb: round2(10 * Math.log(1 + squared) / Math.LN10)
+    };
+  }
+
+  return {
+    MODES: MODES,
+    DEFAULTS: DEFAULTS,
+    MIN_ANGLE: MIN_ANGLE,
+    MAX_ANGLE: MAX_ANGLE,
+    MIN_AR: MIN_AR,
+    MAX_AR: MAX_AR,
+    calculate: calculate
+  };
+})();
+/* polarization-core:end */
+(function(){
+"use strict";
+
+var els = {
+  mode: document.getElementById("in-mode"),
+  angle: document.getElementById("in-angle"),
+  ar: document.getElementById("in-ar"),
+  fieldAngle: document.getElementById("field-angle"),
+  fieldAr: document.getElementById("field-ar"),
+  err: document.getElementById("err"),
+  out: document.getElementById("out")
+};
+
+function fixed(value, places){
+  return value.toFixed(places);
+}
+function dbLabel(value){
+  return value === null ? "∞ dB" : fixed(value, 2) + " dB";
+}
+function clear(node){
+  while (node.firstChild) node.removeChild(node.firstChild);
+}
+function addRow(parent, label, value){
+  var row = document.createElement("div");
+  row.className = "row";
+  var key = document.createElement("span");
+  key.className = "k";
+  key.textContent = label;
+  var val = document.createElement("span");
+  val.className = "v";
+  val.textContent = value;
+  row.appendChild(key);
+  row.appendChild(val);
+  parent.appendChild(row);
+}
+function placeholder(node, message){
+  var span = document.createElement("span");
+  span.style.color = "var(--text-dim,#9aa3b2)";
+  span.textContent = message;
+  node.appendChild(span);
+}
+function syncFields(){
+  var circular = els.mode.value === "lc";
+  els.fieldAngle.hidden = circular;
+  els.fieldAr.hidden = !circular;
+}
+
+function render(result){
+  clear(els.out);
+  var big = document.createElement("div");
+  big.className = "big";
+  var sub = document.createElement("div");
+  sub.className = "sub";
+
+  if (result.mode === "ll"){
+    big.textContent = dbLabel(result.lossDb);
+    sub.textContent = result.lossDb === null
+      ? "Orthogonal axes at 90°: no wanted-signal coupling"
+      : "Mismatch loss at " + fixed(result.angleDeg, 1) + "° tilt (PLF " + fixed(result.plf, 3) + ")";
+    els.out.appendChild(big);
+    els.out.appendChild(sub);
+    addRow(els.out, "Polarization loss factor (cos²θ)", fixed(result.plf, 3));
+    addRow(els.out, "Voltage coupling (cos θ)", fixed(result.voltageCoupling, 3));
+    addRow(els.out, "Rejection of the orthogonal signal", dbLabel(result.crossPolRejectionDb));
+    addRow(els.out, "Tilt between the axes", fixed(result.angleDeg, 1) + "°");
+  } else {
+    big.textContent = dbLabel(result.xpdDb);
+    sub.textContent = result.xpdDb === null
+      ? "Perfect circular at 0 dB: no cross-polar component"
+      : "Cross-polar discrimination at " + fixed(result.axialRatioDb, 1) + " dB axial ratio";
+    els.out.appendChild(big);
+    els.out.appendChild(sub);
+    addRow(els.out, "Axial ratio (voltage ratio r)", fixed(result.axialRatioLinear, 3));
+    addRow(els.out, "Loss to a linear antenna (best case)", dbLabel(result.bestCaseLossDb));
+    addRow(els.out, "Loss to a linear antenna (worst case)", dbLabel(result.worstCaseLossDb));
+    addRow(els.out, "Ideal circular to linear loss", "3.01 dB");
+  }
+}
+
+function calculate(){
+  var result;
+  try {
+    result = PolarizationCore.calculate({
+      mode: els.mode.value,
+      angle: els.angle.value,
+      axialRatio: els.ar.value
+    });
+  } catch (error){
+    els.err.textContent = error.message;
+    clear(els.out);
+    placeholder(els.out, "Check the highlighted field.");
+    return;
+  }
+
+  els.err.textContent = "";
+  render(result);
+}
+
+syncFields();
+els.mode.addEventListener("change", function(){
+  syncFields();
+  calculate();
+});
+[els.angle, els.ar].forEach(function(input){
+  input.addEventListener("input", calculate);
+});
+document.getElementById("polarization-form").addEventListener("submit", function(event){
+  event.preventDefault();
+  calculate();
+});
+
+calculate();
+})();
+</script>
+</body>
+</html>
