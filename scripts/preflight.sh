@@ -178,6 +178,7 @@ node tests/merge_conflict_resolver.test.cjs
 node tests/coffee_extraction_yield.test.cjs
 node tests/pitching_stats_calculator.test.cjs
 node tests/metric_modulation_calculator.test.cjs
+node tests/systemd_unit_name_escaper.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
