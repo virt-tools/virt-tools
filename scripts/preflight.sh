@@ -182,6 +182,7 @@ node tests/systemd_unit_name_escaper.test.cjs
 node tests/fly_fishing_leader_builder.test.cjs
 node tests/microstrip_patch_antenna_designer.test.cjs
 node tests/systemd_network_builder.test.cjs
+node tests/volleyball_rotation_scorekeeper.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
