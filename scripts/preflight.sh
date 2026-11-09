@@ -168,6 +168,7 @@ node tests/propeller_slip_calculator.test.cjs
 node tests/antenna_factor_calculator.test.cjs
 node tests/vlan_id_planner.test.cjs
 node tests/ice_cream_mix_calculator.test.cjs
+node tests/pitch_class_set_analyzer.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
