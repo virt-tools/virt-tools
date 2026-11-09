@@ -157,6 +157,7 @@ node tests/pleat_calculator.test.cjs
 node tests/tournament_bracket_generator.test.cjs
 node tests/yagi_antenna_element_planner.test.cjs
 node tests/fiber_color_code_locator.test.cjs
+node tests/cross_track_error_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
