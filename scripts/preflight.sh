@@ -163,6 +163,7 @@ node tests/fretboard_note_finder.test.cjs
 node tests/systemd_tmpfiles_builder.test.cjs
 node tests/basket_weaving_reed_calculator.test.cjs
 node tests/propeller_slip_calculator.test.cjs
+node tests/antenna_factor_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
