@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Syslog Priority Decoder — Virtual Tools</title>
+<meta name="description" content="Decode a syslog priority such as <34> into its facility and severity, build a priority from auth.crit or local0.info, and see the matching journalctl priority keyword.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+[hidden]{display:none !important}
+label.f{font-size:13px;opacity:.85;display:block;margin-bottom:4px}
+.field{background:var(--bg,#14181f);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px}
+.field:focus-within{border-color:var(--accent,#6ea8fe);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#6ea8fe) 18%,transparent)}
+.field input{box-sizing:border-box;min-width:0;width:100%;min-height:44px;background:transparent;color:var(--text,#e6e6e6);border:none;font-family:ui-monospace,monospace;font-size:17px;padding:2px 0;outline:none}
+.field .unit{font-size:11px;color:var(--text-dim,#9aa3b2);margin-top:4px;line-height:1.45;overflow-wrap:anywhere}
+.picker{border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:10px 12px;margin:14px 0}
+.picker legend{padding:0 6px;font-size:13px;color:var(--text-dim,#9aa3b2)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 2px}
+.chips button{min-height:44px;font:inherit;font-family:ui-monospace,monospace;font-size:12px;font-weight:600;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg,#14181f);color:var(--text,#e6e6e6);cursor:pointer;padding:6px 10px}
+.chips button .num{color:var(--text-dim,#9aa3b2);font-weight:400}
+.chips button:hover{border-color:var(--accent,#6ea8fe)}
+.chips button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:12px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 20px;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);color:var(--text,#e6e6e6);cursor:pointer;min-height:44px}
+.actions button.primary{background:var(--accent,#6ea8fe);border-color:var(--accent,#6ea8fe);color:#0b1017;padding:10px 24px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:14px 0}
+.out:empty{display:none}
+.out .big{font-size:clamp(1.6rem,7vw,2.6rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:4px 0 2px;overflow-wrap:anywhere;color:var(--accent,#6ea8fe)}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45;overflow-wrap:anywhere}
+.out .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:7px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:13.5px}
+.out .row:last-of-type{border-bottom:none}
+.out .row .k{color:var(--text-dim,#9aa3b2);flex:0 0 auto}
+.out .row .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right;overflow-wrap:anywhere;word-break:break-word}
+.out .hint{margin:12px 0 0;padding:10px 12px;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg,#14181f);font-size:13.5px;line-height:1.5}
+.out .hint strong{color:var(--text,#e6e6e6)}
+.err{color:var(--bad,#f87171);font-size:13px;margin:6px 0;min-height:1.2em;line-height:1.4}
+.status{font-size:13px;color:var(--text-dim,#9aa3b2);margin:6px 0 0;min-height:1.2em}
+.details h2{font-size:1rem;margin:22px 0 8px}
+.ref{display:grid;grid-template-columns:3.1rem minmax(0,7.5rem) minmax(0,1fr);gap:10px;align-items:baseline;padding:7px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:13.5px}
+.ref:last-child{border-bottom:none}
+.ref .num{font-family:ui-monospace,monospace;color:var(--text-dim,#9aa3b2);text-align:right}
+.ref .name{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);overflow-wrap:anywhere}
+.ref .msg{color:var(--text,#e6e6e6);opacity:.9;line-height:1.45}
+@media (max-width:560px){
+.ref{grid-template-columns:2.6rem minmax(0,1fr)}
+.ref .msg{grid-column:1 / -1;opacity:.75;font-size:13px}
+.out .row{flex-wrap:wrap;row-gap:2px}
+.out .row .v{flex:1 1 100%;text-align:left}
+}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;margin:18px 0 0;line-height:1.55}
+.note code{font-size:.95em}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>Syslog Priority Decoder</h1>
+<p>Turn a syslog priority such as <code>&lt;34&gt;</code> into its facility and severity, or build one from a pair such as <code>auth.crit</code>.</p>
+</div>
+<div class="panel">
+<form id="pri-form" novalidate>
+<div class="field">
+<label class="f" for="pri">Priority, syslog line, or facility.severity</label>
+<input type="text" id="pri" inputmode="text" autocomplete="off" spellcheck="false" value="&lt;34&gt;" aria-describedby="pri-help">
+<div class="unit" id="pri-help">&lt;34&gt;, 34, auth.crit, local0.info, or a full line such as &lt;134&gt;1 2026-11-09T05:00:00Z host app 123 ID47 - started</div>
+</div>
+<fieldset class="picker">
+<legend>Common priorities</legend>
+<div class="chips" aria-label="Common syslog priorities">
+<button type="button" class="chip" data-value="kern.emerg">kern.emerg <span class="num">0</span></button>
+<button type="button" class="chip" data-value="user.err">user.err <span class="num">11</span></button>
+<button type="button" class="chip" data-value="daemon.warning">daemon.warning <span class="num">28</span></button>
+<button type="button" class="chip" data-value="auth.crit">auth.crit <span class="num">34</span></button>
+<button type="button" class="chip" data-value="local0.info">local0.info <span class="num">134</span></button>
+</div>
+<div class="actions">
+<button type="submit" class="primary">Decode</button>
+<button type="button" id="reset" class="secondary">Reset</button>
+</div>
+</fieldset>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"></div>
+<p class="status" id="status" role="status" aria-live="polite"></p>
+</div>
+<section class="details" aria-labelledby="sev-title">
+<h2 id="sev-title">Severities (0–7)</h2>
+<div id="sev-list"></div>
+<h2 id="fac-title">Facilities (0–23)</h2>
+<div id="fac-list"></div>
+</section>
+<p class="note">A syslog priority is one number from 0 to 191: <code>facility × 8 + severity</code>. RFC 5424 and the older BSD format both put it first in angle brackets, so <code>&lt;34&gt;</code> is facility 4 (<code>auth</code>) and severity 2 (<code>crit</code>). journald stores the severity as <code>PRIORITY</code> and <code>journalctl --priority</code> takes the same keywords shown here. Facility 15 is the <code>solaris-cron</code> slot that RFC 5424 calls a second clock daemon, and every facility can carry any severity. RFC 5424 forbids leading zeros, so <code>&lt;034&gt;</code> is refused rather than silently read as 34. Decoding is a lookup in this page: nothing is executed, stored or sent anywhere.</p>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* syslog-priority-core:start */
+var SyslogPriorityCore = (function(){
+  "use strict";
+  var FACILITIES = [
+    [0, "kern", "kernel messages"],
+    [1, "user", "user-level messages"],
+    [2, "mail", "mail system"],
+    [3, "daemon", "system daemons"],
+    [4, "auth", "security/authorization messages"],
+    [5, "syslog", "messages generated internally by syslogd"],
+    [6, "lpr", "line printer subsystem"],
+    [7, "news", "network news subsystem"],
+    [8, "uucp", "UUCP subsystem"],
+    [9, "cron", "clock daemon"],
+    [10, "authpriv", "security/authorization messages (private)"],
+    [11, "ftp", "FTP daemon"],
+    [12, "ntp", "NTP subsystem"],
+    [13, "security", "log audit"],
+    [14, "console", "log alert"],
+    [15, "solaris-cron", "second clock daemon"],
+    [16, "local0", "local use 0"],
+    [17, "local1", "local use 1"],
+    [18, "local2", "local use 2"],
+    [19, "local3", "local use 3"],
+    [20, "local4", "local use 4"],
+    [21, "local5", "local use 5"],
+    [22, "local6", "local use 6"],
+    [23, "local7", "local use 7"]
+  ];
+  var SEVERITIES = [
+    [0, "emerg", "Emergency", "system is unusable"],
+    [1, "alert", "Alert", "action must be taken immediately"],
+    [2, "crit", "Critical", "critical conditions"],
+    [3, "err", "Error", "error conditions"],
+    [4, "warning", "Warning", "warning conditions"],
+    [5, "notice", "Notice", "normal but significant condition"],
+    [6, "info", "Informational", "informational messages"],
+    [7, "debug", "Debug", "debug-level messages"]
+  ];
+  var FACILITY_ALIASES = { kernel: "kern" };
+  var SEVERITY_ALIASES = {
+    panic: "emerg",
+    emergency: "emerg",
+    critical: "crit",
+    error: "err",
+    warn: "warning",
+    informational: "info"
+  };
+  var MIN = 0;
+  var MAX = 191;
+
+  function fail(message){ throw new Error(message); }
+  function clip(value){
+    var text = String(value);
+    return text.length > 40 ? text.slice(0, 37) + "..." : text;
+  }
+  function normalize(value){ return String(value == null ? "" : value).trim().toLowerCase(); }
+
+  function facilityFor(token){
+    var key = normalize(token);
+    if (FACILITY_ALIASES[key]) key = FACILITY_ALIASES[key];
+    for (var i = 0; i < FACILITIES.length; i += 1) {
+      if (FACILITIES[i][1] === key) return FACILITIES[i];
+    }
+    if (/^[0-9]{1,2}$/.test(key)) {
+      var code = Number(key);
+      if (code >= 0 && code < FACILITIES.length) return FACILITIES[code];
+    }
+    return null;
+  }
+
+  function severityFor(token){
+    var key = normalize(token);
+    if (SEVERITY_ALIASES[key]) key = SEVERITY_ALIASES[key];
+    for (var i = 0; i < SEVERITIES.length; i += 1) {
+      if (SEVERITIES[i][1] === key) return SEVERITIES[i];
+    }
+    if (/^[0-7]$/.test(key)) return SEVERITIES[Number(key)];
+    return null;
+  }
+
+  function build(priority){
+    if (!Number.isInteger(priority) || priority < MIN || priority > MAX) {
+      fail("A syslog priority runs from 0 to 191: 24 facilities times 8 severities.");
+    }
+    var facility = FACILITIES[Math.floor(priority / 8)];
+    var severity = SEVERITIES[priority % 8];
+    return {
+      priority: priority,
+      facilityCode: facility[0],
+      facilityKeyword: facility[1],
+      facilityName: facility[2],
+      severityCode: severity[0],
+      severityKeyword: severity[1],
+      severityName: severity[2],
+      severityMeaning: severity[3],
+      journalPriority: severity[1],
+      arithmetic: facility[0] + " \u00d7 8 + " + severity[0] + " = " + priority
+    };
+  }
+
+  function fromDigits(digits){
+    if (digits.length > 1 && digits.charAt(0) === "0") {
+      fail("RFC 5424 writes the priority without leading zeros; use " + Number(digits) + " instead of " + clip(digits) + ".");
+    }
+    return build(Number(digits));
+  }
+
+  function decode(input){
+    var text = String(input == null ? "" : input).trim();
+    if (!text) {
+      fail("Enter a priority such as <34>, a number from 0 to 191, or a pair such as auth.crit.");
+    }
+    if (text.charAt(0) === "<") {
+      var bracketed = /^<([0-9]+)>/.exec(text);
+      if (!bracketed) {
+        fail("A priority in angle brackets must look like <34>, with a number from 0 to 191 inside.");
+      }
+      return fromDigits(bracketed[1]);
+    }
+    if (/^[0-9]+$/.test(text)) return fromDigits(text);
+    if (text.indexOf(".") > -1) {
+      var parts = text.split(".");
+      if (parts.length !== 2) {
+        fail("\"" + clip(text) + "\" has more than one dot; use one facility and one severity, such as auth.crit.");
+      }
+      if (!normalize(parts[0])) {
+        fail("Enter a facility keyword before the dot, such as auth.crit.");
+      }
+      if (!normalize(parts[1])) {
+        fail("Enter a severity keyword after the dot, such as auth.crit.");
+      }
+      var facility = facilityFor(parts[0]);
+      if (!facility) {
+        fail("\"" + clip(parts[0]) + "\" is not a syslog facility; use a keyword such as auth, daemon, cron or local0.");
+      }
+      var severity = severityFor(parts[1]);
+      if (!severity) {
+        fail("\"" + clip(parts[1]) + "\" is not a syslog severity; use emerg, alert, crit, err, warning, notice, info or debug.");
+      }
+      return build(facility[0] * 8 + severity[0]);
+    }
+    fail("\"" + clip(text) + "\" is not a priority, a number from 0 to 191, or a facility.severity pair.");
+  }
+
+  return {
+    FACILITIES: FACILITIES,
+    SEVERITIES: SEVERITIES,
+    MIN: MIN,
+    MAX: MAX,
+    decode: decode
+  };
+})();
+/* syslog-priority-core:end */
+(function(){
+  "use strict";
+  var C = SyslogPriorityCore;
+  function $(id){ return document.getElementById(id); }
+  function el(tag, cls, text){
+    var node = document.createElement(tag);
+    if (cls) node.className = cls;
+    if (text != null) node.textContent = text;
+    return node;
+  }
+  var els = { form: $("pri-form"), input: $("pri"), err: $("err"), out: $("out"), status: $("status"), reset: $("reset"), sev: $("sev-list"), fac: $("fac-list") };
+  var timer = null;
+  var defaults = { value: "<34>" };
+
+  function row(key, value){
+    var line = el("div", "row");
+    line.appendChild(el("span", "k", key));
+    line.appendChild(el("span", "v", value));
+    return line;
+  }
+
+  function render(result){
+    var out = els.out;
+    out.textContent = "";
+    out.appendChild(el("div", "big", String(result.priority)));
+    out.appendChild(el("p", "sub", result.facilityKeyword + "." + result.severityKeyword + " · " + result.facilityName));
+    out.appendChild(row("Facility", result.facilityKeyword + " (" + result.facilityCode + ")"));
+    out.appendChild(row("Severity", result.severityKeyword + " (" + result.severityCode + ") — " + result.severityName));
+    out.appendChild(row("journalctl filter", "--priority=" + result.journalPriority));
+    out.appendChild(row("Arithmetic", result.arithmetic));
+    var hint = el("p", "hint");
+    hint.appendChild(el("strong", "", result.severityName));
+    hint.appendChild(document.createTextNode(" — " + result.severityMeaning + ". The severity repeats every 8 priorities, and " + result.priority + " mod 8 is " + result.severityCode + "."));
+    out.appendChild(hint);
+  }
+
+  function showError(message){
+    els.err.textContent = message;
+    els.out.textContent = "";
+    els.status.textContent = "The value above could not be decoded.";
+  }
+
+  function run(){
+    var text = els.input.value;
+    try {
+      var result = C.decode(text);
+      els.err.textContent = "";
+      render(result);
+      els.status.textContent = "Decoded in the browser: priority " + result.priority + ", " + result.facilityKeyword + "." + result.severityKeyword + ".";
+    } catch (error) {
+      showError(error.message);
+    }
+  }
+
+  function later(){
+    if (timer) window.clearTimeout(timer);
+    timer = window.setTimeout(run, 120);
+  }
+
+  function addRow(parent, code, name, message){
+    var line = el("div", "ref");
+    line.appendChild(el("span", "num", String(code)));
+    line.appendChild(el("span", "name", name));
+    line.appendChild(el("span", "msg", message));
+    parent.appendChild(line);
+  }
+
+  C.SEVERITIES.forEach(function(entry){ addRow(els.sev, entry[0], entry[1], entry[2] + " — " + entry[3]); });
+  C.FACILITIES.forEach(function(entry){ addRow(els.fac, entry[0], entry[1], entry[2]); });
+
+  els.input.addEventListener("input", later);
+  els.form.addEventListener("submit", function(event){
+    event.preventDefault();
+    if (timer) window.clearTimeout(timer);
+    run();
+    if (els.err.textContent) els.input.focus();
+  });
+  els.reset.addEventListener("click", function(){
+    els.input.value = defaults.value;
+    if (timer) window.clearTimeout(timer);
+    run();
+    els.input.focus();
+  });
+  Array.prototype.forEach.call(document.querySelectorAll(".chip"), function(chip){
+    chip.addEventListener("click", function(){
+      els.input.value = chip.getAttribute("data-value");
+      if (timer) window.clearTimeout(timer);
+      run();
+    });
+  });
+
+  run();
+})();
+</script>
+</body>
+</html>
