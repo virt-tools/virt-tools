@@ -160,6 +160,7 @@ node tests/fiber_color_code_locator.test.cjs
 node tests/cross_track_error_calculator.test.cjs
 node tests/buttercream_quantity_calculator.test.cjs
 node tests/fretboard_note_finder.test.cjs
+node tests/systemd_tmpfiles_builder.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
