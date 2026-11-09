@@ -563,9 +563,74 @@ try {
   await ogMeta.close();
   await context.unroute("https://example.com/**");
 
+  const wifiPlan = await openPage("Wi-Fi coverage sketch", "/tools/wifi-access-point-capacity-planner/");
+  await assertSharedPage(wifiPlan, "Wi-Fi Access Point Capacity Planner", "Wi-Fi coverage sketch");
+  await wifiPlan.locator("#coverage-canvas").waitFor({ state: "visible", timeout: 10_000 });
+  await wifiPlan.locator("#clear-plan").click();
+  assert.equal(
+    (await wifiPlan.locator("#plan-summary strong").textContent()).trim(),
+    "0.0% at target",
+    "clearing the Wi-Fi sketch left coverage behind",
+  );
+  await wifiPlan.locator("#ap-x").fill("4");
+  await wifiPlan.locator("#ap-y").fill("6");
+  await wifiPlan.locator("#ap-add-form button[type=submit]").click();
+  assert.equal(
+    await wifiPlan.locator('#object-select option[value^="ap-"]').count(),
+    1,
+    "precise entry did not add an access point",
+  );
+  await wifiPlan.locator("#obstacle-add-form button[type=submit]").click();
+  assert.equal(
+    await wifiPlan.locator('#object-select option[value^="wall-"]').count(),
+    1,
+    "precise entry did not add a wall",
+  );
+  const planDownloadEvent = wifiPlan.waitForEvent("download");
+  await wifiPlan.locator("#download-plan").click();
+  const planDownload = await planDownloadEvent;
+  assert.equal(planDownload.suggestedFilename(), "wifi-coverage-plan.json", "Wi-Fi plan download name changed");
+  await wifiPlan.locator("#save-plan").click();
+  await wifiPlan.reload({ waitUntil: "domcontentloaded" });
+  await wifiPlan.locator("#coverage-canvas").waitFor({ state: "visible", timeout: 10_000 });
+  assert.equal(
+    await wifiPlan.locator('#object-select option[value^="ap-"]').count(),
+    1,
+    "browser-saved access point was not restored",
+  );
+  assert.equal(
+    await wifiPlan.locator('#object-select option[value^="wall-"]').count(),
+    1,
+    "browser-saved wall was not restored",
+  );
+  await wifiPlan.locator("#add-floor").click();
+  assert.equal(await wifiPlan.locator("#floor-select option").count(), 2, "second floor was not added");
+  await wifiPlan.locator("#ap-add-form button[type=submit]").click();
+  await wifiPlan.locator("#floor-select").selectOption("0");
+  assert.match(
+    await wifiPlan.locator("#plan-summary").innerText(),
+    /Access points in building\s*2/,
+    "cross-floor access points are omitted from the building plan",
+  );
+  await wifiPlan.setViewportSize({ width: 320, height: 900 });
+  const wifiLayout = await wifiPlan.evaluate(() => {
+    const panel = document.querySelector(".plan-panel").getBoundingClientRect();
+    const canvasRect = document.getElementById("coverage-canvas").getBoundingClientRect();
+    const controlsFit = [...document.querySelectorAll(".plan-panel button, .plan-panel input, .plan-panel select")]
+      .filter((element) => element.getBoundingClientRect().width > 0)
+      .every((element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.left >= panel.left - 1 && rect.right <= panel.right + 1 && rect.height >= 43;
+      });
+    return { panelLeft: panel.left, panelRight: panel.right, canvasRight: canvasRect.right, controlsFit };
+  });
+  assert.ok(wifiLayout.canvasRight <= wifiLayout.panelRight + 1, "Wi-Fi canvas overflows its mobile panel");
+  assert.ok(wifiLayout.controlsFit, "Wi-Fi plan controls overflow or miss the 44px target at 320px");
+  await wifiPlan.close();
+
   if (errors.length) throw new Error(errors.join("\n"));
   console.log(
-    `Browser smoke passed: homepage/PWA, search/filter, formula deep link and calculation, privacy/feedback, ${representativeTools.length} representative tools, moon phase, and audit regressions`,
+    `Browser smoke passed: homepage/PWA, search/filter, formula deep link and calculation, privacy/feedback, ${representativeTools.length} representative tools, moon phase, Wi-Fi coverage sketch, and audit regressions`,
   );
 } finally {
   await context.close();

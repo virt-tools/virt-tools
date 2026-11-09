@@ -1,5 +1,5 @@
 /* Regression checks for the Wi-Fi access point capacity planner core, its
-   catalog cases and the page's offline, no-storage contract. */
+   browser-local coverage sketch, catalog cases and offline contract. */
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
@@ -136,10 +136,84 @@ for (const bad of ['1e2', '0x10', '45 6', '+45', 'NaN', '4.5.6', '--2']) {
   assert.ok(failure({ area: bad }), 'floor area refuses ' + JSON.stringify(bad));
 }
 
-// ---- The page must not reach the network, store data or inject markup.
+// ---- Coverage sketch: independent log-distance and obstruction anchors.
+const makePlan = () => ({
+  version: 1, width: 10, depth: 10, txPower: 20, referenceLoss: 46, exponent: 2,
+  target: -67, floorHeight: 3, floorLoss: 15, activeFloor: 0,
+  floors: [{ name: 'Ground floor', aps: [{ id: 'ap-ground', x: 2, y: 2 }], obstacles: [] }],
+});
+const signal = (design, x = 5, y = 2, floor = 0) => plain(C.Plan.signalAt(design, x, y, floor));
+const openPlan = makePlan();
+assert.deepEqual(plain(C.Plan.normalize(openPlan)), plain(openPlan), 'design JSON round-trip');
+assert.equal(signal(openPlan).rssi, -35.5, 'three-metre open-path anchor');
+near(20 - 46 - 20 * Math.log10(3), -35.5425, 0.001, 'independent open-path formula');
+assert.equal(signal(openPlan).obstacleLoss, 0);
+const roundingBoundary = makePlan();
+roundingBoundary.depth = 4;
+roundingBoundary.referenceLoss = 56;
+roundingBoundary.target = -45.54;
+const roundingCoverage = plain(C.Plan.calculateCoverage(roundingBoundary, 1, 1));
+assert.equal(roundingCoverage.samples[0].rssi, -45.5, 'display rounds the boundary sample');
+assert.equal(roundingCoverage.coveredPct, 0, 'target comparison happens before display rounding');
+
+const wallPlan = makePlan();
+wallPlan.floors[0].obstacles.push({ id: 'wall-1', kind: 'wall', x1: 3, y1: 0, x2: 3, y2: 5 });
+assert.equal(signal(wallPlan).rssi, -47.5, 'one 12 dB wall crosses the path');
+assert.equal(signal(wallPlan).obstacleLoss, 12);
+wallPlan.floors[0].obstacles[0].kind = 'door';
+assert.equal(signal(wallPlan).rssi, -41.5, 'one 6 dB door crosses the path');
+wallPlan.floors[0].obstacles.push({ id: 'window-1', kind: 'window', x1: 4, y1: 0, x2: 4, y2: 5 });
+assert.equal(signal(wallPlan).rssi, -44.5, 'door and window losses add');
+assert.equal(signal(wallPlan).obstacleLoss, 9);
+wallPlan.floors[0].obstacles[0].y1 = 3; // Move the door away from the straight path.
+wallPlan.floors[0].obstacles[0].y2 = 5;
+assert.equal(signal(wallPlan).obstacleLoss, 3, 'only crossed partitions attenuate');
+
+const upstairsPlan = makePlan();
+upstairsPlan.floors[0].aps = [];
+upstairsPlan.floors.push({ name: 'Floor 2', aps: [{ id: 'ap-up', x: 5, y: 2 }], obstacles: [] });
+const upstairs = signal(upstairsPlan);
+assert.equal(upstairs.rssi, -50.5, 'three-metre vertical path plus 15 dB floor loss');
+assert.equal(upstairs.distance, 3);
+assert.equal(upstairs.floorLoss, 15);
+assert.equal(upstairs.apFloor, 1);
+
+const gridPlan = makePlan();
+gridPlan.floors[0].aps = [{ id: 'ap-grid', x: 2, y: 5 }];
+gridPlan.target = -40;
+const grid = plain(C.Plan.calculateCoverage(gridPlan, 2, 1));
+assert.equal(grid.samples.length, 2);
+assert.equal(grid.samples[0].rssi, -26, 'distance below one metre uses the one-metre reference');
+assert.equal(grid.samples[1].rssi, -40.8, '5.5-metre open-path grid anchor');
+assert.equal(grid.coveredPct, 50, 'coverage uses unrounded samples against the target');
+assert.equal(grid.apCount, 1);
+assert.equal(grid.currentFloorApCount, 1);
+assert.equal(grid.floorCount, 1);
+const noAp = makePlan();
+noAp.floors[0].aps = [];
+assert.equal(signal(noAp).rssi, null);
+assert.equal(plain(C.Plan.calculateCoverage(noAp, 2, 2)).coveredPct, 0);
+const planFailure = (design) => {
+  try { C.Plan.normalize(design); } catch (error) { return error.message; }
+  return null;
+};
+const badVersion = makePlan(); badVersion.version = 2;
+assert.equal(planFailure(badVersion), 'Design version must be 1.');
+const badCoordinate = makePlan(); badCoordinate.floors[0].aps[0].x = 11;
+assert.equal(planFailure(badCoordinate), 'Access point X must be a number from 0 to 10.');
+const shortWall = makePlan();
+shortWall.floors[0].obstacles.push({ id: 'short', kind: 'wall', x1: 2, y1: 2, x2: 2, y2: 2 });
+assert.equal(planFailure(shortWall), 'Partitions must be at least 0.05 metres long.');
+const duplicateIds = makePlan();
+duplicateIds.floors[0].obstacles.push({ id: 'ap-ground', kind: 'wall', x1: 2, y1: 2, x2: 3, y2: 2 });
+assert.equal(planFailure(duplicateIds), 'Object ids must be unique.');
+
+// ---- The page must not reach the network or inject markup. Saving is explicit and local.
 assert.ok(!/https?:\/\//.test(html), 'page references an external URL');
-assert.ok(!/localStorage|sessionStorage|indexedDB|fetch\(|XMLHttpRequest/.test(html),
-  'page uses storage or network APIs');
+assert.ok(!/sessionStorage|indexedDB|fetch\(|XMLHttpRequest/.test(html),
+  'page uses unrelated storage or network APIs');
+assert.ok(/localStorage\.getItem\(STORAGE_KEY\)/.test(html), 'saved designs can be restored');
+assert.ok(/localStorage\.setItem\(STORAGE_KEY/.test(html), 'browser save writes only the design key');
 assert.ok(!/\son[a-z]+\s*=/i.test(html.replace(/<script[\s\S]*?<\/script>/g, '')),
   'page uses inline event handlers');
 assert.ok(!/innerHTML/.test(html), 'page injects markup strings');
