@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>NMEA 0183 Sentence Parser — Virtual Tools</title>
+<meta name="description" content="Parse NMEA 0183 GPS/GNSS logs locally: verify checksums and decode GGA, RMC, GLL, GSA, GSV and VTG positions, times, satellites, speed and course.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+[hidden]{display:none!important}
+label.f{font-size:13px;opacity:.85;display:block;margin-bottom:4px}
+.field{background:var(--bg,#14181f);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px;min-width:0}
+.field:focus-within{border-color:var(--accent,#6ea8fe);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#6ea8fe) 18%,transparent)}
+.field textarea{box-sizing:border-box;width:100%;max-width:none;min-width:0;background:transparent;color:var(--text,#e6e6e6);border:none;font:14px/1.55 ui-monospace,monospace;padding:2px 0;outline:none;resize:vertical;min-height:170px;white-space:pre;overflow-wrap:normal}
+.field textarea:focus{box-shadow:none}
+.field .unit{font-size:11px;color:var(--text-dim,#9aa3b2);margin-top:5px;line-height:1.45}
+.check{display:flex;align-items:center;gap:9px;margin:10px 0 0;font-size:13px;color:var(--text-dim,#9aa3b2);min-height:44px;cursor:pointer}
+.check input{width:20px;height:20px;margin:0;accent-color:var(--accent,#6ea8fe);flex:none}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:12px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 20px;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);color:var(--text,#e6e6e6);cursor:pointer;min-height:44px}
+.actions button.primary{background:var(--accent,#6ea8fe);border-color:var(--accent,#6ea8fe);color:#0b1017;padding:10px 24px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.err{color:var(--bad,#f87171);font-size:13px;margin:6px 0;min-height:1.2em;line-height:1.4}
+.status{font-size:13px;color:var(--text-dim,#9aa3b2);margin:6px 0 0;min-height:1.2em}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:14px 0}
+.big{font-size:clamp(1.6rem,7vw,2.5rem);font-weight:800;text-align:center;padding:3px 0;overflow-wrap:anywhere;color:var(--accent,#6ea8fe)}
+.sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45}
+.row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:7px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:13.5px}
+.row:last-child{border-bottom:none}
+.row .k{color:var(--text-dim,#9aa3b2);flex:0 0 auto}
+.row .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right;overflow-wrap:anywhere;min-width:0}
+.sentences{display:grid;gap:12px;margin-top:14px}
+.sentence{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:14px;min-width:0}
+.sentence.bad{border-color:color-mix(in srgb,var(--bad,#f87171) 55%,var(--border,#2a2f3a))}
+.sentence-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.sentence-head h2{font:700 15px/1.4 ui-monospace,monospace;margin:0;overflow-wrap:anywhere}
+.sentence-head .line{color:var(--text-dim,#9aa3b2);font-size:12px}
+.badge{margin-left:auto;border:1px solid var(--border,#2a2f3a);border-radius:999px;padding:2px 8px;font-size:11px;color:var(--text-dim,#9aa3b2);white-space:nowrap}
+.badge.ok{color:var(--good,#4ade80)}
+.badge.fail{color:var(--bad,#f87171)}
+.sentence-name{font-size:13px;color:var(--text-dim,#9aa3b2);margin:0 0 8px;line-height:1.45}
+.raw{display:block;font:12px/1.5 ui-monospace,monospace;color:var(--text,#e6e6e6);background:var(--bg,#14181f);border-radius:6px;padding:7px 9px;margin:0 0 8px;white-space:pre-wrap;overflow-wrap:anywhere}
+.sentence .row{padding:6px 0}
+.sentence .row .v{font-size:12.5px}
+.error-text{color:var(--bad,#f87171);font-size:13px;line-height:1.5;margin:6px 0 0}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;margin:16px 0 0;line-height:1.55}
+@media(max-width:520px){.row{flex-direction:column;align-items:flex-start;gap:2px}.row .v{text-align:left}.badge{margin-left:0}.sentence-head{align-items:flex-start}}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>NMEA 0183 Sentence Parser</h1>
+<p>Paste a receiver log to verify its checksums and read the position, time, satellite, speed and course fields.</p>
+</div>
+<div class="panel">
+<form id="nmea-form" novalidate>
+<div class="field">
+<label class="f" for="nmea-input">NMEA sentences</label>
+<textarea id="nmea-input" spellcheck="false" autocomplete="off" aria-describedby="nmea-help"></textarea>
+<div class="unit" id="nmea-help">one sentence per line · GGA, RMC, GLL, GSA, GSV and VTG are decoded; other standard addresses are split into fields · Ctrl+Enter parses</div>
+</div>
+<label class="check" for="require-checksum"><input type="checkbox" id="require-checksum">Require a checksum on every sentence (RMC always requires one)</label>
+<div class="actions">
+<button type="submit" class="primary">Parse sentences</button>
+<button type="button" id="reset">Load example</button>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<p class="status" id="status" role="status" aria-live="polite"></p>
+</form>
+<div class="out" id="summary" aria-live="polite" aria-atomic="true"></div>
+<div class="sentences" id="sentences"></div>
+<p class="note">The checksum is the XOR of the ASCII characters between <code>$</code> (or <code>!</code>) and <code>*</code>. It detects accidental changes, not spoofing, and a valid checksum does not prove that a position or fix is accurate. RMC two-digit years use the conventional 1973 pivot. Parsing is local: no receiver is opened and no data is stored or sent anywhere.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* nmea-sentence-core:start */
+var NmeaSentenceCore = (function(){
+  "use strict";
+  var MAX_INPUT = 100000;
+  var MAX_LINES = 500;
+  var NAMES = {
+    GGA: "GNSS fix data",
+    RMC: "Recommended minimum navigation data",
+    GLL: "Geographic position",
+    GSA: "Active satellites and dilution of precision",
+    GSV: "Satellites in view",
+    VTG: "Course and speed over ground"
+  };
+  var FIX_QUALITY = ["no fix", "GPS/SPS fix", "differential GPS fix", "PPS fix", "real-time kinematic", "float RTK", "estimated/dead reckoning", "manual input", "simulation"];
+  var MODES = { A: "autonomous", D: "differential", E: "estimated", M: "manual", N: "not valid", S: "simulator" };
+  var DEFAULT_TEXT = [
+    "$GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47",
+    "$GPRMC,123519,A,4807.038,N,01131.000,E,022.4,084.4,230394,003.1,W*6A",
+    "$GPGSA,A,3,12,05,25,29,,,,,,,,,9.4,7.6,5.6*37",
+    "$GPGSV,3,3,11,14,25,170,00,16,57,208,39,18,67,296,40*49",
+    "$GPVTG,054.7,T,034.4,M,005.5,N,010.2,K*48"
+  ].join("\n");
+
+  function fail(message){ throw new Error(message); }
+  function present(value){ return value !== undefined && value !== ""; }
+  function requiredFields(fields, count, id){
+    if (fields.length < count) fail(id + " needs at least " + count + " data fields; this sentence has " + fields.length + ".");
+  }
+  function numberField(fields, index, label, options){
+    var opts = options || {};
+    var text = fields[index];
+    if (!present(text)) {
+      if (opts.optional) return null;
+      fail(label + " is required.");
+    }
+    if (!/^-?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)$/.test(text)) fail(label + " must be a decimal number, not \"" + text + "\".");
+    var value = Number(text);
+    if (!isFinite(value)) fail(label + " is outside the supported numeric range.");
+    if (opts.integer && !/^-?[0-9]+$/.test(text)) fail(label + " must be a whole number.");
+    if (opts.min !== undefined && value < opts.min) fail(label + " must be at least " + opts.min + ".");
+    if (opts.max !== undefined && value > opts.max) fail(label + " must be at most " + opts.max + ".");
+    return value;
+  }
+  function parseTime(text, optional){
+    if (!present(text)) {
+      if (optional) return null;
+      fail("UTC time is required.");
+    }
+    if (!/^[0-9]{6}(?:\.[0-9]{1,6})?$/.test(text)) fail("UTC time must use hhmmss with optional fractional seconds.");
+    var hour = Number(text.slice(0, 2));
+    var minute = Number(text.slice(2, 4));
+    var second = Number(text.slice(4, 6));
+    if (hour > 23 || minute > 59 || second > 60) fail("UTC time has an impossible hour, minute or second.");
+    return text.slice(0, 2) + ":" + text.slice(2, 4) + ":" + text.slice(4);
+  }
+  function parseDate(text, optional){
+    if (!present(text)) {
+      if (optional) return null;
+      fail("UTC date is required.");
+    }
+    if (!/^[0-9]{6}$/.test(text)) fail("RMC date must use six digits in ddmmyy form.");
+    var day = Number(text.slice(0, 2));
+    var month = Number(text.slice(2, 4));
+    var shortYear = Number(text.slice(4, 6));
+    var year = shortYear < 73 ? 2000 + shortYear : 1900 + shortYear;
+    var stamp = new Date(Date.UTC(year, month - 1, day));
+    if (stamp.getUTCFullYear() !== year || stamp.getUTCMonth() !== month - 1 || stamp.getUTCDate() !== day) fail("RMC date is not a real calendar day.");
+    return String(year) + "-" + text.slice(2, 4) + "-" + text.slice(0, 2);
+  }
+  function coordinate(fields, valueIndex, hemisphereIndex, latitude, allowBlank){
+    var text = fields[valueIndex];
+    var hemisphere = fields[hemisphereIndex];
+    var label = latitude ? "Latitude" : "Longitude";
+    if (!present(text) && !present(hemisphere) && allowBlank) return null;
+    if (!present(text) || !present(hemisphere)) fail(label + " value and hemisphere must either both be present or both be empty.");
+    var digits = latitude ? 4 : 5;
+    var pattern = latitude ? /^[0-9]{4}(?:\.[0-9]+)?$/ : /^[0-9]{5}(?:\.[0-9]+)?$/;
+    if (!pattern.test(text)) fail(label + " must use " + (latitude ? "ddmm" : "dddmm") + " with optional fractional minutes.");
+    var dot = text.indexOf(".");
+    var whole = dot < 0 ? text : text.slice(0, dot);
+    if (whole.length !== digits) fail(label + " has the wrong degree/minute width.");
+    var degrees = Number(whole.slice(0, digits - 2));
+    var minutes = Number(text.slice(digits - 2));
+    var maximum = latitude ? 90 : 180;
+    if (minutes >= 60 || degrees > maximum || (degrees === maximum && minutes !== 0)) fail(label + " has impossible degrees or minutes.");
+    var expected = latitude ? "NS" : "EW";
+    if (expected.indexOf(hemisphere) < 0 || hemisphere.length !== 1) fail(label + " hemisphere must be " + expected.split("").join(" or ") + ".");
+    var value = degrees + minutes / 60;
+    if (hemisphere === "S" || hemisphere === "W") value = -value;
+    return value;
+  }
+  function position(result, fields, latIndex, lonIndex, allowBlank){
+    result.latitude = coordinate(fields, latIndex, latIndex + 1, true, allowBlank);
+    result.longitude = coordinate(fields, lonIndex, lonIndex + 1, false, allowBlank);
+    if ((result.latitude === null) !== (result.longitude === null)) fail("Latitude and longitude must either both be present or both be empty.");
+  }
+  function statusField(fields, index){
+    var value = fields[index];
+    if (value !== "A" && value !== "V") fail("Status must be A (data valid) or V (data invalid).");
+    return value === "A" ? "valid" : "invalid";
+  }
+  function modeField(fields, index){
+    var value = fields[index];
+    if (!present(value)) return null;
+    if (!Object.prototype.hasOwnProperty.call(MODES, value)) fail("FAA mode must be A, D, E, M, N or S.");
+    return MODES[value];
+  }
+  function unitField(fields, index, value, label){
+    var unit = fields[index];
+    if (value === null && !present(unit)) return;
+    if (unit !== "M") fail(label + " units must be M for metres.");
+  }
+  function referenceField(fields, index, expected, label){
+    if (fields[index] !== expected) fail(label + " reference marker must be " + expected + ".");
+  }
+  function addDateTime(result){
+    result.datetime = result.date && result.time ? result.date + "T" + result.time + "Z" : null;
+  }
+
+  function decodeGGA(result, f){
+    requiredFields(f, 14, "GGA");
+    result.time = parseTime(f[0], false);
+    result.fixQuality = numberField(f, 5, "Fix quality", { integer: true, min: 0, max: 8 });
+    result.fixQualityLabel = FIX_QUALITY[result.fixQuality];
+    position(result, f, 1, 3, result.fixQuality === 0);
+    result.satellitesUsed = numberField(f, 6, "Satellites used", { integer: true, min: 0, max: 99 });
+    result.hdop = numberField(f, 7, "HDOP", { optional: true, min: 0, max: 99.9 });
+    result.altitudeMeters = numberField(f, 8, "Altitude", { optional: true, min: -100000, max: 1000000 });
+    unitField(f, 9, result.altitudeMeters, "Altitude");
+    result.geoidSeparationMeters = numberField(f, 10, "Geoid separation", { optional: true, min: -10000, max: 10000 });
+    unitField(f, 11, result.geoidSeparationMeters, "Geoid separation");
+    result.differentialAge = numberField(f, 12, "Differential age", { optional: true, min: 0, max: 999999 });
+    result.differentialStation = present(f[13]) ? f[13] : null;
+  }
+  function decodeRMC(result, f){
+    requiredFields(f, 11, "RMC");
+    result.status = statusField(f, 1);
+    var invalid = result.status === "invalid";
+    result.time = parseTime(f[0], invalid);
+    position(result, f, 2, 4, invalid);
+    result.speedKnots = numberField(f, 6, "Speed over ground", { optional: invalid, min: 0, max: 9999 });
+    result.speedKmh = result.speedKnots === null ? null : result.speedKnots * 1.852;
+    result.courseTrue = numberField(f, 7, "True course", { optional: true, min: 0, max: 360 });
+    result.date = parseDate(f[8], invalid);
+    addDateTime(result);
+    result.magneticVariation = numberField(f, 9, "Magnetic variation", { optional: true, min: 0, max: 360 });
+    if (result.magneticVariation !== null) {
+      if (f[10] !== "E" && f[10] !== "W") fail("Magnetic variation direction must be E or W.");
+      result.magneticVariationDirection = f[10];
+    } else result.magneticVariationDirection = null;
+    result.mode = f.length > 11 ? modeField(f, 11) : null;
+  }
+  function decodeGLL(result, f){
+    requiredFields(f, 6, "GLL");
+    result.status = statusField(f, 5);
+    position(result, f, 0, 2, result.status === "invalid");
+    result.time = parseTime(f[4], result.status === "invalid");
+    result.mode = f.length > 6 ? modeField(f, 6) : null;
+  }
+  function decodeGSA(result, f){
+    requiredFields(f, 17, "GSA");
+    if (f[0] !== "A" && f[0] !== "M") fail("GSA selection mode must be A (automatic) or M (manual).");
+    result.selectionMode = f[0] === "A" ? "automatic" : "manual";
+    result.fixMode = numberField(f, 1, "GSA fix mode", { integer: true, min: 1, max: 3 });
+    result.fixModeLabel = ["", "no fix", "2D", "3D"][result.fixMode];
+    result.satelliteIds = [];
+    for (var i = 2; i < 14; i += 1) {
+      var id = numberField(f, i, "Satellite ID " + (i - 1), { optional: true, integer: true, min: 1, max: 999 });
+      if (id !== null) result.satelliteIds.push(id);
+    }
+    result.pdop = numberField(f, 14, "PDOP", { optional: true, min: 0, max: 99.9 });
+    result.hdop = numberField(f, 15, "HDOP", { optional: true, min: 0, max: 99.9 });
+    result.vdop = numberField(f, 16, "VDOP", { optional: true, min: 0, max: 99.9 });
+  }
+  function decodeGSV(result, f){
+    requiredFields(f, 3, "GSV");
+    if ((f.length - 3) % 4 !== 0 || f.length > 19) fail("GSV satellite data must contain zero to four complete PRN/elevation/azimuth/SNR groups.");
+    result.totalMessages = numberField(f, 0, "GSV message count", { integer: true, min: 1, max: 99 });
+    result.messageNumber = numberField(f, 1, "GSV message number", { integer: true, min: 1, max: result.totalMessages });
+    result.satellitesInView = numberField(f, 2, "Satellites in view", { integer: true, min: 0, max: 999 });
+    result.satellites = [];
+    for (var i = 3; i < f.length; i += 4) {
+      result.satellites.push({
+        prn: numberField(f, i, "Satellite PRN", { integer: true, min: 1, max: 999 }),
+        elevation: numberField(f, i + 1, "Satellite elevation", { integer: true, min: 0, max: 90 }),
+        azimuth: numberField(f, i + 2, "Satellite azimuth", { integer: true, min: 0, max: 359 }),
+        snr: numberField(f, i + 3, "Signal-to-noise ratio", { optional: true, integer: true, min: 0, max: 99 })
+      });
+    }
+  }
+  function decodeVTG(result, f){
+    requiredFields(f, 8, "VTG");
+    result.courseTrue = numberField(f, 0, "True course", { optional: true, min: 0, max: 360 });
+    referenceField(f, 1, "T", "True course");
+    result.courseMagnetic = numberField(f, 2, "Magnetic course", { optional: true, min: 0, max: 360 });
+    referenceField(f, 3, "M", "Magnetic course");
+    result.speedKnots = numberField(f, 4, "Speed in knots", { optional: true, min: 0, max: 9999 });
+    referenceField(f, 5, "N", "Knots");
+    result.speedKmh = numberField(f, 6, "Speed in km/h", { optional: true, min: 0, max: 18520 });
+    if (result.speedKmh !== null || present(f[7])) referenceField(f, 7, "K", "Kilometres per hour");
+    if (result.speedKnots !== null && result.speedKmh !== null && Math.abs(result.speedKnots * 1.852 - result.speedKmh) > 0.051) fail("VTG knot and km/h speeds disagree by more than rounding allows.");
+    result.mode = f.length > 8 ? modeField(f, 8) : null;
+  }
+
+  function checksum(body){
+    var value = 0;
+    for (var i = 0; i < body.length; i += 1) value ^= body.charCodeAt(i);
+    return value.toString(16).toUpperCase().padStart(2, "0");
+  }
+  function parse(sentence, options){
+    var opts = options || {};
+    var text = String(sentence == null ? "" : sentence).trim();
+    if (!text) fail("Enter an NMEA sentence beginning with $ or !.");
+    if (text.length > 1024) fail("Keep each sentence under 1025 characters.");
+    var first = text.charAt(0);
+    if (first !== "$" && first !== "!") fail("An NMEA sentence must begin with $ or !.");
+    var star = text.indexOf("*");
+    if (star !== -1 && star !== text.lastIndexOf("*")) fail("A sentence can contain only one checksum delimiter (*).");
+    var body = star < 0 ? text.slice(1) : text.slice(1, star);
+    if (!body) fail("The sentence has no address or data.");
+    for (var i = 0; i < body.length; i += 1) {
+      var code = body.charCodeAt(i);
+      if (code < 32 || code > 126) fail("Sentence data must contain printable ASCII only.");
+    }
+    var actual = star < 0 ? null : text.slice(star + 1);
+    if (actual !== null && !/^[0-9A-Fa-f]{2}$/.test(actual)) fail("The checksum must be exactly two hexadecimal digits after *.");
+    var parts = body.split(",");
+    var address = parts[0];
+    if (!/^[A-Z0-9]{5}$/.test(address)) fail("Use a five-character uppercase address such as GPGGA or GNRMC.");
+    var expected = checksum(body);
+    var checksumValid = actual === null ? null : actual.toUpperCase() === expected;
+    var id = address.slice(2);
+    if (actual === null && (opts.requireChecksum || id === "RMC")) fail(id === "RMC" ? "RMC requires a two-digit checksum." : "This sentence has no checksum; add *hh or turn off the checksum requirement.");
+    var fields = parts.slice(1);
+    var result = {
+      raw: text,
+      delimiter: first,
+      address: address,
+      talkerId: address.slice(0, 2),
+      sentenceId: id,
+      sentenceName: NAMES[id] || "Unspecialised sentence",
+      fields: fields,
+      fieldCount: fields.length,
+      checksumProvided: actual !== null,
+      actualChecksum: actual === null ? null : actual.toUpperCase(),
+      expectedChecksum: expected,
+      checksumValid: checksumValid
+    };
+    if (id === "GGA") decodeGGA(result, fields);
+    else if (id === "RMC") decodeRMC(result, fields);
+    else if (id === "GLL") decodeGLL(result, fields);
+    else if (id === "GSA") decodeGSA(result, fields);
+    else if (id === "GSV") decodeGSV(result, fields);
+    else if (id === "VTG") decodeVTG(result, fields);
+    result.valid = checksumValid !== false;
+    return result;
+  }
+  function decode(input){
+    var options = input || {};
+    var text = options.text == null ? DEFAULT_TEXT : String(options.text);
+    if (!text || !/\S/.test(text)) fail("Paste at least one NMEA sentence, or load the example.");
+    if (text.length > MAX_INPUT) fail("Keep the paste under " + MAX_INPUT + " characters; split a long log into smaller pieces.");
+    var lines = text.split(/\r\n|\n|\r/);
+    if (lines.length > MAX_LINES) fail("Parse at most " + MAX_LINES + " lines at a time.");
+    var records = [];
+    lines.forEach(function(line, index){
+      if (!/\S/.test(line)) return;
+      try {
+        var record = parse(line, { requireChecksum: !!options.requireChecksum });
+        record.line = index + 1;
+        records.push(record);
+      } catch (error) {
+        records.push({ line: index + 1, raw: line.trim(), valid: false, error: error.message });
+      }
+    });
+    if (!records.length) fail("Paste at least one NMEA sentence, or load the example.");
+    var validCount = records.filter(function(record){ return record.valid; }).length;
+    var positioned = records.filter(function(record){ return record.valid && typeof record.latitude === "number" && typeof record.longitude === "number"; });
+    return {
+      records: records,
+      total: records.length,
+      validCount: validCount,
+      invalidCount: records.length - validCount,
+      checksumValidCount: records.filter(function(record){ return record.checksumValid === true; }).length,
+      checksumFailedCount: records.filter(function(record){ return record.checksumValid === false; }).length,
+      checksumMissingCount: records.filter(function(record){ return record.checksumProvided === false; }).length,
+      positionCount: positioned.length,
+      latestPosition: positioned.length ? positioned[positioned.length - 1] : null
+    };
+  }
+  return { parse: parse, decode: decode, checksum: checksum, DEFAULT_TEXT: DEFAULT_TEXT, MAX_INPUT: MAX_INPUT, MAX_LINES: MAX_LINES };
+})();
+/* nmea-sentence-core:end */
+(function(){
+  "use strict";
+  var C = NmeaSentenceCore;
+  function $(id){ return document.getElementById(id); }
+  var els = { form: $("nmea-form"), input: $("nmea-input"), requireChecksum: $("require-checksum"), reset: $("reset"), err: $("err"), status: $("status"), summary: $("summary"), sentences: $("sentences") };
+  var timer = null;
+  function el(tag, cls, text){ var node = document.createElement(tag); if (cls) node.className = cls; if (text != null) node.textContent = text; return node; }
+  function clear(node){ node.textContent = ""; }
+  function row(parent, key, value){
+    if (value === null || value === undefined || value === "") return;
+    var line = el("div", "row");
+    line.appendChild(el("span", "k", key));
+    line.appendChild(el("span", "v", String(value)));
+    parent.appendChild(line);
+  }
+  function fixed(value, digits){ return typeof value === "number" ? value.toFixed(digits) : null; }
+  function point(record){
+    if (typeof record.latitude !== "number" || typeof record.longitude !== "number") return null;
+    return Math.abs(record.latitude).toFixed(6) + "° " + (record.latitude < 0 ? "S" : "N") + ", " + Math.abs(record.longitude).toFixed(6) + "° " + (record.longitude < 0 ? "W" : "E");
+  }
+  function speed(record){
+    if (typeof record.speedKnots !== "number") return null;
+    return record.speedKnots.toFixed(2) + " kn · " + (typeof record.speedKmh === "number" ? record.speedKmh.toFixed(2) + " km/h" : "km/h not supplied");
+  }
+  function details(card, record){
+    row(card, "Talker", record.talkerId);
+    if (record.time) row(card, "UTC time", record.time + " UTC");
+    if (record.date) row(card, "UTC date", record.date);
+    if (record.datetime) row(card, "Combined timestamp", record.datetime);
+    row(card, "Position", point(record));
+    if (record.status) row(card, "Receiver status", record.status);
+    if (record.fixQualityLabel) row(card, "Fix quality", record.fixQuality + " — " + record.fixQualityLabel);
+    row(card, "Satellites used", record.satellitesUsed);
+    row(card, "HDOP", record.hdop);
+    row(card, "Altitude above MSL", fixed(record.altitudeMeters, 2) === null ? null : fixed(record.altitudeMeters, 2) + " m");
+    row(card, "Geoid separation", fixed(record.geoidSeparationMeters, 2) === null ? null : fixed(record.geoidSeparationMeters, 2) + " m");
+    row(card, "Differential age", record.differentialAge === null ? null : record.differentialAge + " s");
+    row(card, "Differential station", record.differentialStation);
+    row(card, "Speed over ground", speed(record));
+    row(card, "True course", fixed(record.courseTrue, 2) === null ? null : fixed(record.courseTrue, 2) + "°");
+    row(card, "Magnetic course", fixed(record.courseMagnetic, 2) === null ? null : fixed(record.courseMagnetic, 2) + "°");
+    row(card, "Magnetic variation", record.magneticVariation === null || record.magneticVariation === undefined ? null : record.magneticVariation + "° " + record.magneticVariationDirection);
+    row(card, "FAA mode", record.mode);
+    row(card, "Selection mode", record.selectionMode);
+    row(card, "Fix mode", record.fixModeLabel);
+    if (record.satelliteIds) row(card, "Active satellite IDs", record.satelliteIds.length ? record.satelliteIds.join(", ") : "none supplied");
+    row(card, "PDOP", record.pdop);
+    row(card, "VDOP", record.vdop);
+    if (record.totalMessages) row(card, "GSV sequence", record.messageNumber + " of " + record.totalMessages);
+    row(card, "Satellites in view", record.satellitesInView);
+    if (record.satellites) record.satellites.forEach(function(satellite){
+      row(card, "PRN " + satellite.prn, "elevation " + satellite.elevation + "° · azimuth " + satellite.azimuth + "° · SNR " + (satellite.snr === null ? "not supplied" : satellite.snr + " dB"));
+    });
+    if (!/^(?:GGA|RMC|GLL|GSA|GSV|VTG)$/.test(record.sentenceId)) row(card, "Data fields", record.fields.length ? record.fields.join(" · ") : "none");
+    row(card, "Calculated checksum", record.expectedChecksum);
+  }
+  function renderRecord(record){
+    var bad = !record.valid;
+    var card = el("section", "sentence" + (bad ? " bad" : ""));
+    var head = el("div", "sentence-head");
+    head.appendChild(el("span", "line", "Line " + record.line));
+    head.appendChild(el("h2", "", record.address || "Not parsed"));
+    var badgeText = record.checksumValid === true ? "checksum OK" : record.checksumValid === false ? "bad checksum" : record.error ? "invalid" : "no checksum";
+    head.appendChild(el("span", "badge " + (record.checksumValid === true ? "ok" : bad ? "fail" : ""), badgeText));
+    card.appendChild(head);
+    if (record.sentenceName) card.appendChild(el("p", "sentence-name", record.sentenceName));
+    card.appendChild(el("code", "raw", record.raw));
+    if (record.error) {
+      card.appendChild(el("p", "error-text", record.error));
+    } else {
+      details(card, record);
+      if (record.checksumValid === false) row(card, "Checksum mismatch", "received " + record.actualChecksum + "; expected " + record.expectedChecksum);
+    }
+    return card;
+  }
+  function render(result){
+    clear(els.summary);
+    clear(els.sentences);
+    els.summary.appendChild(el("div", "big", result.validCount + " / " + result.total + " valid"));
+    els.summary.appendChild(el("p", "sub", result.positionCount + " with positions · " + result.checksumValidCount + " valid checksums · " + result.checksumFailedCount + " checksum failures"));
+    row(els.summary, "Valid sentences", result.validCount);
+    row(els.summary, "Rejected sentences", result.invalidCount);
+    row(els.summary, "Checksums", result.checksumValidCount + " OK · " + result.checksumFailedCount + " failed · " + result.checksumMissingCount + " absent");
+    if (result.latestPosition) row(els.summary, "Last valid position", point(result.latestPosition) + " · line " + result.latestPosition.line);
+    result.records.forEach(function(record){ els.sentences.appendChild(renderRecord(record)); });
+  }
+  function run(){
+    try {
+      var result = C.decode({ text: els.input.value, requireChecksum: els.requireChecksum.checked });
+      els.err.textContent = "";
+      render(result);
+      els.status.textContent = "Parsed " + result.total + " sentence" + (result.total === 1 ? "" : "s") + " locally: " + result.validCount + " valid and " + result.invalidCount + " rejected.";
+    } catch (error) {
+      els.err.textContent = error.message;
+      els.status.textContent = "The paste could not be parsed.";
+      clear(els.summary);
+      clear(els.sentences);
+    }
+  }
+  function later(){ if (timer) window.clearTimeout(timer); timer = window.setTimeout(run, 160); }
+  els.input.addEventListener("input", later);
+  els.requireChecksum.addEventListener("change", run);
+  els.form.addEventListener("submit", function(event){ event.preventDefault(); if (timer) window.clearTimeout(timer); run(); });
+  els.input.addEventListener("keydown", function(event){ if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); run(); } });
+  els.reset.addEventListener("click", function(){ els.input.value = C.DEFAULT_TEXT; els.requireChecksum.checked = false; if (timer) window.clearTimeout(timer); run(); els.input.focus(); });
+  els.input.value = C.DEFAULT_TEXT;
+  run();
+})();
+</script>
+</body>
+</html>
