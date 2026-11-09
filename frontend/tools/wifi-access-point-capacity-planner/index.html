@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Wi-Fi Access Point Capacity Planner — Virtual Tools</title>
+<meta name="description" content="Estimate how many Wi-Fi access points a floor needs from its area, peak device count, per-device throughput and the usable capacity of each access point.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,215px),1fr));gap:12px;margin:10px 0}
+label.f{font-size:13px;opacity:.85;display:block;margin-bottom:4px}
+.field{background:var(--bg,#14181f);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px}
+.field:focus-within{border-color:var(--accent,#6ea8fe);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#6ea8fe) 18%,transparent)}
+.field input{box-sizing:border-box;width:100%;min-height:44px;background:transparent;color:var(--text,#e6e6e6);border:none;font-size:18px;font-family:ui-monospace,monospace;padding:2px 0;outline:none}
+.field .unit{font-size:11px;color:var(--text-dim,#9aa3b2);margin-top:4px;line-height:1.4}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:14px 0}
+.out .big{font-size:clamp(1.9rem,7vw,2.5rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:4px 0 6px;overflow-wrap:anywhere}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45}
+.out .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:14px}
+.out .row:last-child{border-bottom:none}
+.out .row .k{color:var(--text-dim,#9aa3b2)}
+.out .row .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right;white-space:nowrap}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.err{color:var(--bad,#f87171);font-size:13px;margin:6px 0;min-height:1.2em}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;margin:10px 0 0;line-height:1.5}
+@media (max-width:360px){.out .row{display:block}.out .row .v{display:block;text-align:left;margin-top:2px}}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>Wi-Fi Access Point Capacity Planner</h1>
+<p>Size a floor's Wi-Fi from its area, peak client count and the throughput each client needs.</p>
+</div>
+<div class="panel">
+<form id="ap-form" novalidate>
+<div class="grid2">
+<div class="field"><label class="f" for="in-area">Floor area to cover</label><input type="text" id="in-area" inputmode="decimal" autocomplete="off" value="1500"><div class="unit">m²: the area this WLAN must serve</div></div>
+<div class="field"><label class="f" for="in-devices">Connected devices</label><input type="text" id="in-devices" inputmode="numeric" autocomplete="off" value="120"><div class="unit">peak clients: laptops, phones and IoT</div></div>
+<div class="field"><label class="f" for="in-target">Target throughput per device</label><input type="text" id="in-target" inputmode="decimal" autocomplete="off" value="20"><div class="unit">Mbps each client should get</div></div>
+<div class="field"><label class="f" for="in-ap">Usable throughput per AP</label><input type="text" id="in-ap" inputmode="decimal" autocomplete="off" value="250"><div class="unit">Mbps of real airtime, often 40–60% of the PHY rate</div></div>
+<div class="field"><label class="f" for="in-coverage">Coverage area per AP</label><input type="text" id="in-coverage" inputmode="decimal" autocomplete="off" value="200"><div class="unit">m² one AP serves reliably; 150–250 m² is typical</div></div>
+<div class="field"><label class="f" for="in-headroom">Capacity headroom</label><input type="text" id="in-headroom" inputmode="decimal" autocomplete="off" value="20"><div class="unit">% of airtime kept free for bursts and roaming</div></div>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions"><button type="submit">Plan access points</button></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"><span style="color:var(--text-dim,#9aa3b2)">Enter the floor and client figures.</span></div>
+<p class="note">The planner takes the larger of two counts. For capacity, the aggregate demand is the device count times the target throughput per device, and it is divided by the usable throughput of one AP after removing the headroom, then rounded up. For coverage, the floor area is divided by the coverage area of one AP and rounded up. Headroom is held back as spare airtime, so a plan sized by capacity runs at 100% minus the headroom when every client asks for its full target. The figures are a first-pass budget: real cell size depends on walls, ceilings, antenna patterns and a site survey, and usable throughput depends on the band, channel width, spatial streams, client mix and interference, so measure before committing to an installation. Everything is calculated in the browser with no storage, uploads or network access.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* wifi-ap-core:start */
+var WifiApCore = (function(){
+  "use strict";
+  var DEFAULTS = { area: 1500, devices: 120, target: 20, apThroughput: 250, coverage: 200, headroom: 20 };
+  var LIMITS = {
+    area: { min: 1, max: 100000 },
+    devices: { min: 1, max: 100000 },
+    target: { min: 0.1, max: 10000 },
+    apThroughput: { min: 1, max: 10000 },
+    coverage: { min: 1, max: 20000 },
+    headroom: { min: 0, max: 50 }
+  };
+  var BINDING = { CAPACITY: "capacity", COVERAGE: "coverage", BOTH: "both" };
+  var EPSILON = 1e-9;
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function parseNumber(value, label, limits, integer){
+    var raw = String(value == null ? "" : value).trim();
+    if (!raw) fail(label + " is required.");
+    var pattern = integer ? /^\d+$/ : /^-?(?:\d+(?:\.\d*)?|\.\d+)$/;
+    if (!pattern.test(raw)) fail(messageFor(label, limits, integer));
+    var parsed = Number(raw);
+    if (!isFinite(parsed) || parsed < limits.min || parsed > limits.max){
+      fail(messageFor(label, limits, integer));
+    }
+    return parsed;
+  }
+
+  function messageFor(label, limits, integer){
+    return label + " must be " + (integer ? "a whole number" : "a number") +
+      " from " + limits.min + " to " + limits.max + ".";
+  }
+
+  function round1(value){
+    return Math.floor(value * 10 + 0.5 + EPSILON) / 10;
+  }
+
+  function ceilCount(value){
+    var count = Math.ceil(value - EPSILON);
+    return count < 1 ? 1 : count;
+  }
+
+  function pick(supplied, key){
+    var value = supplied[key];
+    return value === undefined || value === null ? DEFAULTS[key] : value;
+  }
+
+  function calculate(input){
+    var supplied = input || {};
+    var area = parseNumber(pick(supplied, "area"), "Floor area", LIMITS.area, false);
+    var devices = parseNumber(pick(supplied, "devices"), "Devices", LIMITS.devices, true);
+    var target = parseNumber(pick(supplied, "target"), "Target throughput", LIMITS.target, false);
+    var apThroughput = parseNumber(pick(supplied, "apThroughput"), "AP throughput", LIMITS.apThroughput, false);
+    var coverage = parseNumber(pick(supplied, "coverage"), "Coverage area per AP", LIMITS.coverage, false);
+    var headroom = parseNumber(pick(supplied, "headroom"), "Headroom", LIMITS.headroom, false);
+
+    var usable = apThroughput * (1 - headroom / 100);
+    var demand = devices * target;
+    var capacityAps = ceilCount(demand / usable);
+    var coverageAps = ceilCount(area / coverage);
+    var apCount = Math.max(capacityAps, coverageAps);
+    var binding = capacityAps > coverageAps ? BINDING.CAPACITY
+      : coverageAps > capacityAps ? BINDING.COVERAGE
+      : BINDING.BOTH;
+
+    return {
+      floorArea: area,
+      devices: devices,
+      targetThroughputMbps: target,
+      apThroughputMbps: apThroughput,
+      coveragePerApM2: coverage,
+      headroomPct: headroom,
+      aggregateDemandMbps: round1(demand),
+      usablePerApMbps: round1(usable),
+      capacityAps: capacityAps,
+      coverageAps: coverageAps,
+      apCount: apCount,
+      bindingConstraint: binding,
+      devicesPerAp: round1(devices / apCount),
+      demandPerApMbps: round1(demand / apCount),
+      airtimeUtilisationPct: round1(demand / (apCount * apThroughput) * 100),
+      capacityPerDeviceMbps: round1(apCount * apThroughput / devices)
+    };
+  }
+
+  return {
+    DEFAULTS: DEFAULTS,
+    LIMITS: LIMITS,
+    BINDING: BINDING,
+    calculate: calculate
+  };
+})();
+/* wifi-ap-core:end */
+(function(){
+"use strict";
+
+var els = {
+  area: document.getElementById("in-area"),
+  devices: document.getElementById("in-devices"),
+  target: document.getElementById("in-target"),
+  ap: document.getElementById("in-ap"),
+  coverage: document.getElementById("in-coverage"),
+  headroom: document.getElementById("in-headroom"),
+  err: document.getElementById("err"),
+  out: document.getElementById("out")
+};
+
+function fixed(value, places){
+  return value.toFixed(places);
+}
+function clear(node){
+  while (node.firstChild) node.removeChild(node.firstChild);
+}
+function addRow(parent, label, value){
+  var row = document.createElement("div");
+  row.className = "row";
+  var key = document.createElement("span");
+  key.className = "k";
+  key.textContent = label;
+  var val = document.createElement("span");
+  val.className = "v";
+  val.textContent = value;
+  row.appendChild(key);
+  row.appendChild(val);
+  parent.appendChild(row);
+}
+function placeholder(node, message){
+  var span = document.createElement("span");
+  span.style.color = "var(--text-dim,#9aa3b2)";
+  span.textContent = message;
+  node.appendChild(span);
+}
+
+function render(result){
+  clear(els.out);
+  var big = document.createElement("div");
+  big.className = "big";
+  var sub = document.createElement("div");
+  sub.className = "sub";
+
+  big.textContent = result.apCount + (result.apCount === 1 ? " AP" : " APs");
+  if (result.bindingConstraint === "capacity"){
+    sub.textContent = "Capacity-limited: " + result.devices + " devices at " +
+      fixed(result.targetThroughputMbps, 1) + " Mbps each";
+  } else if (result.bindingConstraint === "coverage"){
+    sub.textContent = "Coverage-limited: " + fixed(result.floorArea, 1) + " m² to cover";
+  } else {
+    sub.textContent = "Capacity and coverage call for the same count";
+  }
+  els.out.appendChild(big);
+  els.out.appendChild(sub);
+
+  addRow(els.out, "Aggregate demand", fixed(result.aggregateDemandMbps, 1) + " Mbps");
+  addRow(els.out, "Usable capacity per AP", fixed(result.usablePerApMbps, 1) + " Mbps");
+  addRow(els.out, "Access points for capacity", String(result.capacityAps));
+  addRow(els.out, "Access points for coverage", String(result.coverageAps));
+  addRow(els.out, "Devices per AP", fixed(result.devicesPerAp, 1));
+  addRow(els.out, "Offered load per AP", fixed(result.demandPerApMbps, 1) + " Mbps");
+  addRow(els.out, "Airtime utilisation", fixed(result.airtimeUtilisationPct, 1) + "%");
+  addRow(els.out, "Capacity per device", fixed(result.capacityPerDeviceMbps, 1) + " Mbps");
+}
+
+function calculate(){
+  var result;
+  try {
+    result = WifiApCore.calculate({
+      area: els.area.value,
+      devices: els.devices.value,
+      target: els.target.value,
+      apThroughput: els.ap.value,
+      coverage: els.coverage.value,
+      headroom: els.headroom.value
+    });
+  } catch (error){
+    els.err.textContent = error.message;
+    clear(els.out);
+    placeholder(els.out, "Check the named field.");
+    return;
+  }
+
+  els.err.textContent = "";
+  render(result);
+}
+
+[els.area, els.devices, els.target, els.ap, els.coverage, els.headroom].forEach(function(input){
+  input.addEventListener("input", calculate);
+});
+document.getElementById("ap-form").addEventListener("submit", function(event){
+  event.preventDefault();
+  calculate();
+});
+
+calculate();
+})();
+</script>
+</body>
+</html>
