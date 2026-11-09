@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Baseball Pitching Stats Calculator — Virtual Tools</title>
+<meta name="description" content="Turn a pitching line into ERA, WHIP, strikeouts and walks per nine innings, home runs per nine and a strikeout-to-walk ratio.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px;margin:10px 0}
+label.f{font-size:13px;opacity:.85;display:block;margin-bottom:4px}
+.field{background:var(--bg,#14181f);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px}
+.field:focus-within{border-color:var(--accent,#6ea8fe);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#6ea8fe) 18%,transparent)}
+.field input{box-sizing:border-box;width:100%;min-height:44px;background:transparent;color:var(--text,#e6e6e6);border:none;font-size:18px;font-family:ui-monospace,monospace;padding:2px 0;outline:none}
+.field .unit{font-size:11px;color:var(--text-dim,#9aa3b2);margin-top:4px}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:14px 0}
+.out .big{font-size:clamp(1.9rem,7vw,2.5rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:4px 0 6px;overflow-wrap:anywhere}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45}
+.out .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:14px}
+.out .row:last-child{border-bottom:none}
+.out .row .k{color:var(--text-dim,#9aa3b2)}
+.out .row .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right;white-space:nowrap}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.err{color:var(--bad,#f87171);font-size:13px;margin:6px 0;min-height:1.2em}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;margin:10px 0 0;line-height:1.5}
+@media (max-width:360px){.out .row{display:block}.out .row .v{display:block;text-align:left;margin-top:2px}}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>Baseball Pitching Stats Calculator</h1>
+<p>Enter a pitching line to get ERA, WHIP, the per-nine rates and a strikeout-to-walk ratio.</p>
+</div>
+<div class="panel">
+<form id="pitching-form" novalidate>
+<div class="grid2">
+<div class="field"><label class="f" for="in-innings">Innings pitched</label><input type="text" id="in-innings" inputmode="decimal" autocomplete="off" value="6.2"><div class="unit">.1 is one out, .2 is two outs</div></div>
+<div class="field"><label class="f" for="in-earned">Earned runs</label><input type="text" id="in-earned" inputmode="numeric" autocomplete="off" value="2"><div class="unit">runs the pitcher is charged</div></div>
+<div class="field"><label class="f" for="in-hits">Hits allowed</label><input type="text" id="in-hits" inputmode="numeric" autocomplete="off" value="5"><div class="unit">base hits</div></div>
+<div class="field"><label class="f" for="in-walks">Walks</label><input type="text" id="in-walks" inputmode="numeric" autocomplete="off" value="1"><div class="unit">bases on balls</div></div>
+<div class="field"><label class="f" for="in-strikeouts">Strikeouts</label><input type="text" id="in-strikeouts" inputmode="numeric" autocomplete="off" value="7"><div class="unit">batters struck out</div></div>
+<div class="field"><label class="f" for="in-homers">Home runs allowed</label><input type="text" id="in-homers" inputmode="numeric" autocomplete="off" value="1"><div class="unit">for the HR/9 rate</div></div>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions"><button type="submit">Calculate pitching stats</button></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"><span style="color:var(--text-dim,#9aa3b2)">Enter a pitching line to see the rates.</span></div>
+<p class="note">ERA = 9 × earned runs ÷ innings pitched. WHIP = (hits + walks) ÷ innings pitched. K/9, BB/9 and HR/9 scale the same counts to nine innings, and K/BB is strikeouts divided by walks. Innings use baseball notation: 6.2 means 6⅔ innings, because .1 is one out and .2 is two. Everything is calculated in this page.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* pitching-stats-core:start */
+var PitchingStatsCore = (function(){
+  "use strict";
+  var MAX = 20000;
+  var MAX_OUTS = 999 * 3;
+  var DEFAULTS = {
+    innings: "6.2",
+    earnedRuns: 2,
+    hits: 5,
+    walks: 1,
+    strikeouts: 7,
+    homers: 1
+  };
+  var FIELDS = [
+    ["earnedRuns", "Earned runs"],
+    ["hits", "Hits allowed"],
+    ["walks", "Walks"],
+    ["strikeouts", "Strikeouts"],
+    ["homers", "Home runs allowed"]
+  ];
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function count(value, label){
+    var raw = String(value == null ? "" : value).trim();
+    if (!raw) fail(label + " is required.");
+    if (!/^\d+$/.test(raw)) fail(label + " must be a whole number from 0 to " + MAX + ".");
+    var parsed = Number(raw);
+    if (!isFinite(parsed) || parsed < 0 || parsed > MAX){
+      fail(label + " must be a whole number from 0 to " + MAX + ".");
+    }
+    return parsed;
+  }
+
+  function outs(value){
+    var raw = String(value == null ? "" : value).trim();
+    if (!raw) fail("Innings pitched is required.");
+    var match = /^(\d{1,4})(?:\.([012]))?$/.exec(raw);
+    if (!match){
+      fail("Innings pitched must be a whole number of innings, or use .1 for one out and .2 for two outs, like 6.2.");
+    }
+    var whole = Number(match[1]);
+    var extras = match[2] ? Number(match[2]) : 0;
+    var total = whole * 3 + extras;
+    if (total <= 0) fail("Innings pitched must be greater than zero.");
+    if (total > MAX_OUTS){
+      fail("Innings pitched must be " + (MAX_OUTS / 3) + " innings or fewer.");
+    }
+    return { outs: total, whole: whole, extras: extras };
+  }
+
+  function round2(value){
+    return Math.round(value * 100) / 100;
+  }
+
+  function calculate(input){
+    var supplied = input || {};
+    var options = {};
+    var keys = Object.keys(DEFAULTS);
+    for (var i = 0; i < keys.length; i++){
+      var key = keys[i];
+      options[key] = supplied[key] === undefined || supplied[key] === null ? DEFAULTS[key] : supplied[key];
+    }
+
+    var innings = outs(options.innings);
+    var values = {};
+    for (var j = 0; j < FIELDS.length; j++){
+      values[FIELDS[j][0]] = count(options[FIELDS[j][0]], FIELDS[j][1]);
+    }
+
+    var thrown = innings.outs;
+    var inningsPitched = thrown / 3;
+
+    return {
+      outs: thrown,
+      inningsWhole: innings.whole,
+      inningsOuts: innings.extras,
+      inningsPitched: inningsPitched,
+      earnedRuns: values.earnedRuns,
+      hits: values.hits,
+      walks: values.walks,
+      strikeouts: values.strikeouts,
+      homers: values.homers,
+      era: round2(27 * values.earnedRuns / thrown),
+      whip: round2(3 * (values.hits + values.walks) / thrown),
+      strikeoutsPerNine: round2(27 * values.strikeouts / thrown),
+      walksPerNine: round2(27 * values.walks / thrown),
+      homersPerNine: round2(27 * values.homers / thrown),
+      strikeoutWalkRatio: values.walks > 0 ? round2(values.strikeouts / values.walks) : null
+    };
+  }
+
+  return {
+    MAX: MAX,
+    MAX_OUTS: MAX_OUTS,
+    DEFAULTS: DEFAULTS,
+    FIELDS: FIELDS,
+    calculate: calculate
+  };
+})();
+/* pitching-stats-core:end */
+(function(){
+"use strict";
+
+var els = {
+  innings: document.getElementById("in-innings"),
+  earnedRuns: document.getElementById("in-earned"),
+  hits: document.getElementById("in-hits"),
+  walks: document.getElementById("in-walks"),
+  strikeouts: document.getElementById("in-strikeouts"),
+  homers: document.getElementById("in-homers"),
+  err: document.getElementById("err"),
+  out: document.getElementById("out")
+};
+
+function num(value){
+  return value.toFixed(2);
+}
+function inningsLabel(result){
+  var whole = result.inningsWhole;
+  var extra = result.inningsOuts;
+  var base = whole === 1 ? "1 inning" : whole + " innings";
+  if (extra === 0) return base;
+  return base + " and " + extra + (extra === 1 ? " out" : " outs");
+}
+function clear(node){
+  while (node.firstChild) node.removeChild(node.firstChild);
+}
+function addRow(parent, label, value){
+  var row = document.createElement("div");
+  row.className = "row";
+  var key = document.createElement("span");
+  key.className = "k";
+  key.textContent = label;
+  var val = document.createElement("span");
+  val.className = "v";
+  val.textContent = value;
+  row.appendChild(key);
+  row.appendChild(val);
+  parent.appendChild(row);
+}
+function placeholder(node, message){
+  var span = document.createElement("span");
+  span.style.color = "var(--text-dim,#9aa3b2)";
+  span.textContent = message;
+  node.appendChild(span);
+}
+
+function render(result){
+  clear(els.out);
+  var big = document.createElement("div");
+  big.className = "big";
+  big.textContent = num(result.era);
+  var sub = document.createElement("div");
+  sub.className = "sub";
+  sub.textContent = "ERA over " + inningsLabel(result);
+  els.out.appendChild(big);
+  els.out.appendChild(sub);
+
+  addRow(els.out, "WHIP (H + BB ÷ IP)", num(result.whip));
+  addRow(els.out, "Strikeouts per nine", num(result.strikeoutsPerNine));
+  addRow(els.out, "Walks per nine", num(result.walksPerNine));
+  addRow(els.out, "Home runs per nine", num(result.homersPerNine));
+  addRow(els.out, "Strikeout-to-walk ratio", result.strikeoutWalkRatio === null ? "—" : num(result.strikeoutWalkRatio));
+  addRow(els.out, "Innings pitched", result.inningsWhole + "." + result.inningsOuts + " (" + result.outs + " outs)");
+}
+
+function calculate(){
+  var result;
+  try {
+    result = PitchingStatsCore.calculate({
+      innings: els.innings.value,
+      earnedRuns: els.earnedRuns.value,
+      hits: els.hits.value,
+      walks: els.walks.value,
+      strikeouts: els.strikeouts.value,
+      homers: els.homers.value
+    });
+  } catch (error){
+    els.err.textContent = error.message;
+    clear(els.out);
+    placeholder(els.out, "Check the highlighted field.");
+    return;
+  }
+
+  els.err.textContent = "";
+  render(result);
+}
+
+var inputs = [els.innings, els.earnedRuns, els.hits, els.walks, els.strikeouts, els.homers];
+inputs.forEach(function(input){
+  input.addEventListener("input", calculate);
+});
+document.getElementById("pitching-form").addEventListener("submit", function(event){
+  event.preventDefault();
+  calculate();
+});
+
+calculate();
+})();
+</script>
+</body>
+</html>
