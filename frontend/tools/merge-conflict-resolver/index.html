@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Merge Conflict Resolver — Virtual Tools</title>
+<meta name="description" content="Paste a file with Git conflict markers, pick ours, theirs, both or the base for each conflict, and copy clean merged text. Validates marker structure and runs entirely in your browser.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.field{margin:0 0 14px}
+.field label{display:block;font-size:13px;opacity:.85;margin-bottom:6px}
+.field textarea{box-sizing:border-box;width:100%;min-height:190px;background:var(--bg,#14181f);color:var(--text,#e6e6e6);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px 12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px;line-height:1.5;resize:vertical}
+.field textarea:focus{outline:none;border-color:var(--accent,#6ea8fe);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#6ea8fe) 18%,transparent)}
+.hint{color:var(--text-dim,#9aa3b2);font-size:12px;margin:6px 0 0;line-height:1.5}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:12px 0 6px}
+.actions button{font:inherit;font-weight:600;padding:10px 20px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button.secondary{background:transparent;color:var(--text,#e6e6e6);border-color:var(--border,#2a2f3a)}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.err{color:var(--bad,#f87171);font-size:13px;margin:4px 0;min-height:1.2em}
+.summary{color:var(--text-dim,#9aa3b2);font-size:13px;margin:12px 0 8px;line-height:1.5}
+.summary strong{color:var(--text,#e6e6e6)}
+.conflicts{border:0;margin:0;padding:0}
+fieldset.conflict{border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:10px 12px 12px;margin:0 0 10px;min-width:0}
+fieldset.conflict legend{font-size:13px;font-weight:700;padding:0 6px;color:var(--accent,#6ea8fe)}
+.sides{color:var(--text-dim,#9aa3b2);font-size:12px;margin:0 0 8px;line-height:1.5;overflow-wrap:anywhere}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+label.chip{position:relative;display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:6px 14px;border:1px solid var(--border,#2a2f3a);border-radius:999px;font-size:13px;cursor:pointer;user-select:none}
+label.chip input{margin:0;accent-color:var(--accent,#6ea8fe)}
+label.chip:has(input:checked){border-color:var(--accent,#6ea8fe);background:color-mix(in srgb,var(--accent,#6ea8fe) 14%,transparent)}
+label.chip:has(input:focus-visible){outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+#result-wrap[hidden]{display:none}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;margin:14px 0 0;line-height:1.55}
+@media (max-width:380px){.actions button{flex:1 1 100%}label.chip{flex:1 1 40%}}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>Merge Conflict Resolver</h1>
+<p>Paste a file that still has Git conflict markers, choose ours, theirs, both or the base for each conflict, and copy the merged text back.</p>
+</div>
+<div class="panel">
+<form id="conflict-form" novalidate>
+<div class="field">
+<label for="in-text">File with conflict markers</label>
+<textarea id="in-text" rows="10" spellcheck="false" autocomplete="off" placeholder="&lt;&lt;&lt;&lt;&lt;&lt;&lt; HEAD&#10;ours&#10;=======&#10;theirs&#10;&gt;&gt;&gt;&gt;&gt;&gt;&gt; feature"></textarea>
+<p class="hint">Markers must start a line: 7 <code>&lt;</code> for ours, optional 7 <code>|</code> plus a base section (diff3 or zdiff3), 7 <code>=</code> then 7 <code>&gt;</code> for theirs. Everything else is kept byte for byte.</p>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions">
+<button type="submit">Find conflicts</button>
+<button type="button" class="secondary" id="example">Load example</button>
+<button type="button" class="secondary" id="clear">Clear</button>
+</div>
+</form>
+<div class="summary" id="summary" aria-live="polite"></div>
+<div class="conflicts" id="conflicts" aria-label="Conflicts"></div>
+<div id="result-wrap" hidden>
+<div class="field">
+<label for="out-text">Resolved text</label>
+<textarea id="out-text" rows="10" readonly spellcheck="false"></textarea>
+</div>
+<div class="actions">
+<button type="button" class="secondary" id="copy">Copy result</button>
+<button type="button" class="secondary" id="download">Download .txt</button>
+</div>
+</div>
+<p class="note">The tool parses the marker lines the way Git writes them, reports the conflicting line ranges and any malformed block instead of guessing, and replaces each block with the version you choose. Ours comes first in both-version output. Base needs a diff3-style <code>|||||||</code> section; without one the option is not offered. Nested conflicts are not supported because Git does not produce them. Nothing is uploaded or stored, and the page never contacts the network.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* merge-conflict-core:start */
+var MergeConflictCore = (function(){
+  "use strict";
+
+  var MARKERS = { ours: "<<<<<<<", base: "|||||||", separator: "=======", theirs: ">>>>>>>" };
+  var MODES = ["ours", "theirs", "both", "both-reverse", "base", "keep"];
+  var MAX_LENGTH = 1000000;
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function markerOf(line){
+    var text = String(line == null ? "" : line).replace(/\r$/, "");
+    var match = /^(<{7,}|>{7,}|\|{7,}|={7,})(?: (.*))?$/.exec(text);
+    if (!match) return null;
+    var glyph = match[1].charAt(0);
+    var kind = glyph === "<" ? "ours" : glyph === ">" ? "theirs" : glyph === "|" ? "base" : "separator";
+    return { kind: kind, size: match[1].length, label: match[2] === undefined ? "" : match[2] };
+  }
+
+  function split(text){
+    if (text == null) fail("Text is required.");
+    var source = String(text);
+    if (!source.trim()) fail("Text is required.");
+    if (source.length > MAX_LENGTH) fail("Text is too long: the limit is 1,000,000 characters.");
+    return source.split("\n");
+  }
+
+  function parse(text){
+    var lines = split(text);
+    var conflicts = [];
+    var index = 0;
+    while (index < lines.length){
+      var opening = markerOf(lines[index]);
+      if (!opening || opening.kind !== "ours"){
+        index += 1;
+        continue;
+      }
+      var start = index;
+      var stage = "ours";
+      var ours = [];
+      var base = null;
+      var theirs = [];
+      var baseLabel = null;
+      var separatorSeen = false;
+      var closed = false;
+      index += 1;
+      while (index < lines.length){
+        var found = markerOf(lines[index]);
+        if (found && found.kind === "ours"){
+          fail("Line " + (index + 1) + ": nested conflict markers are not supported.");
+        }
+        if (stage === "ours"){
+          if (found && found.kind === "base"){
+            base = [];
+            baseLabel = found.label;
+            stage = "base";
+            index += 1;
+            continue;
+          }
+          if (found && found.kind === "separator"){
+            separatorSeen = true;
+            stage = "theirs";
+            index += 1;
+            continue;
+          }
+          if (found && found.kind === "theirs"){
+            fail("Line " + (index + 1) + ": the conflict has no ======= separator.");
+          }
+          ours.push(lines[index]);
+          index += 1;
+          continue;
+        }
+        if (stage === "base"){
+          if (found && found.kind === "separator"){
+            separatorSeen = true;
+            stage = "theirs";
+            index += 1;
+            continue;
+          }
+          if (found && found.kind === "base"){
+            fail("Line " + (index + 1) + ": a second ||||||| base marker is not valid.");
+          }
+          if (found && found.kind === "theirs"){
+            fail("Line " + (index + 1) + ": the conflict has no ======= separator.");
+          }
+          base.push(lines[index]);
+          index += 1;
+          continue;
+        }
+        if (found && found.kind === "base"){
+          fail("Line " + (index + 1) + ": a ||||||| base marker must come before =======.");
+        }
+        if (found && found.kind === "separator"){
+          fail("Line " + (index + 1) + ": a second ======= separator is not valid.");
+        }
+        if (found && found.kind === "theirs"){
+          conflicts.push({
+            index: conflicts.length + 1,
+            startLine: start + 1,
+            endLine: index + 1,
+            oursLabel: opening.label,
+            theirsLabel: found.label,
+            baseLabel: baseLabel,
+            hasBase: base !== null,
+            oursLines: ours,
+            baseLines: base,
+            theirsLines: theirs,
+            ours: ours.join("\n"),
+            base: base === null ? null : base.join("\n"),
+            theirs: theirs.join("\n")
+          });
+          closed = true;
+          index += 1;
+          break;
+        }
+        theirs.push(lines[index]);
+        index += 1;
+      }
+      if (!closed){
+        if (separatorSeen){
+          fail("Line " + (start + 1) + ": the conflict is not closed by a >>>>>>> marker.");
+        }
+        fail("Line " + (start + 1) + ": the conflict has no ======= separator.");
+      }
+    }
+    return { conflicts: conflicts, lineCount: lines.length };
+  }
+
+  function repeat(value, count){
+    var out = [];
+    for (var i = 0; i < count; i += 1) out.push(value);
+    return out;
+  }
+
+  function checkMode(raw){
+    var mode = String(raw == null ? "" : raw).trim().toLowerCase();
+    if (MODES.indexOf(mode) === -1){
+      fail("Unknown choice \"" + String(raw) + "\". Use ours, theirs, both, both-reverse, base or keep.");
+    }
+    return mode;
+  }
+
+  function picksFor(choice, count){
+    if (choice == null || choice === ""){
+      return repeat("ours", count);
+    }
+    if (typeof choice === "string"){
+      return repeat(checkMode(choice), count);
+    }
+    if (Array.isArray(choice)){
+      var out = [];
+      for (var i = 0; i < count; i += 1){
+        var value = choice[i];
+        out.push(value == null || value === "" ? "ours" : checkMode(value));
+      }
+      return out;
+    }
+    fail("Choice must be a mode name or a list of mode names.");
+  }
+
+  function sectionFor(conflict, mode){
+    if (mode === "ours") return conflict.oursLines;
+    if (mode === "theirs") return conflict.theirsLines;
+    if (mode === "base"){
+      if (!conflict.hasBase) fail("Conflict " + conflict.index + " has no base section.");
+      return conflict.baseLines;
+    }
+    if (mode === "both") return conflict.oursLines.concat(conflict.theirsLines);
+    if (mode === "both-reverse") return conflict.theirsLines.concat(conflict.oursLines);
+    return [];
+  }
+
+  function resolve(text, choice){
+    var parsed = parse(text);
+    var lines = String(text).split("\n");
+    var picks = picksFor(choice, parsed.conflicts.length);
+    var out = [];
+    var cursor = 0;
+    var resolved = 0;
+    var kept = 0;
+    var summary = [];
+    parsed.conflicts.forEach(function(conflict, position){
+      var mode = picks[position];
+      while (cursor < conflict.startLine - 1){
+        out.push(lines[cursor]);
+        cursor += 1;
+      }
+      if (mode === "keep"){
+        var block = lines.slice(conflict.startLine - 1, conflict.endLine);
+        for (var i = 0; i < block.length; i += 1) out.push(block[i]);
+        kept += 1;
+      } else {
+        var section = sectionFor(conflict, mode);
+        for (var j = 0; j < section.length; j += 1) out.push(section[j]);
+        resolved += 1;
+      }
+      cursor = conflict.endLine;
+      summary.push({
+        index: conflict.index,
+        startLine: conflict.startLine,
+        endLine: conflict.endLine,
+        chosen: mode,
+        hasBase: conflict.hasBase
+      });
+    });
+    while (cursor < lines.length){
+      out.push(lines[cursor]);
+      cursor += 1;
+    }
+    return {
+      text: out.join("\n"),
+      conflictCount: parsed.conflicts.length,
+      resolvedCount: resolved,
+      keptCount: kept,
+      conflicts: summary
+    };
+  }
+
+  return { MARKERS: MARKERS, MODES: MODES, MAX_LENGTH: MAX_LENGTH, parse: parse, resolve: resolve };
+})();
+/* merge-conflict-core:end */
+
+(function(){
+  "use strict";
+
+  var els = {
+    form: document.getElementById("conflict-form"),
+    text: document.getElementById("in-text"),
+    err: document.getElementById("err"),
+    summary: document.getElementById("summary"),
+    list: document.getElementById("conflicts"),
+    result: document.getElementById("result-wrap"),
+    out: document.getElementById("out-text"),
+    copy: document.getElementById("copy"),
+    download: document.getElementById("download"),
+    example: document.getElementById("example"),
+    clear: document.getElementById("clear")
+  };
+
+  var parsed = null;
+  var picks = [];
+
+  var EXAMPLE = [
+    "function total(items) {",
+    "<<<<<<< HEAD",
+    "  return items.reduce(function (sum, item) { return sum + item.price; }, 0);",
+    "||||||| merged common ancestors",
+    "  return items.reduce(function (sum, item) { return sum + item.price * item.qty; }, 0);",
+    "=======",
+    "  return items.reduce(function (sum, item) { return sum + item.price * item.qty; }, 0) * taxRate;",
+    ">>>>>>> feature/tax",
+    "}"
+  ].join("\n");
+
+  function clearNode(node){
+    while (node.firstChild) node.removeChild(node.firstChild);
+  }
+
+  function labelOf(value, fallback){
+    var text = String(value == null ? "" : value).trim();
+    return text ? text : fallback;
+  }
+
+  function summaryText(result){
+    if (!result.conflictCount) return "No conflict markers found — nothing to resolve.";
+    var parts = [result.conflictCount + (result.conflictCount === 1 ? " conflict" : " conflicts") + " found"];
+    parts.push(result.resolvedCount + " resolved");
+    parts.push(result.keptCount + (result.keptCount === 1 ? " block left with markers" : " blocks left with markers"));
+    return parts.join(" · ");
+  }
+
+  function showError(message){
+    els.err.textContent = message;
+    els.summary.textContent = "";
+    clearNode(els.list);
+    els.result.hidden = true;
+    els.out.value = "";
+  }
+
+  function update(){
+    if (!parsed) return;
+    var result;
+    try {
+      result = MergeConflictCore.resolve(els.text.value, picks);
+    } catch (error){
+      showError(error.message);
+      return;
+    }
+    els.err.textContent = "";
+    els.out.value = result.text;
+    els.summary.textContent = summaryText(result);
+    els.result.hidden = false;
+  }
+
+  function addChip(card, conflict, index, mode, text){
+    var label = document.createElement("label");
+    label.className = "chip";
+    var input = document.createElement("input");
+    input.type = "radio";
+    input.name = "conflict-" + conflict.index;
+    input.value = mode;
+    input.checked = picks[index] === mode;
+    input.addEventListener("change", function(){
+      picks[index] = mode;
+      update();
+    });
+    var span = document.createElement("span");
+    span.textContent = text;
+    label.appendChild(input);
+    label.appendChild(span);
+    card.appendChild(label);
+  }
+
+  function renderCards(){
+    clearNode(els.list);
+    parsed.conflicts.forEach(function(conflict, index){
+      var card = document.createElement("fieldset");
+      card.className = "conflict";
+      var legend = document.createElement("legend");
+      legend.textContent = "Conflict " + conflict.index + " · lines " + conflict.startLine + "–" + conflict.endLine;
+      card.appendChild(legend);
+      var sides = document.createElement("p");
+      sides.className = "sides";
+      sides.textContent = "Ours (" + labelOf(conflict.oursLabel, "HEAD") + "): " +
+        conflict.oursLines.length + (conflict.oursLines.length === 1 ? " line" : " lines") +
+        " · Theirs (" + labelOf(conflict.theirsLabel, "other side") + "): " +
+        conflict.theirsLines.length + (conflict.theirsLines.length === 1 ? " line" : " lines") +
+        (conflict.hasBase ? " · Base (" + labelOf(conflict.baseLabel, "common ancestor") + "): " +
+          conflict.baseLines.length + (conflict.baseLines.length === 1 ? " line" : " lines") : "");
+      card.appendChild(sides);
+      var chips = document.createElement("div");
+      chips.className = "chips";
+      card.appendChild(chips);
+      addChip(chips, conflict, index, "ours", "Ours");
+      addChip(chips, conflict, index, "theirs", "Theirs");
+      addChip(chips, conflict, index, "both", "Both");
+      addChip(chips, conflict, index, "both-reverse", "Both reversed");
+      if (conflict.hasBase) addChip(chips, conflict, index, "base", "Base");
+      addChip(chips, conflict, index, "keep", "Keep markers");
+      els.list.appendChild(card);
+    });
+  }
+
+  function run(){
+    try {
+      parsed = MergeConflictCore.parse(els.text.value);
+    } catch (error){
+      parsed = null;
+      showError(error.message);
+      return;
+    }
+    els.err.textContent = "";
+    if (!parsed.conflicts.length){
+      els.summary.textContent = summaryText({ conflictCount: 0 });
+      clearNode(els.list);
+      els.result.hidden = true;
+      els.out.value = "";
+      return;
+    }
+    picks = parsed.conflicts.map(function(){ return "ours"; });
+    renderCards();
+    update();
+  }
+
+  els.form.addEventListener("submit", function(event){
+    event.preventDefault();
+    run();
+  });
+
+  els.example.addEventListener("click", function(){
+    els.text.value = EXAMPLE;
+    run();
+    els.text.focus();
+    els.text.scrollTop = 0;
+  });
+
+  els.clear.addEventListener("click", function(){
+    els.text.value = "";
+    parsed = null;
+    picks = [];
+    els.err.textContent = "";
+    els.summary.textContent = "";
+    clearNode(els.list);
+    els.result.hidden = true;
+    els.out.value = "";
+    els.text.focus();
+  });
+
+  els.copy.addEventListener("click", function(){
+    var text = els.out.value;
+    if (!text) return;
+    var done = function(){
+      els.copy.textContent = "Copied";
+      window.setTimeout(function(){ els.copy.textContent = "Copy result"; }, 1200);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(done, function(){ els.out.select(); });
+      return;
+    }
+    els.out.select();
+  });
+
+  els.download.addEventListener("click", function(){
+    if (!els.out.value) return;
+    var blob = new Blob([els.out.value], { type: "text/plain" });
+    var url = URL.createObjectURL(blob);
+    var link = document.createElement("a");
+    link.href = url;
+    link.download = "merged.txt";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+  });
+})();
+</script>
+</body>
+</html>

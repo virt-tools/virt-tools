@@ -174,6 +174,7 @@ node tests/bookbinding_case_calculator.test.cjs
 node tests/polarization_mismatch_loss_calculator.test.cjs
 node tests/wifi_access_point_capacity_planner.test.cjs
 node tests/twilight_golden_hour_planner.test.cjs
+node tests/merge_conflict_resolver.test.cjs
 node tests/pitching_stats_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
