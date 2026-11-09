@@ -307,6 +307,42 @@ try {
   );
   assert.ok(await feedbackPage.locator("#submit-panel").isVisible(), "feedback form is hidden");
   assert.ok(await feedbackPage.locator("#lookup-form").isVisible(), "feedback lookup form is hidden");
+
+  const feedbackId = "123e4567-e89b-42d3-a456-426614174000";
+  const originalMessage = "Original <b>feedback</b> remains plain text";
+  await context.route(`**/api/feedback/${feedbackId}`, (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      uuid: feedbackId,
+      kind: "bug",
+      tool: "Geometry Formula Workbench",
+      message: originalMessage,
+      status: "received",
+      reply: "",
+      created_at: "2026-01-02T03:04:05+00:00",
+      updated_at: null,
+    }),
+  }));
+  await feedbackPage.locator("#lookup-id").fill(feedbackId);
+  await feedbackPage.locator("#lookup-btn").click();
+  await feedbackPage.locator("#status-panel").waitFor({ state: "visible", timeout: 10_000 });
+  assert.equal(
+    await feedbackPage.locator("#status-message").count(),
+    1,
+    "feedback status does not display the original message",
+  );
+  assert.equal(
+    await feedbackPage.locator("#status-message").textContent(),
+    originalMessage,
+    "feedback status changed or interpreted the original message",
+  );
+  assert.equal(
+    await feedbackPage.locator("#status-message b").count(),
+    0,
+    "feedback message was rendered as HTML",
+  );
+  await context.unroute(`**/api/feedback/${feedbackId}`);
   await feedbackPage.close();
 
   for (const tool of representativeTools) {
