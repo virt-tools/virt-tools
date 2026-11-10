@@ -190,6 +190,7 @@ node tests/nmea_sentence_parser.test.cjs
 node tests/sauce_reduction_calculator.test.cjs
 node tests/crochet_flat_circle_planner.test.cjs
 node tests/euclidean_rhythm_generator.test.cjs
+node tests/bandpass_sampling_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
