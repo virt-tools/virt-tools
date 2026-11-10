@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Great-Circle Route Densifier — Virtual Tools</title>
+<meta name="description" content="Add evenly spaced points along each leg of a latitude/longitude route. Set a maximum spacing, preserve every waypoint, and copy a GeoJSON LineString locally.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+[hidden]{display:none!important}
+.field{background:var(--bg,#14181f);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px;min-width:0;margin-top:12px;max-width:360px}
+.field:focus-within{border-color:var(--accent,#6ea8fe);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#6ea8fe) 18%,transparent)}
+.field label{font-size:13px;opacity:.85;display:block;margin-bottom:4px}
+.field input{box-sizing:border-box;width:100%;max-width:none;min-width:0;min-height:44px;background:transparent;color:var(--text,#e6e6e6);border:none;font-size:17px;font-family:ui-monospace,monospace;padding:2px 0;outline:none}
+.field input:focus{box-shadow:none}
+textarea{box-sizing:border-box;width:100%;max-width:none;padding:12px;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg,#14181f);color:var(--text,#e6e6e6);font-family:ui-monospace,monospace;font-size:16px;line-height:1.5;resize:vertical}
+textarea:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+#route{min-height:190px;margin-top:6px}
+.help,.note{font-size:13px;color:var(--text-dim,#9aa3b2);line-height:1.5}
+.help{margin:6px 0 0}.note{margin:12px 0 0}
+.err{color:var(--bad,#f87171);font-size:14px;margin:10px 0 0;min-height:1.3em}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:650;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button.secondary{background:transparent;color:var(--accent,#6ea8fe)}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:disabled{opacity:.5;cursor:not-allowed}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:16px 0}
+.big{font-size:clamp(1.65rem,6vw,2.35rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:4px 0 2px;color:var(--accent,#6ea8fe)}
+.summary{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45;overflow-wrap:anywhere}
+.metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:12px 0 16px}
+.metric{border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px;min-width:0}
+.metric span{display:block;color:var(--text-dim,#9aa3b2);font-size:12px;line-height:1.35}
+.metric strong{display:block;margin-top:4px;color:var(--accent,#6ea8fe);font-family:ui-monospace,monospace;font-size:16px;overflow-wrap:anywhere}
+.output-label{display:block;font-size:13px;font-weight:650;margin:0 0 6px}
+#geojson{min-height:180px;font-size:13px;background:var(--bg,#14181f)}
+.warning{font-size:13px;line-height:1.45;margin:10px 0 0;color:var(--text-dim,#9aa3b2)}
+.copy-status{font-size:13px;color:var(--text-dim,#9aa3b2)}
+.empty{color:var(--text-dim,#9aa3b2);margin:16px 0}
+@media(max-width:620px){.metrics{grid-template-columns:1fr}.field{max-width:none}.actions button{flex:1 1 140px}}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>Great-Circle Route Densifier</h1>
+<p>Add evenly spaced points between route waypoints without losing the originals.</p>
+</div>
+<div class="panel">
+<form id="densify-form" novalidate>
+<label class="output-label" for="route">Route waypoints</label>
+<textarea id="route" spellcheck="false" autocomplete="off" aria-describedby="route-help">51.5074, -0.1278
+48.8566, 2.3522
+52.5200, 13.4050</textarea>
+<p class="help" id="route-help">One signed latitude, longitude pair per line. Commas, semicolons, spaces and # comment lines are accepted.</p>
+<div class="field">
+<label for="spacing">Maximum step spacing</label>
+<input id="spacing" type="number" value="100" min="0" max="1000" step="any" inputmode="decimal" aria-describedby="spacing-help">
+<div class="help" id="spacing-help">kilometres; each original leg is divided into equal great-circle steps no longer than this</div>
+</div>
+<div class="err" id="error" role="alert" aria-live="polite"></div>
+<div class="actions">
+<button type="submit">Densify route</button>
+<button type="button" class="secondary" id="reset">Reset</button>
+</div>
+</form>
+<p class="empty" id="empty">Choose Densify route to generate the sample LineString.</p>
+<section class="out" id="result" hidden>
+<div class="big" id="headline"></div>
+<p class="summary" id="summary" role="status" aria-live="polite"></p>
+<div class="metrics" id="metrics"></div>
+<p class="warning" id="warning" hidden></p>
+<label class="output-label" for="geojson">Generated GeoJSON LineString · [longitude, latitude] order</label>
+<textarea id="geojson" readonly spellcheck="false"></textarea>
+<div class="actions">
+<button type="button" class="secondary" id="copy" disabled>Copy GeoJSON</button>
+<span class="copy-status" id="copy-status" aria-live="polite"></span>
+</div>
+</section>
+<p class="note">Uses shortest great-circle arcs on a mean-radius sphere (6,371,008.8 m), not an ellipsoid; for plotting and data preparation, not navigation or surveying. Consecutive duplicate points are preserved. Antipodal legs are refused because no unique shortest arc exists. All processing stays in your browser.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* route-densifier-core:start */
+var RouteDensifierCore = (function(){
+  "use strict";
+  var EARTH_RADIUS_M = 6371008.8;
+  var D2R = Math.PI / 180;
+  var R2D = 180 / Math.PI;
+  var MAX_INPUT_POINTS = 2000;
+  var MAX_OUTPUT_POINTS = 20000;
+  var MAX_INPUT_CHARS = 1000000;
+  var MAX_SPACING_KM = 1000;
+  var DEFAULT_TEXT = "51.5074, -0.1278\n48.8566, 2.3522\n52.5200, 13.4050";
+  var DEFAULT_SPACING = "100";
+
+  function fail(message){ throw new Error(message); }
+  function numeric(token){
+    return /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(token);
+  }
+  function checkPoint(lat, lon, line){
+    if (lat < -90 || lat > 90) fail("Latitude " + lat + " on line " + line + " is outside -90 to 90.");
+    if (lon < -180 || lon > 180) fail("Longitude " + lon + " on line " + line + " is outside -180 to 180.");
+  }
+  function parsePoints(value){
+    var text = String(value === null || value === undefined ? "" : value);
+    if (text.length > MAX_INPUT_CHARS) fail("Route input must be 1,000,000 characters or fewer.");
+    var lines = text.split(/\r?\n/), points = [];
+    for (var i = 0; i < lines.length; i += 1){
+      var line = lines[i].trim();
+      if (!line || line.charAt(0) === "#") continue;
+      var tokens = line.split(/[\s,;]+/);
+      if (tokens.length !== 2) fail("Line " + (i + 1) + " must contain exactly one latitude and one longitude.");
+      if (!numeric(tokens[0]) || !numeric(tokens[1])) fail("Line " + (i + 1) + " must contain numeric latitude and longitude values.");
+      var lat = Number(tokens[0]), lon = Number(tokens[1]);
+      checkPoint(lat, lon, i + 1);
+      points.push([lat, lon]);
+    }
+    if (!points.length) fail("Paste at least two latitude, longitude waypoints.");
+    if (points.length < 2) fail("A route needs at least two waypoints.");
+    if (points.length > MAX_INPUT_POINTS) fail("A route can contain at most 2000 input waypoints.");
+    return points;
+  }
+  function parseSpacing(value){
+    var text = String(value === null || value === undefined ? "" : value).trim();
+    if (!text || !numeric(text)) fail("Enter a maximum step spacing in kilometres.");
+    var spacing = Number(text);
+    if (!isFinite(spacing) || spacing <= 0) fail("Maximum step spacing must be greater than zero kilometres.");
+    if (spacing > MAX_SPACING_KM) fail("Maximum step spacing must be 1000 kilometres or less.");
+    return spacing;
+  }
+  function vector(point){
+    var lat = point[0] * D2R, lon = point[1] * D2R;
+    return [Math.cos(lat) * Math.cos(lon), Math.cos(lat) * Math.sin(lon), Math.sin(lat)];
+  }
+  function centralAngle(a, b){
+    var p1 = a[0] * D2R, p2 = b[0] * D2R;
+    var dLat = p2 - p1, dLon = (b[1] - a[1]) * D2R;
+    var h = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(p1) * Math.cos(p2) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    h = Math.max(0, Math.min(1, h));
+    return 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+  }
+  function distanceKm(a, b){ return centralAngle(a, b) * EARTH_RADIUS_M / 1000; }
+  function intermediateOnArc(a, b, fraction, angle){
+    if (fraction === 0) return [a[0], a[1]];
+    if (fraction === 1) return [b[0], b[1]];
+    if (angle < 1e-12) return [a[0], a[1]];
+    var u = vector(a), v = vector(b);
+    var sinAngle = Math.sin(angle);
+    var aa = Math.sin((1 - fraction) * angle) / sinAngle;
+    var bb = Math.sin(fraction * angle) / sinAngle;
+    var x = aa * u[0] + bb * v[0];
+    var y = aa * u[1] + bb * v[1];
+    var z = aa * u[2] + bb * v[2];
+    var lat = Math.atan2(z, Math.sqrt(x * x + y * y)) * R2D;
+    var lon = Math.atan2(y, x) * R2D;
+    return [Object.is(lat, -0) ? 0 : lat, Object.is(lon, -0) ? 0 : lon];
+  }
+  function intermediate(a, b, fraction){
+    if (!isFinite(fraction) || fraction < 0 || fraction > 1) fail("Fraction must be from 0 through 1.");
+    var angle = centralAngle(a, b);
+    if (Math.PI - angle < 1e-10) fail("Antipodal points do not define a unique great-circle route.");
+    return intermediateOnArc(a, b, fraction, angle);
+  }
+  function stepsFor(distance, spacing){
+    if (distance < 1e-10) return 1;
+    var ratio = distance / spacing;
+    var nearest = Math.round(ratio);
+    if (Math.abs(ratio - nearest) <= 1e-12 * Math.max(1, ratio)) return Math.max(1, nearest);
+    return Math.max(1, Math.ceil(ratio));
+  }
+  function round6(value){
+    var rounded = Math.round(value * 1000000) / 1000000;
+    return Object.is(rounded, -0) ? 0 : rounded;
+  }
+  function run(input){
+    input = input && typeof input === "object" ? input : {};
+    var text = Object.prototype.hasOwnProperty.call(input, "text") ? input.text : DEFAULT_TEXT;
+    var spacingInput = Object.prototype.hasOwnProperty.call(input, "spacingKm") ? input.spacingKm : DEFAULT_SPACING;
+    var points = parsePoints(text), spacingKm = parseSpacing(spacingInput);
+    var legs = [], outputCount = 1, totalDistanceKm = 0, zeroLegs = 0;
+    for (var i = 1; i < points.length; i += 1){
+      var angle = centralAngle(points[i - 1], points[i]);
+      if (Math.PI - angle < 1e-10) fail("Leg " + i + " joins antipodal points; a unique great-circle route is undefined.");
+      var distance = angle * EARTH_RADIUS_M / 1000;
+      var steps = stepsFor(distance, spacingKm);
+      if (distance < 1e-10) zeroLegs += 1;
+      legs.push({ angle: angle, distanceKm: distance, steps: steps });
+      totalDistanceKm += distance;
+      outputCount += steps;
+    }
+    if (outputCount > MAX_OUTPUT_POINTS) fail("This spacing would create " + outputCount + " points; increase it to keep the output at 20000 points or fewer.");
+    var generated = [[points[0][0], points[0][1]]];
+    for (i = 0; i < legs.length; i += 1){
+      var a = points[i], b = points[i + 1], leg = legs[i];
+      for (var step = 1; step <= leg.steps; step += 1){
+        generated.push(intermediateOnArc(a, b, step / leg.steps, leg.angle));
+      }
+    }
+    var generatedDistanceKm = 0, longestStepKm = 0;
+    for (i = 1; i < generated.length; i += 1){
+      var stepDistance = distanceKm(generated[i - 1], generated[i]);
+      generatedDistanceKm += stepDistance;
+      if (stepDistance > longestStepKm) longestStepKm = stepDistance;
+    }
+    var coordinates = generated.map(function(point){ return [round6(point[1]), round6(point[0])]; });
+    var geojson = JSON.stringify({ type: "LineString", coordinates: coordinates }, null, 2) + "\n";
+    return {
+      inputCount: points.length,
+      outputCount: generated.length,
+      addedCount: generated.length - points.length,
+      spacingKm: spacingKm,
+      totalDistanceKm: totalDistanceKm,
+      generatedDistanceKm: generatedDistanceKm,
+      longestStepKm: longestStepKm,
+      zeroLegs: zeroLegs,
+      points: generated,
+      legs: legs,
+      geojson: geojson
+    };
+  }
+  return { run: run, parsePoints: parsePoints, distanceKm: distanceKm, intermediate: intermediate, stepsFor: stepsFor };
+})();
+/* route-densifier-core:end */
+(function(){
+  "use strict";
+  var $ = function(id){ return document.getElementById(id); };
+  var latest = null;
+  function number(value, digits){
+    return Number(value).toLocaleString(undefined, { maximumFractionDigits: digits });
+  }
+  function metric(label, value){
+    var box = document.createElement("div"), name = document.createElement("span"), figure = document.createElement("strong");
+    box.className = "metric";
+    name.textContent = label;
+    figure.textContent = value;
+    box.append(name, figure);
+    $("metrics").append(box);
+  }
+  function calculate(event){
+    if (event) event.preventDefault();
+    $("copy-status").textContent = "";
+    try {
+      latest = RouteDensifierCore.run({ text: $("route").value, spacingKm: $("spacing").value });
+      $("error").textContent = "";
+      $("empty").hidden = true;
+      $("result").hidden = false;
+      $("copy").disabled = false;
+      $("headline").textContent = number(latest.outputCount, 0) + " points";
+      $("summary").textContent = number(latest.addedCount, 0) + " added · longest generated step " + number(latest.longestStepKm, 3) + " km";
+      $("metrics").replaceChildren();
+      metric("Original waypoints", number(latest.inputCount, 0));
+      metric("Route distance", number(latest.totalDistanceKm, 2) + " km");
+      metric("Requested spacing", "≤ " + number(latest.spacingKm, 6) + " km");
+      $("warning").hidden = latest.zeroLegs === 0;
+      $("warning").textContent = latest.zeroLegs ? latest.zeroLegs + " zero-length leg" + (latest.zeroLegs === 1 ? " was" : "s were") + " preserved without adding points." : "";
+      $("geojson").value = latest.geojson;
+    } catch (error) {
+      latest = null;
+      $("result").hidden = true;
+      $("empty").hidden = false;
+      $("empty").textContent = "Correct the input, then choose Densify route.";
+      $("copy").disabled = true;
+      $("geojson").value = "";
+      $("error").textContent = error.message;
+    }
+  }
+  $("densify-form").addEventListener("submit", calculate);
+  $("reset").addEventListener("click", function(){
+    $("route").value = "51.5074, -0.1278\n48.8566, 2.3522\n52.5200, 13.4050";
+    $("spacing").value = "100";
+    latest = null;
+    $("result").hidden = true;
+    $("empty").hidden = false;
+    $("empty").textContent = "Choose Densify route to generate the sample LineString.";
+    $("error").textContent = "";
+    $("copy-status").textContent = "";
+    $("copy").disabled = true;
+    $("geojson").value = "";
+    $("route").focus();
+  });
+  $("copy").addEventListener("click", async function(){
+    if (!latest) return;
+    try {
+      await navigator.clipboard.writeText(latest.geojson);
+      $("copy-status").textContent = "Copied GeoJSON.";
+    } catch (error) {
+      $("copy-status").textContent = "Clipboard unavailable; select the output to copy it.";
+      $("geojson").focus();
+      $("geojson").select();
+    }
+  });
+})();
+</script>
+</body>
+</html>
