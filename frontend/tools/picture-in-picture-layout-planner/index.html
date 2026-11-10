@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Plan a picture-in-picture composite: compute the aspect-correct inset size, corner position and pixel rectangle from a main frame, check it against the 5% title-safe edge, and copy an FFmpeg overlay expression.">
+<script src="/assets/theme-init.js"></script>
+<title>Picture-in-Picture Layout Planner — virt.tools</title><link rel="stylesheet" href="/assets/style.css">
+<style>
+.pip-shell{max-width:1000px;margin:0 auto}.lead,.hint{color:var(--text-secondary,#8b949e)}
+.presets{display:flex;flex-wrap:wrap;gap:.5rem;margin:1rem 0}.presets button{font-size:.9rem}
+.panel,.result{background:var(--surface,#161b22);border:1px solid var(--border,#30363d);border-radius:10px;padding:1rem;margin:1rem 0}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:.9rem 1.1rem}.wide{grid-column:1/-1}
+.field{display:flex;flex-direction:column;gap:.35rem}.field label{font-weight:600}
+.field input,.field select{box-sizing:border-box;width:100%;background:var(--background,#0d1117);color:var(--text,#c9d1d9);border:1px solid var(--border,#30363d);border-radius:6px;padding:.62rem;font:inherit;min-height:44px}
+.hint{font-size:.85rem;margin:0}
+.actions{display:flex;flex-wrap:wrap;gap:.6rem;margin-top:1rem}
+button{border:1px solid var(--border,#30363d);border-radius:6px;background:var(--surface-raised,#21262d);color:var(--text,#c9d1d9);padding:.58rem .85rem;min-height:44px;font:inherit;font-size:1rem;cursor:pointer}
+.primary{border-color:var(--accent,#58a6ff);background:var(--accent-soft,#1e3a5f)}
+button:focus-visible,button:focus{outline:2px solid var(--accent,#58a6ff);outline-offset:2px}
+input:focus-visible,select:focus-visible{outline:2px solid var(--accent,#58a6ff);outline-offset:2px}
+.status{min-height:1.4rem;margin:.6rem 0}.error{color:#f85149}.ok{color:#3fb950}.warning{color:#d29922}
+.preview{position:relative;width:min(100%,560px);aspect-ratio:16/9;background:#0d1117;border:1px solid var(--border,#30363d);border-radius:6px;margin:.8rem 0;overflow:hidden}
+.preview-safe{position:absolute;inset:5%;border:1px dashed var(--border,#30363d);border-radius:3px;pointer-events:none}
+.preview-inset{position:absolute;background:var(--accent-soft,#1e3a5f);border:1px solid var(--accent,#58a6ff);border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--text-secondary,#8b949e);overflow:hidden}
+.preview-inset span{padding:0 .2rem;white-space:nowrap}
+.preview-caption{font-size:.8rem;color:var(--text-secondary,#8b949e);margin:.2rem 0 .6rem}
+.rect{margin:.8rem 0 0;display:grid;gap:.45rem}
+.rect-row{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:.8rem;align-items:baseline;border-bottom:1px solid var(--border,#30363d);padding:.35rem 0}
+.rect-row dt{font-weight:600;min-width:7.5rem}.rect-row dd{margin:0;display:flex;flex-wrap:wrap;gap:.2rem .8rem;align-items:baseline}
+.rect-row .value{font:600 1rem ui-monospace,SFMono-Regular,Consolas,monospace}
+.rect-row .meaning{font-size:.85rem;color:var(--text-secondary,#8b949e)}
+code.overlay{display:block;padding:.6rem .7rem;border:1px solid var(--border,#30363d);border-radius:6px;background:var(--background,#0d1117);font:13px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;overflow-x:auto;white-space:pre;user-select:all}
+ul{margin:.5rem 0 0;padding-left:1.2rem}#warnings:empty{display:none}
+.explain li{margin:.2rem 0}
+@media(max-width:640px){.grid{grid-template-columns:1fr}.actions>*{flex:1 1 10rem}.panel,.result{padding:.85rem}.rect-row dt{min-width:6rem}.rect-row .meaning{flex-basis:100%}}
+</style></head>
+<body><div id="site-header"></div><main class="tool-container"><div class="pip-shell">
+<a href="/">← Back to all tools</a><h1>Picture-in-Picture Layout Planner</h1>
+<p class="lead">Place a second video inside a main frame: choose the frame, the inset's aspect ratio, its share of the width and the corner, and get the exact pixel rectangle to composite, a title-safe check and an FFmpeg overlay expression. Everything is calculated in your browser; nothing is uploaded or sent anywhere.</p>
+
+<div class="presets" role="group" aria-label="Layout presets">
+<button id="preset-webcam" type="button">Corner webcam</button>
+<button id="preset-vertical" type="button">Vertical guest</button>
+<button id="preset-square" type="button">Square reaction</button>
+<button id="preset-4k" type="button">4K lecture</button>
+</div>
+
+<form id="pip-form" novalidate>
+<section class="panel" aria-labelledby="input-title">
+<h2 id="input-title">Frame and inset</h2>
+<div class="grid">
+<div class="field"><label for="in-frameWidth">Main frame width (px)</label><input id="in-frameWidth" type="number" min="64" max="16384" step="1" value="1920" inputmode="numeric"><p class="hint">The delivery frame, for example 1920.</p></div>
+<div class="field"><label for="in-frameHeight">Main frame height (px)</label><input id="in-frameHeight" type="number" min="64" max="16384" step="1" value="1080" inputmode="numeric"><p class="hint">The delivery frame, for example 1080.</p></div>
+<div class="field"><label for="in-aspect">Inset aspect ratio</label><input id="in-aspect" type="text" value="16:9" spellcheck="false" autocomplete="off" inputmode="decimal"><p class="hint">The source's own shape: 16:9, 9:16, 4:3, 1:1 or a number such as 1.85.</p></div>
+<div class="field"><label for="in-size">Inset width (% of frame)</label><input id="in-size" type="number" min="5" max="95" step="0.5" value="25" inputmode="decimal"><p class="hint">Width in percent of the main frame width; the height follows the aspect ratio.</p></div>
+<div class="field"><label for="in-margin">Margin (% of frame width)</label><input id="in-margin" type="number" min="0" max="20" step="0.5" value="4" inputmode="decimal"><p class="hint">Distance from the frame edges. 5% keeps the inset on the title-safe line.</p></div>
+<div class="field"><label for="in-corner">Corner</label><select id="in-corner">
+<option value="top-left">Top left</option>
+<option value="top-right">Top right</option>
+<option value="bottom-left">Bottom left</option>
+<option value="bottom-right" selected>Bottom right</option>
+</select><p class="hint">Which corner the inset is anchored to.</p></div>
+<div class="field wide"><label for="in-align">Pixel alignment</label><select id="in-align">
+<option value="even" selected>Even pixels (encoder-friendly)</option>
+<option value="none">Nearest pixel</option>
+</select><p class="hint">Even sizes avoid chroma-subsampling edge artefacts and encoder padding; the nearest pixel keeps the requested size.</p></div>
+</div>
+<div class="actions"><button id="calculate" class="primary" type="submit">Calculate layout</button><button id="reset" type="button">Reset</button></div>
+</section>
+</form>
+
+<section class="result" aria-labelledby="result-title">
+<h2 id="result-title">Layout</h2>
+<p id="status" class="status" role="status" aria-live="polite"></p>
+<p id="summary"></p>
+<div class="preview" id="preview" aria-hidden="true"><div class="preview-safe"></div><div class="preview-inset" id="preview-inset"><span>Inset</span></div></div>
+<p class="preview-caption">Preview only: the dashed box is the 5% title-safe edge.</p>
+<dl class="rect">
+<div class="rect-row"><dt>Inset size</dt><dd><span id="out-size" class="value">not computed</span><span class="meaning">width × height in pixels</span></dd></div>
+<div class="rect-row"><dt>Top-left corner</dt><dd><span id="out-position" class="value">not computed</span><span class="meaning">x, y of the inset inside the frame</span></dd></div>
+<div class="rect-row"><dt>Margin</dt><dd><span id="out-margin" class="value">not computed</span><span class="meaning">from the anchored edges</span></dd></div>
+<div class="rect-row"><dt>Width share</dt><dd><span id="out-scale" class="value">not computed</span><span class="meaning">of the frame width</span></dd></div>
+<div class="rect-row"><dt>Area share</dt><dd><span id="out-area" class="value">not computed</span><span class="meaning">of the whole frame</span></dd></div>
+<div class="rect-row"><dt>Fitted aspect</dt><dd><span id="out-aspect" class="value">not computed</span><span class="meaning">actual shape after rounding</span></dd></div>
+</dl>
+<p id="safety" class="hint"></p>
+<h3>FFmpeg overlay</h3>
+<code class="overlay" id="out-overlay">scale the inset, then overlay at the computed corner</code>
+<ul id="warnings"></ul>
+<h3>How this is computed</h3>
+<ul id="explanation" class="explain"><li>Calculate to see the layout arithmetic.</li></ul>
+</section>
+</div></main><script src="/assets/tools.js"></script><script src="/assets/app.js"></script>
+<script>
+/* pip-layout-core:start */
+const PipLayoutCore=(()=>{'use strict';
+const FIELDS=['frameWidth','frameHeight','aspect','size','margin','corner','align'];
+const DEFAULTS={frameWidth:1920,frameHeight:1080,aspect:'16:9',size:25,margin:4,corner:'bottom-right',align:'even'};
+const MIN_FRAME=64,MAX_FRAME=16384;
+const MIN_SIZE=5,MAX_SIZE=95;
+const MIN_MARGIN=0,MAX_MARGIN=20;
+const MIN_ASPECT=0.1,MAX_ASPECT=10;
+const SAFE_EDGE=0.05;
+const CORNERS=['top-left','top-right','bottom-left','bottom-right'];
+const ALIGNMENTS=['even','none'];
+const CORNER_LABELS={'top-left':'top left','top-right':'top right','bottom-left':'bottom left','bottom-right':'bottom right'};
+function roundTo(value,digits){const factor=Math.pow(10,digits);return Math.round(value*factor)/factor;}
+function parseFrame(raw,label){
+  const text=String(raw===undefined||raw===null?'':raw).trim();
+  if(!text)throw Error(`${label} is required.`);
+  if(!/^\d+$/.test(text))throw Error(`${label} must be a whole number of pixels.`);
+  const value=Number(text);
+  if(value<MIN_FRAME||value>MAX_FRAME)throw Error(`${label} must be from ${MIN_FRAME} to ${MAX_FRAME} pixels.`);
+  return value;
+}
+function parseAspect(raw){
+  const text=String(raw===undefined||raw===null?'':raw).trim();
+  if(!text)throw Error('Inset aspect is required.');
+  const pair=/^(\d+(?:\.\d+)?)\s*[:/]\s*(\d+(?:\.\d+)?)$/.exec(text);
+  const single=/^(\d+(?:\.\d+)?)$/.exec(text);
+  let ratio,label,aspectWidth,aspectHeight;
+  if(pair){
+    const width=Number(pair[1]),height=Number(pair[2]);
+    if(!isFinite(width)||!isFinite(height))throw Error('Inset aspect must look like 16:9 or a single number such as 1.85.');
+    if(height<=0)throw Error('The aspect ratio cannot have a zero second value.');
+    ratio=width/height;
+    label=`${pair[1]}:${pair[2]}`;
+    aspectWidth=width;
+    aspectHeight=height;
+  }else if(single){
+    ratio=Number(single[1]);
+    label=`${single[1]}:1`;
+    aspectWidth=ratio;
+    aspectHeight=1;
+  }else{
+    throw Error('Inset aspect must look like 16:9 or a single number such as 1.85.');
+  }
+  if(!isFinite(ratio)||ratio<MIN_ASPECT||ratio>MAX_ASPECT)throw Error(`Inset aspect must be between ${MIN_ASPECT} and ${MAX_ASPECT}.`);
+  return {ratio,label,aspectWidth,aspectHeight};
+}
+function parsePercent(raw,label,min,max){
+  const text=String(raw===undefined||raw===null?'':raw).trim();
+  if(!text)throw Error(`${label} is required.`);
+  if(!/^\d+(?:\.\d+)?$/.test(text))throw Error(`${label} must be a number.`);
+  const value=Number(text);
+  if(!isFinite(value)||value<min||value>max)throw Error(`${label} must be from ${min} to ${max} percent of the frame width.`);
+  return value;
+}
+function snap(value,align){
+  if(!isFinite(value))throw Error('The inset does not fit inside the frame.');
+  const rounded=align==='even'?Math.floor(value/2)*2:Math.round(value);
+  return Math.max(2,rounded);
+}
+function build(raw){
+  const state=Object.assign({},DEFAULTS,raw||{});
+  const frameWidth=parseFrame(state.frameWidth,'Frame width');
+  const frameHeight=parseFrame(state.frameHeight,'Frame height');
+  const aspect=parseAspect(state.aspect);
+  const sizePct=parsePercent(state.size,'Inset size',MIN_SIZE,MAX_SIZE);
+  const marginPct=parsePercent(state.margin,'Margin',MIN_MARGIN,MAX_MARGIN);
+  const corner=String(state.corner);
+  if(!CORNERS.includes(corner))throw Error('Choose a corner for the inset: top left, top right, bottom left or bottom right.');
+  const align=String(state.align);
+  if(!ALIGNMENTS.includes(align))throw Error('Choose even-pixel alignment or nearest-pixel rounding.');
+  const targetWidth=frameWidth*sizePct/100;
+  const width=snap(targetWidth,align);
+  const targetHeight=width*aspect.aspectHeight/aspect.aspectWidth;
+  const height=snap(targetHeight,align);
+  const marginPx=Math.round(frameWidth*marginPct/100);
+  const right=corner.indexOf('right')>-1;
+  const bottom=corner.indexOf('bottom')>-1;
+  const x=right?frameWidth-marginPx-width:marginPx;
+  const y=bottom?frameHeight-marginPx-height:marginPx;
+  if(x<0||y<0||width+2*marginPx>frameWidth||height+2*marginPx>frameHeight){
+    throw Error(`At ${sizePct}% of the frame width the inset is ${width} × ${height} px, which does not fit inside a ${frameWidth} × ${frameHeight} frame with a ${marginPx} px margin.`);
+  }
+  const scalePct=width/frameWidth*100;
+  const areaShare=width*height/(frameWidth*frameHeight)*100;
+  const fittedAspect=width/height;
+  const safeEdgeX=frameWidth*SAFE_EDGE;
+  const safeEdgeY=frameHeight*SAFE_EDGE;
+  const epsilon=1e-9;
+  const safe=x>=safeEdgeX-epsilon&&y>=safeEdgeY-epsilon&&x+width<=frameWidth-safeEdgeX+epsilon&&y+height<=frameHeight-safeEdgeY+epsilon;
+  const warnings=[];
+  const clearance=Math.min(x,frameWidth-(x+width),y,frameHeight-(y+height));
+  if(!safe){
+    warnings.push(marginPct<5
+      ?`The ${marginPx} px margin is narrower than the 5% title-safe edge (${Math.ceil(safeEdgeX)} px across and ${Math.ceil(safeEdgeY)} px down), so the inset reaches into the area some displays overscan.`
+      :`The inset still crosses the 5% title-safe box: its smallest edge clearance is ${clearance} px, against ${Math.ceil(safeEdgeX)} px at the sides and ${Math.ceil(safeEdgeY)} px at the top and bottom of this frame.`);
+  }
+  if(scalePct<10)warnings.push(`The inset is ${width} px wide, ${roundTo(scalePct,1)}% of the frame, so text or detail inside it will be hard to read after encoding.`);
+  const aspectDrift=Math.abs(fittedAspect-aspect.ratio)/aspect.ratio;
+  if(aspectDrift>0.02)warnings.push(`At ${width} × ${height} px the inset cannot hold its ${roundTo(aspect.ratio,4)}:1 shape: it fits ${roundTo(fittedAspect,4)}:1, so raise the inset size or switch to nearest-pixel rounding.`);
+  const explanation=[
+    `The target box is ${roundTo(targetWidth,2)} × ${roundTo(targetHeight,2)} px: ${sizePct}% of ${frameWidth} px width at the ${aspect.label} inset aspect ratio.`,
+    align==='even'
+      ?`Rounding down to even pixels gives ${width} × ${height} px, which keeps both dimensions divisible by two for 4:2:0 chroma.`
+      :`Rounding to the nearest pixel gives ${width} × ${height} px.`,
+    `Anchored ${CORNER_LABELS[corner]} with a ${marginPx} px margin, the inset's top-left corner is (${x}, ${y}), so it occupies ${roundTo(areaShare,2)}% of the frame area.`,
+    `The fitted aspect is ${roundTo(fittedAspect,4)}:1 against the requested ${roundTo(aspect.ratio,4)}:1; pixel rounding is the only reason the two differ.`
+  ];
+  if(!safe)explanation.push(`The inset is outside the 5% title-safe box, whose edges are ${Math.ceil(safeEdgeX)} px from the sides and ${Math.ceil(safeEdgeY)} px from the top and bottom.`);
+  const overlay=`[1:v]scale=${width}:${height}[inset];[0:v][inset]overlay=${x}:${y}`;
+  const summary=`${width} × ${height} px inset at ${corner.replace('-',' ')} in a ${frameWidth} × ${frameHeight} frame, top-left corner (${x}, ${y}).`;
+  return {frameWidth,frameHeight,width,height,x,y,marginPx,scalePct:roundTo(scalePct,4),areaShare:roundTo(areaShare,4),
+    fittedAspect:roundTo(fittedAspect,4),aspectRatio:roundTo(aspect.ratio,4),aspectLabel:aspect.label,
+    targetWidth:roundTo(targetWidth,3),targetHeight:roundTo(targetHeight,3),corner,align,safe,
+    overlay,summary,explanation,warnings,warningCount:warnings.length};
+}
+return{FIELDS,DEFAULTS,MIN_FRAME,MAX_FRAME,MIN_SIZE,MAX_SIZE,MIN_MARGIN,MAX_MARGIN,MIN_ASPECT,MAX_ASPECT,SAFE_EDGE,CORNERS,ALIGNMENTS,CORNER_LABELS,parseFrame,parseAspect,parsePercent,snap,build};
+})();
+/* pip-layout-core:end */
+(()=>{'use strict';
+const $=id=>document.getElementById(id);
+function setStatus(message,kind=''){const node=$('status');node.textContent=message;node.className='status '+kind;}
+function readForm(){return{frameWidth:$('in-frameWidth').value,frameHeight:$('in-frameHeight').value,aspect:$('in-aspect').value,size:$('in-size').value,margin:$('in-margin').value,corner:$('in-corner').value,align:$('in-align').value};}
+function writeForm(state){$('in-frameWidth').value=state.frameWidth;$('in-frameHeight').value=state.frameHeight;$('in-aspect').value=state.aspect;$('in-size').value=state.size;$('in-margin').value=state.margin;$('in-corner').value=state.corner;$('in-align').value=state.align;}
+function clearResult(){
+  for(const id of ['out-size','out-position','out-margin','out-scale','out-area','out-aspect'])$(id).textContent='not computed';
+  $('summary').textContent='';$('safety').textContent='';$('out-overlay').textContent='scale the inset, then overlay at the computed corner';
+  $('explanation').replaceChildren();$('warnings').replaceChildren();
+  const preview=$('preview'),inset=$('preview-inset');
+  preview.style.aspectRatio='16 / 9';inset.style.display='none';
+}
+function render(state){
+  let result;
+  try{result=PipLayoutCore.build(state);}catch(error){
+    setStatus(error.message,'error');
+    clearResult();
+    const item=document.createElement('li');
+    item.textContent='Fix the frame, aspect ratio or size and calculate again.';
+    $('explanation').append(item);
+    return false;
+  }
+  setStatus(result.warningCount
+    ?`Layout calculated with ${result.warningCount} note${result.warningCount===1?'':'s'}.`
+    :'Layout calculated.',result.warningCount?'warning':'ok');
+  $('summary').textContent=result.summary;
+  $('out-size').textContent=`${result.width} × ${result.height} px`;
+  $('out-position').textContent=`${result.x}, ${result.y}`;
+  $('out-margin').textContent=`${result.marginPx} px`;
+  $('out-scale').textContent=`${result.scalePct}%`;
+  $('out-area').textContent=`${result.areaShare}%`;
+  $('out-aspect').textContent=`${result.fittedAspect}:1`;
+  $('safety').textContent=result.safe
+    ?'All four inset edges stay inside the 5% title-safe box.'
+    :'';
+  $('out-overlay').textContent=result.overlay;
+  const preview=$('preview'),inset=$('preview-inset');
+  preview.style.aspectRatio=`${result.frameWidth} / ${result.frameHeight}`;
+  inset.style.display='flex';
+  inset.style.left=`${result.x/result.frameWidth*100}%`;
+  inset.style.top=`${result.y/result.frameHeight*100}%`;
+  inset.style.width=`${result.width/result.frameWidth*100}%`;
+  inset.style.height=`${result.height/result.frameHeight*100}%`;
+  const notes=$('warnings');
+  notes.replaceChildren();
+  for(const line of result.warnings){const item=document.createElement('li');item.className='warning';item.textContent=line;notes.append(item);}
+  const list=$('explanation');
+  list.replaceChildren();
+  for(const line of result.explanation){const item=document.createElement('li');item.textContent=line;list.append(item);}
+  return true;
+}
+function preset(values){writeForm(Object.assign({},PipLayoutCore.DEFAULTS,values));render(readForm());}
+$('pip-form').addEventListener('submit',event=>{event.preventDefault();render(readForm());});
+$('reset').addEventListener('click',()=>{writeForm(PipLayoutCore.DEFAULTS);render(readForm());$('in-frameWidth').focus();});
+$('preset-webcam').addEventListener('click',()=>preset({frameWidth:1920,frameHeight:1080,aspect:'16:9',size:25,margin:4,corner:'bottom-right'}));
+$('preset-vertical').addEventListener('click',()=>preset({frameWidth:1920,frameHeight:1080,aspect:'9:16',size:18,margin:5,corner:'top-right'}));
+$('preset-square').addEventListener('click',()=>preset({frameWidth:1920,frameHeight:1080,aspect:'1:1',size:28,margin:5,corner:'bottom-left'}));
+$('preset-4k').addEventListener('click',()=>preset({frameWidth:3840,frameHeight:2160,aspect:'4:3',size:22,margin:3,corner:'top-right'}));
+render(readForm());
+})();
+</script></body></html>

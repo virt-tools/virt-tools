@@ -206,6 +206,7 @@ node tests/shooting_ratio_calculator.test.cjs
 node tests/ebn0_ber_calculator.test.cjs
 node tests/tcpdump_filter_builder.test.cjs
 node tests/gnss_dop_calculator.test.cjs
+node tests/picture_in_picture_layout_planner.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
