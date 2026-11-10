@@ -193,6 +193,7 @@ node tests/euclidean_rhythm_generator.test.cjs
 node tests/bandpass_sampling_calculator.test.cjs
 node tests/ospf_path_cost_calculator.test.cjs
 node tests/great_circle_route_densifier.test.cjs
+node tests/z85_encoder_decoder.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"

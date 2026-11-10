@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Z85 Encoder / Decoder — Virtual Tools</title>
+<meta name="description" content="Encode hexadecimal bytes to ZeroMQ Z85 or decode Z85 back to hexadecimal. Strict four-byte and five-character frames, processed entirely in your browser.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+[hidden]{display:none!important}
+.direction{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}
+.direction button{min-height:44px;padding:9px 18px;border:1px solid var(--border,#2a2f3a);border-radius:8px;background:transparent;color:var(--text,#e6e6e6);font:inherit;font-weight:650;cursor:pointer}
+.direction button[aria-pressed="true"]{border-color:var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017}
+.direction button:focus-visible,.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+label.output-label{display:block;font-size:13px;font-weight:650;margin:0 0 6px}
+textarea{box-sizing:border-box;width:100%;max-width:none;padding:12px;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg,#14181f);color:var(--text,#e6e6e6);font-family:ui-monospace,monospace;font-size:16px;line-height:1.5;resize:vertical;overflow-wrap:anywhere}
+textarea:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+#input{min-height:150px}#output{min-height:150px;font-size:15px}
+.help,.note{font-size:13px;color:var(--text-dim,#9aa3b2);line-height:1.5}.help{margin:6px 0 0}.note{margin:12px 0 0}
+.err{color:var(--bad,#f87171);font-size:14px;margin:10px 0 0;min-height:1.3em}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:650;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button.secondary{background:transparent;color:var(--accent,#6ea8fe)}.actions button:hover{filter:brightness(1.08)}.actions button:disabled{opacity:.5;cursor:not-allowed}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:16px 0}
+.big{font-size:clamp(1.65rem,6vw,2.35rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:4px 0 2px;color:var(--accent,#6ea8fe);overflow-wrap:anywhere}
+.summary{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 14px;line-height:1.45}
+.copy-status{font-size:13px;color:var(--text-dim,#9aa3b2)}.empty{color:var(--text-dim,#9aa3b2);margin:16px 0}
+@media(max-width:480px){.direction{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.direction button{padding-inline:8px}.actions button{flex:1 1 140px}.out{padding:12px}}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>Z85 Encoder / Decoder</h1>
+<p>Convert binary data between hexadecimal and ZeroMQ’s string-safe Z85 format.</p>
+</div>
+<div class="panel">
+<div class="direction" role="group" aria-label="Conversion direction">
+<button type="button" id="encode-mode" aria-pressed="true">Hex → Z85</button>
+<button type="button" id="decode-mode" aria-pressed="false">Z85 → Hex</button>
+</div>
+<form id="codec-form" novalidate>
+<label class="output-label" for="input" id="input-label">Hexadecimal bytes</label>
+<textarea id="input" spellcheck="false" autocomplete="off" autocapitalize="off" aria-describedby="input-help">864FD26FB559F75B</textarea>
+<p class="help" id="input-help">Spaces and line breaks are allowed. The byte count must be a multiple of four; no padding is added.</p>
+<div class="err" id="error" role="alert" aria-live="polite"></div>
+<div class="actions">
+<button type="submit" id="convert">Encode to Z85</button>
+<button type="button" class="secondary" id="reset">Reset</button>
+</div>
+</form>
+<p class="empty" id="empty">Choose Encode to Z85 to convert the specification’s sample bytes.</p>
+<section class="out" id="result" hidden>
+<div class="big" id="headline"></div>
+<p class="summary" id="summary" role="status" aria-live="polite"></p>
+<label class="output-label" for="output" id="output-label">Z85 text</label>
+<textarea id="output" readonly spellcheck="false"></textarea>
+<div class="actions">
+<button type="button" class="secondary" id="copy" disabled>Copy output</button>
+<button type="button" class="secondary" id="reverse" disabled>Use output as input</button>
+<span class="copy-status" id="copy-status" aria-live="polite"></span>
+</div>
+</section>
+<p class="note">Z85 uses ZeroMQ RFC 32’s 85-character alphabet, big-endian 32-bit words and exact 4-byte ↔ 5-character groups. Decoding is strict: whitespace, partial groups and values above 2³²−1 are rejected. Z85 is an encoding, not encryption. All processing stays in your browser.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* z85-core:start */
+var Z85Core = (function(){
+  "use strict";
+  var ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-:+=^!/*?&<>()[]{}@%$#";
+  var DEFAULT_HEX = "864FD26FB559F75B";
+  var DEFAULT_Z85 = "HelloWorld";
+  var MAX_INPUT_CHARS = 100000;
+  var MAX_WORD = 4294967295n;
+  var DECODER = Object.create(null);
+  for (var d = 0; d < ALPHABET.length; d += 1) DECODER[ALPHABET.charAt(d)] = d;
+
+  function fail(message){ throw new Error(message); }
+  function bounded(text){
+    if (text.length > MAX_INPUT_CHARS) fail("Input must be 100,000 characters or fewer.");
+  }
+  function parseHex(value){
+    var text = String(value === null || value === undefined ? "" : value);
+    bounded(text);
+    var compact = text.replace(/\s+/g, "");
+    if (!compact) fail("Enter hexadecimal bytes to encode.");
+    if (!/^[0-9a-fA-F]+$/.test(compact)) fail("Hex input may contain only hexadecimal digits and whitespace.");
+    if (compact.length % 2 !== 0) fail("Hex input must contain complete two-digit bytes.");
+    if (compact.length % 8 !== 0) fail("Z85 encoding requires a multiple of 4 bytes (8 hexadecimal characters); no padding is added.");
+    var bytes = [];
+    for (var i = 0; i < compact.length; i += 2) bytes.push(parseInt(compact.slice(i, i + 2), 16));
+    return bytes;
+  }
+  function encode(bytes){
+    if (!bytes || typeof bytes.length !== "number") fail("Bytes must be an array or typed array.");
+    if (bytes.length % 4 !== 0) fail("Z85 encoding requires a multiple of 4 bytes.");
+    var output = "";
+    for (var offset = 0; offset < bytes.length; offset += 4){
+      var word = 0n;
+      for (var i = 0; i < 4; i += 1){
+        var byte = bytes[offset + i];
+        if (!Number.isInteger(byte) || byte < 0 || byte > 255) fail("Each byte must be an integer from 0 through 255.");
+        word = word * 256n + BigInt(byte);
+      }
+      var group = new Array(5);
+      for (var digit = 4; digit >= 0; digit -= 1){
+        group[digit] = ALPHABET.charAt(Number(word % 85n));
+        word /= 85n;
+      }
+      output += group.join("");
+    }
+    return output;
+  }
+  function decode(value){
+    var text = String(value === null || value === undefined ? "" : value);
+    bounded(text);
+    if (!text) fail("Enter Z85 text to decode.");
+    if (text.length % 5 !== 0) fail("Z85 decoding requires a multiple of 5 characters; no padding is removed.");
+    var bytes = [];
+    for (var offset = 0; offset < text.length; offset += 5){
+      var word = 0n;
+      for (var i = 0; i < 5; i += 1){
+        var character = text.charAt(offset + i);
+        if (!Object.prototype.hasOwnProperty.call(DECODER, character)) fail("Invalid Z85 character at position " + (offset + i + 1) + ".");
+        word = word * 85n + BigInt(DECODER[character]);
+      }
+      if (word > MAX_WORD) fail("Z85 group " + (offset / 5 + 1) + " exceeds the maximum 32-bit value.");
+      bytes.push(Number((word >> 24n) & 255n), Number((word >> 16n) & 255n), Number((word >> 8n) & 255n), Number(word & 255n));
+    }
+    return bytes;
+  }
+  function hex(bytes){
+    return bytes.map(function(byte){ return byte.toString(16).padStart(2, "0"); }).join("").toUpperCase();
+  }
+  function run(input){
+    input = input && typeof input === "object" ? input : {};
+    var mode = Object.prototype.hasOwnProperty.call(input, "mode") ? input.mode : "encode";
+    var text = Object.prototype.hasOwnProperty.call(input, "input") ? input.input : (mode === "decode" ? DEFAULT_Z85 : DEFAULT_HEX);
+    if (mode === "encode"){
+      var sourceBytes = parseHex(text), z85 = encode(sourceBytes);
+      return { mode: mode, output: z85, groups: sourceBytes.length / 4, inputUnits: sourceBytes.length, outputUnits: z85.length, bytes: sourceBytes, z85: z85 };
+    }
+    if (mode === "decode"){
+      var decoded = decode(text), hexadecimal = hex(decoded);
+      return { mode: mode, output: hexadecimal, groups: decoded.length / 4, inputUnits: String(text).length, outputUnits: decoded.length, bytes: decoded, z85: String(text) };
+    }
+    fail("Choose either encode or decode mode.");
+  }
+  return { run: run, parseHex: parseHex, encode: encode, decode: decode, hex: hex, alphabet: ALPHABET };
+})();
+/* z85-core:end */
+(function(){
+  "use strict";
+  var $ = function(id){ return document.getElementById(id); };
+  var mode = "encode", latest = null;
+  function clearResult(message){
+    latest = null;
+    $("result").hidden = true;
+    $("empty").hidden = false;
+    $("empty").textContent = message;
+    $("error").textContent = "";
+    $("copy").disabled = true;
+    $("reverse").disabled = true;
+    $("output").value = "";
+    $("copy-status").textContent = "";
+  }
+  function setMode(next){
+    if (next === mode) return;
+    mode = next;
+    $("encode-mode").setAttribute("aria-pressed", String(mode === "encode"));
+    $("decode-mode").setAttribute("aria-pressed", String(mode === "decode"));
+    $("input-label").textContent = mode === "encode" ? "Hexadecimal bytes" : "Z85 text";
+    $("input-help").textContent = mode === "encode" ? "Spaces and line breaks are allowed. The byte count must be a multiple of four; no padding is added." : "Use the exact Z85 alphabet. Whitespace is not ignored, and the character count must be a multiple of five.";
+    $("convert").textContent = mode === "encode" ? "Encode to Z85" : "Decode to hex";
+    $("output-label").textContent = mode === "encode" ? "Z85 text" : "Hexadecimal bytes";
+    clearResult(mode === "encode" ? "Enter hexadecimal bytes, then choose Encode to Z85." : "Enter Z85 text, then choose Decode to hex.");
+  }
+  function calculate(event){
+    if (event) event.preventDefault();
+    $("copy-status").textContent = "";
+    try {
+      latest = Z85Core.run({ mode: mode, input: $("input").value });
+      $("error").textContent = "";
+      $("empty").hidden = true;
+      $("result").hidden = false;
+      $("copy").disabled = false;
+      $("reverse").disabled = false;
+      $("headline").textContent = latest.groups + (latest.groups === 1 ? " group" : " groups");
+      $("summary").textContent = latest.inputUnits + (mode === "encode" ? " bytes" : " characters") + " in · " + latest.outputUnits + (mode === "encode" ? " characters" : " bytes") + " out";
+      $("output").value = latest.output;
+    } catch (error) {
+      clearResult("Correct the input, then convert again.");
+      $("error").textContent = error.message;
+    }
+  }
+  $("encode-mode").addEventListener("click", function(){ setMode("encode"); });
+  $("decode-mode").addEventListener("click", function(){ setMode("decode"); });
+  $("codec-form").addEventListener("submit", calculate);
+  $("reset").addEventListener("click", function(){
+    mode = "decode";
+    setMode("encode");
+    $("input").value = "864FD26FB559F75B";
+    clearResult("Choose Encode to Z85 to convert the specification’s sample bytes.");
+    $("input").focus();
+  });
+  $("copy").addEventListener("click", async function(){
+    if (!latest) return;
+    try {
+      await navigator.clipboard.writeText(latest.output);
+      $("copy-status").textContent = "Copied output.";
+    } catch (error) {
+      $("copy-status").textContent = "Clipboard unavailable; select the output to copy it.";
+      $("output").focus();
+      $("output").select();
+    }
+  });
+  $("reverse").addEventListener("click", function(){
+    if (!latest) return;
+    var output = latest.output;
+    setMode(mode === "encode" ? "decode" : "encode");
+    $("input").value = output;
+    $("input").focus();
+  });
+})();
+</script>
+</body>
+</html>
