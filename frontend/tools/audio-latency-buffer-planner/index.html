@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Plan a recording rig's round-trip latency: turn the sample rate, buffer size and buffer count into block time, total samples and milliseconds, add converter and plugin latency, and see which buffer sizes meet your target.">
+<script src="/assets/theme-init.js"></script>
+<title>Audio Latency &amp; Buffer Planner — virt.tools</title><link rel="stylesheet" href="/assets/style.css">
+<style>
+.lat-shell{max-width:1000px;margin:0 auto}.lead,.hint{color:var(--text-secondary,#8b949e)}
+.presets{display:flex;flex-wrap:wrap;gap:.5rem;margin:1rem 0}.presets button{font-size:.9rem}
+.panel,.result{background:var(--surface,#161b22);border:1px solid var(--border,#30363d);border-radius:10px;padding:1rem;margin:1rem 0}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:.9rem 1.1rem}.wide{grid-column:1/-1}
+.field{display:flex;flex-direction:column;gap:.35rem}.field label{font-weight:600}
+.field input,.field select{box-sizing:border-box;width:100%;max-width:none;background:var(--background,#0d1117);color:var(--text,#c9d1d9);border:1px solid var(--border,#30363d);border-radius:6px;padding:.62rem;font:inherit;min-height:44px}
+.hint{font-size:.85rem;margin:0}
+.actions{display:flex;flex-wrap:wrap;gap:.6rem;margin-top:1rem}
+button{border:1px solid var(--border,#30363d);border-radius:6px;background:var(--surface-raised,#21262d);color:var(--text,#c9d1d9);padding:.58rem .85rem;min-height:44px;font:inherit;font-size:1rem;cursor:pointer}
+.primary{border-color:var(--accent,#58a6ff);background:var(--accent-soft,#1e3a5f)}
+button:focus-visible,button:focus{outline:2px solid var(--accent,#58a6ff);outline-offset:2px}
+input:focus-visible,select:focus-visible{outline:2px solid var(--accent,#58a6ff);outline-offset:2px}
+.status{min-height:1.4rem;margin:.6rem 0}.error{color:#f85149}.ok{color:#3fb950}.warning{color:#d29922}
+.rows{margin:.8rem 0 0;display:grid;gap:.45rem}
+.row{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:.8rem;align-items:baseline;border-bottom:1px solid var(--border,#30363d);padding:.35rem 0}
+.row dt{font-weight:600;min-width:11rem}.row dd{margin:0;display:flex;flex-wrap:wrap;gap:.2rem .8rem;align-items:baseline}
+.row .value{font:600 1rem ui-monospace,SFMono-Regular,Consolas,monospace}
+.row .meaning{font-size:.85rem;color:var(--text-secondary,#8b949e)}
+.sizes{list-style:none;margin:.6rem 0 0;padding:0;display:grid;gap:.35rem}
+.sizes li{display:grid;grid-template-columns:minmax(0,6.5rem) minmax(0,7rem) minmax(0,1fr);column-gap:.7rem;align-items:baseline;padding:.4rem .55rem;border:1px solid var(--border,#30363d);border-radius:6px}
+.sizes .frames{font-weight:600}.sizes .ms{font:600 .95rem ui-monospace,SFMono-Regular,Consolas,monospace}
+.sizes .tag{font-size:.85rem;color:var(--text-secondary,#8b949e)}
+.sizes li.current{border-color:var(--accent,#58a6ff);background:var(--accent-soft,#1e3a5f)}
+.sizes li.fits .tag{color:#3fb950}.sizes li.over .tag{color:#d29922}
+ul{margin:.5rem 0 0;padding-left:1.2rem}#warnings:empty{display:none}
+.explain li{margin:.2rem 0}
+@media(max-width:640px){.grid{grid-template-columns:1fr}.actions>*{flex:1 1 10rem}.panel,.result{padding:.85rem}.row{grid-template-columns:1fr}.row dt{min-width:0}.row .meaning{flex-basis:100%}.sizes li{grid-template-columns:minmax(0,1fr) auto;row-gap:.15rem}.sizes .tag{grid-column:1/-1}}
+</style></head>
+<body><div id="site-header"></div><main class="tool-container"><div class="lat-shell">
+<a href="/">← Back to all tools</a><h1>Audio Latency &amp; Buffer Planner</h1>
+<p class="lead">Work out a recording rig's round-trip latency from the sample rate, the buffer size and the number of buffers, add converter, driver and plugin latency in samples at the session rate, and see which standard buffer sizes still meet your monitoring target. Everything is calculated in your browser; nothing is uploaded or sent anywhere.</p>
+
+<div class="presets" role="group" aria-label="Rig presets">
+<button id="preset-tracking" type="button">Tracking at 48 kHz</button>
+<button id="preset-mixing" type="button">Mixing at 48 kHz</button>
+<button id="preset-live" type="button">Live at 96 kHz</button>
+<button id="preset-usb" type="button">USB mic at 44.1 kHz</button>
+</div>
+
+<form id="lat-form" novalidate>
+<section class="panel" aria-labelledby="input-title">
+<h2 id="input-title">Buffer and budget</h2>
+<div class="grid">
+<div class="field"><label for="in-sampleRate">Sample rate (Hz)</label><input id="in-sampleRate" type="number" min="8000" max="192000" step="1" value="48000" inputmode="numeric"><p class="hint">The session rate: 44100, 48000, 88200 or 96000.</p></div>
+<div class="field"><label for="in-bufferFrames">Buffer size (frames)</label><input id="in-bufferFrames" type="number" min="8" max="8192" step="1" value="128" inputmode="numeric"><p class="hint">The block your interface asks for: 32, 64, 128, 256, 512 or 1024.</p></div>
+<div class="field"><label for="in-buffers">Buffers per round trip</label><input id="in-buffers" type="number" min="1" max="4" step="1" value="2" inputmode="numeric"><p class="hint">One input buffer plus one output buffer is the usual 2.</p></div>
+<div class="field"><label for="in-extraMs">Converter &amp; driver latency (ms)</label><input id="in-extraMs" type="number" min="0" max="200" step="0.1" value="0" inputmode="decimal"><p class="hint">AD/DA and driver overhead. Leave 0 if you only want the buffer share.</p></div>
+<div class="field"><label for="in-pluginMs">Plugin chain latency (ms)</label><input id="in-pluginMs" type="number" min="0" max="1000" step="0.1" value="0" inputmode="decimal"><p class="hint">The latency your plugins report, as a total.</p></div>
+<div class="field"><label for="in-targetMs">Latency target (ms)</label><input id="in-targetMs" type="number" min="1" max="200" step="0.5" value="10" inputmode="decimal"><p class="hint">The round trip you want to stay under while monitoring yourself.</p></div>
+</div>
+<div class="actions"><button id="calculate" class="primary" type="submit">Calculate latency</button><button id="reset" type="button">Reset</button></div>
+</section>
+</form>
+
+<section class="result" aria-labelledby="result-title">
+<h2 id="result-title">Round trip</h2>
+<p id="status" class="status" role="status" aria-live="polite"></p>
+<p id="summary"></p>
+<dl class="rows">
+<div class="row"><dt>Block time</dt><dd><span id="out-block" class="value">not computed</span><span class="meaning">audio held in one buffer</span></dd></div>
+<div class="row"><dt>Buffer round trip</dt><dd><span id="out-buffers" class="value">not computed</span><span class="meaning">input plus output buffers only</span></dd></div>
+<div class="row"><dt>Total round trip</dt><dd><span id="out-total" class="value">not computed</span><span class="meaning">with converter, driver and plugin latency</span></dd></div>
+<div class="row"><dt>Against your target</dt><dd><span id="out-headroom" class="value">not computed</span><span class="meaning">headroom left, or the overrun</span></dd></div>
+<div class="row"><dt>Equivalent distance</dt><dd><span id="out-distance" class="value">not computed</span><span class="meaning">how far sound travels in that time at 20 °C</span></dd></div>
+<div class="row"><dt>Largest buffer that fits</dt><dd><span id="out-maxframes" class="value">not computed</span><span class="meaning">power-of-two size that still meets the target</span></dd></div>
+</dl>
+<h3>Standard buffers at this rate</h3>
+<ul id="out-sizes" class="sizes" aria-label="Round-trip latency for each standard buffer size"></ul>
+<ul id="warnings"></ul>
+<h3>How this is computed</h3>
+<ul id="explanation" class="explain"><li>Calculate to see the latency arithmetic.</li></ul>
+</section>
+</div></main><script src="/assets/tools.js"></script><script src="/assets/app.js"></script>
+<script>
+/* audio-latency-core:start */
+const AudioLatencyCore=(()=>{'use strict';
+const FIELDS=['sampleRate','bufferFrames','buffers','extraMs','pluginMs','targetMs'];
+const DEFAULTS={sampleRate:48000,bufferFrames:128,buffers:2,extraMs:0,pluginMs:0,targetMs:10};
+const MIN_RATE=8000,MAX_RATE=192000;
+const MIN_FRAMES=8,MAX_FRAMES=8192;
+const MIN_BUFFERS=1,MAX_BUFFERS=4;
+const MAX_EXTRA=200,MAX_PLUGIN=1000;
+const MIN_TARGET=1,MAX_TARGET=200;
+const STANDARD_FRAMES=[32,64,128,256,512,1024,2048];
+const SPEED_OF_SOUND=343;
+function roundTo(value,digits){const factor=Math.pow(10,digits);return Math.round(value*factor)/factor;}
+function fmt(value,digits){return roundTo(value,digits).toFixed(digits);}
+function parseWhole(raw,label,min,max,unit){
+  const text=String(raw===undefined||raw===null?'':raw).trim();
+  if(!text)throw Error(`${label} is required.`);
+  if(!/^\d+$/.test(text))throw Error(unit?`${label} must be a whole number of ${unit}.`:`${label} must be a whole number.`);
+  const value=Number(text);
+  if(!isFinite(value))throw Error(`${label} is required.`);
+  if(value<min||value>max)throw Error(unit?`${label} must be from ${min} to ${max} ${unit}.`:`${label} must be from ${min} to ${max}.`);
+  return value;
+}
+function parseDecimal(raw,label,min,max){
+  const text=String(raw===undefined||raw===null?'':raw).trim();
+  if(!text)throw Error(`${label} is required.`);
+  if(!/^\d+(?:\.\d{1,3})?$/.test(text))throw Error(`${label} must be a number of milliseconds with up to three decimals.`);
+  const value=Number(text);
+  if(value<min||value>max)throw Error(`${label} must be from ${min} to ${max} ms.`);
+  return value;
+}
+function framesThatFit(buffers,fixedSamples,budgetSamples){
+  for(let frames=MAX_FRAMES;frames>=MIN_FRAMES;frames/=2){
+    if(frames*buffers+fixedSamples<=budgetSamples)return frames;
+  }
+  return null;
+}
+function build(raw){
+  const state=Object.assign({},DEFAULTS,raw||{});
+  const sampleRate=parseWhole(state.sampleRate,'Sample rate',MIN_RATE,MAX_RATE,'Hz');
+  const bufferFrames=parseWhole(state.bufferFrames,'Buffer size',MIN_FRAMES,MAX_FRAMES,'frames');
+  const buffers=parseWhole(state.buffers,'Buffers per round trip',MIN_BUFFERS,MAX_BUFFERS);
+  const extraMs=parseDecimal(state.extraMs,'Converter and driver latency',0,MAX_EXTRA);
+  const pluginMs=parseDecimal(state.pluginMs,'Plugin chain latency',0,MAX_PLUGIN);
+  const targetMs=parseDecimal(state.targetMs,'Latency target',MIN_TARGET,MAX_TARGET);
+  const blockMs=bufferFrames*1000/sampleRate;
+  const bufferSamples=bufferFrames*buffers;
+  const bufferMs=bufferSamples*1000/sampleRate;
+  const extraSamples=Math.round(Math.round(extraMs*1000)*sampleRate/1e6);
+  const pluginSamples=Math.round(Math.round(pluginMs*1000)*sampleRate/1e6);
+  const fixedSamples=extraSamples+pluginSamples;
+  const totalSamples=bufferSamples+fixedSamples;
+  const totalMs=totalSamples*1000/sampleRate;
+  const budgetSamples=Math.floor(Math.round(targetMs*1000)*sampleRate/1e6);
+  const fits=totalSamples<=budgetSamples;
+  const marginMs=(budgetSamples-totalSamples)*1000/sampleRate;
+  const distanceM=totalMs/1000*SPEED_OF_SOUND;
+  const maxFrames=framesThatFit(buffers,fixedSamples,budgetSamples);
+  const table=STANDARD_FRAMES.map(frames=>{
+    const samples=frames*buffers+fixedSamples;
+    return {frames,samples,ms:roundTo(samples*1000/sampleRate,6),fits:samples<=budgetSamples,current:frames===bufferFrames};
+  });
+  const warnings=[];
+  if(!fits){
+    warnings.push(maxFrames===null
+      ? `This chain totals ${fmt(totalMs,3)} ms, ${fmt(totalMs-targetMs,3)} ms over your ${fmt(targetMs,2)} ms target, and no standard buffer size meets it: lower the converter, driver or plugin latency first.`
+      : `This chain totals ${fmt(totalMs,3)} ms, ${fmt(totalMs-targetMs,3)} ms over your ${fmt(targetMs,2)} ms target; ${maxFrames} frames is the largest power-of-two buffer that fits.`);
+  }
+  if(fixedSamples===0)warnings.push('Converter, driver and plugin latency are set to zero, so this is the buffer chain alone — a floor, not a measurement of your own interface.');
+  if((bufferFrames&(bufferFrames-1))!==0)warnings.push(`${bufferFrames} frames is not a power of two; most audio drivers only offer power-of-two buffer sizes, so check what your interface reports.`);
+  if(totalMs>=20)warnings.push(`${fmt(totalMs,3)} ms is a long round trip for playing through the computer; direct hardware monitoring or a smaller buffer keeps your own playing in time.`);
+  if(blockMs<1)warnings.push(`One buffer is ${fmt(blockMs,3)} ms of audio, which needs a real-time driver and spare CPU to avoid dropouts.`);
+  const explanation=[
+    `Each buffer holds ${bufferFrames} frames: ${bufferFrames} / ${sampleRate} Hz × 1000 = ${fmt(blockMs,3)} ms of audio.`,
+    `The round trip crosses ${buffers} buffer${buffers===1?'':'s'}: ${bufferFrames} × ${buffers} = ${bufferSamples} samples = ${fmt(bufferMs,3)} ms.`,
+    `Converter and driver latency of ${fmt(extraMs,2)} ms is ${extraSamples} samples and plugin latency of ${fmt(pluginMs,2)} ms is ${pluginSamples} samples at ${sampleRate} Hz, so the chain totals ${totalSamples} samples = ${fmt(totalMs,3)} ms.`,
+    `Sound travels ${fmt(distanceM,3)} m in that time at 20 °C (343 m/s), so a monitor that far away would sound as late.`,
+    fits
+      ? `A ${fmt(targetMs,2)} ms target is ${budgetSamples} samples at this rate, so ${fmt(marginMs,3)} ms is left over.`
+      : `A ${fmt(targetMs,2)} ms target is ${budgetSamples} samples at this rate, ${totalSamples-budgetSamples} samples short of this chain.`
+  ];
+  const summary=`${fmt(totalMs,3)} ms round trip at ${sampleRate} Hz with a ${bufferFrames}-frame buffer and ${buffers} buffer${buffers===1?'':'s'}.`;
+  return {sampleRate,bufferFrames,buffers,extraMs,pluginMs,targetMs,
+    blockMs:roundTo(blockMs,6),bufferSamples,bufferMs:roundTo(bufferMs,6),
+    extraSamples,pluginSamples,totalSamples,totalMs:roundTo(totalMs,6),
+    budgetSamples,fits,marginMs:roundTo(marginMs,6),overMs:roundTo(totalMs-targetMs,6),
+    distanceM:roundTo(distanceM,6),maxFrames,table,summary,explanation,warnings,
+    warningCount:warnings.length};
+}
+return{FIELDS,DEFAULTS,MIN_RATE,MAX_RATE,MIN_FRAMES,MAX_FRAMES,MIN_BUFFERS,MAX_BUFFERS,
+  MAX_EXTRA,MAX_PLUGIN,MIN_TARGET,MAX_TARGET,STANDARD_FRAMES,SPEED_OF_SOUND,
+  parseWhole,parseDecimal,framesThatFit,build};
+})();
+/* audio-latency-core:end */
+(()=>{'use strict';
+const $=id=>document.getElementById(id);
+function setStatus(message,kind=''){const node=$('status');node.textContent=message;node.className='status '+kind;}
+function readForm(){return{sampleRate:$('in-sampleRate').value,bufferFrames:$('in-bufferFrames').value,buffers:$('in-buffers').value,extraMs:$('in-extraMs').value,pluginMs:$('in-pluginMs').value,targetMs:$('in-targetMs').value};}
+function writeForm(state){$('in-sampleRate').value=state.sampleRate;$('in-bufferFrames').value=state.bufferFrames;$('in-buffers').value=state.buffers;$('in-extraMs').value=state.extraMs;$('in-pluginMs').value=state.pluginMs;$('in-targetMs').value=state.targetMs;}
+function clearResult(){
+  for(const id of ['out-block','out-buffers','out-total','out-headroom','out-distance','out-maxframes'])$(id).textContent='not computed';
+  $('summary').textContent='';
+  $('out-sizes').replaceChildren();$('explanation').replaceChildren();$('warnings').replaceChildren();
+}
+function render(state){
+  let result;
+  try{result=AudioLatencyCore.build(state);}catch(error){
+    setStatus(error.message,'error');
+    clearResult();
+    const item=document.createElement('li');
+    item.textContent='Fix the sample rate, buffer size or latency figures and calculate again.';
+    $('explanation').append(item);
+    return false;
+  }
+  setStatus(result.fits
+    ? `Round trip fits: ${result.totalMs.toFixed(3)} ms against a ${result.targetMs.toFixed(2)} ms target.`
+    : `Round trip is over the target: ${result.totalMs.toFixed(3)} ms against ${result.targetMs.toFixed(2)} ms.`,
+    result.fits?'ok':'warning');
+  $('summary').textContent=result.summary;
+  $('out-block').textContent=`${result.blockMs.toFixed(3)} ms`;
+  $('out-buffers').textContent=`${result.bufferSamples} samples · ${result.bufferMs.toFixed(3)} ms`;
+  $('out-total').textContent=`${result.totalSamples} samples · ${result.totalMs.toFixed(3)} ms`;
+  $('out-headroom').textContent=result.fits
+    ? `+${result.marginMs.toFixed(3)} ms`
+    : `over by ${Math.abs(result.overMs).toFixed(3)} ms`;
+  $('out-distance').textContent=`${result.distanceM.toFixed(3)} m`;
+  $('out-maxframes').textContent=result.maxFrames===null?'none':`${result.maxFrames} frames`;
+  const list=$('out-sizes');
+  list.replaceChildren();
+  for(const row of result.table){
+    const item=document.createElement('li');
+    item.className=(row.fits?'fits':'over')+(row.current?' current':'');
+    const frames=document.createElement('span');
+    frames.className='frames';
+    frames.textContent=`${row.frames} frames`;
+    const ms=document.createElement('span');
+    ms.className='ms';
+    ms.textContent=`${row.ms.toFixed(3)} ms`;
+    const tag=document.createElement('span');
+    tag.className='tag';
+    const verdict=row.fits?'meets the target':`over by ${Math.abs(row.ms-result.targetMs).toFixed(3)} ms`;
+    tag.textContent=row.current?`current · ${verdict}`:verdict;
+    if(row.current)item.setAttribute('aria-current','true');
+    item.append(frames,ms,tag);
+    list.append(item);
+  }
+  const notes=$('warnings');
+  notes.replaceChildren();
+  for(const line of result.warnings){const item=document.createElement('li');item.className='warning';item.textContent=line;notes.append(item);}
+  const explain=$('explanation');
+  explain.replaceChildren();
+  for(const line of result.explanation){const item=document.createElement('li');item.textContent=line;explain.append(item);}
+  return true;
+}
+function preset(values){writeForm(Object.assign({},AudioLatencyCore.DEFAULTS,values));render(readForm());}
+$('lat-form').addEventListener('submit',event=>{event.preventDefault();render(readForm());});
+$('reset').addEventListener('click',()=>{writeForm(AudioLatencyCore.DEFAULTS);render(readForm());$('in-sampleRate').focus();});
+$('preset-tracking').addEventListener('click',()=>preset({sampleRate:48000,bufferFrames:128,buffers:2,extraMs:0,pluginMs:0,targetMs:10}));
+$('preset-mixing').addEventListener('click',()=>preset({sampleRate:48000,bufferFrames:1024,buffers:2,extraMs:0,pluginMs:0,targetMs:30}));
+$('preset-live').addEventListener('click',()=>preset({sampleRate:96000,bufferFrames:64,buffers:2,extraMs:0,pluginMs:0,targetMs:5}));
+$('preset-usb').addEventListener('click',()=>preset({sampleRate:44100,bufferFrames:256,buffers:2,extraMs:4,pluginMs:0,targetMs:20}));
+render(readForm());
+})();
+</script></body></html>

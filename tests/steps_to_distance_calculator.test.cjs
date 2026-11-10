@@ -177,7 +177,7 @@ assert.equal(entry.sources.length, 0);
 assert.ok(entry.method.includes('1609.344') && entry.method.includes('whole step'));
 assert.equal(new Set(entry.tags).size, entry.tags.length, 'duplicate tags');
 assert.equal(new Set(entry.aliases).size, entry.aliases.length, 'duplicate aliases');
-assert.equal(catalog.tools.length, 2198);
+assert.equal(catalog.tools.length, 2199);
 const kinds = Object.fromEntries(['golden', 'boundary', 'validation'].map((kind) =>
   [kind, entry.testCases.filter((testCase) => testCase.kind === kind).length]));
 assert.deepEqual(kinds, { golden: 7, boundary: 6, validation: 15 });
