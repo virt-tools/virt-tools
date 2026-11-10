@@ -196,6 +196,7 @@ node tests/great_circle_route_densifier.test.cjs
 node tests/z85_encoder_decoder.test.cjs
 node tests/http_accept_header_tester.test.cjs
 node tests/systemd_path_unit_builder.test.cjs
+node tests/disc_golf_scorecard.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
