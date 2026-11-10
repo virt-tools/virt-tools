@@ -188,6 +188,7 @@ node tests/robots_txt_rule_tester.test.cjs
 node tests/snmp_oid_codec.test.cjs
 node tests/nmea_sentence_parser.test.cjs
 node tests/sauce_reduction_calculator.test.cjs
+node tests/yeast_conversion_calculator.test.cjs
 node tests/crochet_flat_circle_planner.test.cjs
 node tests/euclidean_rhythm_generator.test.cjs
 node tests/bandpass_sampling_calculator.test.cjs
