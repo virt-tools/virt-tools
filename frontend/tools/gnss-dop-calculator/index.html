@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Estimate GNSS dilution of precision (PDOP, HDOP, VDOP, GDOP, TDOP) from satellite azimuths and elevations, with an elevation mask, geometry-quality rating and expected 1-sigma accuracy.">
+<script src="/assets/theme-init.js"></script>
+<title>GNSS Dilution of Precision Calculator — virt.tools</title><link rel="stylesheet" href="/assets/style.css">
+<style>
+.dop-shell{max-width:1000px;margin:0 auto}.lead,.hint{color:var(--text-secondary,#8b949e)}
+.presets{display:flex;flex-wrap:wrap;gap:.5rem;margin:1rem 0}.presets button{font-size:.9rem}
+.panel,.result{background:var(--surface,#161b22);border:1px solid var(--border,#30363d);border-radius:10px;padding:1rem;margin:1rem 0}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:.9rem 1.1rem}.wide{grid-column:1/-1}
+.field{display:flex;flex-direction:column;gap:.35rem}.field label{font-weight:600}
+.field textarea,.field input{box-sizing:border-box;width:100%;background:var(--background,#0d1117);color:var(--text,#c9d1d9);border:1px solid var(--border,#30363d);border-radius:6px;padding:.62rem;font:inherit}
+.field textarea{min-height:9.5rem;resize:vertical;font:13px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace}
+.hint{font-size:.85rem;margin:0}
+.actions{display:flex;flex-wrap:wrap;gap:.6rem;margin-top:1rem}
+button{border:1px solid var(--border,#30363d);border-radius:6px;background:var(--surface-raised,#21262d);color:var(--text,#c9d1d9);padding:.58rem .85rem;min-height:44px;font:inherit;font-size:1rem;cursor:pointer}
+.primary{border-color:var(--accent,#58a6ff);background:var(--accent-soft,#1e3a5f)}
+button:focus-visible,button:focus{outline:2px solid var(--accent,#58a6ff);outline-offset:2px}
+textarea:focus-visible,input:focus-visible{outline:2px solid var(--accent,#58a6ff);outline-offset:2px}
+.status{min-height:1.4rem;margin:.6rem 0}.error{color:#f85149}.ok{color:#3fb950}.warning{color:#d29922}
+.dop-list{margin:.8rem 0 0;display:grid;gap:.45rem}
+.dop-row{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:.8rem;align-items:baseline;border-bottom:1px solid var(--border,#30363d);padding:.35rem 0}
+.dop-row dt{font-weight:600;min-width:5.5rem}.dop-row dd{margin:0;display:flex;flex-wrap:wrap;gap:.2rem .8rem;align-items:baseline}
+.dop-row .value{font:600 1rem ui-monospace,SFMono-Regular,Consolas,monospace}
+.dop-row .meaning{font-size:.85rem;color:var(--text-secondary,#8b949e)}
+#quality{font-weight:600;margin:.8rem 0 0}
+ul{margin:.5rem 0 0;padding-left:1.2rem}#warnings:empty{display:none}
+.explain li{margin:.2rem 0}
+@media(max-width:640px){.grid{grid-template-columns:1fr}.actions>*{flex:1 1 10rem}.panel,.result{padding:.85rem}.dop-row dt{min-width:4.75rem}.dop-row .meaning{flex-basis:100%}}
+</style></head>
+<body><div id="site-header"></div><main class="tool-container"><div class="dop-shell">
+<a href="/">← Back to all tools</a><h1>GNSS Dilution of Precision Calculator</h1>
+<p class="lead">Compute PDOP, HDOP, VDOP, GDOP and TDOP from the directions of the satellites your receiver can see, apply an elevation mask, and see how much the sky geometry amplifies range error. Everything is calculated in your browser; nothing is uploaded or sent anywhere.</p>
+
+<div class="presets" role="group" aria-label="Satellite presets">
+<button id="preset-four" type="button">Four-satellite fix</button>
+<button id="preset-six" type="button">Six-satellite sky</button>
+<button id="preset-low" type="button">Low horizon</button>
+<button id="preset-cluster" type="button">Clustered sky</button>
+</div>
+
+<form id="dop-form" novalidate>
+<section class="panel" aria-labelledby="input-title">
+<h2 id="input-title">Visible satellites</h2>
+<div class="grid">
+<div class="field wide"><label for="satellites">Satellites (azimuth, elevation)</label>
+<textarea id="satellites" rows="6" spellcheck="false" autocomplete="off" placeholder="10, 70&#10;100, 20&#10;175, 50&#10;250, 30&#10;330, 60">10, 70
+100, 20
+175, 50
+250, 30
+330, 60</textarea>
+<p class="hint">One satellite per line: azimuth in degrees clockwise from true north, then elevation in degrees above the horizon. Separators may be commas or spaces; up to 64 satellites.</p></div>
+<div class="field"><label for="mask">Elevation mask (degrees)</label><input id="mask" type="number" min="0" max="90" step="1" value="10" inputmode="numeric"><p class="hint">Satellites below the mask are excluded, as a real receiver would exclude them.</p></div>
+<div class="field"><label for="uere">Average range error (metres)</label><input id="uere" type="number" min="0.1" max="1000" step="0.1" value="5" inputmode="decimal"><p class="hint">A planning assumption for the error on each satellite range; 5 m is typical of a consumer receiver.</p></div>
+</div>
+<div class="actions"><button id="calculate" class="primary" type="submit">Calculate DOP</button><button id="reset" type="button">Reset</button></div>
+</section>
+</form>
+
+<section class="result" aria-labelledby="result-title">
+<h2 id="result-title">Result</h2>
+<p id="status" class="status" role="status" aria-live="polite"></p>
+<p id="summary"></p>
+<dl class="dop-list">
+<div class="dop-row"><dt>GDOP</dt><dd><span id="gdop" class="value">not computed</span><span class="meaning">Position and receiver clock together</span></dd></div>
+<div class="dop-row"><dt>PDOP</dt><dd><span id="pdop" class="value">not computed</span><span class="meaning">Three-dimensional position</span></dd></div>
+<div class="dop-row"><dt>HDOP</dt><dd><span id="hdop" class="value">not computed</span><span class="meaning">Horizontal position</span></dd></div>
+<div class="dop-row"><dt>VDOP</dt><dd><span id="vdop" class="value">not computed</span><span class="meaning">Height</span></dd></div>
+<div class="dop-row"><dt>TDOP</dt><dd><span id="tdop" class="value">not computed</span><span class="meaning">Receiver clock offset</span></dd></div>
+</dl>
+<p id="quality"></p>
+<p id="accuracy" class="hint"></p>
+<ul id="warnings"></ul>
+<h3>How this is computed</h3>
+<ul id="explanation" class="explain"><li>Calculate to see the geometry summary.</li></ul>
+</section>
+</div></main><script src="/assets/tools.js"></script><script src="/assets/app.js"></script>
+<script>
+/* gnss-dop-core:start */
+const GnssDopCore=(()=>{'use strict';
+const FIELDS=['satellites','mask','uere'];
+const DEFAULTS={satellites:'10, 70\n100, 20\n175, 50\n250, 30\n330, 60',mask:10,uere:5};
+const MAX_SATELLITES=64;
+const MIN_SATELLITES=4;
+const QUALITY_LEVELS=[{max:2,label:'Ideal',note:'PDOP is at or below 2, which is ideal.'},
+ {max:5,label:'Excellent',note:'PDOP is between 2 and 5, which is excellent.'},
+ {max:10,label:'Good',note:'PDOP is between 5 and 10, which is good.'},
+ {max:20,label:'Moderate',note:'PDOP is between 10 and 20, so positions will be noticeably noisier.'},
+ {max:Infinity,label:'Poor',note:'PDOP is above 20, so the position solution may be unusable.'}];
+const DEG=Math.PI/180;
+function roundTo(value,digits){const factor=Math.pow(10,digits);return Math.round(value*factor)/factor;}
+function parseSatellites(raw){
+  const text=String(raw===undefined||raw===null?'':raw).trim();
+  if(!text)throw Error('Add at least one satellite as azimuth, elevation.');
+  const entries=text.split(/[\n;]+/).map(line=>line.trim()).filter(Boolean);
+  if(entries.length>MAX_SATELLITES)throw Error('Use at most 64 satellites.');
+  return entries.map((entry,index)=>{
+    const line=index+1;
+    const parts=entry.split(/[\s,]+/).filter(Boolean);
+    if(parts.length!==2)throw Error(`Line ${line} must be one azimuth and one elevation, such as 135, 40.`);
+    const az=Number(parts[0]),el=Number(parts[1]);
+    if(!isFinite(az)||!isFinite(el))throw Error(`Line ${line} must be two numbers: azimuth first, then elevation.`);
+    if(az<0||az>=360)throw Error(`Line ${line}: azimuth must be from 0 to just under 360 degrees.`);
+    if(el<0||el>90)throw Error(`Line ${line}: elevation must be from 0 to 90 degrees.`);
+    return{az,el};
+  });
+}
+function losRow(sat){
+  const c=Math.cos(sat.el*DEG);
+  return [-c*Math.sin(sat.az*DEG),-c*Math.cos(sat.az*DEG),-Math.sin(sat.el*DEG),1];
+}
+function invert4(matrix){
+  const n=4;
+  const a=matrix.map((row,r)=>{const out=row.slice();for(let c=0;c<n;c+=1)out.push(r===c?1:0);return out;});
+  for(let col=0;col<n;col+=1){
+    let pivot=col;
+    for(let r=col+1;r<n;r+=1)if(Math.abs(a[r][col])>Math.abs(a[pivot][col]))pivot=r;
+    if(Math.abs(a[pivot][col])<1e-10)return null;
+    if(pivot!==col){const swap=a[col];a[col]=a[pivot];a[pivot]=swap;}
+    const lead=a[col][col];
+    for(let c=0;c<2*n;c+=1)a[col][c]/=lead;
+    for(let r=0;r<n;r+=1){
+      if(r===col)continue;
+      const factor=a[r][col];
+      if(!factor)continue;
+      for(let c=0;c<2*n;c+=1)a[r][c]-=factor*a[col][c];
+    }
+  }
+  const inverse=[];
+  for(let r=0;r<n;r+=1){
+    const row=a[r].slice(n);
+    for(const value of row)if(!isFinite(value))return null;
+    inverse.push(row);
+  }
+  return inverse;
+}
+function qualityFor(pdop){
+  for(const level of QUALITY_LEVELS)if(pdop<=level.max)return level;
+  return QUALITY_LEVELS[QUALITY_LEVELS.length-1];
+}
+function build(raw){
+  const state=Object.assign({},DEFAULTS,raw||{});
+  const satellites=parseSatellites(state.satellites);
+  const mask=Number(state.mask);
+  if(!isFinite(mask))throw Error('Elevation mask must be a number from 0 to 90 degrees.');
+  if(mask<0||mask>90)throw Error('Elevation mask must be from 0 to 90 degrees.');
+  const uere=Number(state.uere);
+  if(!isFinite(uere)||uere<=0||uere>1000)throw Error('Average range error must be more than 0 and at most 1000 metres.');
+  const used=satellites.filter(sat=>sat.el>=mask);
+  const excluded=satellites.length-used.length;
+  if(used.length<MIN_SATELLITES){
+    throw Error(`The ${mask} degree mask leaves ${used.length} of ${satellites.length} satellites; at least 4 are needed for a 3D fix.`);
+  }
+  const normal=[[0,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]];
+  for(const sat of used){
+    const row=losRow(sat);
+    for(let i=0;i<4;i+=1)for(let j=0;j<4;j+=1)normal[i][j]+=row[i]*row[j];
+  }
+  const q=invert4(normal);
+  if(!q)throw Error('These satellite directions are geometrically dependent, so no unique position solution exists. Spread satellites across the sky and across different elevations.');
+  const gdop=Math.sqrt(q[0][0]+q[1][1]+q[2][2]+q[3][3]);
+  const pdop=Math.sqrt(q[0][0]+q[1][1]+q[2][2]);
+  const hdop=Math.sqrt(q[0][0]+q[1][1]);
+  const vdop=Math.sqrt(q[2][2]);
+  const tdop=Math.sqrt(q[3][3]);
+  for(const value of [gdop,pdop,hdop,vdop,tdop]){
+    if(!isFinite(value))throw Error('These satellite directions are geometrically dependent, so no unique position solution exists. Spread satellites across the sky and across different elevations.');
+  }
+  const level=qualityFor(pdop);
+  const horizontalAccuracy=roundTo(hdop*uere,2);
+  const verticalAccuracy=roundTo(vdop*uere,2);
+  const warnings=[];
+  if(used.length===MIN_SATELLITES)warnings.push('Exactly four satellites are used, so there is no redundancy: a single bad range cannot be detected or rejected.');
+  if(pdop>20)warnings.push(`PDOP ${roundTo(pdop,2)} is above 20, so range error is amplified more than twentyfold and the position may be unusable.`);
+  const directions=new Set(used.map(sat=>`${sat.az.toFixed(2)}/${sat.el.toFixed(2)}`));
+  if(directions.size<used.length)warnings.push('Two or more satellites share the same azimuth and elevation, which adds no new geometry and can make the solution singular.');
+  const explanation=[
+    `Using ${used.length} of ${satellites.length} satellites at or above the ${mask} degree mask${excluded?`; ${excluded} below the mask ${excluded===1?'is':'are'} ignored.`:'.'}`,
+    'Each used satellite adds one row [east, north, up, 1] built from its azimuth and elevation; the last column carries the receiver clock term.',
+    'The normal matrix is the sum of the outer products of those rows, and its inverse gives the covariance of the position and clock solution.',
+    'GDOP is the square root of the covariance trace; PDOP covers the three position axes, HDOP east and north, VDOP height, and TDOP the clock offset. Lower values mean a better spread of satellites.'
+  ];
+  explanation.push(`With ${uere} m assumed average range error, one sigma is about ${horizontalAccuracy} m horizontally and ${verticalAccuracy} m vertically (DOP multiplied by range error).`);
+  const summary=`${level.label} geometry: PDOP ${roundTo(pdop,2)} from ${used.length} of ${satellites.length} satellites.`;
+  return {gdop:roundTo(gdop,4),pdop:roundTo(pdop,4),hdop:roundTo(hdop,4),vdop:roundTo(vdop,4),tdop:roundTo(tdop,4),
+    quality:level.label,qualityNote:level.note,usedCount:used.length,excludedCount:excluded,totalCount:satellites.length,
+    mask,uere,horizontalAccuracy,verticalAccuracy,summary,explanation,warnings,warningCount:warnings.length};
+}
+return{FIELDS,DEFAULTS,MAX_SATELLITES,MIN_SATELLITES,QUALITY_LEVELS,parseSatellites,losRow,invert4,qualityFor,build};
+})();
+/* gnss-dop-core:end */
+(()=>{'use strict';
+const $=id=>document.getElementById(id);
+function setStatus(message,kind=''){const node=$('status');node.textContent=message;node.className='status '+kind;}
+function readForm(){return{satellites:$('satellites').value,mask:$('mask').value,uere:$('uere').value};}
+function writeForm(state){$('satellites').value=state.satellites;$('mask').value=state.mask;$('uere').value=state.uere;}
+function clearResult(){
+  for(const id of ['gdop','pdop','hdop','vdop','tdop'])$(id).textContent='not computed';
+  $('quality').textContent='';
+  $('accuracy').textContent='';
+  $('summary').textContent='';
+  $('explanation').replaceChildren();
+  $('warnings').replaceChildren();
+}
+function render(state){
+  let result;
+  try{result=GnssDopCore.build(state);}catch(error){
+    setStatus(error.message,'error');
+    clearResult();
+    const item=document.createElement('li');
+    item.textContent='Fix the satellite list or the mask and calculate again.';
+    $('explanation').append(item);
+    return false;
+  }
+  setStatus(result.warningCount
+    ?`Calculated with ${result.usedCount} satellites and ${result.warningCount} note${result.warningCount===1?'':'s'}.`
+    :`Calculated with ${result.usedCount} satellites.`,result.warningCount?'warning':'ok');
+  $('gdop').textContent=result.gdop;
+  $('pdop').textContent=result.pdop;
+  $('hdop').textContent=result.hdop;
+  $('vdop').textContent=result.vdop;
+  $('tdop').textContent=result.tdop;
+  $('summary').textContent=result.summary;
+  $('quality').textContent=result.qualityNote;
+  $('accuracy').textContent=`At ${result.uere} m average range error: about ${result.horizontalAccuracy} m horizontal and ${result.verticalAccuracy} m vertical, one sigma.`;
+  const notes=$('warnings');
+  notes.replaceChildren();
+  for(const line of result.warnings){const item=document.createElement('li');item.className='warning';item.textContent=line;notes.append(item);}
+  const list=$('explanation');
+  list.replaceChildren();
+  for(const line of result.explanation){const item=document.createElement('li');item.textContent=line;list.append(item);}
+  return true;
+}
+function preset(values){writeForm(Object.assign({},GnssDopCore.DEFAULTS,values));render(readForm());}
+$('dop-form').addEventListener('submit',event=>{event.preventDefault();render(readForm());});
+$('reset').addEventListener('click',()=>{writeForm(GnssDopCore.DEFAULTS);render(readForm());$('satellites').focus();});
+$('preset-four').addEventListener('click',()=>preset({satellites:'0, 45\n90, 30\n180, 60\n270, 20',mask:10,uere:5}));
+$('preset-six').addEventListener('click',()=>preset({satellites:'15, 60\n75, 25\n140, 40\n200, 70\n265, 35\n320, 15',mask:10,uere:5}));
+$('preset-low').addEventListener('click',()=>preset({satellites:'20, 12\n110, 14\n200, 13\n290, 15',mask:10,uere:5}));
+$('preset-cluster').addEventListener('click',()=>preset({satellites:'40, 55\n55, 50\n70, 60\n85, 45',mask:10,uere:5}));
+render(readForm());
+})();
+</script></body></html>
