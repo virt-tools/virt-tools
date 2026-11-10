@@ -199,6 +199,7 @@ node tests/http_accept_header_tester.test.cjs
 node tests/systemd_path_unit_builder.test.cjs
 node tests/disc_golf_scorecard.test.cjs
 node tests/git_refname_validator.test.cjs
+node tests/steps_to_distance_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
