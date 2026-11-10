@@ -188,6 +188,7 @@ node tests/robots_txt_rule_tester.test.cjs
 node tests/snmp_oid_codec.test.cjs
 node tests/nmea_sentence_parser.test.cjs
 node tests/sauce_reduction_calculator.test.cjs
+node tests/crochet_flat_circle_planner.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
