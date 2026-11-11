@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Spanning Tree Root Bridge Calculator — Virtual Tools</title>
+<meta name="description" content="Work out which switch becomes the spanning tree root, every switch's root path cost, its root port, and which link gets blocked, from bridge priorities, MAC addresses and link speeds.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.sec{font-size:1.05rem;margin:18px 0 8px}
+.sec:first-child{margin-top:0}
+.grid-scroll{overflow-x:auto;border:1px solid var(--border,#2a2f3a);border-radius:8px;margin:0 0 8px}
+table.grid{display:table;border-collapse:collapse;width:100%;min-width:700px;table-layout:auto}
+table.grid.links{min-width:780px}
+.grid th,.grid td{text-align:left;padding:6px;border-bottom:1px solid var(--border,#2a2f3a);font-size:13.5px;vertical-align:middle;position:relative}
+.grid th{background:var(--bg-elev-2,#ecede7);color:var(--text,#e6e6e6);font-weight:600;white-space:nowrap;line-height:1.3}
+.grid tr:last-child td{border-bottom:none}
+.grid td.num,.grid th.num{text-align:right}
+.cell-input,.grid select{box-sizing:border-box;width:100%;min-width:0;background:transparent;color:var(--text,#e6e6e6);border:1px solid transparent;border-radius:6px;padding:8px;font:inherit;font-size:15px;min-height:44px;outline:none}
+.cell-input{font-family:ui-monospace,monospace;font-size:14px}
+.cell-name{min-width:64px}
+.cell-priority{min-width:86px}
+.cell-mac{min-width:142px}
+.grid select option{background:var(--bg-elev,#171a21);color:var(--text,#e6e6e6)}
+.cell-input:hover,.grid select:hover{border-color:var(--border,#2a2f3a)}
+.cell-input:focus-visible,.grid select:focus-visible{outline:2px solid var(--accent,#6ea8fe);outline-offset:1px}
+.cell-input:invalid{border-color:var(--bad,#f87171)}
+.val{font-family:ui-monospace,monospace;font-size:12px;color:var(--accent,#6ea8fe);overflow-wrap:anywhere;white-space:nowrap}
+.vh{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.val.blocked{color:var(--bad,#f87171)}
+.endpoints{display:flex;align-items:center;gap:4px;min-width:180px}
+.endpoints select{flex:1 1 0;min-width:0}
+.dash{color:var(--text-dim,#9aa3b2)}
+.speed-cell{display:flex;flex-direction:column;gap:4px;min-width:104px}
+@media (max-width:560px){
+  .grid-scroll{border:0;border-radius:0;overflow:visible}
+  table.grid,table.grid.links{display:block;min-width:0}
+  .grid thead{display:none}
+  .grid tbody{display:block}
+  .grid tr{display:block;border:1px solid var(--border,#2a2f3a);border-radius:8px;margin:0 0 8px;padding:6px 8px}
+  .grid td{display:flex;flex-direction:column;align-items:stretch;gap:2px;border:0;padding:4px 0}
+  .grid td::before{content:attr(data-label);flex:none;color:var(--text-dim,#9aa3b2);font-size:11px;letter-spacing:.03em;text-transform:uppercase;line-height:1.3}
+  .grid td.cell-blank::before{content:none}
+  .grid td.cell-blank{justify-content:flex-end;align-items:flex-end;padding-top:6px}
+  .cell-input,.grid select{min-width:0}
+  .endpoints,.speed-cell{flex:1 1 auto;min-width:0}
+  .val{white-space:normal}
+}
+.remove{font:inherit;font-size:17px;line-height:1;background:transparent;border:1px solid var(--border,#2a2f3a);color:var(--text-dim,#9aa3b2);border-radius:6px;min-width:44px;min-height:44px;cursor:pointer}
+.remove:hover:not([disabled]){color:var(--bad,#f87171);border-color:var(--bad,#f87171)}
+.remove:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.remove[disabled]{opacity:.4;cursor:not-allowed}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:14px 0}
+.out .label{text-align:center;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-dim,#9aa3b2)}
+.out .big{font-size:clamp(1.9rem,8vw,2.6rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:2px 0 4px;overflow-wrap:anywhere}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45;overflow-wrap:anywhere}
+.out .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:14px}
+.out .row:last-child{border-bottom:none}
+.out .row .k{color:var(--text-dim,#9aa3b2)}
+.out .row .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right;overflow-wrap:anywhere}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:10px 0}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.actions button.ghost{background:transparent;color:var(--accent,#6ea8fe)}
+.err{color:var(--bad,#f87171);font-size:13px;margin:6px 0;min-height:1.2em}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;margin:12px 0 0;line-height:1.55}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>Spanning Tree Root Bridge Calculator</h1>
+<p>Pick the root bridge, follow each switch's cheapest path to it, and see exactly which port the spanning tree blocks to break the loop.</p>
+</div>
+<div class="panel">
+<form id="stp-form" novalidate>
+<h2 class="sec">Switches</h2>
+<div class="grid-scroll">
+<table class="grid switches">
+<thead><tr><th scope="col">Switch</th><th scope="col">Priority</th><th scope="col">MAC address</th><th scope="col" class="col-bridge">Bridge ID</th><th scope="col" class="num">Root path cost</th><th scope="col">Root port</th><th scope="col"><span class="vh">Remove switch</span></th></tr></thead>
+<tbody id="switches-body"></tbody>
+</table>
+</div>
+<div class="actions"><button type="button" class="ghost" id="add-switch">Add switch</button></div>
+
+<h2 class="sec">Links</h2>
+<div class="grid-scroll">
+<table class="grid links">
+<thead><tr><th scope="col">Link</th><th scope="col">Endpoints</th><th scope="col">Speed</th><th scope="col" class="num">Cost</th><th scope="col" class="col-designated">Designated</th><th scope="col">Port state</th><th scope="col"><span class="vh">Remove link</span></th></tr></thead>
+<tbody id="links-body"></tbody>
+</table>
+</div>
+<div class="actions"><button type="button" class="ghost" id="add-link">Add link</button></div>
+
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions"><button type="submit">Calculate spanning tree</button></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"></div>
+<p class="note">A switch's bridge ID is its 2-byte priority followed by its 48-bit MAC address, and the lowest bridge ID wins the root election, so priority is compared before the MAC and a switch at 4096 beats one left at the default 32768. Every other switch forwards on the port that offers the lowest root path cost; equal offers are broken by the lowest upstream bridge ID, then the lowest upstream port ID, then the lowest local port ID, with ports numbered in the order the links appear. On each link the side advertising the better path cost, bridge ID and port ID becomes the designated port; a port that is neither root nor designated is an alternate and stays blocked, which is what removes the loop. Costs use the IEEE 802.1t rule of thumb 20,000,000 divided by the link speed in Mb/s, which reproduces the standard values from 10 Mb/s (2,000,000) through 100 Gb/s (200). The model assumes point-to-point links, at most one link per pair of switches, equal port priorities and a single common spanning tree (STP, RSTP or the CIST of MSTP), so it does not cover per-VLAN trees, shared hubs, port cost overrides or BPDU filtering. Everything runs locally in your browser.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* spanning-tree-core:start */
+var StpTopologyCore = (function(){
+  "use strict";
+  var COST_BASE = 20000000;
+  var MIN_MBPS = 10;
+  var MAX_MBPS = 1000000;
+  var MAX_SWITCHES = 8;
+  var MAX_LINKS = 12;
+  var SPEEDS = [
+    {id: "10", mbps: 10, label: "10 Mb/s"},
+    {id: "100", mbps: 100, label: "100 Mb/s"},
+    {id: "1000", mbps: 1000, label: "1 Gb/s"},
+    {id: "2500", mbps: 2500, label: "2.5 Gb/s"},
+    {id: "10000", mbps: 10000, label: "10 Gb/s"},
+    {id: "40000", mbps: 40000, label: "40 Gb/s"},
+    {id: "100000", mbps: 100000, label: "100 Gb/s"},
+    {id: "custom", mbps: 0, label: "Custom"}
+  ];
+  var DEFAULT_SWITCHES = [
+    {name: "SW1", priority: "32768", mac: "02:00:00:00:00:11"},
+    {name: "SW2", priority: "32768", mac: "02:00:00:00:00:22"},
+    {name: "SW3", priority: "32768", mac: "02:00:00:00:00:33"},
+    {name: "SW4", priority: "32768", mac: "02:00:00:00:00:44"}
+  ];
+  var DEFAULT_LINKS = [
+    {a: "SW1", b: "SW2", speed: "1000", custom: ""},
+    {a: "SW2", b: "SW3", speed: "1000", custom: ""},
+    {a: "SW3", b: "SW4", speed: "1000", custom: ""},
+    {a: "SW4", b: "SW1", speed: "1000", custom: ""},
+    {a: "SW2", b: "SW4", speed: "100", custom: ""}
+  ];
+  var DEFAULTS = {switches: DEFAULT_SWITCHES, links: DEFAULT_LINKS};
+
+  function text(value){
+    return String(value == null ? "" : value).trim();
+  }
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function comma(value){
+    return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  }
+
+  function priorityValue(value){
+    var raw = text(value);
+    if (!raw) fail("Bridge priority is required.");
+    if (!/^\d+$/.test(raw)) fail("Bridge priority must be a whole number.");
+    var parsed = Number(raw);
+    if (parsed > 61440 || parsed % 4096 !== 0) fail("Bridge priority must be 0 to 61440 in steps of 4096.");
+    return parsed;
+  }
+
+  function macValue(value){
+    var raw = text(value);
+    if (!raw) fail("MAC address is required.");
+    var hex = raw.replace(/[\s:.\-]/g, "").toLowerCase();
+    if (!/^[0-9a-f]{12}$/.test(hex)) fail("MAC addresses must be 12 hexadecimal digits.");
+    return hex.slice(0, 2) + ":" + hex.slice(2, 4) + ":" + hex.slice(4, 6) + ":"
+      + hex.slice(6, 8) + ":" + hex.slice(8, 10) + ":" + hex.slice(10, 12);
+  }
+
+  function speedById(value){
+    var raw = text(value);
+    for (var i = 0; i < SPEEDS.length; i += 1){
+      if (SPEEDS[i].id === raw) return SPEEDS[i];
+    }
+    return null;
+  }
+
+  function speedValue(id, custom){
+    var speed = speedById(id);
+    if (!speed) fail("Choose a link speed from the list.");
+    var mbps = speed.mbps;
+    if (speed.id === "custom"){
+      var raw = text(custom);
+      if (!raw) fail("Enter a custom link speed in Mb/s.");
+      if (!/^\d+(?:\.\d+)?$/.test(raw)) fail("Custom link speed must be a number of Mb/s.");
+      mbps = Number(raw);
+      if (!(mbps >= MIN_MBPS && mbps <= MAX_MBPS)) fail("Custom link speed must be from 10 to 1000000 Mb/s.");
+    }
+    return {
+      mbps: mbps,
+      label: speed.id === "custom" ? comma(mbps) + " Mb/s" : speed.label,
+      cost: Math.max(1, Math.round(COST_BASE / mbps))
+    };
+  }
+
+  function bridgeId(sw){
+    return String(sw.priority) + "." + sw.mac.replace(/:/g, "").replace(/(.{4})(.{4})(.{4})/, "$1.$2.$3");
+  }
+
+  function betterBridge(a, b){
+    if (a.priority !== b.priority) return a.priority < b.priority;
+    return a.mac < b.mac;
+  }
+
+  function betterVector(candidate, current){
+    if (!current) return true;
+    if (candidate.cost !== current.cost) return candidate.cost < current.cost;
+    if (candidate.sender.priority !== current.sender.priority) return candidate.sender.priority < current.sender.priority;
+    if (candidate.sender.mac !== current.sender.mac) return candidate.sender.mac < current.sender.mac;
+    if (candidate.senderPort !== current.senderPort) return candidate.senderPort < current.senderPort;
+    return candidate.localPort < current.localPort;
+  }
+
+  function betterAdvertisement(a, b){
+    if (a.cost !== b.cost) return a.cost < b.cost;
+    if (a.priority !== b.priority) return a.priority < b.priority;
+    if (a.mac !== b.mac) return a.mac < b.mac;
+    return a.port < b.port;
+  }
+
+  function roleLabel(code){
+    if (code === "root") return "Root";
+    if (code === "designated") return "Designated";
+    return "Alternate (blocked)";
+  }
+
+  function plan(input){
+    var options = input || {};
+    var rawSwitches = options.switches;
+    var rawLinks = options.links;
+    if (!Array.isArray(rawSwitches) || rawSwitches.length < 2) fail("Add at least two switches.");
+    if (rawSwitches.length > MAX_SWITCHES) fail("The planner supports up to 8 switches.");
+    var switches = [];
+    var byName = {};
+    var macs = {};
+    rawSwitches.forEach(function(item, index){
+      var source = item || {};
+      var name = text(source.name);
+      if (!name) fail("Switch " + (index + 1) + " needs a name.");
+      if (name.length > 12) fail("Switch names must be 12 characters or fewer.");
+      var key = name.toLowerCase();
+      if (Object.prototype.hasOwnProperty.call(byName, key)) fail("Switch names must be unique.");
+      var priority = priorityValue(source.priority);
+      var mac = macValue(source.mac);
+      if (Object.prototype.hasOwnProperty.call(macs, mac)) fail("Two switches cannot share the same MAC address.");
+      var sw = {name: name, priority: priority, mac: mac};
+      sw.bridge = bridgeId(sw);
+      byName[key] = sw;
+      macs[mac] = true;
+      switches.push(sw);
+    });
+    if (!Array.isArray(rawLinks) || rawLinks.length < 1) fail("Add at least one link between the switches.");
+    if (rawLinks.length > MAX_LINKS) fail("The planner supports up to 12 links.");
+    var links = [];
+    var seenPairs = {};
+    var ports = {};
+    rawLinks.forEach(function(item, index){
+      var source = item || {};
+      var a = byName[text(source.a).toLowerCase()];
+      var b = byName[text(source.b).toLowerCase()];
+      if (!a || !b) fail("Each link must connect two named switches.");
+      if (a === b) fail("A link must join two different switches.");
+      var pair = a.name.toLowerCase() < b.name.toLowerCase()
+        ? a.name.toLowerCase() + "|" + b.name.toLowerCase()
+        : b.name.toLowerCase() + "|" + a.name.toLowerCase();
+      if (seenPairs[pair]){
+        var first = a.name.toLowerCase() < b.name.toLowerCase() ? a.name : b.name;
+        var second = first === a.name ? b.name : a.name;
+        fail("Only one link between " + first + " and " + second + " is supported.");
+      }
+      seenPairs[pair] = true;
+      var speed = speedValue(source.speed, source.custom);
+      ports[a.name] = (ports[a.name] || 0) + 1;
+      ports[b.name] = (ports[b.name] || 0) + 1;
+      links.push({
+        index: index,
+        a: a,
+        b: b,
+        aPort: ports[a.name],
+        bPort: ports[b.name],
+        cost: speed.cost,
+        speedLabel: speed.label,
+        mbps: speed.mbps
+      });
+    });
+
+    var root = switches[0];
+    switches.forEach(function(sw){
+      if (betterBridge(sw, root)) root = sw;
+    });
+
+    var best = {};
+    best[root.name] = {cost: 0, viaLink: -1, sender: root, senderPort: 0, localPort: 0};
+    var passes = 0;
+    var changed = true;
+    while (changed && passes <= switches.length){
+      changed = false;
+      passes += 1;
+      links.forEach(function(link){
+        [[link.a, link.b, link.aPort, link.bPort], [link.b, link.a, link.bPort, link.aPort]].forEach(function(direction){
+          var from = direction[0];
+          var to = direction[1];
+          var current = best[from.name];
+          if (!current) return;
+          var candidate = {
+            cost: current.cost + link.cost,
+            viaLink: link.index,
+            sender: from,
+            senderPort: direction[2],
+            localPort: direction[3]
+          };
+          if (betterVector(candidate, best[to.name])){
+            best[to.name] = candidate;
+            changed = true;
+          }
+        });
+      });
+    }
+    switches.forEach(function(sw){
+      if (!best[sw.name]) fail(sw.name + " cannot reach the root bridge; connect it to the topology.");
+    });
+
+    var switchRows = switches.map(function(sw){
+      var vector = best[sw.name];
+      var rootPortText = "Root bridge";
+      if (vector.viaLink >= 0){
+        var link = links[vector.viaLink];
+        var peer = link.a === sw ? link.b : link.a;
+        rootPortText = "Port " + vector.localPort + " to " + peer.name;
+      }
+      return {
+        name: sw.name,
+        priority: sw.priority,
+        priorityText: String(sw.priority),
+        mac: sw.mac,
+        bridgeId: sw.bridge,
+        pathCost: vector.cost,
+        pathCostText: comma(vector.cost),
+        rootPortText: rootPortText,
+        isRoot: vector.viaLink < 0
+      };
+    });
+
+    var linkRows = links.map(function(link){
+      var advA = {cost: best[link.a.name].cost, priority: link.a.priority, mac: link.a.mac, port: link.aPort};
+      var advB = {cost: best[link.b.name].cost, priority: link.b.priority, mac: link.b.mac, port: link.bPort};
+      var aWins = betterAdvertisement(advA, advB);
+      var aRole = aWins ? "designated" : (best[link.a.name].viaLink === link.index ? "root" : "alternate");
+      var bRole = aWins ? (best[link.b.name].viaLink === link.index ? "root" : "alternate") : "designated";
+      var blockedName = aRole === "alternate" ? link.a.name : (bRole === "alternate" ? link.b.name : null);
+      var blockedPort = aRole === "alternate" ? link.aPort : (bRole === "alternate" ? link.bPort : 0);
+      return {
+        index: link.index,
+        a: link.a.name,
+        b: link.b.name,
+        aPort: link.aPort,
+        bPort: link.bPort,
+        pairText: link.a.name + " \u2013 " + link.b.name,
+        speedLabel: link.speedLabel,
+        mbps: link.mbps,
+        cost: link.cost,
+        costText: comma(link.cost),
+        designated: aWins ? link.a.name : link.b.name,
+        designatedPort: aWins ? link.aPort : link.bPort,
+        aRole: roleLabel(aRole),
+        bRole: roleLabel(bRole),
+        rolesText: link.a.name + " " + roleLabel(aRole).toLowerCase() + ", " + link.b.name + " " + roleLabel(bRole).toLowerCase(),
+        blockedName: blockedName,
+        blockedPort: blockedPort,
+        blocked: blockedName !== null,
+        state: blockedName ? "Blocked on " + blockedName : "Forwarding"
+      };
+    });
+
+    var blocked = linkRows.filter(function(row){ return row.blocked; });
+    return {
+      rootName: root.name,
+      rootPriority: root.priority,
+      rootMac: root.mac,
+      rootBridgeId: root.bridge,
+      switchCount: switches.length,
+      linkCount: links.length,
+      blockedCount: blocked.length,
+      blockedNames: blocked.map(function(row){ return row.blockedName + " port " + row.blockedPort; }),
+      blockedText: blocked.length === 0
+        ? "no blocked ports"
+        : blocked.length + (blocked.length === 1 ? " blocked port" : " blocked ports"),
+      forwardingCount: links.length - blocked.length,
+      switches: switchRows,
+      links: linkRows
+    };
+  }
+
+  return {
+    COST_BASE: COST_BASE,
+    MIN_MBPS: MIN_MBPS,
+    MAX_MBPS: MAX_MBPS,
+    MAX_SWITCHES: MAX_SWITCHES,
+    MAX_LINKS: MAX_LINKS,
+    SPEEDS: SPEEDS,
+    DEFAULTS: DEFAULTS,
+    plan: plan,
+    bridgeId: bridgeId,
+    priorityValue: priorityValue,
+    macValue: macValue,
+    speedValue: speedValue,
+    comma: comma
+  };
+})();
+/* spanning-tree-core:end */
+(function(){
+"use strict";
+var C = StpTopologyCore;
+var state = {
+  switches: C.DEFAULTS.switches.map(function(sw){ return {name: sw.name, priority: sw.priority, mac: sw.mac}; }),
+  links: []
+};
+(function seedLinks(){
+  var indexOf = {};
+  C.DEFAULTS.switches.forEach(function(sw, index){ indexOf[sw.name] = index; });
+  state.links = C.DEFAULTS.links.map(function(link){
+    return {a: indexOf[link.a], b: indexOf[link.b], speed: link.speed, custom: link.custom};
+  });
+})();
+var els = {
+  form: document.getElementById("stp-form"),
+  switchesBody: document.getElementById("switches-body"),
+  linksBody: document.getElementById("links-body"),
+  addSwitch: document.getElementById("add-switch"),
+  addLink: document.getElementById("add-link"),
+  err: document.getElementById("err"),
+  out: document.getElementById("out")
+};
+var swRows = [];
+var lnRows = [];
+
+function cell(node){
+  var td = document.createElement("td");
+  td.appendChild(node);
+  return td;
+}
+
+function valueCell(){
+  var td = document.createElement("td");
+  td.className = "val";
+  td.textContent = "\u2014";
+  return td;
+}
+
+function inputOf(value, label, kind, className){
+  var input = document.createElement("input");
+  input.type = "text";
+  input.className = "cell-input" + (className ? " " + className : "");
+  input.value = value;
+  input.autocomplete = "off";
+  input.spellcheck = false;
+  if (kind === "numeric") input.inputMode = "numeric";
+  input.setAttribute("aria-label", label);
+  return input;
+}
+
+function selectOf(options, value, label){
+  var select = document.createElement("select");
+  select.setAttribute("aria-label", label);
+  options.forEach(function(option){
+    var node = document.createElement("option");
+    node.value = option.value;
+    node.textContent = option.text;
+    select.appendChild(node);
+  });
+  select.value = value;
+  return select;
+}
+
+function pad2(value){
+  var text = value.toString(16);
+  return text.length < 2 ? "0" + text : text;
+}
+
+function macFor(index){
+  return "02:00:00:00:00:" + pad2((index * 0x11) % 256);
+}
+
+function buildSwitchRows(){
+  els.switchesBody.textContent = "";
+  swRows = [];
+  state.switches.forEach(function(sw, index){
+    var tr = document.createElement("tr");
+    var name = inputOf(sw.name, "Switch " + (index + 1) + " name", "", "cell-name");
+    var priority = inputOf(sw.priority, "Switch " + (index + 1) + " bridge priority", "numeric", "cell-priority");
+    var mac = inputOf(sw.mac, "Switch " + (index + 1) + " MAC address", "", "cell-mac");
+    var bridge = valueCell();
+    bridge.className = "val col-bridge";
+    var cost = valueCell();
+    var port = valueCell();
+    var remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "remove";
+    remove.textContent = "\u00d7";
+    remove.disabled = state.switches.length <= 2;
+    remove.setAttribute("aria-label", "Remove switch " + (index + 1));
+    remove.addEventListener("click", function(){ removeSwitch(index); });
+
+    tr.appendChild(cell(name)).dataset.label = "Switch";
+    tr.appendChild(cell(priority)).dataset.label = "Priority";
+    tr.appendChild(cell(mac)).dataset.label = "MAC";
+    bridge.dataset.label = "Bridge ID";
+    cost.dataset.label = "Root cost";
+    port.dataset.label = "Root port";
+    tr.appendChild(bridge);
+    tr.appendChild(cost);
+    tr.appendChild(port);
+    var removeCell = cell(remove);
+    removeCell.className = "cell-blank";
+    tr.appendChild(removeCell);
+    els.switchesBody.appendChild(tr);
+
+    [name, priority, mac].forEach(function(control){
+      control.addEventListener("input", calculate);
+      control.addEventListener("change", calculate);
+    });
+    swRows.push({name: name, priority: priority, mac: mac, bridge: bridge, cost: cost, port: port});
+  });
+}
+
+function buildLinkRows(){
+  els.linksBody.textContent = "";
+  lnRows = [];
+  var options = state.switches.map(function(sw, index){
+    return {value: String(index), text: sw.name || "Switch " + (index + 1)};
+  });
+  var speeds = C.SPEEDS.map(function(speed){ return {value: speed.id, text: speed.label}; });
+  state.links.forEach(function(link, index){
+    var tr = document.createElement("tr");
+    var label = document.createElement("td");
+    label.className = "val";
+    label.textContent = "#" + (index + 1);
+    label.dataset.label = "Link";
+
+    var endpoints = document.createElement("div");
+    endpoints.className = "endpoints";
+    var a = selectOf(options, String(link.a), "Link " + (index + 1) + " first endpoint");
+    var dash = document.createElement("span");
+    dash.className = "dash";
+    dash.textContent = "\u2013";
+    var b = selectOf(options, String(link.b), "Link " + (index + 1) + " second endpoint");
+    endpoints.appendChild(a);
+    endpoints.appendChild(dash);
+    endpoints.appendChild(b);
+
+    var speedCell = document.createElement("div");
+    speedCell.className = "speed-cell";
+    var speed = selectOf(speeds, link.speed, "Link " + (index + 1) + " speed");
+    var custom = inputOf(link.custom, "Link " + (index + 1) + " custom speed in Mb/s", "numeric");
+    custom.hidden = link.speed !== "custom";
+    speedCell.appendChild(speed);
+    speedCell.appendChild(custom);
+
+    var cost = valueCell();
+    var designated = valueCell();
+    designated.className = "val col-designated";
+    var stateCell = valueCell();
+    var remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "remove";
+    remove.textContent = "\u00d7";
+    remove.setAttribute("aria-label", "Remove link " + (index + 1));
+    remove.addEventListener("click", function(){ removeLink(index); });
+
+    tr.appendChild(label);
+    tr.appendChild(cell(endpoints)).dataset.label = "Endpoints";
+    tr.appendChild(cell(speedCell)).dataset.label = "Speed";
+    cost.dataset.label = "Cost";
+    designated.dataset.label = "Designated";
+    stateCell.dataset.label = "State";
+    tr.appendChild(cost);
+    tr.appendChild(designated);
+    tr.appendChild(stateCell);
+    var removeCell = cell(remove);
+    removeCell.className = "cell-blank";
+    tr.appendChild(removeCell);
+    els.linksBody.appendChild(tr);
+
+    speed.addEventListener("change", function(){
+      custom.hidden = speed.value !== "custom";
+      calculate();
+    });
+    [a, b, custom].forEach(function(control){
+      control.addEventListener("input", calculate);
+      control.addEventListener("change", calculate);
+    });
+    lnRows.push({a: a, b: b, speed: speed, custom: custom, cost: cost, designated: designated, state: stateCell});
+  });
+}
+
+function collect(){
+  state.switches = swRows.map(function(row){
+    return {name: row.name.value, priority: row.priority.value, mac: row.mac.value};
+  });
+  state.links = lnRows.map(function(row){
+    return {a: Number(row.a.value), b: Number(row.b.value), speed: row.speed.value, custom: row.custom.value};
+  });
+}
+
+function planInput(){
+  var names = state.switches.map(function(sw){ return sw.name; });
+  return {
+    switches: state.switches,
+    links: state.links.map(function(link){
+      return {a: names[link.a], b: names[link.b], speed: link.speed, custom: link.custom};
+    })
+  };
+}
+
+function addRow(parent, key, value){
+  var row = document.createElement("div");
+  row.className = "row";
+  var k = document.createElement("span");
+  k.className = "k";
+  k.textContent = key;
+  var v = document.createElement("span");
+  v.className = "v";
+  v.textContent = value;
+  row.appendChild(k);
+  row.appendChild(v);
+  parent.appendChild(row);
+}
+
+function placeholder(message){
+  els.out.textContent = "";
+  var span = document.createElement("div");
+  span.className = "sub";
+  span.style.padding = "18px 0";
+  span.textContent = message;
+  els.out.appendChild(span);
+}
+
+function renderResult(result){
+  els.out.textContent = "";
+  var label = document.createElement("div");
+  label.className = "label";
+  label.textContent = "Root bridge";
+  var big = document.createElement("div");
+  big.className = "big";
+  big.textContent = result.rootName;
+  var sub = document.createElement("div");
+  sub.className = "sub";
+  sub.textContent = "Bridge ID " + result.rootBridgeId + " \u00b7 " + result.switchCount + " switches, "
+    + result.linkCount + " links \u00b7 " + result.blockedText;
+  els.out.appendChild(label);
+  els.out.appendChild(big);
+  els.out.appendChild(sub);
+  addRow(els.out, "Root priority", String(result.rootPriority));
+  addRow(els.out, "Root MAC address", result.rootMac);
+  addRow(els.out, "Blocked ports", result.blockedCount === 0 ? "None" : result.blockedNames.join(", "));
+  addRow(els.out, "Forwarding links", result.forwardingCount + " of " + result.linkCount);
+  addRow(els.out, "Election rule", "Lowest bridge ID: priority first, then MAC");
+}
+
+function calculate(){
+  collect();
+  var result;
+  try {
+    result = C.plan(planInput());
+  } catch (error){
+    els.err.textContent = error.message;
+    swRows.forEach(function(row){
+      row.bridge.textContent = "\u2014";
+      row.cost.textContent = "\u2014";
+      row.port.textContent = "\u2014";
+    });
+    lnRows.forEach(function(row){
+      row.cost.textContent = "\u2014";
+      row.designated.textContent = "\u2014";
+      row.state.textContent = "\u2014";
+      row.state.className = "val";
+    });
+    placeholder("Fix the highlighted fields to see the elected root bridge and blocked links.");
+    return;
+  }
+  els.err.textContent = "";
+  result.switches.forEach(function(sw, index){
+    var row = swRows[index];
+    if (!row) return;
+    row.bridge.textContent = sw.bridgeId;
+    row.cost.textContent = sw.pathCostText;
+    row.port.textContent = sw.rootPortText;
+  });
+  result.links.forEach(function(link, index){
+    var row = lnRows[index];
+    if (!row) return;
+    row.cost.textContent = link.costText;
+    row.designated.textContent = link.designated;
+    row.state.textContent = link.state;
+    row.state.className = "val" + (link.blocked ? " blocked" : "");
+  });
+  renderResult(result);
+}
+
+function buildAll(){
+  buildSwitchRows();
+  buildLinkRows();
+  calculate();
+}
+
+function addSwitch(){
+  collect();
+  if (state.switches.length >= C.MAX_SWITCHES){
+    els.err.textContent = "The planner supports up to " + C.MAX_SWITCHES + " switches.";
+    return;
+  }
+  var used = {};
+  state.switches.forEach(function(sw){ used[sw.name.toLowerCase()] = true; });
+  var number = state.switches.length + 1;
+  while (used["sw" + number]) number += 1;
+  state.switches.push({name: "SW" + number, priority: "32768", mac: macFor(state.switches.length + 1)});
+  buildAll();
+  var row = swRows[swRows.length - 1];
+  if (row) row.name.focus();
+}
+
+function addLink(){
+  collect();
+  if (state.links.length >= C.MAX_LINKS){
+    els.err.textContent = "The planner supports up to " + C.MAX_LINKS + " links.";
+    return;
+  }
+  state.links.push({a: 0, b: Math.min(1, state.switches.length - 1), speed: "1000", custom: ""});
+  buildAll();
+  var row = lnRows[lnRows.length - 1];
+  if (row) row.a.focus();
+}
+
+function removeSwitch(index){
+  collect();
+  if (state.switches.length <= 2) return;
+  state.switches.splice(index, 1);
+  state.links = state.links
+    .filter(function(link){ return link.a !== index && link.b !== index; })
+    .map(function(link){
+      return {
+        a: link.a > index ? link.a - 1 : link.a,
+        b: link.b > index ? link.b - 1 : link.b,
+        speed: link.speed,
+        custom: link.custom
+      };
+    });
+  buildAll();
+  els.addSwitch.focus();
+}
+
+function removeLink(index){
+  collect();
+  state.links.splice(index, 1);
+  buildAll();
+  els.addLink.focus();
+}
+
+els.form.addEventListener("submit", function(event){
+  event.preventDefault();
+  calculate();
+});
+els.addSwitch.addEventListener("click", addSwitch);
+els.addLink.addEventListener("click", addLink);
+
+buildAll();
+})();
+</script>
+</body>
+</html>
