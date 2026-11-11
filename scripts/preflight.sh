@@ -208,6 +208,7 @@ node tests/tcpdump_filter_builder.test.cjs
 node tests/gnss_dop_calculator.test.cjs
 node tests/picture_in_picture_layout_planner.test.cjs
 node tests/audio_latency_buffer_planner.test.cjs
+node tests/legacy_code_page_converter.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
