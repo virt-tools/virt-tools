@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Ethernet Frame Rate Calculator — Virtual Tools</title>
+<meta name="description" content="Convert a link rate and Ethernet payload size into frames per second, wire overhead and payload goodput, counting preamble, VLAN tags, FCS and the inter-frame gap. Runs entirely in your browser.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+[hidden]{display:none!important}
+.field{margin:0 0 14px}
+label{display:block;font-weight:650;font-size:13px;margin:0 0 6px}
+input,select{box-sizing:border-box;width:100%;min-height:44px;padding:10px 12px;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg,#14181f);color:var(--text,#e6e6e6);font:inherit;font-size:16px}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:start}
+.help,.note{font-size:13px;color:var(--text-dim,#9aa3b2);line-height:1.5}
+.help{margin:6px 0 0}
+.note{margin:14px 0 0}
+.err{color:var(--bad,#f87171);font-size:14px;margin:10px 0 0;min-height:1.3em}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:650;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button.secondary{background:transparent;color:var(--accent,#6ea8fe)}
+.actions button:hover{filter:brightness(1.08)}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:16px 0}
+.big{font-size:clamp(1.5rem,5.5vw,2.1rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:2px 0;color:var(--accent,#6ea8fe);overflow-wrap:anywhere}
+.summary{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 14px;line-height:1.45}
+.warn{margin:0 0 12px;padding:9px 12px;border-radius:8px;border:1px solid #7a5b1e;background:rgba(122,91,30,.18);color:var(--text,#e6e6e6);font-size:13px;line-height:1.5}
+.metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:0 0 14px}
+.metric{border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:9px 11px}
+.metric span{display:block;font-size:11.5px;letter-spacing:.03em;text-transform:uppercase;color:var(--text-dim,#9aa3b2);margin:0 0 3px}
+.metric strong{font-size:15px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.table-label{font-size:13px;font-weight:650;margin:16px 0 6px}
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--border,#2a2f3a);border-radius:8px}
+table{width:100%;min-width:520px;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+caption{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+th,td{padding:7px 9px;text-align:right;border-bottom:1px solid var(--border,#2a2f3a);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+thead th{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--text-dim,#9aa3b2);background:var(--bg-elev,#171a21)}
+tbody tr:last-child td{border-bottom:0}
+tbody tr.current td{color:var(--accent,#6ea8fe);font-weight:700}
+@media(max-width:640px){.grid{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.out{padding:12px}}
+@media(max-width:430px){.metrics{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>Ethernet Frame Rate Calculator</h1>
+<p>Turn a link rate and payload size into frames per second, wire overhead and payload goodput — with preamble, VLAN tags, FCS and the inter-frame gap counted.</p>
+</div>
+<div class="panel">
+<form id="frame-form" novalidate>
+<div class="grid">
+<div class="field">
+<label for="rate">Link rate</label>
+<input id="rate" type="number" inputmode="decimal" min="0.001" max="1600" step="any" value="1" aria-describedby="rate-help">
+<p class="help" id="rate-help">The Ethernet MAC line rate, not a measured throughput.</p>
+</div>
+<div class="field">
+<label for="rate-unit">Rate unit</label>
+<select id="rate-unit">
+<option value="gbps" selected>Gb/s</option>
+<option value="mbps">Mb/s</option>
+</select>
+<p class="help">1 Gb/s = 1,000 Mb/s.</p>
+</div>
+<div class="field">
+<label for="vlans">VLAN tags</label>
+<select id="vlans">
+<option value="0" selected>None</option>
+<option value="1">1 × 802.1Q (4 bytes)</option>
+<option value="2">2 × QinQ (8 bytes)</option>
+</select>
+<p class="help">Each tag adds 4 bytes to the header.</p>
+</div>
+</div>
+<div class="field">
+<label for="payload">Ethernet payload (bytes)</label>
+<input id="payload" type="number" inputmode="numeric" min="1" max="65535" step="1" value="1500" aria-describedby="payload-help">
+<p class="help" id="payload-help">The bytes carried after the 14-byte header and before the 4-byte FCS — for IPv4, the IP packet. Frames smaller than 64 bytes are padded to the minimum.</p>
+</div>
+<div class="err" id="error" role="alert" aria-live="polite"></div>
+<div class="actions">
+<button type="submit" id="calculate">Calculate</button>
+<button type="button" class="secondary" id="reset">Reset</button>
+</div>
+</form>
+<section class="out" id="result" hidden>
+<div class="big" id="headline"></div>
+<p class="summary" id="summary" role="status" aria-live="polite"></p>
+<p class="warn" id="warning" role="status" hidden></p>
+<div class="metrics" id="metrics"></div>
+<p class="table-label" id="table-label">Standard payload sizes at this rate</p>
+<div class="table-wrap">
+<table aria-describedby="table-label">
+<caption>Wire bytes, frames per second, payload rate and efficiency for common Ethernet payload sizes</caption>
+<thead><tr><th scope="col">Payload (B)</th><th scope="col">Wire bytes</th><th scope="col">Frames/s</th><th scope="col">Payload rate</th><th scope="col">Efficiency</th></tr></thead>
+<tbody id="rows"></tbody>
+</table>
+</div>
+</section>
+<p class="note">The model counts 8 preamble/SFD bytes, the 14-byte header, any 802.1Q tags, the 4-byte FCS, 12 inter-frame-gap bytes and padding to the 64-byte minimum, then divides the line rate by the resulting wire size. It assumes a saturated link with no collisions, pause frames, frame preemption, FEC or 64b/66b line coding — 10GBASE-R, for example, runs at 10.3125 Gbaud — and no protocol, congestion or latency behaviour. Figures are theoretical maxima, not measured throughput. Nothing leaves your browser.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* ethernet-frame-core:start */
+var EthernetFrameCore = (function () {
+  "use strict";
+  var PREAMBLE_SFD = 8;
+  var HEADER = 14;
+  var FCS = 4;
+  var VLAN_TAG = 4;
+  var IFG = 12;
+  var MIN_FRAME = 64;
+  var MAX_VLANS = 2;
+  var MAX_PAYLOAD = 65535;
+  var MAX_RATE_KBPS = 1600000000;
+  var TABLE_SIZES = [46, 64, 100, 128, 256, 512, 1024, 1500, 9000];
+  var defaults = { rate: "1", unit: "gbps", payload: 1500, vlans: 0 };
+
+  function fail(message) { throw new Error(message); }
+
+  function parseRate(value, unit) {
+    var raw = String(value === undefined || value === null ? "" : value).trim();
+    if (raw === "") fail("Enter a link rate as a number.");
+    if (unit !== "gbps" && unit !== "mbps") fail("Choose Gb/s or Mb/s for the link rate.");
+    if (!/^[0-9]+(?:\.[0-9]+)?$/.test(raw)) fail("Enter a link rate as a number, for example 1 or 2.5.");
+    var parts = raw.split(".");
+    var scale = parts.length > 1 ? Math.pow(10, parts[1].length) : 1;
+    var digits = Number(parts[0] + (parts.length > 1 ? parts[1] : ""));
+    var multiplier = unit === "gbps" ? 1000000 : 1000;
+    if (!isFinite(digits) || digits > 1e15) fail("Link rate is too large to model.");
+    if ((digits * multiplier) % scale !== 0) fail("Link rate must be a whole number of kb/s.");
+    var kbps = (digits * multiplier) / scale;
+    if (kbps === 0) fail("Link rate must be greater than zero.");
+    if (kbps < 1) fail("Link rate is too small; the model needs at least 1 kb/s.");
+    if (kbps > MAX_RATE_KBPS) fail("Link rate must be at most 1,600 Gb/s (1,600,000 Mb/s).");
+    return kbps;
+  }
+
+  function parsePayload(value) {
+    var raw = String(value === undefined || value === null ? "" : value).trim();
+    if (!/^[0-9]+$/.test(raw)) fail("Payload must be a whole number of bytes from 1 to 65,535.");
+    var bytes = Number(raw);
+    if (bytes < 1 || bytes > MAX_PAYLOAD) fail("Payload must be a whole number of bytes from 1 to 65,535.");
+    return bytes;
+  }
+
+  function parseVlans(value) {
+    var raw = String(value === undefined || value === null ? "" : value).trim();
+    if (!/^[0-9]$/.test(raw)) fail("VLAN tags must be 0, 1 or 2.");
+    var tags = Number(raw);
+    if (tags > MAX_VLANS) fail("VLAN tags must be 0, 1 or 2.");
+    return tags;
+  }
+
+  function frame(rate, unit, payloadBytes, vlanTags) {
+    var kbps = parseRate(rate, unit);
+    var payload = parsePayload(payloadBytes);
+    var vlans = parseVlans(vlanTags);
+    var vlanBytes = vlans * VLAN_TAG;
+    var frameBytes = HEADER + vlanBytes + payload + FCS;
+    var l2Bytes = Math.max(frameBytes, MIN_FRAME);
+    var wireBytes = PREAMBLE_SFD + l2Bytes + IFG;
+    var lineBits = kbps * 1000;
+    var wireBits = wireBytes * 8;
+    var framesPerSecond = lineBits / wireBits;
+    return {
+      linkKbps: kbps,
+      linkBits: lineBits,
+      payloadBytes: payload,
+      vlanTags: vlans,
+      vlanBytes: vlanBytes,
+      frameBytes: frameBytes,
+      l2Bytes: l2Bytes,
+      paddingBytes: l2Bytes - frameBytes,
+      wireBytes: wireBytes,
+      overheadBytes: wireBytes - payload,
+      framesPerSecond: framesPerSecond,
+      framesPerSecondWhole: Math.floor(framesPerSecond),
+      frameTimeNs: (wireBits / lineBits) * 1e9,
+      l2Bps: framesPerSecond * l2Bytes * 8,
+      payloadBps: framesPerSecond * payload * 8,
+      efficiency: payload / wireBytes,
+      jumbo: payload > 1500
+    };
+  }
+
+  function compute(input) {
+    var options = input || {};
+    var rate = options.rate === undefined ? defaults.rate : options.rate;
+    var unit = options.unit === undefined ? defaults.unit : options.unit;
+    var payload = options.payload === undefined ? defaults.payload : options.payload;
+    var vlans = options.vlans === undefined ? defaults.vlans : options.vlans;
+    var result = frame(rate, unit, payload, vlans);
+    var rows = TABLE_SIZES.map(function (size) {
+      var row = frame(rate, unit, size, vlans);
+      row.current = size === result.payloadBytes;
+      return row;
+    });
+    return { result: result, rows: rows };
+  }
+
+  return {
+    compute: compute,
+    frame: frame,
+    parseRate: parseRate,
+    parsePayload: parsePayload,
+    parseVlans: parseVlans,
+    defaults: defaults,
+    tableSizes: TABLE_SIZES,
+    constants: {
+      preambleSfd: PREAMBLE_SFD,
+      header: HEADER,
+      fcs: FCS,
+      vlanTag: VLAN_TAG,
+      ifg: IFG,
+      minFrame: MIN_FRAME,
+      maxVlans: MAX_VLANS,
+      maxPayload: MAX_PAYLOAD,
+      maxRateKbps: MAX_RATE_KBPS
+    }
+  };
+})();
+/* ethernet-frame-core:end */
+
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var form = $("frame-form");
+  var rateEl = $("rate");
+  var unitEl = $("rate-unit");
+  var vlansEl = $("vlans");
+  var payloadEl = $("payload");
+  var errorEl = $("error");
+  var resultEl = $("result");
+  var headlineEl = $("headline");
+  var summaryEl = $("summary");
+  var warningEl = $("warning");
+  var metricsEl = $("metrics");
+  var rowsEl = $("rows");
+  var countFormat = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
+
+  function formatBits(bps) {
+    if (bps >= 1e12) return (bps / 1e12).toFixed(3) + " Tb/s";
+    if (bps >= 1e9) return (bps / 1e9).toFixed(3) + " Gb/s";
+    if (bps >= 1e6) return (bps / 1e6).toFixed(2) + " Mb/s";
+    if (bps >= 1e3) return (bps / 1e3).toFixed(2) + " kb/s";
+    return bps.toFixed(0) + " b/s";
+  }
+
+  function formatTime(ns) {
+    if (ns < 1000) return ns.toFixed(1) + " ns";
+    if (ns < 1e6) return (ns / 1000).toFixed(2) + " µs";
+    if (ns < 1e9) return (ns / 1e6).toFixed(3) + " ms";
+    return (ns / 1e9).toFixed(3) + " s";
+  }
+
+  function formatPercent(ratio) { return (ratio * 100).toFixed(2) + "%"; }
+
+  function formatRateCount(value) {
+    if (value >= 1000) return countFormat.format(value);
+    if (value >= 10) return value.toFixed(1);
+    return value.toFixed(3);
+  }
+
+  function metric(label, value) {
+    var box = document.createElement("div");
+    box.className = "metric";
+    var name = document.createElement("span");
+    name.textContent = label;
+    var strong = document.createElement("strong");
+    strong.textContent = value;
+    box.appendChild(name);
+    box.appendChild(strong);
+    return box;
+  }
+
+  function render() {
+    errorEl.textContent = "";
+    warningEl.hidden = true;
+    var model;
+    try {
+      model = EthernetFrameCore.compute({ rate: rateEl.value, unit: unitEl.value, payload: payloadEl.value, vlans: vlansEl.value });
+    } catch (error) {
+      resultEl.hidden = true;
+      errorEl.textContent = error.message || String(error);
+      return;
+    }
+    var result = model.result;
+    resultEl.hidden = false;
+    headlineEl.textContent = formatRateCount(result.framesPerSecond) + " frames/s";
+    summaryEl.textContent = formatBits(result.linkBits) + " line rate · " +
+      countFormat.format(result.payloadBytes) + "-byte payload · " +
+      (result.vlanTags === 0 ? "no VLAN tags" : result.vlanTags + " VLAN tag" + (result.vlanTags > 1 ? "s" : "")) + " · " +
+      formatBits(result.payloadBps) + " of payload";
+
+    var messages = [];
+    if (result.paddingBytes > 0) {
+      messages.push("The frame is padded to the 64-byte Ethernet minimum: " + countFormat.format(result.paddingBytes) +
+        " padding byte" + (result.paddingBytes === 1 ? "" : "s") + " counted on the wire but carrying no payload.");
+    }
+    if (result.jumbo) {
+      messages.push("Payloads above 1,500 bytes assume jumbo frames, which are not defined by IEEE 802.3; many switches drop them.");
+    }
+    if (messages.length) {
+      warningEl.textContent = messages.join(" ");
+      warningEl.hidden = false;
+    }
+
+    metricsEl.innerHTML = "";
+    metricsEl.appendChild(metric("Wire bytes per frame", countFormat.format(result.wireBytes)));
+    metricsEl.appendChild(metric("Payload efficiency", formatPercent(result.efficiency)));
+    metricsEl.appendChild(metric("Time per frame", formatTime(result.frameTimeNs)));
+    metricsEl.appendChild(metric("Payload per frame", countFormat.format(result.payloadBytes) + " B"));
+    metricsEl.appendChild(metric("Overhead per frame", countFormat.format(result.overheadBytes) + " B"));
+    metricsEl.appendChild(metric("L2 frame bytes", countFormat.format(result.l2Bytes)));
+    metricsEl.appendChild(metric("L2 throughput", formatBits(result.l2Bps)));
+    metricsEl.appendChild(metric("Payload throughput", formatBits(result.payloadBps)));
+
+    rowsEl.innerHTML = "";
+    model.rows.forEach(function (row) {
+      var tr = document.createElement("tr");
+      if (row.current) tr.className = "current";
+      var cells = [
+        countFormat.format(row.payloadBytes),
+        countFormat.format(row.wireBytes),
+        formatRateCount(row.framesPerSecond),
+        formatBits(row.payloadBps),
+        formatPercent(row.efficiency)
+      ];
+      cells.forEach(function (text, index) {
+        var td = document.createElement("td");
+        td.textContent = text;
+        if (index === 0) td.setAttribute("scope", "row");
+        tr.appendChild(td);
+      });
+      rowsEl.appendChild(tr);
+    });
+  }
+
+  form.addEventListener("submit", function (event) {
+    event.preventDefault();
+    render();
+  });
+
+  $("reset").addEventListener("click", function () {
+    rateEl.value = EthernetFrameCore.defaults.rate;
+    unitEl.value = EthernetFrameCore.defaults.unit;
+    vlansEl.value = String(EthernetFrameCore.defaults.vlans);
+    payloadEl.value = String(EthernetFrameCore.defaults.payload);
+    errorEl.textContent = "";
+    warningEl.hidden = true;
+    render();
+    rateEl.focus();
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
