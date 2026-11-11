@@ -215,6 +215,7 @@ node tests/archery_sight_adjustment_calculator.test.cjs
 node tests/bash_parameter_expansion_explainer.test.cjs
 node tests/egg_size_converter.test.cjs
 node tests/latch_hook_rug_yarn_calculator.test.cjs
+node tests/album_side_split_planner.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
