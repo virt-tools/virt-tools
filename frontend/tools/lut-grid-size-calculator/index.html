@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Size a 3D LUT from its grid resolution: grid points, channel samples, table memory at 8-bit, 16-bit, half and float precision, .cube file size, input step and the corner fetches per frame for tetrahedral or trilinear sampling. Runs entirely in your browser.">
+<script src="/assets/theme-init.js"></script>
+<title>3D LUT Grid &amp; Memory Calculator — virt.tools</title>
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.lut-shell{max-width:900px;margin:0 auto}
+.lead,.hint,.detail{color:var(--text-secondary,#8b949e)}
+.panel{background:var(--surface,#161b22);border:1px solid var(--border,#30363d);border-radius:10px;padding:1rem;margin:1rem 0}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:.9rem 1.1rem}
+.field{display:flex;flex-direction:column;gap:.35rem}
+.field label{font-weight:600}
+.field input,.field select{box-sizing:border-box;width:100%;max-width:none;background:var(--background,#0d1117);color:var(--text,#c9d1d9);border:1px solid var(--border,#30363d);border-radius:6px;padding:.62rem;font:inherit;min-height:44px}
+.field input:focus-visible,.field select:focus-visible,button:focus-visible{outline:2px solid var(--accent,#58a6ff);outline-offset:2px}
+.actions{display:flex;flex-wrap:wrap;gap:.6rem;margin:.9rem 0 .2rem}
+button{border:1px solid var(--border,#30363d);border-radius:6px;background:var(--surface-raised,#21262d);color:var(--text,#c9d1d9);padding:.58rem .85rem;min-height:44px;font:inherit;font-size:.95rem;cursor:pointer}
+button.primary{border-color:var(--accent,#58a6ff);background:var(--accent-soft,#1e3a5f)}
+.status{min-height:1.4rem;margin:.55rem 0 .3rem}
+.status.ok{color:#3fb950}.status.error{color:#f85149}.status.info{color:var(--text-secondary,#8b949e)}
+.results{margin:.2rem 0 0;display:grid;gap:.75rem}
+.results>div{display:grid;grid-template-columns:12rem 1fr;gap:.4rem 1rem;align-items:baseline}
+.results dt{font-weight:600}
+.results dd{margin:0;overflow-wrap:anywhere}
+.results output{font:600 1rem/1.45 ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--accent,#58a6ff)}
+.results .sub{display:block;font-weight:400;font-size:.82rem;color:var(--text-secondary,#8b949e);margin-top:.2rem}
+h2{font-size:1.05rem;margin:.2rem 0 .8rem}
+h2 span{font-weight:500;font-size:.85rem;color:var(--text-secondary,#8b949e)}
+.table-wrap{overflow-x:auto;border:1px solid var(--border,#30363d);border-radius:8px}
+table{width:100%;border-collapse:collapse;font-size:.9rem}
+th,td{padding:.45rem .55rem;text-align:left;border-bottom:1px solid var(--border,#30363d);white-space:nowrap}
+thead th{font-size:.76rem;letter-spacing:.04em;text-transform:uppercase;color:var(--text-secondary,#8b949e);white-space:normal}
+tbody th{font-weight:600}
+tbody tr.selected{background:color-mix(in srgb,var(--accent,#58a6ff) 10%,transparent)}
+tbody tr:last-child th,tbody tr:last-child td{border-bottom:0}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+.explain p{margin:.5rem 0}
+.explain ul{margin:.4rem 0 0;padding-left:1.2rem}
+.explain li{margin:.3rem 0}
+.explain code{background:var(--surface-raised,#21262d);padding:.05rem .3rem;border-radius:4px;font-size:.88em}
+@media(max-width:600px){.grid{grid-template-columns:1fr}.results>div{grid-template-columns:1fr;gap:.15rem}.panel{padding:.85rem}.actions>*{flex:1 1 9rem}table{font-size:.8rem}th,td{padding:.35rem .35rem;white-space:normal}}
+</style>
+</head>
+<body><div id="site-header"></div><main class="tool-container"><div class="lut-shell">
+<a href="/">← Back to all tools</a>
+<h1>3D LUT Grid &amp; Memory Calculator</h1>
+<p class="lead">A 3D LUT stores one RGB triplet per grid point. This page sizes that table for any grid resolution, showing the entry count, runtime memory at 8-bit, 16-bit, half and float precision, the text size of a <code>.cube</code> file at your chosen number of decimals, the input step between grid points, and the corner fetches a tetrahedral or trilinear sampler makes per frame. Everything runs locally.</p>
+
+<form id="lut-form" novalidate>
+<section class="panel" aria-labelledby="lut-input-title">
+<h2 id="lut-input-title">LUT table</h2>
+<div class="grid">
+<div class="field"><label for="grid-input">Grid size (N × N × N)</label><input id="grid-input" type="text" inputmode="numeric" value="33" autocomplete="off" aria-describedby="grid-hint"><p class="hint" id="grid-hint">Whole number from 2 to 129. Common sizes are 17, 33 and 65; 33 is the usual grading default.</p></div>
+<div class="field"><label for="precision-select">Runtime sample precision</label>
+<select id="precision-select">
+<option value="float32">float32 / 32-bit float — 4 bytes</option>
+<option value="float16">float16 / half — 2 bytes</option>
+<option value="uint16">uint16 integer — 2 bytes</option>
+<option value="uint8">uint8 integer — 1 byte</option>
+</select></div>
+<div class="field"><label for="decimals-input">Decimals in the .cube text</label><input id="decimals-input" type="text" inputmode="numeric" value="6" autocomplete="off" aria-describedby="decimals-hint"><p class="hint" id="decimals-hint">Whole number from 1 to 10. Most .cube writers use 6 decimals.</p></div>
+</div>
+</section>
+
+<section class="panel" aria-labelledby="sampling-title">
+<h2 id="sampling-title">Sampling cost <span>optional, for one output frame</span></h2>
+<div class="grid">
+<div class="field"><label for="width-input">Frame width (px)</label><input id="width-input" type="text" inputmode="numeric" value="1920" autocomplete="off" aria-describedby="width-hint"><p class="hint" id="width-hint">Whole number from 1 to 16,384.</p></div>
+<div class="field"><label for="height-input">Frame height (px)</label><input id="height-input" type="text" inputmode="numeric" value="1080" autocomplete="off" aria-describedby="height-hint"><p class="hint" id="height-hint">Whole number from 1 to 16,384.</p></div>
+<div class="field"><label for="fps-input">Frame rate (fps)</label><input id="fps-input" type="text" inputmode="decimal" value="24" autocomplete="off" aria-describedby="fps-hint"><p class="hint" id="fps-hint">Number from 0.001 to 1000.</p></div>
+<div class="field"><label for="interpolation-select">Interpolation</label>
+<select id="interpolation-select">
+<option value="tetrahedral">Tetrahedral — 4 corners</option>
+<option value="trilinear">Trilinear — 8 corners</option>
+</select></div>
+</div>
+<div class="actions"><button id="calculate" class="primary" type="submit">Calculate</button></div>
+<p id="lut-status" class="status info" role="status" aria-live="polite"></p>
+</section>
+</form>
+
+<section class="panel" aria-labelledby="result-title">
+<h2 id="result-title">Result <span>the table and what it costs to read</span></h2>
+<dl class="results">
+<div><dt>Grid points</dt><dd><output id="entries-out">—</output><span class="sub" id="entries-sub"></span></dd></div>
+<div><dt>Channel samples</dt><dd><output id="samples-out">—</output></dd></div>
+<div><dt>Runtime memory</dt><dd><output id="memory-out">—</output><span class="sub" id="memory-sub"></span></dd></div>
+<div><dt>.cube text size</dt><dd><output id="cube-out">—</output><span class="sub" id="cube-sub"></span></dd></div>
+<div><dt>Input step</dt><dd><output id="step-out">—</output><span class="sub" id="step-sub"></span></dd></div>
+<div><dt>Corners per sample</dt><dd><output id="corners-out">—</output></dd></div>
+<div><dt>Corner fetches</dt><dd><output id="fetches-out">—</output><span class="sub" id="fetches-sub"></span></dd></div>
+<div><dt>Corner traffic</dt><dd><output id="traffic-out">—</output><span class="sub" id="traffic-sub"></span></dd></div>
+</dl>
+<p class="detail" id="lut-note"></p>
+</section>
+
+<section class="panel" aria-labelledby="table-title">
+<h2 id="table-title">Common grid sizes <span id="table-caption">at the selected precision and decimals</span></h2>
+<div class="table-wrap">
+<table>
+<caption class="sr-only">Grid points, runtime memory at the selected precision and .cube text size at the selected decimals for common 3D LUT grid sizes</caption>
+<thead><tr><th scope="col">Grid</th><th scope="col">Grid points</th><th scope="col">Memory</th><th scope="col">.cube text</th><th scope="col">Input step</th></tr></thead>
+<tbody id="table-body"></tbody>
+</table>
+</div>
+</section>
+
+<section class="panel explain" aria-labelledby="how-title">
+<h2 id="how-title">How the numbers work</h2>
+<ul>
+<li><strong>Grid points.</strong> An <code>N × N × N</code> 3D LUT holds <code>N³</code> points, each with three channels, so the channel sample count is <code>3 × N³</code>. A 33-point cube holds 35,937 points and 107,811 channel samples; a 65-point cube holds 274,625 points.</li>
+<li><strong>Runtime memory.</strong> The table is <code>3 × N³</code> stored channel values of the chosen width: 4 bytes for float32, 2 bytes for float16 or uint16 and 1 byte for uint8. Memory does not depend on the file's decimal count — that is a text serialisation detail.</li>
+<li><strong>.cube text size.</strong> Each point is written as three values with <code>d</code> decimals, separated by spaces, so a line is <code>3 × (d + 2) + 3</code> bytes including the newline. The estimate adds a 64-byte header allowance for <code>TITLE</code>, <code>LUT_3D_SIZE</code> and the domain lines and excludes optional comments, so a real file can be slightly larger.</li>
+<li><strong>Input step.</strong> Grid points sit <code>1 / (N − 1)</code> apart in the normalised 0–1 domain. A 33-point LUT steps by 0.03125 (3.125 %), so a 10-bit input has about 32 distinct values between samples.</li>
+<li><strong>Sampling cost.</strong> A tetrahedral sampler reads 4 corners per output sample and a trilinear sampler reads 8. Each corner fetch returns three channels, so the traffic figure is <code>samples × corners × 3 × bytes</code> per second. Real hardware caches neighbouring lookups, so treat the traffic number as an upper bound for uncached random access.</li>
+<li>This is table arithmetic, not a quality score. A larger grid reduces interpolation error but costs memory and cache locality, and a LUT's accuracy still depends on how it was generated. The page performs no storage, uploads or network requests.</li>
+</ul>
+</section>
+</div></main><script src="/assets/tools.js"></script><script src="/assets/app.js"></script>
+<script>
+/* lut-size-core:start */
+const LutSize = (() => {
+  'use strict';
+  const PRECISION_BYTES = { float32: 4, float16: 2, uint16: 2, uint8: 1 };
+  const INTERPOLATION_CORNERS = { tetrahedral: 4, trilinear: 8 };
+  const PRECISION_LABELS = {
+    float32: 'float32 (4 bytes per channel)',
+    float16: 'float16 / half (2 bytes per channel)',
+    uint16: 'uint16 (2 bytes per channel)',
+    uint8: 'uint8 (1 byte per channel)'
+  };
+  const INTERPOLATION_LABELS = { tetrahedral: 'tetrahedral (4 corners)', trilinear: 'trilinear (8 corners)' };
+  const MAX_GRID = 129;
+  const HEADER_BYTES = 64;
+  const GRID_PRESETS = [17, 33, 65, 129];
+
+  function readNumber(text, spec) {
+    const raw = String(text == null ? '' : text).trim();
+    if (raw === '') throw Error(spec.empty);
+    if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(raw)) throw Error(spec.format);
+    const value = Number(raw);
+    if (!Number.isFinite(value)) throw Error(spec.format);
+    if (spec.integer && !Number.isInteger(value)) throw Error(spec.format);
+    if (value < spec.min || value > spec.max) throw Error(spec.format);
+    return value;
+  }
+
+  function lineBytes(decimals) {
+    return 3 * (decimals + 2) + 3;
+  }
+
+  function compute(input) {
+    const source = input || {};
+    const grid = readNumber(source.grid, {
+      integer: true, min: 2, max: MAX_GRID,
+      empty: 'Enter the 3D LUT grid size, for example 33.',
+      format: 'Grid size must be a whole number from 2 to 129; 33 is the common grading default.'
+    });
+    const decimals = readNumber(source.decimals, {
+      integer: true, min: 1, max: 10,
+      empty: 'Enter the number of decimals written in the .cube file, for example 6.',
+      format: 'Decimals must be a whole number from 1 to 10; most .cube files use 6.'
+    });
+    const width = readNumber(source.width, {
+      integer: true, min: 1, max: 16384,
+      empty: 'Enter the frame width in pixels, for example 1920.',
+      format: 'Frame width must be a whole number from 1 to 16384 pixels.'
+    });
+    const height = readNumber(source.height, {
+      integer: true, min: 1, max: 16384,
+      empty: 'Enter the frame height in pixels, for example 1080.',
+      format: 'Frame height must be a whole number from 1 to 16384 pixels.'
+    });
+    const fps = readNumber(source.fps, {
+      integer: false, min: 0.001, max: 1000,
+      empty: 'Enter the frame rate in fps, for example 24.',
+      format: 'Frame rate must be a number from 0.001 to 1000 fps.'
+    });
+    const precision = source.precision;
+    if (!Object.prototype.hasOwnProperty.call(PRECISION_BYTES, precision)) {
+      throw Error('Choose float32, float16, uint16 or uint8 sample precision.');
+    }
+    const interpolation = source.interpolation;
+    if (!Object.prototype.hasOwnProperty.call(INTERPOLATION_CORNERS, interpolation)) {
+      throw Error('Choose tetrahedral (4 corners) or trilinear (8 corners) interpolation.');
+    }
+
+    const entries = Math.pow(grid, 3);
+    const channelSamples = entries * 3;
+    const bytesPerChannel = PRECISION_BYTES[precision];
+    const memoryBytes = channelSamples * bytesPerChannel;
+    const entryBytes = lineBytes(decimals);
+    const cubeBytes = entries * entryBytes + HEADER_BYTES;
+    const step = 1 / (grid - 1);
+    const corners = INTERPOLATION_CORNERS[interpolation];
+    const samplesPerFrame = width * height;
+    const fetchesPerFrame = samplesPerFrame * corners;
+    const fetchesPerSecond = fetchesPerFrame * fps;
+    const cornerBytesPerSecond = fetchesPerSecond * 3 * bytesPerChannel;
+
+    return {
+      grid: grid,
+      entries: entries,
+      channelSamples: channelSamples,
+      precision: precision,
+      precisionLabel: PRECISION_LABELS[precision],
+      bytesPerChannel: bytesPerChannel,
+      memoryBytes: memoryBytes,
+      memoryMib: memoryBytes / 1048576,
+      decimals: decimals,
+      entryBytes: entryBytes,
+      cubeBytes: cubeBytes,
+      cubeMb: cubeBytes / 1e6,
+      cubeMib: cubeBytes / 1048576,
+      step: step,
+      stepPercent: step * 100,
+      interpolation: interpolation,
+      interpolationLabel: INTERPOLATION_LABELS[interpolation],
+      corners: corners,
+      width: width,
+      height: height,
+      fps: fps,
+      samplesPerFrame: samplesPerFrame,
+      fetchesPerFrame: fetchesPerFrame,
+      fetchesPerSecond: fetchesPerSecond,
+      cornerBytesPerSecond: cornerBytesPerSecond,
+      cornerGigabytesPerSecond: cornerBytesPerSecond / 1e9
+    };
+  }
+
+  function tableRows(decimals, precision) {
+    const bytesPerChannel = PRECISION_BYTES[precision] || 4;
+    return GRID_PRESETS.map((grid) => {
+      const entries = Math.pow(grid, 3);
+      return {
+        grid: grid,
+        entries: entries,
+        memoryBytes: entries * 3 * bytesPerChannel,
+        cubeBytes: entries * lineBytes(decimals) + HEADER_BYTES,
+        step: 1 / (grid - 1)
+      };
+    });
+  }
+
+  return {
+    PRECISION_BYTES: PRECISION_BYTES,
+    INTERPOLATION_CORNERS: INTERPOLATION_CORNERS,
+    PRECISION_LABELS: PRECISION_LABELS,
+    GRID_PRESETS: GRID_PRESETS,
+    MAX_GRID: MAX_GRID,
+    HEADER_BYTES: HEADER_BYTES,
+    lineBytes: lineBytes,
+    compute: compute,
+    tableRows: tableRows
+  };
+})();
+/* lut-size-core:end */
+(() => {
+'use strict';
+const $ = (id) => document.getElementById(id);
+const form = $('lut-form'), gridInput = $('grid-input'), decimalsInput = $('decimals-input');
+const precisionSelect = $('precision-select'), interpolationSelect = $('interpolation-select');
+const widthInput = $('width-input'), heightInput = $('height-input'), fpsInput = $('fps-input');
+const status = $('lut-status'), note = $('lut-note');
+const entriesOut = $('entries-out'), entriesSub = $('entries-sub');
+const samplesOut = $('samples-out'), memoryOut = $('memory-out'), memorySub = $('memory-sub');
+const cubeOut = $('cube-out'), cubeSub = $('cube-sub'), stepOut = $('step-out'), stepSub = $('step-sub');
+const cornersOut = $('corners-out'), fetchesOut = $('fetches-out'), fetchesSub = $('fetches-sub');
+const trafficOut = $('traffic-out'), trafficSub = $('traffic-sub');
+const tableBody = $('table-body'), tableCaption = $('table-caption');
+let latest = null;
+
+function setStatus(message, kind) { status.textContent = message; status.className = 'status ' + (kind || 'info'); }
+function group(value) { return String(Math.round(value)).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+function trim(value) { return value.indexOf('.') > -1 ? value.replace(/\.?0+$/, '') : value; }
+function formatFixed(value, digits) { return trim(value.toFixed(digits)); }
+function formatBytes(bytes) {
+  if (bytes >= 1e9) return formatFixed(bytes / 1e9, 3) + ' GB';
+  if (bytes >= 1e6) return formatFixed(bytes / 1e6, 2) + ' MB';
+  if (bytes >= 1e3) return formatFixed(bytes / 1e3, 1) + ' kB';
+  return group(bytes) + ' bytes';
+}
+function formatMib(mib) {
+  if (mib >= 1) return formatFixed(mib, 2) + ' MiB';
+  return formatFixed(mib * 1024, 1) + ' KiB';
+}
+function formatStep(step) {
+  if (step >= 0.01) return formatFixed(step, 6);
+  return step.toFixed(8);
+}
+function formatCount(value) {
+  if (value >= 1e9) return formatFixed(value / 1e9, 2) + ' billion';
+  if (value >= 1e6) return formatFixed(value / 1e6, 1) + ' million';
+  if (value >= 1e3) return group(value);
+  return formatFixed(value, 1);
+}
+function clearResults() {
+  latest = null;
+  for (const node of [entriesOut, entriesSub, samplesOut, memoryOut, memorySub, cubeOut, cubeSub,
+    stepOut, stepSub, cornersOut, fetchesOut, fetchesSub, trafficOut, trafficSub]) {
+    node.textContent = node === entriesSub || node === memorySub || node === cubeSub ||
+      node === stepSub || node === fetchesSub || node === trafficSub ? '' : '—';
+  }
+  note.textContent = '';
+}
+function showResult(result) {
+  latest = result;
+  entriesOut.textContent = group(result.entries);
+  entriesSub.textContent = result.grid + ' × ' + result.grid + ' × ' + result.grid + ' grid points';
+  samplesOut.textContent = group(result.channelSamples) + ' stored channel values';
+  memoryOut.textContent = formatMib(result.memoryMib);
+  memorySub.textContent = group(result.memoryBytes) + ' bytes at ' + result.precisionLabel;
+  cubeOut.textContent = formatFixed(result.cubeMb, 2) + ' MB';
+  cubeSub.textContent = group(result.cubeBytes) + ' bytes, ' + formatMib(result.cubeMib) +
+    ' · ' + group(result.entryBytes) + ' bytes per line at ' + result.decimals + ' decimals';
+  stepOut.textContent = formatStep(result.step);
+  stepSub.textContent = formatFixed(result.stepPercent, 3) + ' % of the normalised 0–1 domain';
+  cornersOut.textContent = result.corners + ' · ' + result.interpolationLabel;
+  fetchesOut.textContent = formatCount(result.fetchesPerFrame) + ' per frame';
+  fetchesSub.textContent = group(result.fetchesPerFrame) + ' fetches for ' +
+    group(result.samplesPerFrame) + ' samples at ' + result.width + '×' + result.height;
+  trafficOut.textContent = formatFixed(result.cornerGigabytesPerSecond, 2) + ' GB/s';
+  trafficSub.textContent = group(result.cornerBytesPerSecond) + ' bytes/s at ' +
+    formatFixed(result.fps, 3) + ' fps; upper bound before cache reuse';
+  note.textContent = 'A ' + result.grid + '-point 3D LUT holds ' + group(result.entries) +
+    ' RGB triplets. Memory depends on runtime precision, not on how many decimals the file writes; ' +
+    'the .cube estimate assumes one point per line and no comments.';
+  setStatus('Sized a ' + result.grid + '³ table at ' + result.precision + ' and ' +
+    formatFixed(result.cubeMb, 2) + ' MB of .cube text.', 'ok');
+}
+function render() {
+  try {
+    const result = LutSize.compute({
+      grid: gridInput.value,
+      decimals: decimalsInput.value,
+      precision: precisionSelect.value,
+      interpolation: interpolationSelect.value,
+      width: widthInput.value,
+      height: heightInput.value,
+      fps: fpsInput.value
+    });
+    showResult(result);
+    buildTable(result);
+  } catch (error) {
+    clearResults();
+    buildTable(null);
+    setStatus(error.message || String(error), 'error');
+  }
+}
+function buildTable(result) {
+  const decimals = result ? result.decimals : (Number(decimalsInput.value) || 6);
+  const precision = result ? result.precision : precisionSelect.value;
+  const rows = LutSize.tableRows(decimals, precision).map((row) => {
+    const tr = document.createElement('tr');
+    if (result && row.grid === result.grid) tr.className = 'selected';
+    const head = document.createElement('th');
+    head.scope = 'row';
+    head.textContent = String(row.grid);
+    const entries = document.createElement('td');
+    entries.className = 'num';
+    entries.textContent = group(row.entries);
+    const memory = document.createElement('td');
+    memory.className = 'num';
+    memory.textContent = formatMib(row.memoryBytes / 1048576);
+    const cube = document.createElement('td');
+    cube.className = 'num';
+    cube.textContent = formatFixed(row.cubeBytes / 1e6, 2) + ' MB';
+    const step = document.createElement('td');
+    step.className = 'num';
+    step.textContent = formatStep(row.step);
+    tr.append(head, entries, memory, cube, step);
+    return tr;
+  });
+  tableBody.replaceChildren(...rows);
+  tableCaption.textContent = 'at ' + (LutSize.PRECISION_LABELS[precision] || precision) +
+    ' and ' + String(decimals) + ' decimals';
+}
+form.addEventListener('submit', (event) => { event.preventDefault(); render(); });
+for (const input of [gridInput, decimalsInput, widthInput, heightInput, fpsInput]) {
+  input.addEventListener('input', render);
+}
+for (const select of [precisionSelect, interpolationSelect]) {
+  select.addEventListener('change', render);
+}
+render();
+})();
+</script></body></html>
