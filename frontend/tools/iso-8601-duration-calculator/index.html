@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>ISO 8601 Duration Calculator &mdash; Virtual Tools</title>
+<meta name="description" content="Parse an ISO 8601 duration such as P1Y2M3DT4H5M6S, add it to a start date on the real calendar, and see exact totals in days, hours, minutes and seconds.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.grid{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) minmax(0,.8fr);gap:12px}
+.field{display:flex;flex-direction:column;gap:6px;margin:0}
+.field label{font-size:13px;color:var(--text-dim,#9aa3b2)}
+input#duration,input#start-date,input#start-time{box-sizing:border-box;width:100%;min-height:46px;padding:10px 12px;border-radius:8px;
+  border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);color:var(--text,#e6e6e6);
+  font:inherit;font-size:16px;line-height:1.3;outline:none}
+input#duration{font-family:ui-monospace,monospace}
+input#duration:focus-visible,input#start-date:focus-visible,input#start-time:focus-visible{outline:2px solid var(--accent,#6ea8fe);outline-offset:1px}
+input#duration::placeholder{color:var(--text-dim,#9aa3b2)}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:12px 0 0}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover:not(:disabled){filter:brightness(1.08)}
+.actions button:disabled{opacity:.55;cursor:default}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.actions button.ghost{background:transparent;color:var(--accent,#6ea8fe)}
+.err{color:var(--bad,#f87171);font-size:13px;margin:10px 0 0;min-height:1.2em}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:16px 0 0}
+.out .label{text-align:center;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-dim,#9aa3b2)}
+.out .big{font-size:clamp(1.35rem,6.4vw,2.1rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:2px 0 4px;overflow-wrap:anywhere;line-height:1.25}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45;overflow-wrap:anywhere}
+.out .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:7px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:14px}
+.out .row:last-child{border-bottom:none}
+.out .row .k{color:var(--text-dim,#9aa3b2);flex:1 1 auto;min-width:0}
+.out .row .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right;white-space:nowrap}
+.status{color:var(--good,#4ade80);font-size:13px;min-height:1.2em}
+.hint{color:var(--text-dim,#9aa3b2);font-size:13px;margin:10px 0 0;min-height:1.2em;line-height:1.45}
+@media (max-width:700px){
+  .grid{grid-template-columns:minmax(0,1fr)}
+  .actions button{flex:1 1 auto}
+  .out .row{flex-direction:column;align-items:flex-start;gap:2px}
+  .out .row .v{white-space:normal;overflow-wrap:anywhere;text-align:left}
+}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">&larr; All tools</a>
+<h1>ISO 8601 Duration Calculator</h1>
+<p>Parse an ISO 8601 duration such as P1Y2M3DT4H5M6S and add it to a start date on the real calendar, so months land on the same day of the month and never past its end.</p>
+</div>
+<div class="panel">
+<form id="calc-form" novalidate>
+<div class="grid">
+<div class="field">
+<label for="duration">Duration</label>
+<input id="duration" type="text" autocomplete="off" spellcheck="false" value="P1M2DT3H" placeholder="P1Y2M3DT4H5M6S">
+</div>
+<div class="field">
+<label for="start-date">Start date (UTC)</label>
+<input id="start-date" type="date" value="2026-01-31">
+</div>
+<div class="field">
+<label for="start-time">Start time (UTC)</label>
+<input id="start-time" type="time" value="09:00">
+</div>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions">
+<button type="submit">Calculate end</button>
+<button type="button" class="ghost" id="clear">Clear</button>
+</div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"></div>
+<div class="actions">
+<button type="button" class="ghost" id="copy">Copy ISO 8601</button>
+<span class="status" id="status" role="status" aria-live="polite"></span>
+</div>
+<p class="hint" id="hint"></p>
+<p class="note">Years and months are calendar units, so the end date is worked out on the real calendar: one month after 31 January is 28 February, or 29 February in a leap year. Only the smallest unit may carry a decimal fraction, and a week duration cannot be mixed with other units. End times are rounded to the nearest second, with halves rounding up. Totals are exact when the duration has no years or months; with years or months they are nominal, using 1 month = 30 days. Date arithmetic runs in UTC so a daylight-saving change never shifts the result. Everything is calculated in your browser.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* iso-8601-duration-core:start */
+var IsoDurationCore = (function(){
+  "use strict";
+  var SECONDS_PER_MINUTE = 60;
+  var SECONDS_PER_HOUR = 3600;
+  var SECONDS_PER_DAY = 86400;
+  var NOMINAL_DAYS_PER_MONTH = 30;
+  var MIN_START_YEAR = 1000;
+  var MAX_END_YEAR = 9999;
+  var MAX_MONTHS = 120000;
+  var DEFAULT_DURATION = "P1M2DT3H";
+  var DEFAULT_DATE = "2026-01-31";
+  var DEFAULT_TIME = "09:00";
+  var PATTERN = /^P(?:(\d+(?:\.\d+)?)Y)?(?:(\d+(?:\.\d+)?)M)?(?:(\d+(?:\.\d+)?)W)?(?:(\d+(?:\.\d+)?)D)?(?:T(?:(\d+(?:\.\d+)?)H)?(?:(\d+(?:\.\d+)?)M)?(?:(\d+(?:\.\d+)?)S)?)?$/;
+  var WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  var MONTH_DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  var COMPONENTS = [
+    {name: "years", letter: "Y", one: "year", many: "years"},
+    {name: "months", letter: "M", one: "month", many: "months"},
+    {name: "weeks", letter: "W", one: "week", many: "weeks"},
+    {name: "days", letter: "D", one: "day", many: "days"},
+    {name: "hours", letter: "H", one: "hour", many: "hours"},
+    {name: "minutes", letter: "M", one: "minute", many: "minutes"},
+    {name: "seconds", letter: "S", one: "second", many: "seconds"}
+  ];
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function isLeap(year){
+    return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  }
+
+  function daysInMonth(year, month){
+    if (month < 1 || month > 12) return 0;
+    if (month === 2) return isLeap(year) ? 29 : 28;
+    return MONTH_DAYS[month - 1];
+  }
+
+  function trim(value){
+    var fixed = Math.round(value * 1000 + 1e-9) / 1000;
+    return String(fixed);
+  }
+
+  function group(text){
+    var parts = String(text).split(".");
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    return parts.join(".");
+  }
+
+  function formatNumber(value){
+    return group(trim(value));
+  }
+
+  function daysText(value){
+    return formatNumber(value) + (value === 1 ? " day" : " days");
+  }
+
+  function pad(value, width){
+    var text = String(value);
+    while (text.length < width) text = "0" + text;
+    return text;
+  }
+
+  function isoOf(values){
+    var text = "P";
+    var time = "";
+    for (var index = 0; index < COMPONENTS.length; index += 1){
+      var component = COMPONENTS[index];
+      var value = values[component.name];
+      if (!value) continue;
+      if (component.name === "hours") time += trim(value) + "H";
+      else if (component.name === "minutes") time += trim(value) + "M";
+      else if (component.name === "seconds") time += trim(value) + "S";
+      else text += trim(value) + component.letter;
+    }
+    if (time) text += "T" + time;
+    return text === "P" ? "PT0S" : text;
+  }
+
+  function humanOf(values){
+    var parts = [];
+    for (var index = 0; index < COMPONENTS.length; index += 1){
+      var component = COMPONENTS[index];
+      var value = values[component.name];
+      if (!value) continue;
+      parts.push(trim(value) + " " + (value === 1 ? component.one : component.many));
+    }
+    return parts.length ? parts.join(", ") : "zero duration";
+  }
+
+  function parse(text){
+    var raw = String(text == null ? "" : text).trim();
+    if (!raw) fail("Enter a duration such as P1Y2M3DT4H5M6S.");
+    var match = PATTERN.exec(raw);
+    if (!match) fail("Use an ISO 8601 duration such as P1Y2M3DT4H5M6S: P first, then years, months, weeks or days, then T before hours, minutes and seconds.");
+    if (raw === "P" || raw === "PT") fail("Add at least one number, such as P1D or PT30M.");
+    if (raw.charAt(raw.length - 1) === "T" || /T$/.test(raw)) fail("Put at least one of hours, minutes or seconds after T.");
+    var values = {};
+    var present = [];
+    for (var index = 0; index < COMPONENTS.length; index += 1){
+      var component = COMPONENTS[index];
+      var group = match[index + 1];
+      if (group === undefined) continue;
+      var value = Number(group);
+      if (!isFinite(value)) fail("Use digits for each value, such as P1M or PT30S.");
+      values[component.name] = value;
+      present.push({name: component.name, value: value, fraction: group.indexOf(".") >= 0});
+    }
+    if (!present.length) fail("Add at least one number, such as P1D or PT30M.");
+    for (var index = 0; index < present.length - 1; index += 1){
+      if (present[index].fraction) fail("Only the smallest unit can carry a decimal fraction, as in PT1.5H.");
+    }
+    for (var index = 0; index < present.length; index += 1){
+      if (present[index].fraction && (present[index].name === "years" || present[index].name === "months")){
+        fail("Years and months must be whole numbers, because a fraction of a month has no fixed length.");
+      }
+    }
+    var weekPresent = false;
+    for (var index = 0; index < present.length; index += 1){
+      if (present[index].name === "weeks") weekPresent = true;
+    }
+    if (weekPresent && present.length > 1){
+      fail("A week duration such as P3W cannot be mixed with other units.");
+    }
+    var monthsTotal = (values.years || 0) * 12 + (values.months || 0);
+    if (monthsTotal > MAX_MONTHS) fail("Keep the duration under 120,000 months.");
+    var fixedSeconds = ((values.weeks || 0) * 7 + (values.days || 0)) * SECONDS_PER_DAY;
+    var timeSeconds = (values.hours || 0) * SECONDS_PER_HOUR + (values.minutes || 0) * SECONDS_PER_MINUTE + (values.seconds || 0);
+    var secondsTotal = fixedSeconds + timeSeconds;
+    var nominal = monthsTotal > 0;
+    var totalDays = monthsTotal * NOMINAL_DAYS_PER_MONTH + secondsTotal / SECONDS_PER_DAY;
+    return {
+      raw: raw,
+      iso: isoOf(values),
+      human: humanOf(values),
+      years: values.years || 0,
+      months: values.months || 0,
+      weeks: values.weeks || 0,
+      days: values.days || 0,
+      hours: values.hours || 0,
+      minutes: values.minutes || 0,
+      seconds: values.seconds || 0,
+      monthsTotal: monthsTotal,
+      secondsTotal: secondsTotal,
+      nominal: nominal,
+      exactSecondsText: nominal ? null : formatNumber(secondsTotal) + " s",
+      totalDays: totalDays,
+      totalHours: totalDays * 24,
+      totalMinutes: totalDays * 1440,
+      totalDaysText: daysText(totalDays),
+      totalHoursText: formatNumber(totalDays * 24) + " h",
+      totalMinutesText: formatNumber(totalDays * 1440) + " min"
+    };
+  }
+
+  function endOf(duration, dateText, timeText){
+    var dateRaw = String(dateText == null ? "" : dateText).trim();
+    if (!dateRaw) return null;
+    var dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateRaw);
+    if (!dateMatch) fail("Enter the start date as YYYY-MM-DD.");
+    var year = Number(dateMatch[1]);
+    var month = Number(dateMatch[2]);
+    var day = Number(dateMatch[3]);
+    if (year < MIN_START_YEAR || year > MAX_END_YEAR) fail("Enter a start date between the years 1000 and 9999.");
+    if (month < 1 || month > 12) fail("Enter a real calendar date to start from.");
+    if (day < 1 || day > daysInMonth(year, month)) fail("Enter a real calendar date to start from.");
+    var timeRaw = String(timeText == null ? "" : timeText).trim();
+    var hour = 0;
+    var minute = 0;
+    var second = 0;
+    if (timeRaw){
+      var timeMatch = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(timeRaw);
+      if (!timeMatch) fail("Enter the start time as HH:MM in UTC.");
+      hour = Number(timeMatch[1]);
+      minute = Number(timeMatch[2]);
+      second = timeMatch[3] === undefined ? 0 : Number(timeMatch[3]);
+      if (hour > 23 || minute > 59 || second > 59) fail("Enter the start time as HH:MM in UTC.");
+    }
+    var monthIndex = year * 12 + (month - 1) + duration.monthsTotal;
+    var endYear = Math.floor(monthIndex / 12);
+    var endMonth = (monthIndex % 12) + 1;
+    if (endYear > MAX_END_YEAR) fail("That duration lands past the year 9999; use a shorter one.");
+    var endDay = Math.min(day, daysInMonth(endYear, endMonth));
+    var endMs = Date.UTC(endYear, endMonth - 1, endDay, hour, minute, second) + Math.round(duration.secondsTotal) * 1000;
+    var end = new Date(endMs);
+    var finalYear = end.getUTCFullYear();
+    if (finalYear > MAX_END_YEAR) fail("That duration lands past the year 9999; use a shorter one.");
+    var dateTextOut = pad(finalYear, 4) + "-" + pad(end.getUTCMonth() + 1, 2) + "-" + pad(end.getUTCDate(), 2);
+    var timeTextOut = pad(end.getUTCHours(), 2) + ":" + pad(end.getUTCMinutes(), 2) + ":" + pad(end.getUTCSeconds(), 2);
+    return {
+      date: dateTextOut,
+      time: timeTextOut,
+      text: dateTextOut + " " + timeTextOut + " UTC",
+      weekday: WEEKDAYS[end.getUTCDay()],
+      clamped: endDay !== day,
+      startDay: day,
+      endDay: endDay
+    };
+  }
+
+  function calculate(text, dateText, timeText){
+    var duration = parse(text);
+    var end = endOf(duration, dateText, timeText);
+    duration.end = end;
+    duration.endText = end ? end.text : null;
+    duration.weekday = end ? end.weekday : null;
+    duration.clamped = end ? end.clamped : false;
+    return duration;
+  }
+
+  return {
+    SECONDS_PER_MINUTE: SECONDS_PER_MINUTE,
+    SECONDS_PER_HOUR: SECONDS_PER_HOUR,
+    SECONDS_PER_DAY: SECONDS_PER_DAY,
+    NOMINAL_DAYS_PER_MONTH: NOMINAL_DAYS_PER_MONTH,
+    MIN_START_YEAR: MIN_START_YEAR,
+    MAX_END_YEAR: MAX_END_YEAR,
+    MAX_MONTHS: MAX_MONTHS,
+    DEFAULT_DURATION: DEFAULT_DURATION,
+    DEFAULT_DATE: DEFAULT_DATE,
+    DEFAULT_TIME: DEFAULT_TIME,
+    COMPONENTS: COMPONENTS,
+    isLeap: isLeap,
+    daysInMonth: daysInMonth,
+    formatNumber: formatNumber,
+    isoOf: isoOf,
+    humanOf: humanOf,
+    parse: parse,
+    endOf: endOf,
+    calculate: calculate
+  };
+})();
+/* iso-8601-duration-core:end */
+(function(){
+  "use strict";
+  var C = IsoDurationCore;
+  var els = {
+    form: document.getElementById("calc-form"),
+    duration: document.getElementById("duration"),
+    date: document.getElementById("start-date"),
+    time: document.getElementById("start-time"),
+    clear: document.getElementById("clear"),
+    copy: document.getElementById("copy"),
+    status: document.getElementById("status"),
+    hint: document.getElementById("hint"),
+    err: document.getElementById("err"),
+    out: document.getElementById("out")
+  };
+  var current = null;
+
+  function addRow(key, value){
+    var row = document.createElement("div");
+    row.className = "row";
+    var k = document.createElement("span");
+    k.className = "k";
+    k.textContent = key;
+    var v = document.createElement("span");
+    v.className = "v";
+    v.textContent = value;
+    row.appendChild(k);
+    row.appendChild(v);
+    els.out.appendChild(row);
+  }
+
+  function placeholder(message){
+    els.out.textContent = "";
+    var span = document.createElement("div");
+    span.className = "sub";
+    span.style.padding = "18px 0 6px";
+    span.textContent = message;
+    els.out.appendChild(span);
+  }
+
+  function render(result){
+    els.out.textContent = "";
+    var label = document.createElement("div");
+    label.className = "label";
+    label.textContent = "ISO 8601 duration";
+    var big = document.createElement("div");
+    big.className = "big";
+    big.textContent = result.iso;
+    var sub = document.createElement("div");
+    sub.className = "sub";
+    sub.textContent = result.human;
+    els.out.appendChild(label);
+    els.out.appendChild(big);
+    els.out.appendChild(sub);
+    if (result.end){
+      addRow("Ends (UTC)", result.end.text);
+      addRow("Weekday", result.end.weekday);
+    }
+    if (result.nominal || result.totalDays >= 1) addRow(result.nominal ? "Total days (nominal)" : "Total days", result.totalDaysText);
+    if (result.totalHours >= 1) addRow(result.nominal ? "Total hours (nominal)" : "Total hours", result.totalHoursText);
+    if (result.totalMinutes >= 1) addRow(result.nominal ? "Total minutes (nominal)" : "Total minutes", result.totalMinutesText);
+    if (result.exactSecondsText) addRow("Total seconds", result.exactSecondsText);
+  }
+
+  function hintFor(result){
+    if (!result) return "";
+    if (!result.end) return "No start date entered, so only the duration and its totals are shown.";
+    if (result.clamped){
+      return "Month-end clamp: day " + result.end.startDay + " does not exist in the month reached, so it landed on day " + result.end.endDay + ".";
+    }
+    return "";
+  }
+
+  function calculate(announce){
+    var text = els.duration.value;
+    var result;
+    els.hint.textContent = "";
+    if (!String(text).trim()){
+      current = null;
+      els.copy.disabled = true;
+      els.err.textContent = announce ? "Enter a duration such as P1Y2M3DT4H5M6S." : "";
+      els.status.textContent = "";
+      placeholder("Enter a duration such as P1M2DT3H to see its totals and end date.");
+      return;
+    }
+    try {
+      result = C.calculate(text, els.date.value, els.time.value);
+    } catch (error){
+      current = null;
+      els.copy.disabled = true;
+      els.err.textContent = error.message;
+      els.status.textContent = "";
+      els.hint.textContent = "";
+      placeholder("Enter an ISO 8601 duration such as P1Y2M3DT4H5M6S.");
+      return;
+    }
+    els.err.textContent = "";
+    els.copy.disabled = false;
+    els.status.textContent = "";
+    current = result;
+    render(result);
+    els.hint.textContent = hintFor(result);
+  }
+
+  function copyIso(){
+    if (!current) return;
+    var text = current.iso;
+    if (!navigator.clipboard || !navigator.clipboard.writeText){
+      els.status.textContent = "Copy is unavailable here; select the duration above.";
+      return;
+    }
+    navigator.clipboard.writeText(text).then(function(){
+      els.status.textContent = "Copied " + text;
+    }, function(){
+      els.status.textContent = "Copy was refused; select the duration above.";
+    });
+  }
+
+  els.form.addEventListener("submit", function(event){
+    event.preventDefault();
+    calculate(true);
+  });
+  els.duration.addEventListener("input", function(){ calculate(false); });
+  els.date.addEventListener("input", function(){ calculate(false); });
+  els.time.addEventListener("input", function(){ calculate(false); });
+  els.copy.addEventListener("click", copyIso);
+  els.clear.addEventListener("click", function(){
+    els.duration.value = "";
+    els.date.value = "";
+    els.time.value = "";
+    els.status.textContent = "";
+    calculate(false);
+    els.duration.focus();
+  });
+
+  calculate(false);
+})();
+</script>
+</body>
+</html>
