@@ -142787,6 +142787,365 @@
         }
       ],
       "listed": true
+    },
+    {
+      "slug": "cgroup-v1-to-v2-converter",
+      "name": "cgroup v1 to v2 Resource Converter",
+      "description": "Convert cgroup v1 limits to the cgroup v2 files that replace them: cpu.shares to cpu.weight under the current and the legacy formula, cpu.cfs_quota_us with cpu.cfs_period_us to one cpu.max line, and memory.limit_in_bytes to memory.max. Runs entirely in your browser.",
+      "category": "System",
+      "legacyCategory": null,
+      "subcategory": "Conversion",
+      "tags": [
+        "system",
+        "cgroup",
+        "cgroup-v2",
+        "resource-limits",
+        "cpu-shares",
+        "cpu-weight",
+        "cpu-max",
+        "memory-limit",
+        "linux",
+        "conversion"
+      ],
+      "aliases": [
+        "cgroup v2 Converter",
+        "cgroup v1 to v2",
+        "CPU Shares to CPU Weight",
+        "cpu.shares to cpu.weight",
+        "cpu.max Converter",
+        "CPU Quota to cpu.max",
+        "memory.max Converter",
+        "cgroup Migration Calculator",
+        "Control Group Resource Converter"
+      ],
+      "icon": "📦",
+      "added": "2026-11-11T20:50:27Z",
+      "risk": "low",
+      "maturity": "draft",
+      "reviewedAt": null,
+      "method": "Three cgroup v1 settings are turned into the v2 file that carries the same limit. cpu.shares (2 to 262144, default 1024) becomes cpu.weight (1 to 10000, default 100) with the formula adopted by runc 1.3.2 and crun 1.23: weight = ceil(10^(L^2/612 + 125L/612 - 7/34)), where L = log2(shares); it is exact at 2 -> 1, 1024 -> 100 and 262144 -> 10000, and every shares value from 2 to 262144 maps to a weight in range with all 10000 weights reachable. The older KEP-2254 linear mapping weight = 1 + floor((shares - 2) * 9999 / 262142) is shown beside it and gives 39 for 1024 shares, which is why it was replaced. cpu.cfs_quota_us (-1 for no limit, otherwise a whole number of microseconds) and cpu.cfs_period_us (1000 to 1000000, default 100000) collapse into one cpu.max line written as $MAX $PERIOD with the quota first, and -1 becomes the literal max; the CPU equivalent is quota divided by period, capped by neither the page nor a CPU count. memory.limit_in_bytes becomes memory.max with the same byte count, and -1 becomes max. Every field accepts whole numbers only: surrounding spaces, a leading minus sign and leading zeros are accepted, while decimal points, unit suffixes and exponents are refused with a message that names the field, its range and the unlimited sentinel. Values above 9007199254740991 bytes or 1000000000000 microseconds are refused instead of being rounded. The page states that a weight is a relative share among runnable siblings rather than a reservation, and everything runs in the browser with no storage, uploads or network access.",
+      "sources": [
+        {
+          "title": "Linux kernel cgroup v2 documentation: cpu.weight defaults to 100 in the range 1 to 10000, cpu.max is a two-value file in the format $MAX $PERIOD defaulting to max 100000, and memory.max defaults to max.",
+          "url": "https://docs.kernel.org/admin-guide/cgroup-v2.html"
+        },
+        {
+          "title": "Linux kernel CFS bandwidth control documentation covers the cgroup v1 cpu.cfs_quota_us and cpu.cfs_period_us pair that cpu.max replaces.",
+          "url": "https://docs.kernel.org/scheduler/sched-bwc.html"
+        },
+        {
+          "title": "systemd cgroup-util.h defines the ranges used here: cpu shares 2 to 262144 with a default of 1024, and CPU weight 1 to 10000 with a default of 100.",
+          "url": "https://github.com/systemd/systemd/blob/main/src/basic/cgroup-util.h"
+        },
+        {
+          "title": "Kubernetes blog, New Conversion from cgroup v1 CPU Shares to v2 CPU Weight: records the KEP-2254 linear formula, the replacement logarithmic formula, and its adoption in runc 1.3.2 and crun 1.23.",
+          "url": "https://kubernetes.io/blog/2026/01/30/new-cgroup-v1-to-v2-cpu-conversion-formula/"
+        }
+      ],
+      "testCases": [
+        {
+          "name": "golden: the default 1024 shares keeps the default weight",
+          "kind": "golden",
+          "input": {
+            "mode": "cpu-shares",
+            "shares": "1024"
+          },
+          "expected": {
+            "file": "cpu.weight",
+            "value": "100",
+            "legacy": "39",
+            "weight": 100,
+            "legacyWeight": 39
+          }
+        },
+        {
+          "name": "golden: 512 shares is half the v1 default",
+          "kind": "golden",
+          "input": {
+            "mode": "cpu-shares",
+            "shares": "512"
+          },
+          "expected": {
+            "value": "59",
+            "legacy": "20",
+            "weight": 59
+          }
+        },
+        {
+          "name": "golden: 2048 shares is twice the v1 default",
+          "kind": "golden",
+          "input": {
+            "mode": "cpu-shares",
+            "shares": "2048"
+          },
+          "expected": {
+            "value": "174",
+            "legacy": "79",
+            "weight": 174
+          }
+        },
+        {
+          "name": "golden: the lowest shares value maps to the lowest weight",
+          "kind": "golden",
+          "input": {
+            "mode": "cpu-shares",
+            "shares": "2"
+          },
+          "expected": {
+            "value": "1",
+            "legacy": "1",
+            "weight": 1
+          }
+        },
+        {
+          "name": "golden: the highest shares value maps to the highest weight",
+          "kind": "golden",
+          "input": {
+            "mode": "cpu-shares",
+            "shares": "262144"
+          },
+          "expected": {
+            "value": "10000",
+            "legacy": "10000",
+            "weight": 10000
+          }
+        },
+        {
+          "name": "golden: half a CPU becomes one cpu.max line",
+          "kind": "golden",
+          "input": {
+            "mode": "cpu-quota",
+            "quota": "50000",
+            "period": "100000"
+          },
+          "expected": {
+            "file": "cpu.max",
+            "value": "50000 100000",
+            "cpus": 0.5,
+            "unlimited": false
+          }
+        },
+        {
+          "name": "golden: a quota of two periods allows two CPUs",
+          "kind": "golden",
+          "input": {
+            "mode": "cpu-quota",
+            "quota": "200000",
+            "period": "100000"
+          },
+          "expected": {
+            "value": "200000 100000",
+            "cpus": 2
+          }
+        },
+        {
+          "name": "golden: one gibibyte in bytes",
+          "kind": "golden",
+          "input": {
+            "mode": "memory-limit",
+            "bytes": "1073741824"
+          },
+          "expected": {
+            "file": "memory.max",
+            "value": "1073741824",
+            "human": "1 GiB",
+            "unlimited": false
+          }
+        },
+        {
+          "name": "boundary: three shares still maps below the legacy curve",
+          "kind": "boundary",
+          "input": {
+            "mode": "cpu-shares",
+            "shares": "3"
+          },
+          "expected": {
+            "value": "2",
+            "legacy": "1"
+          }
+        },
+        {
+          "name": "boundary: one below the maximum shares value",
+          "kind": "boundary",
+          "input": {
+            "mode": "cpu-shares",
+            "shares": "262143"
+          },
+          "expected": {
+            "value": "10000",
+            "legacy": "9999"
+          }
+        },
+        {
+          "name": "boundary: an unlimited quota is written as max",
+          "kind": "boundary",
+          "input": {
+            "mode": "cpu-quota",
+            "quota": "-1",
+            "period": "1000000"
+          },
+          "expected": {
+            "value": "max 1000000",
+            "unlimited": true,
+            "cpus": null
+          }
+        },
+        {
+          "name": "boundary: a zero quota keeps the period",
+          "kind": "boundary",
+          "input": {
+            "mode": "cpu-quota",
+            "quota": "0",
+            "period": "100000"
+          },
+          "expected": {
+            "value": "0 100000",
+            "cpus": 0
+          }
+        },
+        {
+          "name": "boundary: the shortest allowed period",
+          "kind": "boundary",
+          "input": {
+            "mode": "cpu-quota",
+            "quota": "1000",
+            "period": "1000"
+          },
+          "expected": {
+            "value": "1000 1000",
+            "cpus": 1
+          }
+        },
+        {
+          "name": "boundary: an unlimited memory limit is written as max",
+          "kind": "boundary",
+          "input": {
+            "mode": "memory-limit",
+            "bytes": "-1"
+          },
+          "expected": {
+            "value": "max",
+            "human": "no limit",
+            "unlimited": true
+          }
+        },
+        {
+          "name": "boundary: a zero memory limit keeps the byte count",
+          "kind": "boundary",
+          "input": {
+            "mode": "memory-limit",
+            "bytes": "0"
+          },
+          "expected": {
+            "value": "0",
+            "human": "0 bytes"
+          }
+        },
+        {
+          "name": "validation: empty shares",
+          "kind": "validation",
+          "input": {
+            "mode": "cpu-shares",
+            "shares": ""
+          },
+          "expectedError": "Enter a cpu.shares value, for example 1024."
+        },
+        {
+          "name": "validation: shares below the kernel minimum",
+          "kind": "validation",
+          "input": {
+            "mode": "cpu-shares",
+            "shares": "1"
+          },
+          "expectedError": "cpu.shares must be a whole number from 2 to 262144, for example 1024."
+        },
+        {
+          "name": "validation: shares above the kernel maximum",
+          "kind": "validation",
+          "input": {
+            "mode": "cpu-shares",
+            "shares": "262145"
+          },
+          "expectedError": "cpu.shares must be a whole number from 2 to 262144, for example 1024."
+        },
+        {
+          "name": "validation: shares with a unit suffix",
+          "kind": "validation",
+          "input": {
+            "mode": "cpu-shares",
+            "shares": "1024 shares"
+          },
+          "expectedError": "cpu.shares must be a whole number from 2 to 262144, for example 1024."
+        },
+        {
+          "name": "validation: empty quota",
+          "kind": "validation",
+          "input": {
+            "mode": "cpu-quota",
+            "quota": "",
+            "period": "100000"
+          },
+          "expectedError": "Enter cpu.cfs_quota_us in microseconds, or -1 for no limit."
+        },
+        {
+          "name": "validation: quota below the unlimited sentinel",
+          "kind": "validation",
+          "input": {
+            "mode": "cpu-quota",
+            "quota": "-2",
+            "period": "100000"
+          },
+          "expectedError": "cpu.cfs_quota_us cannot be below -1; -1 means no limit."
+        },
+        {
+          "name": "validation: quota above the exact conversion range",
+          "kind": "validation",
+          "input": {
+            "mode": "cpu-quota",
+            "quota": "2000000000000",
+            "period": "100000"
+          },
+          "expectedError": "cpu.cfs_quota_us is too large to convert exactly; the largest supported value is 1000000000000 microseconds."
+        },
+        {
+          "name": "validation: period below the kernel minimum",
+          "kind": "validation",
+          "input": {
+            "mode": "cpu-quota",
+            "quota": "50000",
+            "period": "999"
+          },
+          "expectedError": "cpu.cfs_period_us must be a whole number from 1000 to 1000000, for example 100000."
+        },
+        {
+          "name": "validation: empty memory limit",
+          "kind": "validation",
+          "input": {
+            "mode": "memory-limit",
+            "bytes": ""
+          },
+          "expectedError": "Enter memory.limit_in_bytes in bytes, or -1 for no limit."
+        },
+        {
+          "name": "validation: memory limit below the unlimited sentinel",
+          "kind": "validation",
+          "input": {
+            "mode": "memory-limit",
+            "bytes": "-2"
+          },
+          "expectedError": "memory.limit_in_bytes cannot be below -1; -1 means no limit."
+        },
+        {
+          "name": "validation: memory limit beyond exact integer range",
+          "kind": "validation",
+          "input": {
+            "mode": "memory-limit",
+            "bytes": "9223372036854775807"
+          },
+          "expectedError": "memory.limit_in_bytes is too large to convert exactly; the largest supported value is 9007199254740991 bytes."
+        }
+      ],
+      "listed": true
     }
   ]
 }
