@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Build a modified EUI-64 interface identifier from a MAC address or EUI-64 identifier, then combine it with a /64 prefix to get the SLAAC IPv6 address and the fe80:: link-local address. Runs entirely in your browser.">
+<script src="/assets/theme-init.js"></script>
+<title>IPv6 EUI-64 Interface ID Generator — virt.tools</title>
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.eui-shell{max-width:860px;margin:0 auto}
+.lead,.hint,.detail{color:var(--text-secondary,#8b949e)}
+.panel{background:var(--surface,#161b22);border:1px solid var(--border,#30363d);border-radius:10px;padding:1rem;margin:1rem 0}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:.9rem 1.1rem}
+.field{display:flex;flex-direction:column;gap:.35rem}
+.field label{font-weight:600}
+.field input{box-sizing:border-box;width:100%;max-width:none;background:var(--background,#0d1117);color:var(--text,#c9d1d9);border:1px solid var(--border,#30363d);border-radius:6px;padding:.62rem;font:inherit;min-height:44px}
+.field input:focus-visible,button:focus-visible{outline:2px solid var(--accent,#58a6ff);outline-offset:2px}
+.actions{display:flex;flex-wrap:wrap;gap:.6rem;margin:.9rem 0 .2rem}
+button{border:1px solid var(--border,#30363d);border-radius:6px;background:var(--surface-raised,#21262d);color:var(--text,#c9d1d9);padding:.58rem .85rem;min-height:44px;font:inherit;font-size:.95rem;cursor:pointer}
+button.primary{border-color:var(--accent,#58a6ff);background:var(--accent-soft,#1e3a5f)}
+button.copy{min-height:44px;padding:.35rem .7rem;font-size:.85rem;margin-left:.5rem;vertical-align:middle}
+.status{min-height:1.4rem;margin:.55rem 0 .3rem}
+.status.ok{color:#3fb950}.status.error{color:#f85149}.status.info{color:var(--text-secondary,#8b949e)}
+.results{margin:.2rem 0 0;display:grid;gap:.75rem}
+.results>div{display:grid;grid-template-columns:12rem 1fr;gap:.4rem 1rem;align-items:baseline}
+.results dt{font-weight:600}
+.results dd{margin:0;overflow-wrap:normal}
+.results output{font:600 1rem/1.45 ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--accent,#58a6ff)}
+.results output .group{display:inline-block}
+.results .sub{display:block;font-weight:400;font-size:.82rem;color:var(--text-secondary,#8b949e);margin-top:.2rem}
+h2{font-size:1.05rem;margin:.2rem 0 .8rem}
+h2 span{font-weight:500;font-size:.85rem;color:var(--text-secondary,#8b949e)}
+.explain p{margin:.5rem 0}
+.explain ul{margin:.4rem 0 0;padding-left:1.2rem}
+.explain li{margin:.3rem 0}
+.explain code{background:var(--surface-raised,#21262d);padding:.05rem .3rem;border-radius:4px;font-size:.88em}
+@media(max-width:600px){.grid{grid-template-columns:1fr}.results>div{grid-template-columns:1fr;gap:.15rem}.panel{padding:.85rem}.actions>*{flex:1 1 9rem}}
+</style>
+</head>
+<body><div id="site-header"></div><main class="tool-container"><div class="eui-shell">
+<a href="/">← Back to all tools</a>
+<h1>IPv6 EUI-64 Interface ID Generator</h1>
+<p class="lead">A host that uses stateless address autoconfiguration builds its IPv6 interface identifier from its 48-bit MAC address with the modified EUI-64 rule: flip the universal/local bit and insert <code>ff:fe</code> in the middle. This page does that conversion, combines the identifier with a /64 prefix, and also shows the <code>fe80::</code> link-local address. Everything runs locally.</p>
+
+<form id="eui-form" novalidate>
+<section class="panel" aria-labelledby="input-title">
+<h2 id="input-title">Input</h2>
+<div class="grid">
+<div class="field"><label for="mac-input">MAC address or EUI-64 identifier</label><input id="mac-input" type="text" value="00:1a:2b:3c:4d:5e" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="mac-hint"><p class="hint" id="mac-hint">Colon, dash, Cisco dotted or plain hex; 12 hex digits for a MAC, 16 for an EUI-64.</p></div>
+<div class="field"><label for="prefix-input">IPv6 /64 prefix</label><input id="prefix-input" type="text" value="2001:db8:1:2::/64" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="prefix-hint"><p class="hint" id="prefix-hint">Only the first 64 bits are used; any host bits are cleared.</p></div>
+</div>
+<div class="actions"><button id="generate" class="primary" type="submit">Generate interface ID</button></div>
+<p id="eui-status" class="status info" role="status" aria-live="polite"></p>
+</section>
+
+<section class="panel" aria-labelledby="result-title">
+<h2 id="result-title">Result <span>modified EUI-64 → SLAAC address</span></h2>
+<dl class="results">
+<div><dt>Interface identifier</dt><dd><output id="iid-out" for="mac-input">—</output><span class="sub" id="iid-sub"></span></dd></div>
+<div><dt>Link-local address</dt><dd><output id="linklocal-out" for="mac-input">—</output><button id="copy-linklocal" class="copy" type="button" aria-label="Copy link-local address">Copy</button></dd></div>
+<div><dt id="prefix-label">Address in prefix</dt><dd><output id="address-out" for="mac-input prefix-input">—</output><button id="copy-address" class="copy" type="button" aria-label="Copy prefix address">Copy</button></dd></div>
+</dl>
+<p class="detail" id="eui-detail"></p>
+</section>
+</form>
+
+<section class="panel explain" aria-labelledby="how-title">
+<h2 id="how-title">How the modified EUI-64 rule works</h2>
+<p>Take the 48-bit MAC <code>00:1a:2b:3c:4d:5e</code>. The first octet's universal/local (U/L) bit is bit 1, the <code>0x02</code> place; the multicast (I/G) bit is bit 0, the <code>0x01</code> place. Flipping the U/L bit turns <code>00</code> into <code>02</code>, then <code>ff:fe</code> is inserted between the vendor and device halves:</p>
+<ul>
+<li><code>00:1a:2b</code> + <code>ff:fe</code> + <code>3c:4d:5e</code> becomes <code>02:1a:2b:ff:fe:3c:4d:5e</code>, written as <code>021a:2bff:fe3c:4d5e</code>.</li>
+<li>The link-local address is always <code>fe80::/64</code> plus that identifier, so this MAC gives <code>fe80::21a:2bff:fe3c:4d5e</code>.</li>
+<li>A global address puts the chosen /64 prefix in front of the identifier. The tool clears any host bits you type after the 64th bit.</li>
+<li>An odd first octet (I/G bit set) marks a multicast or broadcast address, which cannot be an interface identifier; the tool rejects it instead of guessing.</li>
+<li>If you paste a 64-bit EUI-64 identifier, only the U/L bit is flipped — <code>ff:fe</code> is not inserted a second time.</li>
+<li>Addresses are printed in the RFC 5952 canonical form: lowercase, no leading zeros, and the longest run of zero groups collapsed to <code>::</code>.</li>
+<li>Modern operating systems usually prefer stable-privacy or temporary addresses for outbound traffic, so a SLAAC address built this way is the interface's stable identifier, not necessarily the source address it uses.</li>
+</ul>
+</section>
+</div></main><script src="/assets/tools.js"></script><script src="/assets/app.js"></script>
+<script>
+/* eui64-core:start */
+const Eui64Core=(()=>{'use strict';
+const HEX=/^[0-9a-fA-F]+$/;
+function hexByte(value){return value.toString(16).padStart(2,'0');}
+function parseIdentifier(text){
+  const source=String(text==null?'':text).trim();
+  if(source==='')throw Error('Enter a 48-bit MAC address or a 64-bit EUI-64 identifier.');
+  if(/[^0-9a-fA-F:.\-\s]/.test(source))throw Error('Use only hex digits and the separators :, - or .');
+  const digits=source.replace(/[:\-.\s]/g,'');
+  if(!HEX.test(digits))throw Error('Use only hex digits and the separators :, - or .');
+  if(digits.length!==12&&digits.length!==16){
+    throw Error(`A MAC address has 12 hex digits and an EUI-64 identifier has 16; this input has ${digits.length}.`);
+  }
+  const bytes=new Uint8Array(digits.length/2);
+  for(let i=0;i<bytes.length;i++)bytes[i]=parseInt(digits.slice(i*2,i*2+2),16);
+  return {kind:digits.length===12?'mac48':'eui64',bytes};
+}
+function formatIdentifier(bytes){
+  return Array.from(bytes,hexByte).join(':');
+}
+function buildInterfaceId(identifier){
+  const bytes=identifier.bytes;
+  if((bytes[0]&0x01)===1){
+    throw Error(`The first octet is 0x${hexByte(bytes[0])}, an odd value with the multicast (I/G) bit set; an interface identifier must come from an individual unicast MAC or EUI-64.`);
+  }
+  const iid=new Uint8Array(8);
+  iid[0]=bytes[0]^0x02;
+  if(bytes.length===6){
+    iid[1]=bytes[1];iid[2]=bytes[2];iid[3]=0xFF;iid[4]=0xFE;iid[5]=bytes[3];iid[6]=bytes[4];iid[7]=bytes[5];
+  }else{
+    for(let i=1;i<8;i++)iid[i]=bytes[i];
+  }
+  return iid;
+}
+function iidGroups(iid){
+  const groups=[];
+  for(let i=0;i<8;i+=2)groups.push((iid[i]<<8)|iid[i+1]);
+  return groups;
+}
+function formatGroups(groups){
+  return groups.map(group=>group.toString(16).padStart(4,'0')).join(':');
+}
+function toHextets(token){
+  if(token==='')throw Error('An empty group is only allowed through "::".');
+  if(token.includes('.')){
+    const quad=token.split('.');
+    if(quad.length!==4)throw Error(`"${token}" is not a dotted-quad IPv4 address.`);
+    const octets=quad.map(part=>{
+      if(!/^\d{1,3}$/.test(part))throw Error(`"${token}" is not a dotted-quad IPv4 address.`);
+      const value=Number(part);
+      if(value>255)throw Error(`"${token}" has an octet above 255.`);
+      return value;
+    });
+    return [(octets[0]<<8)|octets[1],(octets[2]<<8)|octets[3]];
+  }
+  if(!/^[0-9a-fA-F]{1,4}$/.test(token))throw Error(`"${token}" is not a hex group of 1 to 4 digits.`);
+  return [parseInt(token,16)];
+}
+function parseAddress(source){
+  const text=source.trim();
+  if(text==='')throw Error('Enter an IPv6 prefix, for example 2001:db8:1:2::/64.');
+  if(text.includes('%'))throw Error('Remove the zone index (% and interface name); a network prefix has no zone.');
+  if(text.includes('.')){
+    const tail=text.slice(text.lastIndexOf(':')+1);
+    if(!tail.includes('.'))throw Error('An embedded IPv4 address must be the last part of the IPv6 address.');
+  }
+  const halves=text.split('::');
+  if(halves.length>2||text.includes(':::'))throw Error('An IPv6 address may contain "::" only once.');
+  const collect=half=>{
+    if(half==='')return [];
+    const out=[];
+    for(const token of half.split(':'))out.push(...toHextets(token));
+    return out;
+  };
+  const head=collect(halves[0]);
+  if(halves.length===1){
+    if(head.length!==8)throw Error(`An IPv6 address without "::" needs eight groups; this one has ${head.length}.`);
+    return head;
+  }
+  const tail=collect(halves[1]);
+  const zeros=8-head.length-tail.length;
+  if(zeros<0)throw Error('Too many groups for an IPv6 address (more than eight).');
+  if(zeros===0)throw Error('"::" must stand for at least one group of zeros.');
+  return head.concat(new Array(zeros).fill(0),tail);
+}
+function formatAddress(groups){
+  let bestStart=-1,bestLength=0;
+  for(let i=0;i<8;){
+    if(groups[i]!==0){i++;continue;}
+    let j=i;
+    while(j<8&&groups[j]===0)j++;
+    if(j-i>bestLength){bestStart=i;bestLength=j-i;}
+    i=j;
+  }
+  const render=list=>list.map(group=>group.toString(16)).join(':');
+  if(bestLength<2)return render(groups);
+  const left=groups.slice(0,bestStart);
+  const right=groups.slice(bestStart+bestLength);
+  if(left.length===0&&right.length===0)return '::';
+  if(left.length===0)return '::'+render(right);
+  if(right.length===0)return render(left)+'::';
+  return render(left)+'::'+render(right);
+}
+function parsePrefix(text){
+  let source=String(text==null?'':text).trim();
+  if(source==='')throw Error('Enter a /64 IPv6 prefix, for example 2001:db8:1:2::/64.');
+  let length=64;
+  const slash=source.indexOf('/');
+  if(slash>=0){
+    const lengthText=source.slice(slash+1).trim();
+    source=source.slice(0,slash).trim();
+    if(!/^\d{1,3}$/.test(lengthText))throw Error('The prefix length after "/" must be a whole number from 0 to 128.');
+    length=Number(lengthText);
+    if(length>128)throw Error('The prefix length must be between 0 and 128.');
+    if(length!==64)throw Error(`This tool needs a /64 prefix because the interface identifier is 64 bits; /${length} was given.`);
+  }
+  const groups=parseAddress(source);
+  return groups.slice(0,4).concat([0,0,0,0]);
+}
+function prefixText(groups){
+  return formatAddress(groups)+'/64';
+}
+function generate(macText,prefixTextValue){
+  const identifier=parseIdentifier(macText);
+  const prefix=parsePrefix(prefixTextValue);
+  const iid=buildInterfaceId(identifier);
+  const groups=iidGroups(iid);
+  const linkLocal=[0xFE80,0,0,0].concat(groups);
+  return {
+    kind:identifier.kind,
+    kindLabel:identifier.kind==='mac48'?'48-bit MAC address':'64-bit EUI-64 identifier',
+    source:formatIdentifier(identifier.bytes),
+    universal:(identifier.bytes[0]&0x02)===0,
+    firstOctetBefore:hexByte(identifier.bytes[0]),
+    firstOctetAfter:hexByte(iid[0]),
+    iid:formatGroups(groups),
+    iidBytes:formatIdentifier(iid),
+    linkLocal:formatAddress(linkLocal),
+    address:formatAddress(prefix.slice(0,4).concat(groups)),
+    prefix:prefixText(prefix)
+  };
+}
+return{parseIdentifier,formatIdentifier,buildInterfaceId,iidGroups,formatGroups,parseAddress,formatAddress,parsePrefix,prefixText,generate};
+})();
+/* eui64-core:end */
+(()=>{'use strict';
+const $=id=>document.getElementById(id);
+const macInput=$('mac-input'),prefixInput=$('prefix-input'),status=$('eui-status'),detail=$('eui-detail');
+const iidOut=$('iid-out'),iidSub=$('iid-sub'),linkOut=$('linklocal-out'),addressOut=$('address-out'),prefixLabel=$('prefix-label');
+let latest=null;
+function setStatus(message,kind){status.textContent=message;status.className='status '+(kind||'info');}
+function clear(){
+  latest=null;
+  iidOut.textContent='—';iidSub.textContent='';linkOut.textContent='—';addressOut.textContent='—';
+  prefixLabel.textContent='Address in prefix';
+  detail.textContent='';
+}
+function renderAddress(node,text){
+  node.replaceChildren();
+  text.split(':').forEach((part,index)=>{
+    if(index>0){
+      node.append(document.createTextNode(':'));
+      node.append(document.createElement('wbr'));
+    }
+    const span=document.createElement('span');
+    span.className='group';
+    span.textContent=part;
+    node.append(span);
+  });
+}
+function render(announce){
+  try{
+    const result=Eui64Core.generate(macInput.value,prefixInput.value);
+    latest=result;
+    iidOut.textContent=result.iid;
+    iidSub.textContent=result.kindLabel+' · '+result.iidBytes;
+    renderAddress(linkOut,result.linkLocal);
+    renderAddress(addressOut,result.address);
+    prefixLabel.textContent='Address in '+result.prefix;
+    detail.textContent=`First octet ${result.firstOctetBefore} → ${result.firstOctetAfter} (U/L bit flipped)`+(result.kind==='mac48'?' · ff:fe inserted after the OUI':' · no ff:fe insertion for a 64-bit identifier')+(result.universal?'':' · source identifier was already locally administered');
+    setStatus(`Identifier built from a ${result.kindLabel.toLowerCase()}.`, 'ok');
+  }catch(error){
+    clear();
+    setStatus(error.message||String(error),'error');
+    if(announce)detail.textContent='';
+  }
+}
+async function copy(text,button,label){
+  const original=button.textContent;
+  try{
+    await navigator.clipboard.writeText(text);
+    button.textContent='Copied';
+    setTimeout(()=>{button.textContent=original;},1200);
+  }catch(error){
+    setStatus(`Clipboard access was denied; select the ${label} and copy it manually.`,'error');
+  }
+}
+$('eui-form').addEventListener('submit',event=>{event.preventDefault();render(true);});
+macInput.addEventListener('input',()=>render(false));
+prefixInput.addEventListener('input',()=>render(false));
+$('copy-linklocal').addEventListener('click',()=>{
+  if(!latest)return;
+  copy(latest.linkLocal,$('copy-linklocal'),'link-local address');
+});
+$('copy-address').addEventListener('click',()=>{
+  if(!latest)return;
+  copy(latest.address,$('copy-address'),'address');
+});
+render(false);
+})();
+</script></body></html>

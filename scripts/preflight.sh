@@ -223,6 +223,7 @@ node tests/paper_weight_converter.test.cjs
 node tests/iso_8601_duration_calculator.test.cjs
 node tests/thd_sinad_calculator.test.cjs
 node tests/yenc_codec.test.cjs
+node tests/ipv6_eui_64_generator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
