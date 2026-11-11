@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Bash Parameter Expansion Explainer — Virtual Tools</title>
+<meta name="description" content="Paste a shell expansion such as ${file%.*} with a sample value and see the result, the operator it applies and what was removed or replaced.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:12px;margin:10px 0}
+label.f{font-size:13px;opacity:.85;display:block;margin-bottom:4px}
+.field{background:var(--bg,#14181f);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px}
+.field:focus-within{border-color:var(--accent,#6ea8fe);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#6ea8fe) 18%,transparent)}
+.field input{box-sizing:border-box;width:100%;min-width:0;background:transparent;color:var(--text,#e6e6e6);border:none;font-size:17px;font-family:ui-monospace,monospace;padding:2px 0;outline:none}
+.field input:focus{box-shadow:none}
+.field .unit{font-size:11px;color:var(--text-dim,#9aa3b2);margin-top:4px;line-height:1.4}
+.check{display:flex;gap:10px;align-items:flex-start;margin:4px 0 2px;min-height:44px;padding:8px 0}
+.check input{width:20px;height:20px;margin:2px 0 0;flex:0 0 auto;accent-color:var(--accent,#6ea8fe)}
+.check label{font-size:14px;line-height:1.45;cursor:pointer}
+.check .hint{display:block;font-size:12px;color:var(--text-dim,#9aa3b2);margin-top:3px}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:14px 0}
+.out .big{font-size:clamp(1.15rem,4.6vw,1.6rem);font-weight:700;font-family:ui-monospace,monospace;text-align:center;padding:6px 0;overflow-wrap:anywhere;white-space:pre-wrap}
+.out .big.empty{color:var(--text-dim,#9aa3b2);font-weight:600}
+.out .big.bad{color:var(--bad,#f87171);font-size:clamp(1rem,4vw,1.25rem)}
+@media (max-width:380px){.out .big{font-size:1rem}}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45}
+.out .row{display:flex;justify-content:space-between;align-items:baseline;gap:14px;padding:6px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:14px}
+.out .row:last-of-type{border-bottom:none}
+.out .row .k{color:var(--text-dim,#9aa3b2);flex:0 0 auto}
+.out .row .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right;overflow-wrap:anywhere}
+.out .why{font-size:13.5px;line-height:1.55;margin:12px 0 0;color:var(--text,#e6e6e6)}
+.warn{color:var(--warn,#a16207);font-size:13px;margin:10px 0 0;line-height:1.45}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.actions button.ghost{background:transparent;color:var(--text,#e6e6e6);border-color:var(--border,#2a2f3a)}
+.err{color:var(--bad,#f87171);font-size:13px;margin:6px 0;min-height:1.2em}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;margin:10px 0 0;line-height:1.5}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>Bash Parameter Expansion Explainer</h1>
+<p>Paste a shell expansion and a sample value to see exactly what it produces and why.</p>
+</div>
+<div class="panel">
+<form id="expand-form" novalidate>
+<div class="grid2">
+<div class="field"><label class="f" for="expr">Expansion</label><input type="text" id="expr" autocomplete="off" autocapitalize="off" spellcheck="false" value="${file%.*}"><div class="unit" id="u-expr">from ${ to }; the variable name may be anything</div></div>
+<div class="field"><label class="f" for="value">Variable value</label><input type="text" id="value" autocomplete="off" spellcheck="false" value="/home/dev/report.tar.gz"><div class="unit" id="u-value">the value that name holds in this example</div></div>
+</div>
+<div class="check"><input type="checkbox" id="unset"><label for="unset">Treat the variable as unset<span class="hint">Shows what ${x:-default} and ${x-default} do when the name has never been set.</span></label></div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions">
+<button type="submit">Expand</button>
+<button type="button" class="ghost" id="reset">Reset</button>
+</div>
+</form>
+<div class="out" id="out" role="status" aria-live="polite" aria-atomic="true"></div>
+<p class="note">Bash replaces <code>${...}</code> before the command runs. The variable name is only a label here: the expansion is always evaluated against the value you type. Supported operators are the plain value, <code>${#v}</code> for length, <code>${v:-word}</code>, <code>${v-word}</code>, <code>${v:=word}</code>, <code>${v=word}</code>, <code>${v:+word}</code>, <code>${v+word}</code>, <code>${v:?word}</code> and <code>${v?word}</code>, the offsets <code>${v:offset}</code> and <code>${v:offset:length}</code>, prefix removal with <code>${v#pattern}</code> and <code>${v##pattern}</code>, suffix removal with <code>${v%pattern}</code> and <code>${v%%pattern}</code>, the substitutions <code>${v/pattern/repl}</code> and <code>${v//pattern/repl}</code>, and case conversion with <code>${v^}</code>, <code>${v^^}</code>, <code>${v,}</code> and <code>${v,,}</code>. Patterns use shell globbing: <code>*</code>, <code>?</code>, character classes such as <code>[a-z]</code> or <code>[!0-9]</code>, and <code>\</code> to escape a character. Quotes are treated as ordinary characters, not removed, and patterns are case-sensitive. A negative offset counts from the end of the value and, as in bash, needs a space after the colon so it is not read as a default word. Command substitution, nested expansions, arrays and attribute operators such as <code>${v@Q}</code> are rejected rather than guessed. Length and the offset arithmetic count Unicode characters, not bytes, and case conversion uses Unicode case mapping rather than the shell's locale. This is an interactive model of bash's own rules; it does not run a shell. Everything runs locally in your browser with no storage, uploads or network access.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* bash-parameter-expansion-core:start */
+var BashExpansionCore = (function(){
+  "use strict";
+
+  var MAX_VALUE = 1000;
+  var MAX_EXPRESSION = 400;
+  var MAX_PATTERN = 200;
+  var NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+  var NAME_HEAD_RE = /^[A-Za-z_][A-Za-z0-9_]*/;
+
+  function fail(message){ throw new Error(message); }
+
+  function codePoints(text){
+    var source = String(text == null ? "" : text);
+    var out = [];
+    var i = 0;
+    while (i < source.length){
+      var code = source.charCodeAt(i);
+      if (code >= 0xD800 && code <= 0xDBFF && i + 1 < source.length){
+        var next = source.charCodeAt(i + 1);
+        if (next >= 0xDC00 && next <= 0xDFFF){
+          out.push(source.slice(i, i + 2));
+          i += 2;
+          continue;
+        }
+      }
+      out.push(source.charAt(i));
+      i += 1;
+    }
+    return out;
+  }
+
+  function tokenizePattern(pattern){
+    var text = String(pattern == null ? "" : pattern);
+    if (text.length > MAX_PATTERN) fail("A pattern is limited to " + MAX_PATTERN + " characters.");
+    var chars = codePoints(text);
+    var tokens = [];
+    var i = 0;
+    while (i < chars.length){
+      var ch = chars[i];
+      if (ch === "\\"){
+        if (i + 1 >= chars.length) fail("A pattern cannot end with a lone backslash.");
+        tokens.push({ type: "lit", ch: chars[i + 1] });
+        i += 2;
+        continue;
+      }
+      if (ch === "*"){ tokens.push({ type: "star" }); i += 1; continue; }
+      if (ch === "?"){ tokens.push({ type: "any" }); i += 1; continue; }
+      if (ch === "["){
+        var j = i + 1;
+        var negate = false;
+        if (j < chars.length && (chars[j] === "!" || chars[j] === "^")){ negate = true; j += 1; }
+        var set = {};
+        var items = 0;
+        var closed = false;
+        while (j < chars.length){
+          if (chars[j] === "]" && items > 0){ closed = true; break; }
+          var first = chars[j];
+          if (first === "\\"){
+            j += 1;
+            if (j >= chars.length) fail("A pattern cannot end with a lone backslash.");
+            first = chars[j];
+          }
+          if (first.length !== 1) fail("Character ranges in a pattern must use single-unit characters.");
+          if (j + 2 < chars.length && chars[j + 1] === "-" && chars[j + 2] !== "]"){
+            var last = chars[j + 2];
+            if (last.length !== 1) fail("Character ranges in a pattern must use single-unit characters.");
+            var from = first.charCodeAt(0);
+            var to = last.charCodeAt(0);
+            if (from > to) fail("A character range in a pattern must run from a lower character to a higher one.");
+            for (var code = from; code <= to; code += 1) set[String.fromCharCode(code)] = true;
+            j += 3;
+          } else {
+            set[first] = true;
+            j += 1;
+          }
+          items += 1;
+        }
+        if (!closed) fail("A character class in a pattern must be closed with ].");
+        tokens.push({ type: "class", set: set, negate: negate });
+        i = j + 1;
+        continue;
+      }
+      tokens.push({ type: "lit", ch: ch });
+      i += 1;
+    }
+    return tokens;
+  }
+
+  function tokenMatches(token, ch){
+    if (token.type === "any") return true;
+    if (token.type === "lit") return ch === token.ch;
+    var inside = Object.prototype.hasOwnProperty.call(token.set, ch);
+    return token.negate ? !inside : inside;
+  }
+
+  /* End tables: max[j][i] and min[j][i] are the largest and smallest end
+     positions reachable when tokens j.. match a prefix of chars[i..].
+     -1 means "no match". Both tables are filled in one O(n*m) pass. */
+  function endTables(tokens, chars){
+    var n = chars.length;
+    var m = tokens.length;
+    var max = [];
+    var min = [];
+    var i;
+    var j;
+    for (j = 0; j <= m; j += 1){
+      var rowMax = new Int32Array(n + 1);
+      var rowMin = new Int32Array(n + 1);
+      for (i = 0; i <= n; i += 1){ rowMax[i] = i; rowMin[i] = i; }
+      max.push(rowMax);
+      min.push(rowMin);
+    }
+    for (j = m - 1; j >= 0; j -= 1){
+      var token = tokens[j];
+      for (i = n; i >= 0; i -= 1){
+        if (token.type === "star"){
+          max[j][i] = Math.max(max[j + 1][i], i < n ? max[j][i + 1] : -1);
+          var emptyMin = min[j + 1][i];
+          var moreMin = i < n ? min[j][i + 1] : -1;
+          if (emptyMin >= 0 && moreMin >= 0) min[j][i] = Math.min(emptyMin, moreMin);
+          else min[j][i] = emptyMin >= 0 ? emptyMin : moreMin;
+          continue;
+        }
+        var usable = i < n && tokenMatches(token, chars[i]);
+        max[j][i] = usable ? max[j + 1][i + 1] : -1;
+        min[j][i] = usable ? min[j + 1][i + 1] : -1;
+      }
+    }
+    return { max: max, min: min, n: n, m: m };
+  }
+
+  function stripPrefix(value, tokens, longest){
+    var chars = codePoints(value);
+    var tables = endTables(tokens, chars);
+    var length = longest ? tables.max[0][0] : tables.min[0][0];
+    if (length < 0) return { value: value, match: null };
+    return {
+      value: chars.slice(length).join(""),
+      match: chars.slice(0, length).join("")
+    };
+  }
+
+  function stripSuffix(value, tokens, longest){
+    var chars = codePoints(value);
+    var reversed = chars.slice().reverse();
+    var tables = endTables(tokens.slice().reverse(), reversed);
+    var length = longest ? tables.max[0][0] : tables.min[0][0];
+    if (length < 0) return { value: value, match: null };
+    return {
+      value: chars.slice(0, chars.length - length).join(""),
+      match: chars.slice(chars.length - length).join("")
+    };
+  }
+
+  function substitute(value, tokens, replacement, global){
+    var chars = codePoints(value);
+    var tables = endTables(tokens, chars);
+    var out = [];
+    var matches = [];
+    var i = 0;
+    if (!chars.length){
+      var emptyPatternMatches = tables.max[0][0] === 0;
+      return {
+        value: emptyPatternMatches ? replacement : value,
+        matches: emptyPatternMatches ? [""] : [],
+        count: emptyPatternMatches ? 1 : 0
+      };
+    }
+    while (i < chars.length){
+      var end = tables.max[0][i];
+      if (end > i){
+        out.push(replacement);
+        matches.push(chars.slice(i, end).join(""));
+        i = end;
+        if (!global){
+          out.push(chars.slice(i).join(""));
+          break;
+        }
+        continue;
+      }
+      out.push(chars[i]);
+      i += 1;
+    }
+    return { value: out.join(""), matches: matches, count: matches.length };
+  }
+
+  function caseConvert(value, upper, all){
+    if (!all) return value;
+    return upper ? value.toUpperCase() : value.toLowerCase();
+  }
+
+  function firstCaseChange(value, upper){
+    var chars = codePoints(value);
+    if (!chars.length) return value;
+    var head = upper ? chars[0].toUpperCase() : chars[0].toLowerCase();
+    return head + chars.slice(1).join("");
+  }
+
+  function quote(text){
+    return "\"" + text + "\"";
+  }
+
+  function analyse(options){
+    var opts = options || {};
+    var expression = String(opts.expression == null ? "" : opts.expression).trim();
+    var value = String(opts.value == null ? "" : opts.value);
+    var unset = opts.unset === true || opts.unset === "true";
+
+    if (!expression) fail("Enter an expansion such as ${file%.*}.");
+    if (expression.length > MAX_EXPRESSION) fail("The expansion is limited to " + MAX_EXPRESSION + " characters.");
+    if (value.length > MAX_VALUE) fail("The variable value is limited to " + MAX_VALUE + " characters.");
+    if (expression.slice(0, 2) !== "${" || expression.slice(-1) !== "}"){
+      fail("The expansion must start with ${ and end with }.");
+    }
+    var inner = expression.slice(2, -1);
+    if (!inner) fail("Put a variable name between the braces.");
+    if (inner.indexOf("{") >= 0 || inner.indexOf("}") >= 0){
+      fail("Nested braces are not supported; use one ${...} expansion at a time.");
+    }
+    if (inner.indexOf("$") >= 0 || inner.indexOf("`") >= 0){
+      fail("Command substitution and nested variables are not supported inside the expansion.");
+    }
+
+    var state = unset ? "unset" : (value === "" ? "empty" : "set");
+    var result = {
+      expression: expression,
+      name: null,
+      state: state,
+      operator: "",
+      symbol: "",
+      value: "",
+      status: "ok",
+      errorText: null,
+      matchText: null,
+      explanation: "",
+      warnings: []
+    };
+
+    function done(operator, symbol){
+      result.operator = operator;
+      result.symbol = symbol;
+      return result;
+    }
+
+    function empty(operator, symbol, why){
+      result.value = "";
+      result.explanation = why || "The variable is unset, so bash expands this to an empty string.";
+      return done(operator, symbol);
+    }
+
+    if (inner.charAt(0) === "#" && inner.indexOf("#") === 0){
+      var lengthName = inner.slice(1);
+      if (!NAME_RE.test(lengthName)) fail("The length form is ${#name}, with no other operator or pattern.");
+      result.name = lengthName;
+      var count = unset ? 0 : codePoints(value).length;
+      result.value = String(count);
+      result.explanation = unset
+        ? "The variable is unset, so its length is 0."
+        : "The value contains " + count + " character" + (count === 1 ? "" : "s") + ".";
+      return done("Length", "#");
+    }
+
+    var head = NAME_HEAD_RE.exec(inner);
+    if (!head) fail("The expansion must start with a variable name: letters, digits or underscores, not starting with a digit.");
+    var name = head[0];
+    var rest = inner.slice(name.length);
+    result.name = name;
+
+    if (rest === ""){
+      if (unset) return empty("Plain expansion", "", "The variable is unset, so the expansion is an empty string.");
+      result.value = value;
+      result.explanation = "No operator is applied, so the expansion is the value itself.";
+      return done("Plain expansion", "");
+    }
+
+    var prefixLongest = rest.slice(0, 2) === "##";
+    if (prefixLongest || rest.charAt(0) === "#"){
+      var prefixPattern = rest.slice(prefixLongest ? 2 : 1);
+      var prefixLabel = (prefixLongest ? "Longest" : "Shortest") + " matching prefix";
+      var prefixSymbol = prefixLongest ? "##" : "#";
+      if (prefixPattern === "") fail("The prefix form needs a pattern, as in ${name#pattern}.");
+      var prefixTokens = tokenizePattern(prefixPattern);
+      if (unset) return empty(prefixLabel, prefixSymbol);
+      var prefix = stripPrefix(value, prefixTokens, prefixLongest);
+      if (prefix.match === null){
+        result.value = value;
+        result.explanation = "No prefix of the value matches " + quote(prefixPattern) + ", so the value is unchanged.";
+        return done(prefixLabel, prefixSymbol);
+      }
+      result.value = prefix.value;
+      result.matchText = prefix.match;
+      result.explanation = "Removed the " + (prefixLongest ? "longest" : "shortest") + " prefix matching " +
+        quote(prefixPattern) + (prefix.match === "" ? ", which is empty, so the value is unchanged." :
+        ", which is " + quote(prefix.match) + ", leaving " + quote(prefix.value) + ".");
+      return done(prefixLabel, prefixSymbol);
+    }
+
+    var suffixLongest = rest.slice(0, 2) === "%%";
+    if (suffixLongest || rest.charAt(0) === "%"){
+      var suffixPattern = rest.slice(suffixLongest ? 2 : 1);
+      var suffixLabel = (suffixLongest ? "Longest" : "Shortest") + " matching suffix";
+      var suffixSymbol = suffixLongest ? "%%" : "%";
+      if (suffixPattern === "") fail("The suffix form needs a pattern, as in ${name%pattern}.");
+      var suffixTokens = tokenizePattern(suffixPattern);
+      if (unset) return empty(suffixLabel, suffixSymbol);
+      var suffix = stripSuffix(value, suffixTokens, suffixLongest);
+      if (suffix.match === null){
+        result.value = value;
+        result.explanation = "No suffix of the value matches " + quote(suffixPattern) + ", so the value is unchanged.";
+        return done(suffixLabel, suffixSymbol);
+      }
+      result.value = suffix.value;
+      result.matchText = suffix.match;
+      result.explanation = "Removed the " + (suffixLongest ? "longest" : "shortest") + " suffix matching " +
+        quote(suffixPattern) + (suffix.match === "" ? ", which is empty, so the value is unchanged." :
+        ", which is " + quote(suffix.match) + ", leaving " + quote(suffix.value) + ".");
+      return done(suffixLabel, suffixSymbol);
+    }
+
+    if (rest.charAt(0) === "/"){
+      var global = rest.charAt(1) === "/";
+      var body = rest.slice(global ? 2 : 1);
+      var slash = -1;
+      for (var scan = 0; scan < body.length; scan += 1){
+        if (body.charAt(scan) === "\\"){ scan += 1; continue; }
+        if (body.charAt(scan) === "/"){ slash = scan; break; }
+      }
+      var subPattern = slash < 0 ? body : body.slice(0, slash);
+      var replacement = slash < 0 ? "" : body.slice(slash + 1);
+      var subLabel = global ? "Replace every match" : "Replace the first match";
+      var subSymbol = global ? "//" : "/";
+      if (subPattern === "") fail("The substitution form needs a pattern, as in ${name/old/new}.");
+      if (subPattern.charAt(0) === "#" || subPattern.charAt(0) === "%"){
+        fail("The anchored substitution forms ${name/#pattern/repl} and ${name/%pattern/repl} are not supported.");
+      }
+      var subTokens = tokenizePattern(subPattern);
+      if (unset) return empty(subLabel, subSymbol);
+      var sub = substitute(value, subTokens, replacement, global);
+      if (sub.count === 0){
+        result.value = value;
+        result.explanation = "No part of the value matches " + quote(subPattern) + ", so the value is unchanged.";
+        return done(subLabel, subSymbol);
+      }
+      result.value = sub.value;
+      result.matchText = sub.matches.join(", ");
+      result.explanation = "Replaced " + sub.count + " match" + (sub.count === 1 ? "" : "es") + " of " +
+        quote(subPattern) + (replacement === "" ? " with nothing" : " with " + quote(replacement)) +
+        ", giving " + quote(sub.value) + ".";
+      return done(subLabel, subSymbol);
+    }
+
+    if (rest === "^^" || rest === "^" || rest === ",," || rest === ","){
+      var upper = rest.charAt(0) === "^";
+      var everyCharacter = rest.length === 2;
+      var caseLabel = (upper ? "Uppercase " : "Lowercase ") + (everyCharacter ? "all" : "first character");
+      var caseSymbol = rest;
+      if (unset) return empty(caseLabel, caseSymbol);
+      result.value = everyCharacter ? caseConvert(value, upper, true) : firstCaseChange(value, upper);
+      result.explanation = everyCharacter
+        ? "Converted every character to " + (upper ? "upper" : "lower") + " case."
+        : "Converted only the first character to " + (upper ? "upper" : "lower") + " case.";
+      if (/[^\u0000-\u007F]/.test(value)){
+        result.warnings.push("Case conversion here uses Unicode case mapping; bash follows the current locale, so non-ASCII letters can differ.");
+      }
+      return done(caseLabel, caseSymbol);
+    }
+
+    var defaultOp = /^(:?[-=+?])([\s\S]*)$/.exec(rest);
+    if (defaultOp){
+      var operator = defaultOp[1];
+      var word = defaultOp[2];
+      var testsEmpty = operator.charAt(0) === ":";
+      var kind = operator.charAt(operator.length - 1);
+      var label;
+      if (kind === "-") label = testsEmpty ? "Default when unset or empty" : "Default when unset";
+      else if (kind === "=") label = testsEmpty ? "Assign when unset or empty" : "Assign when unset";
+      else if (kind === "+") label = testsEmpty ? "Alternative when set and not empty" : "Alternative when set";
+      else label = testsEmpty ? "Error when unset or empty" : "Error when unset";
+      var useWord = unset || (testsEmpty && value === "");
+      var symbol = operator;
+
+      if (kind === "?"){
+        if (useWord){
+          result.status = "error";
+          result.value = "";
+          result.errorText = word || ("parameter null or not set: " + name);
+          result.explanation = "Bash stops with an error here: " + (testsEmpty
+            ? "the variable is unset or empty and the :? operator treats that as fatal."
+            : "the variable is unset and the ? operator treats that as fatal.");
+          return done(label, symbol);
+        }
+        result.value = value;
+        result.explanation = "The variable is " + state + ", so the error word is not used and the value passes through.";
+        return done(label, symbol);
+      }
+
+      if (kind === "+"){
+        result.value = useWord ? "" : word;
+        result.explanation = useWord
+          ? "The variable is " + state + ", so the alternative is skipped and the expansion is empty."
+          : "The variable is " + state + ", so the alternative " + quote(word) + " replaces the value.";
+        return done(label, symbol);
+      }
+
+      if (!useWord){
+        result.value = value;
+        result.explanation = "The variable is " + state + ", so the word is not used and the value passes through.";
+        return done(label, symbol);
+      }
+
+      result.value = word;
+      result.explanation = (testsEmpty
+        ? "The variable is " + state + ", so the default applies."
+        : "The variable is unset, so the default applies.") +
+        (kind === "=" ? " Bash also assigns " + quote(word) + " to " + name + "." : "");
+      return done(label, symbol);
+    }
+
+    if (rest.charAt(0) === ":"){
+      var offsetText = rest.slice(1).trim();
+      var offsetMatch = /^(-?[0-9]+)(?::(-?[0-9]+))?$/.exec(offsetText);
+      if (!offsetMatch){
+        fail("The substring form is ${name:offset} or ${name:offset:length} with whole numbers; a negative offset needs a space, as in ${name: -3}.");
+      }
+      var offset = parseInt(offsetMatch[1], 10);
+      var length = offsetMatch[2] === undefined ? null : parseInt(offsetMatch[2], 10);
+      var chars = codePoints(value);
+      var total = chars.length;
+      var substringLabel = length === null ? "Substring from offset" : "Substring by offset and length";
+      var substringSymbol = length === null ? ":" : ":o:l";
+      if (unset) return empty(substringLabel, substringSymbol);
+      var start;
+      if (offset < 0){
+        start = total + offset;
+        if (start < 0){
+          result.value = "";
+          result.explanation = "A negative offset counts back from the end, and " + Math.abs(offset) +
+            " is past the start of a " + total + "-character value, so the expansion is empty.";
+          return done(substringLabel, substringSymbol);
+        }
+      } else {
+        if (offset > total){
+          result.value = "";
+          result.explanation = "The offset " + offset + " is past the end of a " + total +
+            "-character value, so the expansion is empty.";
+          return done(substringLabel, substringSymbol);
+        }
+        start = offset;
+      }
+      var end;
+      if (length === null) end = total;
+      else if (length < 0){
+        end = total + length;
+        if (end < start){
+          fail("Bash rejects a negative length that ends before the offset: " + length + " leaves nothing after position " + start + ".");
+        }
+      } else end = Math.min(start + length, total);
+      result.value = chars.slice(start, end).join("");
+      result.explanation = "Kept characters " + start + " to " + end + " of " + total +
+        (result.value === "" ? ", which is an empty slice." : ", giving " + quote(result.value) + ".");
+      return done(substringLabel, substringSymbol);
+    }
+
+    fail("Unsupported expansion operator " + quote(rest.charAt(0)) + ". Only the operators listed under the form are supported.");
+    return result;
+  }
+
+  return {
+    analyse: analyse,
+    tokenizePattern: tokenizePattern,
+    limits: { value: MAX_VALUE, expression: MAX_EXPRESSION, pattern: MAX_PATTERN }
+  };
+})();
+/* bash-parameter-expansion-core:end */
+(function(){
+"use strict";
+
+var els = {
+  expr: document.getElementById("expr"),
+  value: document.getElementById("value"),
+  unset: document.getElementById("unset"),
+  err: document.getElementById("err"),
+  out: document.getElementById("out"),
+  form: document.getElementById("expand-form"),
+  reset: document.getElementById("reset")
+};
+
+function clear(node){
+  while (node.firstChild) node.removeChild(node.firstChild);
+}
+function addRow(parent, key, value){
+  var row = document.createElement("div");
+  row.className = "row";
+  var k = document.createElement("span");
+  k.className = "k";
+  k.textContent = key;
+  var v = document.createElement("span");
+  v.className = "v";
+  v.textContent = value;
+  row.appendChild(k);
+  row.appendChild(v);
+  parent.appendChild(row);
+}
+function stateLabel(state){
+  if (state === "unset") return "unset";
+  if (state === "empty") return "set to an empty string";
+  return "set";
+}
+function characterCount(text){
+  var count = 0;
+  var i = 0;
+  while (i < text.length){
+    var code = text.charCodeAt(i);
+    if (code >= 0xD800 && code <= 0xDBFF && i + 1 < text.length){
+      var next = text.charCodeAt(i + 1);
+      if (next >= 0xDC00 && next <= 0xDFFF){ i += 1; }
+    }
+    count += 1;
+    i += 1;
+  }
+  return count;
+}
+
+function render(result){
+  clear(els.out);
+
+  var big = document.createElement("div");
+  big.className = "big";
+  if (result.status === "error"){
+    big.className = "big bad";
+    big.textContent = "Expansion fails";
+  } else if (result.value === ""){
+    big.className = "big empty";
+    big.textContent = "(empty string)";
+  } else {
+    big.textContent = result.value;
+  }
+
+  var sub = document.createElement("div");
+  sub.className = "sub";
+  if (result.status === "error"){
+    sub.textContent = result.errorText;
+  } else {
+    sub.textContent = result.operator + " · " + result.expression;
+  }
+  els.out.appendChild(big);
+  els.out.appendChild(sub);
+
+  addRow(els.out, "Variable", stateLabel(result.state));
+  addRow(els.out, "Operator", result.operator);
+  if (result.status !== "error"){
+    addRow(els.out, "Matched text", result.matchText === null ? "—" : (result.matchText === "" ? "(empty)" : result.matchText));
+    addRow(els.out, "Result length", characterCount(result.value) + " character" + (characterCount(result.value) === 1 ? "" : "s"));
+  }
+
+  var why = document.createElement("p");
+  why.className = "why";
+  why.textContent = result.explanation;
+  els.out.appendChild(why);
+
+  result.warnings.forEach(function(message){
+    var p = document.createElement("p");
+    p.className = "warn";
+    p.textContent = message;
+    els.out.appendChild(p);
+  });
+}
+
+function expand(){
+  var result;
+  try {
+    result = BashExpansionCore.analyse({
+      expression: els.expr.value,
+      value: els.value.value,
+      unset: els.unset.checked
+    });
+  } catch (error){
+    els.err.textContent = error.message;
+    clear(els.out);
+    var hint = document.createElement("div");
+    hint.className = "big empty";
+    hint.textContent = "Check the expansion above";
+    els.out.appendChild(hint);
+    return;
+  }
+  els.err.textContent = "";
+  render(result);
+}
+
+function reset(){
+  els.expr.value = "${file%.*}";
+  els.value.value = "/home/dev/report.tar.gz";
+  els.unset.checked = false;
+  els.err.textContent = "";
+  expand();
+}
+
+els.form.addEventListener("submit", function(event){
+  event.preventDefault();
+  expand();
+});
+els.reset.addEventListener("click", reset);
+[els.expr, els.value].forEach(function(control){
+  control.addEventListener("input", expand);
+});
+els.unset.addEventListener("change", expand);
+
+expand();
+})();
+</script>
+</body>
+</html>
