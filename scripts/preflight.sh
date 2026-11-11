@@ -225,6 +225,7 @@ node tests/thd_sinad_calculator.test.cjs
 node tests/yenc_codec.test.cjs
 node tests/ipv6_eui_64_generator.test.cjs
 node tests/cgroup_v1_to_v2_converter.test.cjs
+node tests/hdr_transfer_function_converter.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"

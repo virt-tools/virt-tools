@@ -260,7 +260,7 @@ assert.ok(entry.method.includes('dBFS') && entry.method.includes('6.02') && entr
   'method must state the units, the per-bit factor and local execution');
 assert.equal(new Set(entry.tags).size, entry.tags.length, 'duplicate tags');
 assert.equal(new Set(entry.aliases).size, entry.aliases.length, 'duplicate aliases');
-assert.equal(catalog.tools.length, 2216);
+assert.equal(catalog.tools.length, 2217);
 const allAliases = new Map();
 for (const tool of catalog.tools) {
   for (const alias of tool.aliases || []) {
