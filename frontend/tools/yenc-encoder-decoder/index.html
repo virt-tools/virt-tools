@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Encode text as a yEnc body with =ybegin and =yend headers and a CRC32 checksum, or decode a pasted yEnc body back to text and verify its size and checksum. Runs entirely in your browser.">
+<script src="/assets/theme-init.js"></script>
+<title>yEnc Encoder / Decoder — virt.tools</title>
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.yenc-shell{max-width:960px;margin:0 auto}
+.lead,.hint{color:var(--text-secondary,#8b949e)}
+.panel{background:var(--surface,#161b22);border:1px solid var(--border,#30363d);border-radius:10px;padding:1rem;margin:1rem 0}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:.9rem 1.1rem}
+.field{display:flex;flex-direction:column;gap:.35rem}
+.field label,.out-label{font-weight:600}
+.field input,.field select{box-sizing:border-box;width:100%;max-width:none;background:var(--background,#0d1117);color:var(--text,#c9d1d9);border:1px solid var(--border,#30363d);border-radius:6px;padding:.62rem;font:inherit;min-height:44px}
+textarea{box-sizing:border-box;width:100%;max-width:none;min-height:7rem;background:var(--background,#0d1117);color:var(--text,#c9d1d9);border:1px solid var(--border,#30363d);border-radius:6px;padding:.62rem;font:400 .9rem/1.45 ui-monospace,SFMono-Regular,Consolas,monospace;resize:vertical}
+textarea:focus-visible,input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--accent,#58a6ff);outline-offset:2px}
+.check{display:flex;align-items:center;gap:.5rem;margin:.9rem 0 0;min-height:44px}
+.check input{width:1.05rem;height:1.05rem}
+.check label{font-weight:500}
+.actions{display:flex;flex-wrap:wrap;gap:.6rem;margin:.9rem 0}
+button{border:1px solid var(--border,#30363d);border-radius:6px;background:var(--surface-raised,#21262d);color:var(--text,#c9d1d9);padding:.58rem .85rem;min-height:44px;font:inherit;font-size:.95rem;cursor:pointer}
+button.primary{border-color:var(--accent,#58a6ff);background:var(--accent-soft,#1e3a5f)}
+.status{min-height:1.4rem;margin:.4rem 0 .7rem}
+.status.ok{color:#3fb950}.status.warning{color:#d29922}.status.error{color:#f85149}
+.detail{min-height:1.2rem;margin:.5rem 0 0;color:var(--text-secondary,#8b949e);font-size:.85rem;overflow-wrap:anywhere}
+#decode-warnings{margin:.3rem 0 0;padding-left:1.2rem;color:#d29922;font-size:.85rem}
+#decode-warnings:empty{display:none}
+h2{font-size:1.05rem;margin:.2rem 0 .8rem}
+h2 span{font-weight:500;font-size:.85rem;color:var(--text-secondary,#8b949e)}
+.explain p{margin:.5rem 0}
+.explain ul{margin:.4rem 0 0;padding-left:1.2rem}
+.explain li{margin:.25rem 0}
+.explain code{background:var(--surface-raised,#21262d);padding:.05rem .3rem;border-radius:4px;font-size:.88em}
+@media(max-width:600px){.grid{grid-template-columns:1fr}.actions>*{flex:1 1 9rem}.panel{padding:.85rem}}
+</style>
+</head>
+<body><div id="site-header"></div><main class="tool-container"><div class="yenc-shell">
+<a href="/">← Back to all tools</a>
+<h1>yEnc Encoder / Decoder</h1>
+<p class="lead">yEnc is the transfer encoding used for binary attachments in Usenet: every byte is shifted by 42, a handful of characters are escaped with <code>=</code>, and the trailer carries the byte count and a CRC32 checksum. Encode text into a postable body, or paste a yEnc body and decode it while the size and checksum are verified. Everything runs in your browser; nothing is uploaded.</p>
+
+<form id="encode-form" novalidate>
+<section class="panel" aria-labelledby="encode-title">
+<h2 id="encode-title">Encode <span>text → yEnc</span></h2>
+<div class="grid">
+<div class="field"><label for="file-name">File name (optional)</label><input id="file-name" type="text" value="message.txt" maxlength="120" autocomplete="off" spellcheck="false"><p class="hint">Written into the <code>=ybegin</code> and <code>=yend</code> headers.</p></div>
+<div class="field"><label for="line-length">Line length</label><select id="line-length"><option value="128" selected>128 characters (standard)</option><option value="76">76 characters (email-safe)</option><option value="64">64 characters (short lines)</option></select><p class="hint">Escapes take two characters, so lines are wrapped without splitting a pair.</p></div>
+</div>
+<div class="field" style="margin-top:.9rem"><label for="encode-input">Text to encode</label><textarea id="encode-input" rows="5" spellcheck="false">Hello, yEnc!
+Café — 42 bytes of payload.</textarea></div>
+<p class="check"><input type="checkbox" id="headers" checked><label for="headers">Include the <code>=ybegin</code> / <code>=yend</code> headers</label></p>
+<div class="actions"><button id="encode" class="primary" type="submit">Encode</button><button id="decode-result" type="button">Decode this result</button></div>
+<p id="encode-status" class="status" role="status" aria-live="polite"></p>
+<label class="out-label" for="encode-output">yEnc output</label>
+<textarea id="encode-output" rows="8" readonly spellcheck="false"></textarea>
+<p class="detail" id="encode-detail"></p>
+</section>
+</form>
+
+<form id="decode-form" novalidate>
+<section class="panel" aria-labelledby="decode-title">
+<h2 id="decode-title">Decode <span>yEnc → text</span></h2>
+<label class="out-label" for="decode-input">yEnc body or full article</label>
+<textarea id="decode-input" rows="6" placeholder="Paste a =ybegin … =yend block, or the body lines on their own…" spellcheck="false"></textarea>
+<div class="actions"><button id="decode" class="primary" type="submit">Decode</button><button id="encode-result" type="button">Use as encode input</button></div>
+<p id="decode-status" class="status" role="status" aria-live="polite"></p>
+<ul id="decode-warnings"></ul>
+<label class="out-label" for="decode-output">Decoded text</label>
+<textarea id="decode-output" rows="6" readonly spellcheck="false"></textarea>
+<p class="detail" id="decode-detail"></p>
+</section>
+</form>
+
+<section class="panel explain" aria-labelledby="how-title">
+<h2 id="how-title">How yEnc works</h2>
+<p>Each payload byte is stored as <code>(byte + 42) mod 256</code>, so the characters that would break a Usenet message — NUL, LF, CR and <code>=</code> — never appear unescaped. When the shifted character is one of those, or a tab or space at the start of a line, it is written as <code>=</code> followed by <code>(character + 64) mod 256</code>. A decoder subtracts 106 from the escaped character instead of 42.</p>
+<ul>
+<li><code>=ybegin line=128 size=N name=file</code> opens the part; <code>=ypart</code> marks a multipart section; <code>=yend size=N crc32=XXXXXXXX</code> closes it.</li>
+<li>Line breaks inside the body are framing and are removed before decoding, so the body can be reflowed by a news client.</li>
+<li>The CRC32 is the standard IEEE 802.3 checksum (same polynomial as zip and PNG) over the original bytes, shown as eight lowercase hex digits.</li>
+<li>This page encodes the UTF-8 bytes of the text you type. When a decoded payload is not valid UTF-8 it is shown as hex rather than silently replaced.</li>
+<li>Input is limited to 100,000 characters, which keeps encoding and checksumming in a single frame. Nothing is stored and no request is made.</li>
+</ul>
+</section>
+</div></main><script src="/assets/tools.js"></script><script src="/assets/app.js"></script>
+<script>
+/* yenc-core:start */
+const YencCore=(()=>{'use strict';
+const DEFAULT_OPTIONS={lineLength:128,headers:true,name:'message.txt'};
+const MAX_CHARS=100000;
+const MIN_LINE=16,MAX_LINE=998;
+const CRC_TABLE=(()=>{
+  const table=new Uint32Array(256);
+  for(let n=0;n<256;n++){
+    let c=n;
+    for(let k=0;k<8;k++)c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1);
+    table[n]=c>>>0;
+  }
+  return table;
+})();
+function crc32(bytes){
+  let crc=0xFFFFFFFF;
+  for(let i=0;i<bytes.length;i++)crc=CRC_TABLE[(crc^bytes[i])&0xFF]^(crc>>>8);
+  return (crc^0xFFFFFFFF)>>>0;
+}
+function hex32(value){return (value>>>0).toString(16).padStart(8,'0');}
+function utf8Encode(text){
+  const source=String(text==null?'':text);
+  const out=[];
+  for(let i=0;i<source.length;i++){
+    let cp=source.codePointAt(i);
+    if(cp>0xFFFF)i++;
+    if(cp>=0xD800&&cp<=0xDFFF)cp=0xFFFD;
+    if(cp<0x80)out.push(cp);
+    else if(cp<0x800)out.push(0xC0|(cp>>6),0x80|(cp&0x3F));
+    else if(cp<0x10000)out.push(0xE0|(cp>>12),0x80|((cp>>6)&0x3F),0x80|(cp&0x3F));
+    else out.push(0xF0|(cp>>18),0x80|((cp>>12)&0x3F),0x80|((cp>>6)&0x3F),0x80|(cp&0x3F));
+  }
+  return new Uint8Array(out);
+}
+function utf8Decode(bytes){
+  const points=[];
+  let valid=true;
+  let i=0;
+  while(i<bytes.length){
+    const b=bytes[i];
+    if(b<0x80){points.push(b);i++;continue;}
+    let need,cp,min;
+    if((b&0xE0)===0xC0){need=1;cp=b&0x1F;min=0x80;}
+    else if((b&0xF0)===0xE0){need=2;cp=b&0x0F;min=0x800;}
+    else if((b&0xF8)===0xF0){need=3;cp=b&0x07;min=0x10000;}
+    else {valid=false;points.push(0xFFFD);i++;continue;}
+    if(i+need>=bytes.length){valid=false;points.push(0xFFFD);i++;continue;}
+    let ok=true;
+    for(let k=1;k<=need;k++){
+      const next=bytes[i+k];
+      if((next&0xC0)!==0x80){ok=false;break;}
+      cp=(cp<<6)|(next&0x3F);
+    }
+    if(!ok||cp<min||cp>0x10FFFF||(cp>=0xD800&&cp<=0xDFFF)){valid=false;points.push(0xFFFD);i++;continue;}
+    points.push(cp);
+    i+=need+1;
+  }
+  let text='';
+  for(const cp of points)text+=String.fromCodePoint(cp);
+  return {text,valid};
+}
+function tokenFor(byte,atLineStart){
+  const code=(byte+42)&0xFF;
+  const escape=code===0||code===10||code===13||code===61||(atLineStart&&(code===9||code===32));
+  return escape?'='+String.fromCharCode((code+64)&0xFF):String.fromCharCode(code);
+}
+function encodeBytes(bytes,options){
+  if(!(bytes instanceof Uint8Array))bytes=new Uint8Array(bytes||[]);
+  const opts=Object.assign({},DEFAULT_OPTIONS,options||{});
+  const lineLength=Number(opts.lineLength);
+  if(!Number.isInteger(lineLength)||lineLength<MIN_LINE||lineLength>MAX_LINE){
+    throw Error(`Line length must be a whole number from ${MIN_LINE} to ${MAX_LINE} characters.`);
+  }
+  const name=String(opts.name==null?'':opts.name).trim();
+  if(/[\r\n]/.test(name))throw Error('The file name cannot contain a line break.');
+  if(/\s/.test(name))throw Error('The file name cannot contain spaces: yEnc header attributes are space-separated.');
+  if(name.length>120)throw Error('The file name is limited to 120 characters.');
+  const lines=[];
+  let line='';
+  for(let i=0;i<bytes.length;i++){
+    let token=tokenFor(bytes[i],line==='');
+    if(line!==''&&line.length+token.length>lineLength){
+      lines.push(line);
+      line='';
+      token=tokenFor(bytes[i],true);
+    }
+    line+=token;
+  }
+  if(line!=='')lines.push(line);
+  const checksum=hex32(crc32(bytes));
+  const header=`=ybegin line=${lineLength} size=${bytes.length}${name?' name='+name:''}`;
+  const trailer=`=yend size=${bytes.length} crc32=${checksum}`;
+  const body=lines.join('\n');
+  const output=opts.headers?`${header}\n${body}\n${trailer}`:body;
+  return {body,output,lines:lines.length,size:bytes.length,bytes:bytes.length,crc32:checksum,header,trailer};
+}
+function parseAttrs(text){
+  const out={};
+  for(const part of String(text).trim().split(/\s+/)){
+    if(!part)continue;
+    const eq=part.indexOf('=');
+    if(eq>0)out[part.slice(0,eq).toLowerCase()]=part.slice(eq+1);
+  }
+  return out;
+}
+function decodeText(text){
+  const source=String(text==null?'':text);
+  if(source.length>MAX_CHARS*2)throw Error('The yEnc input is too large for this page (over 200,000 characters).');
+  const lines=source.replace(/\r\n?/g,'\n').split('\n');
+  let start=0;
+  let hasHeaders=false;
+  for(let i=0;i<lines.length;i++){
+    if(/^=ybegin(?:\s|$)/i.test(lines[i])){start=i;hasHeaders=true;break;}
+  }
+  const bytes=[];
+  const warnings=[];
+  let expectedCrc=null,expectedSize=null,name=null,parts=0;
+  for(let i=start;i<lines.length;i++){
+    const line=lines[i];
+    if(/^=ybegin(?:\s|$)/i.test(line)){
+      const attrs=parseAttrs(line.slice(7));
+      if(attrs.size!==undefined){
+        const size=Number(attrs.size);
+        if(Number.isInteger(size)&&size>=0)expectedSize=size;
+        else warnings.push('The size in =ybegin is not a non-negative whole number and was ignored.');
+      }
+      if(attrs.name)name=attrs.name;
+      continue;
+    }
+    if(/^=ypart(?:\s|$)/i.test(line)){parts+=1;continue;}
+    if(/^=yend(?:\s|$)/i.test(line)){
+      const attrs=parseAttrs(line.slice(5));
+      if(attrs.crc32!==undefined){
+        if(/^[0-9a-f]{8}$/i.test(attrs.crc32))expectedCrc=attrs.crc32.toLowerCase();
+        else warnings.push('The crc32 in =yend is not eight hex digits and was ignored.');
+      }
+      if(attrs.size!==undefined){
+        const size=Number(attrs.size);
+        if(Number.isInteger(size)&&size>=0)expectedSize=size;
+        else warnings.push('The size in =yend is not a non-negative whole number and was ignored.');
+      }
+      break;
+    }
+    for(let j=0;j<line.length;j++){
+      const code=line.charCodeAt(j);
+      if(code>0xFF)throw Error(`Line ${i+1}: character ${JSON.stringify(line[j])} is outside the single-byte range that yEnc bodies use.`);
+      if(code===0x3D){
+        if(j+1>=line.length)throw Error(`Line ${i+1}: the escape "=" is the last character on the line; yEnc escapes are always two characters and cannot be split.`);
+        const next=line.charCodeAt(j+1);
+        if(next>0xFF)throw Error(`Line ${i+1}: the escaped character is outside the single-byte range that yEnc bodies use.`);
+        bytes.push((next-106)&0xFF);
+        j++;
+      } else {
+        bytes.push((code-42)&0xFF);
+      }
+    }
+  }
+  const result=new Uint8Array(bytes);
+  const computed=hex32(crc32(result));
+  const crcMatch=expectedCrc===null?null:expectedCrc===computed;
+  const sizeMatch=expectedSize===null?null:expectedSize===result.length;
+  if(crcMatch===false)warnings.push(`The trailer's CRC32 ${expectedCrc} does not match the decoded payload (${computed}); the body was edited or is corrupt.`);
+  if(sizeMatch===false)warnings.push(`The trailer says ${expectedSize} bytes but the body decodes to ${result.length}; a part may be missing or truncated.`);
+  const decoded=utf8Decode(result);
+  if(!decoded.valid)warnings.push('The payload is not valid UTF-8, so its bytes are shown as hex instead of text.');
+  return {bytes:result.length,size:result.length,bytesRaw:result,crc32:computed,crcExpected:expectedCrc,crcMatch,sizeExpected:expectedSize,sizeMatch,
+    validUtf8:decoded.valid,text:decoded.text,name,partCount:parts,hasHeaders,
+    warnings,warningCount:warnings.length};
+}
+function encodeText(text,options){
+  const source=String(text==null?'':text);
+  if(source.length>MAX_CHARS)throw Error(`The text is too large for this page (limit ${MAX_CHARS.toLocaleString('en-US')} characters).`);
+  return encodeBytes(utf8Encode(source),options);
+}
+return{DEFAULT_OPTIONS,MAX_CHARS,MIN_LINE,MAX_LINE,crc32,hex32,utf8Encode,utf8Decode,
+  tokenFor,encodeBytes,decodeText,encodeText,parseAttrs};
+})();
+/* yenc-core:end */
+(()=>{'use strict';
+const $=id=>document.getElementById(id);
+const encInput=$('encode-input'),encOutput=$('encode-output'),encStatus=$('encode-status'),encDetail=$('encode-detail');
+const decInput=$('decode-input'),decOutput=$('decode-output'),decStatus=$('decode-status'),decDetail=$('decode-detail'),decWarnings=$('decode-warnings');
+function setStatus(node,message,kind){node.textContent=message;node.className='status '+(kind||'');}
+function hexPreview(bytes,limit){
+  const shown=Array.from(bytes.slice(0,limit),byte=>byte.toString(16).padStart(2,'0'));
+  return shown.join(' ')+(bytes.length>limit?' …':'');
+}
+function renderEncode(){
+  encStatus.className='status';
+  try{
+    const result=YencCore.encodeText(encInput.value,{
+      name:$('file-name').value,
+      lineLength:Number($('line-length').value),
+      headers:$('headers').checked
+    });
+    encOutput.value=result.output;
+    setStatus(encStatus,`Encoded ${result.bytes} ${result.bytes===1?'byte':'bytes'} into ${result.lines} ${result.lines===1?'line':'lines'}.`,'ok');
+    encDetail.textContent=`CRC32 ${result.crc32} · ${result.bytes} bytes · ${result.lines} ${result.lines===1?'body line':'body lines'}`;
+  }catch(error){
+    encOutput.value='';
+    encDetail.textContent='';
+    setStatus(encStatus,error.message||String(error),'error');
+  }
+}
+function renderDecode(){
+  decWarnings.replaceChildren();
+  decDetail.textContent='';
+  decStatus.className='status';
+  if(decInput.value.trim()===''){
+    decOutput.value='';
+    setStatus(decStatus,'Paste a yEnc body to decode.','');
+    return;
+  }
+  let result;
+  try{result=YencCore.decodeText(decInput.value);}
+  catch(error){
+    decOutput.value='';
+    setStatus(decStatus,error.message||String(error),'error');
+    return;
+  }
+  decOutput.value=result.validUtf8?result.text:hexPreview(result.bytesRaw,256);
+  decOutput.dataset.valid=result.validUtf8?'true':'false';
+  const verification=result.crcMatch===null?'no trailer checksum':result.crcMatch?'CRC32 matches the trailer':'CRC32 mismatch';
+  setStatus(decStatus,`Decoded ${String(result.bytes)} ${result.bytes===1?'byte':'bytes'} · ${verification}.`,result.warningCount?'warning':'ok');
+  const details=[`CRC32 ${result.crc32}`];
+  if(result.sizeExpected!==null)details.push(`trailer size ${String(result.sizeExpected)} bytes`);
+  if(result.partCount)details.push(`${String(result.partCount)} =ypart ${result.partCount===1?'marker':'markers'}`);
+  if(!result.validUtf8)details.push(`first bytes: ${hexPreview(result.bytesRaw,48)}`);
+  decDetail.textContent=details.join(' · ');
+  for(const line of result.warnings){
+    const item=document.createElement('li');
+    item.textContent=line;
+    decWarnings.append(item);
+  }
+}
+$('encode-form').addEventListener('submit',event=>{event.preventDefault();renderEncode();});
+$('decode-form').addEventListener('submit',event=>{event.preventDefault();renderDecode();});
+$('decode-result').addEventListener('click',()=>{
+  if(!encOutput.value)return;
+  decInput.value=encOutput.value;
+  renderDecode();
+  decInput.focus();
+});
+$('encode-result').addEventListener('click',()=>{
+  if(!decOutput.value||decOutput.dataset.valid==='false')return;
+  encInput.value=decOutput.value;
+  renderEncode();
+  encInput.focus();
+});
+for(const id of ['file-name','line-length','headers'])$(id).addEventListener('input',renderEncode);
+encInput.addEventListener('input',renderEncode);
+for(const area of [encInput,decInput]){
+  area.addEventListener('keydown',event=>{
+    if((event.ctrlKey||event.metaKey)&&event.key==='Enter'){
+      event.preventDefault();
+      if(area===encInput)$('encode-form').requestSubmit();
+      else $('decode-form').requestSubmit();
+    }
+  });
+}
+renderEncode();
+})();
+</script></body></html>
