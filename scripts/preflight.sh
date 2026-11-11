@@ -218,6 +218,7 @@ node tests/latch_hook_rug_yarn_calculator.test.cjs
 node tests/album_side_split_planner.test.cjs
 node tests/rf_skin_depth_calculator.test.cjs
 node tests/spanning_tree_root_bridge_calculator.test.cjs
+node tests/map_link_coordinate_extractor.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"

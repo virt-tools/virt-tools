@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Map Link Coordinate Extractor — Virtual Tools</title>
+<meta name="description" content="Paste a map link, geo: URI or coordinate pair and pull out the latitude and longitude as decimal, degrees-minutes-seconds and a geo: URI, with the zoom and precision the link carries.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.sec{font-size:1.05rem;margin:18px 0 8px}
+.sec:first-child{margin-top:0}
+.field{display:flex;flex-direction:column;gap:6px;margin:0 0 12px}
+.field label{font-size:13px;color:var(--text-dim,#9aa3b2)}
+textarea#link{box-sizing:border-box;width:100%;min-height:96px;resize:vertical;padding:12px;border-radius:8px;
+  border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);color:var(--text,#e6e6e6);
+  font:inherit;font-size:15px;font-family:ui-monospace,monospace;line-height:1.45;outline:none}
+textarea#link:focus-visible{outline:2px solid var(--accent,#6ea8fe);outline-offset:1px}
+textarea#link::placeholder{color:var(--text-dim,#9aa3b2)}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:10px 0}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.actions button.ghost{background:transparent;color:var(--accent,#6ea8fe)}
+.err{color:var(--bad,#f87171);font-size:13px;margin:6px 0;min-height:1.2em}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:14px 0}
+.out .label{text-align:center;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-dim,#9aa3b2)}
+.out .big{font-size:clamp(1.35rem,6vw,2rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:2px 0 4px;overflow-wrap:anywhere;line-height:1.25}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45;overflow-wrap:anywhere}
+.out .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:14px}
+.out .row:last-child{border-bottom:none}
+.out .row .k{color:var(--text-dim,#9aa3b2);flex:0 0 auto}
+.out .row .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right;overflow-wrap:anywhere}
+.status{color:var(--good,#4ade80);font-size:13px;min-height:1.2em}
+@media (max-width:560px){
+  .out .row{flex-direction:column;align-items:stretch;gap:2px}
+  .out .row .v{text-align:left}
+  .actions button{flex:1 1 auto}
+}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>Map Link Coordinate Extractor</h1>
+<p>Paste a map link or a coordinate pair and get the latitude and longitude in decimal, in degrees-minutes-seconds and as a geo: URI, plus the zoom and the precision the link carries.</p>
+</div>
+<div class="panel">
+<form id="extract-form" novalidate>
+<div class="field">
+<label for="link">Map link, geo: URI or coordinate pair</label>
+<textarea id="link" rows="3" spellcheck="false" autocomplete="off" placeholder="37.7749, -122.4194"></textarea>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions">
+<button type="submit">Extract coordinates</button>
+<button type="button" class="ghost" id="clear">Clear</button>
+</div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"></div>
+<div class="actions">
+<button type="button" class="ghost" id="copy">Copy decimal pair</button>
+<span class="status" id="status" role="status" aria-live="polite"></span>
+</div>
+<p class="note">The link is read as text in your browser; nothing is fetched, stored or sent anywhere. Recognised shapes are a place pin, a dropped marker, a map view fragment, a map centre parameter, a map view centre, a latitude and longitude parameter pair, a geo: URI and a plain decimal pair with optional N, S, E or W letters. Latitude always comes first, so a value above 90 in the first position is reported as a likely swap. Decimal places in the source decide the precision line: each step of the last digit is that many metres of latitude, and the east-west step shrinks with the cosine of the latitude.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* map-link-core:start */
+var MapLinkCore = (function(){
+  "use strict";
+  var MAX_INPUT = 4000;
+  var MAX_DECIMALS = 6;
+  var METERS_PER_DEGREE = 111320;
+  var DEFAULT_INPUT = "37.7749, -122.4194";
+  var PARAM_NAMES = ["ll", "q", "query", "center", "centre", "coordinate", "coords", "sll", "saddr", "daddr", "destination", "origin"];
+  var NUM = "(-?\\d+(?:\\.\\d+)?)";
+  var PAIR = NUM + "\\s*,\\s*" + NUM;
+  var RE_PLACE = new RegExp("!3d" + NUM + "!4d" + NUM);
+  var RE_MARKER_LAT = new RegExp("[?&]mlat=" + NUM, "i");
+  var RE_MARKER_LON = new RegExp("[?&]mlon=" + NUM, "i");
+  var RE_FRAGMENT = new RegExp("[#&]map=(\\d+(?:\\.\\d+)?)\\/" + NUM + "\\/" + NUM);
+  var RE_CENTRE_CP = new RegExp("[?&]cp=" + NUM + "~" + NUM, "i");
+  var RE_VIEW = new RegExp("@" + NUM + "," + NUM + "(?:,(\\d+(?:\\.\\d+)?)z)?");
+  var RE_LAT_PARAM = new RegExp("[?&]lat=" + NUM, "i");
+  var RE_LON_PARAM = new RegExp("[?&]lon=" + NUM, "i");
+  var RE_ZOOM_PARAM = new RegExp("[?&](?:z|zoom|lvl)=(\\d+(?:\\.\\d+)?)", "i");
+  var RE_PLAIN = new RegExp("^(?:lat(?:itude)?\\s*[:=]?\\s*)?" + NUM + "\\s*(?:\\u00b0)?\\s*([NS])?(?:\\s*[,;]\\s*|\\s+)(?:lon(?:gitude)?\\s*[:=]?\\s*)?" + NUM + "\\s*(?:\\u00b0)?\\s*([EW])?$", "i");
+
+  function text(value){
+    return String(value == null ? "" : value).trim();
+  }
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function number(value){
+    var raw = text(value);
+    if (!/^-?\d+(?:\.\d+)?$/.test(raw)) return null;
+    var parsed = Number(raw);
+    return isFinite(parsed) ? parsed : null;
+  }
+
+  function comma(value){
+    return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  }
+
+  function trimFixed(value, places){
+    var fixed = Math.abs(value).toFixed(places);
+    if (fixed.indexOf(".") > -1) fixed = fixed.replace(/0+$/, "").replace(/\.$/, "");
+    return (value < 0 && Number(fixed) !== 0 ? "-" : "") + fixed;
+  }
+
+  function trimNumber(value){
+    return trimFixed(value, MAX_DECIMALS);
+  }
+
+  function sourceText(raw, value){
+    var match = /^-?\d+(?:\.(\d+))?$/.exec(text(raw));
+    if (!match) return trimNumber(value);
+    var places = match[1] ? match[1].length : 0;
+    if (places > MAX_DECIMALS) return trimNumber(value);
+    var fixed = Math.abs(value).toFixed(places);
+    return (value < 0 && Number(fixed) !== 0 ? "-" : "") + fixed;
+  }
+
+  function decimalsOf(value){
+    var raw = text(value);
+    var dot = raw.indexOf(".");
+    return dot === -1 ? 0 : raw.length - dot - 1;
+  }
+
+  function formatDms(value, axis){
+    var hemisphere = axis === "lat" ? (value < 0 ? "S" : "N") : (value < 0 ? "W" : "E");
+    var tenths = Math.round(Math.abs(value) * 36000);
+    var degrees = Math.floor(tenths / 36000);
+    var rest = tenths - degrees * 36000;
+    var minutes = Math.floor(rest / 600);
+    var seconds = (rest - minutes * 600) / 10;
+    if (seconds >= 60){
+      seconds = 0;
+      minutes += 1;
+    }
+    if (minutes >= 60){
+      minutes = 0;
+      degrees += 1;
+    }
+    return degrees + "\u00b0" + minutes + "'" + seconds.toFixed(1) + "\"" + " " + hemisphere;
+  }
+
+  function metersText(value){
+    if (!(value > 0)) return "0 m";
+    if (value >= 100) return comma(Math.round(value));
+    if (value >= 1) return trimFixed(value, 2);
+    return trimFixed(value, 3);
+  }
+
+  function zoomOf(value){
+    var parsed = number(value);
+    if (parsed === null) return null;
+    if (parsed < 0 || parsed > 22) return null;
+    return Math.round(parsed * 100) / 100;
+  }
+
+  function precisionOf(latText, lonText, lat){
+    var places = Math.max(decimalsOf(latText), decimalsOf(lonText));
+    var latStep = Math.pow(10, -places) * METERS_PER_DEGREE;
+    var lonStep = latStep * Math.abs(Math.cos(lat * Math.PI / 180));
+    return {
+      decimalPlaces: places,
+      latStep: latStep,
+      lonStep: lonStep,
+      latStepText: metersText(latStep),
+      lonStepText: metersText(lonStep),
+      text: metersText(latStep) + " m north-south, " + metersText(lonStep) + " m east-west"
+    };
+  }
+
+  function build(source, latRaw, lonRaw, zoom, latTextOverride, lonTextOverride){
+    var lat = number(latRaw);
+    var lon = number(lonRaw);
+    if (lat === null || lon === null) fail("Those coordinates are not numbers.");
+    if (!(Math.abs(lat) <= 90) || !(Math.abs(lon) <= 180)){
+      if (Math.abs(lat) <= 180 && Math.abs(lon) <= 90){
+        fail("Check the order: latitude comes first and must be between -90 and 90.");
+      }
+      fail("Latitude must be between -90 and 90 and longitude between -180 and 180.");
+    }
+    var latText = sourceText(latTextOverride === undefined ? latRaw : latTextOverride, lat);
+    var lonText = sourceText(lonTextOverride === undefined ? lonRaw : lonTextOverride, lon);
+    var precision = precisionOf(latText, lonText, lat);
+    var parsedZoom = zoom === null || zoom === undefined ? null : zoomOf(zoom);
+    return {
+      source: source,
+      lat: lat,
+      lon: lon,
+      latText: latText,
+      lonText: lonText,
+      pairText: latText + ", " + lonText,
+      latDms: formatDms(lat, "lat"),
+      lonDms: formatDms(lon, "lon"),
+      dmsText: formatDms(lat, "lat") + ", " + formatDms(lon, "lon"),
+      geoUri: "geo:" + latText + "," + lonText,
+      zoom: parsedZoom,
+      hasZoom: parsedZoom !== null,
+      zoomText: parsedZoom === null ? "Not in this link" : "Zoom " + trimNumber(parsedZoom),
+      precision: precision.text,
+      precisionDetail: precision.decimalPlaces + " decimal places",
+      latStepText: precision.latStepText,
+      lonStepText: precision.lonStepText,
+      decimalPlaces: precision.decimalPlaces
+    };
+  }
+
+  function paramValue(input, name){
+    var match = new RegExp("[?&]" + name + "=([^&#]*)", "i").exec(input);
+    if (!match) return null;
+    var value = text(match[1]).replace(/%2c/ig, ",").replace(/%7e/ig, "~");
+    var pair = new RegExp("^" + PAIR + "(?:$|[^\\d.,])").exec(value);
+    if (!pair) return null;
+    return {lat: pair[1], lon: pair[2]};
+  }
+
+  function parse(input){
+    var raw = text(input);
+    if (!raw) fail("Paste a map link or a pair of coordinates.");
+    if (raw.length > MAX_INPUT) fail("That input is too long; paste one map link or coordinate pair.");
+
+    if (/^geo:/i.test(raw)){
+      var body = raw.slice(4).split("#")[0].split("?")[0];
+      var coords = body.split(";")[0].split(",");
+      if (coords.length < 2 || number(coords[0]) === null || number(coords[1]) === null){
+        fail("That geo: URI does not carry a latitude, longitude pair.");
+      }
+      var geoZoom = RE_ZOOM_PARAM.exec(raw);
+      return build("geo: URI", coords[0], coords[1], geoZoom ? geoZoom[1] : null);
+    }
+
+    var place = RE_PLACE.exec(raw);
+    if (place) return build("Place pin", place[1], place[2], null);
+
+    var markerLat = RE_MARKER_LAT.exec(raw);
+    var markerLon = RE_MARKER_LON.exec(raw);
+    if (markerLat && markerLon){
+      var markerZoom = RE_FRAGMENT.exec(raw);
+      return build("Dropped marker", markerLat[1], markerLon[1], markerZoom ? markerZoom[1] : zoomParam(raw));
+    }
+
+    var fragment = RE_FRAGMENT.exec(raw);
+    if (fragment) return build("Map view fragment", fragment[2], fragment[3], fragment[1]);
+
+    var centre = RE_CENTRE_CP.exec(raw);
+    if (centre) return build("Map centre parameter", centre[1], centre[2], zoomParam(raw));
+
+    var view = RE_VIEW.exec(raw);
+    if (view) return build("Map view centre", view[1], view[2], view[3] || null);
+
+    for (var index = 0; index < PARAM_NAMES.length; index += 1){
+      var found = paramValue(raw, PARAM_NAMES[index]);
+      if (found) return build("Map parameter (" + PARAM_NAMES[index] + ")", found.lat, found.lon, zoomParam(raw));
+    }
+
+    var latParam = RE_LAT_PARAM.exec(raw);
+    var lonParam = RE_LON_PARAM.exec(raw);
+    if (latParam && lonParam) return build("Latitude and longitude parameters", latParam[1], lonParam[1], zoomParam(raw));
+
+    var plain = RE_PLAIN.exec(raw);
+    if (plain){
+      var latValue = number(plain[1]);
+      var lonValue = number(plain[3]);
+      if (latValue === null || lonValue === null) fail("Those coordinates are not numbers.");
+      var latSign = String(plain[2] || "").toUpperCase();
+      var lonSign = String(plain[4] || "").toUpperCase();
+      if (latSign) latValue = latSign === "S" ? -Math.abs(latValue) : Math.abs(latValue);
+      if (lonSign) lonValue = lonSign === "W" ? -Math.abs(lonValue) : Math.abs(lonValue);
+      var latRawText = (latValue < 0 ? "-" : "") + String(plain[1]).replace(/^-/, "");
+      var lonRawText = (lonValue < 0 ? "-" : "") + String(plain[3]).replace(/^-/, "");
+      return build("Plain coordinates", latRawText, lonRawText, null);
+    }
+
+    fail("No coordinates found. Paste a map link or a decimal coordinate pair.");
+  }
+
+  function zoomParam(input){
+    var match = RE_ZOOM_PARAM.exec(input);
+    return match ? match[1] : null;
+  }
+
+  return {
+    MAX_INPUT: MAX_INPUT,
+    MAX_DECIMALS: MAX_DECIMALS,
+    METERS_PER_DEGREE: METERS_PER_DEGREE,
+    DEFAULT_INPUT: DEFAULT_INPUT,
+    parse: parse,
+    formatDms: formatDms,
+    trimNumber: trimNumber,
+    decimalsOf: decimalsOf,
+    metersText: metersText,
+    precisionOf: precisionOf
+  };
+})();
+/* map-link-core:end */
+(function(){
+  "use strict";
+  var C = MapLinkCore;
+  var els = {
+    form: document.getElementById("extract-form"),
+    input: document.getElementById("link"),
+    clear: document.getElementById("clear"),
+    copy: document.getElementById("copy"),
+    status: document.getElementById("status"),
+    err: document.getElementById("err"),
+    out: document.getElementById("out")
+  };
+  var current = null;
+
+  function addRow(key, value){
+    var row = document.createElement("div");
+    row.className = "row";
+    var k = document.createElement("span");
+    k.className = "k";
+    k.textContent = key;
+    var v = document.createElement("span");
+    v.className = "v";
+    v.textContent = value;
+    row.appendChild(k);
+    row.appendChild(v);
+    els.out.appendChild(row);
+  }
+
+  function placeholder(message){
+    els.out.textContent = "";
+    var span = document.createElement("div");
+    span.className = "sub";
+    span.style.padding = "18px 0";
+    span.textContent = message;
+    els.out.appendChild(span);
+  }
+
+  function render(result){
+    els.out.textContent = "";
+    var label = document.createElement("div");
+    label.className = "label";
+    label.textContent = "Coordinates";
+    var big = document.createElement("div");
+    big.className = "big";
+    big.textContent = result.pairText;
+    var sub = document.createElement("div");
+    sub.className = "sub";
+    sub.textContent = "Found in: " + result.source + (result.hasZoom ? " \u00b7 " + result.zoomText : "");
+    els.out.appendChild(label);
+    els.out.appendChild(big);
+    els.out.appendChild(sub);
+    addRow("Latitude", result.latText + " (" + result.latDms + ")");
+    addRow("Longitude", result.lonText + " (" + result.lonDms + ")");
+    addRow("Precision", result.precisionDetail + ": " + result.precision);
+    addRow("geo: URI", result.geoUri);
+  }
+
+  function calculate(){
+    var value = els.input.value;
+    var result;
+    try {
+      result = C.parse(value);
+    } catch (error){
+      current = null;
+      els.err.textContent = error.message;
+      els.copy.disabled = true;
+      placeholder("Paste a map link or coordinates to see the latitude, longitude and geo: URI.");
+      return;
+    }
+    els.err.textContent = "";
+    els.copy.disabled = false;
+    current = result;
+    els.status.textContent = "";
+    render(result);
+  }
+
+  function copyPair(){
+    if (!current) return;
+    var pair = current.pairText;
+    if (!navigator.clipboard || !navigator.clipboard.writeText){
+      els.status.textContent = "Copy is unavailable here; select the coordinates above.";
+      return;
+    }
+    navigator.clipboard.writeText(pair).then(function(){
+      els.status.textContent = "Copied " + pair;
+    }, function(){
+      els.status.textContent = "Copy was refused; select the coordinates above.";
+    });
+  }
+
+  els.form.addEventListener("submit", function(event){
+    event.preventDefault();
+    calculate();
+  });
+  els.input.addEventListener("input", calculate);
+  els.copy.addEventListener("click", copyPair);
+  els.clear.addEventListener("click", function(){
+    els.input.value = "";
+    els.status.textContent = "";
+    calculate();
+    els.input.focus();
+  });
+
+  els.input.value = C.DEFAULT_INPUT;
+  calculate();
+})();
+</script>
+</body>
+</html>
