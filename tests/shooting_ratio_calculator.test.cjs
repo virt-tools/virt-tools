@@ -158,7 +158,7 @@ assert.equal(entry.sources.length, 0);
 assert.ok(entry.method.includes('recorded footage divided by the finished runtime') && entry.method.includes('10,000 hours'));
 assert.equal(new Set(entry.tags).size, entry.tags.length, 'duplicate tags');
 assert.equal(new Set(entry.aliases).size, entry.aliases.length, 'duplicate aliases');
-assert.equal(catalog.tools.length, 2202);
+assert.equal(catalog.tools.length, 2203);
 const kinds = Object.fromEntries(['golden', 'boundary', 'validation'].map((kind) =>
   [kind, entry.testCases.filter((testCase) => testCase.kind === kind).length]));
 assert.deepEqual(kinds, { golden: 7, boundary: 6, validation: 15 });

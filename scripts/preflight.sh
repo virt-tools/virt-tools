@@ -211,6 +211,7 @@ node tests/audio_latency_buffer_planner.test.cjs
 node tests/legacy_code_page_converter.test.cjs
 node tests/ethernet_frame_rate_calculator.test.cjs
 node tests/file_open_flags_decoder.test.cjs
+node tests/archery_sight_adjustment_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
