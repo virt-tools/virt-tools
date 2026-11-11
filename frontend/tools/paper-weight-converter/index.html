@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Paper Weight Converter &mdash; Virtual Tools</title>
+<meta name="description" content="Convert paper weight between grams per square metre and the US basis weights for bond, text, cover, index, bristol and tag, using each grade's base sheet.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:12px}
+.field{display:flex;flex-direction:column;gap:6px;margin:0}
+.field label{font-size:13px;color:var(--text-dim,#9aa3b2)}
+input#weight,select#unit{box-sizing:border-box;width:100%;min-height:46px;padding:10px 12px;border-radius:8px;
+  border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);color:var(--text,#e6e6e6);
+  font:inherit;font-size:16px;line-height:1.3;outline:none}
+input#weight{font-family:ui-monospace,monospace}
+input#weight:focus-visible,select#unit:focus-visible{outline:2px solid var(--accent,#6ea8fe);outline-offset:1px}
+input#weight::placeholder{color:var(--text-dim,#9aa3b2)}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:12px 0 0}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover:not(:disabled){filter:brightness(1.08)}
+.actions button:disabled{opacity:.55;cursor:default}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.actions button.ghost{background:transparent;color:var(--accent,#6ea8fe)}
+.err{color:var(--bad,#f87171);font-size:13px;margin:10px 0 0;min-height:1.2em}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:16px 0 0}
+.out .label{text-align:center;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-dim,#9aa3b2)}
+.out .big{font-size:clamp(1.5rem,7vw,2.1rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:2px 0 4px;overflow-wrap:anywhere;line-height:1.25}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45;overflow-wrap:anywhere}
+.out .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:7px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:14px}
+.out .row:last-child{border-bottom:none}
+.out .row .k{color:var(--text-dim,#9aa3b2);flex:1 1 auto;min-width:0}
+.out .row .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right;white-space:nowrap}
+.status{color:var(--good,#4ade80);font-size:13px;min-height:1.2em}
+@media (max-width:560px){
+  .grid{grid-template-columns:minmax(0,1fr)}
+  .actions button{flex:1 1 auto}
+  .out .row{flex-direction:column;align-items:flex-start;gap:2px}
+  .out .row .v{text-align:left}
+}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">&larr; All tools</a>
+<h1>Paper Weight Converter</h1>
+<p>Convert a paper weight between grams per square metre and the US basis weights for bond, text, cover, index, bristol and tag, using each grade&rsquo;s own base sheet.</p>
+</div>
+<div class="panel">
+<form id="convert-form" novalidate>
+<div class="grid">
+<div class="field">
+<label for="weight">Paper weight</label>
+<input id="weight" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="80" placeholder="80">
+</div>
+<div class="field">
+<label for="unit">Unit</label>
+<select id="unit">
+<option value="gsm">g/m&sup2; (metric)</option>
+<option value="bond">lb bond / writing</option>
+<option value="text" selected>lb text / book</option>
+<option value="cover">lb cover</option>
+<option value="index">lb index</option>
+<option value="bristol">lb bristol</option>
+<option value="tag">lb tag</option>
+</select>
+</div>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions">
+<button type="submit">Convert weight</button>
+<button type="button" class="ghost" id="clear">Clear</button>
+</div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"></div>
+<div class="actions">
+<button type="button" class="ghost" id="copy">Copy metric weight</button>
+<span class="status" id="status" role="status" aria-live="polite"></span>
+</div>
+<p class="note">A US basis weight is the weight of a 500-sheet ream of that grade&rsquo;s standard base sheet, so one metric figure becomes a different pound figure for every grade: 80 g/m&sup2; is about 21 lb bond, 54 lb text or 30 lb cover. Caliper is not implied, because thickness also depends on the paper&rsquo;s bulk. Values are rounded to one decimal place. Everything is calculated in your browser; nothing is sent or stored.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* paper-weight-core:start */
+var PaperWeightCore = (function(){
+  "use strict";
+  var MIN_GRAMS = 1;
+  var MAX_GRAMS = 2000;
+  var GRAMS_PER_POUND = 453.59237;
+  var SQ_METRES_PER_SQ_INCH = 0.00064516;
+  var SHEETS_PER_REAM = 500;
+  var ROUND_EPSILON = 1e-9;
+  var METRIC = {id: "gsm", label: "Grams per square metre", short: "g/m\u00b2", base: null, area: null};
+  var GRADES = [
+    {id: "bond", label: "Bond / writing / ledger", short: "lb bond", base: "17 \u00d7 22 in", area: 374},
+    {id: "text", label: "Text / book / offset", short: "lb text", base: "25 \u00d7 38 in", area: 950},
+    {id: "cover", label: "Cover", short: "lb cover", base: "20 \u00d7 26 in", area: 520},
+    {id: "index", label: "Index", short: "lb index", base: "25.5 \u00d7 30.5 in", area: 777.75},
+    {id: "bristol", label: "Bristol", short: "lb bristol", base: "22.5 \u00d7 28.5 in", area: 641.25},
+    {id: "tag", label: "Tag", short: "lb tag", base: "24 \u00d7 36 in", area: 864}
+  ];
+  var DEFAULT_VALUE = "80";
+  var DEFAULT_UNIT = "text";
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function gradeOf(id){
+    for (var index = 0; index < GRADES.length; index += 1){
+      if (GRADES[index].id === id) return GRADES[index];
+    }
+    return null;
+  }
+
+  function unitOf(id){
+    var raw = String(id == null ? "" : id).trim().toLowerCase();
+    return gradeOf(raw) || METRIC;
+  }
+
+  function gramsForOneUnit(grade){
+    return SHEETS_PER_REAM * grade.area * SQ_METRES_PER_SQ_INCH;
+  }
+
+  function toGrams(value, unitLike){
+    var unit = unitLike && typeof unitLike === "object" ? unitLike : unitOf(unitLike);
+    if (!unit.area) return value;
+    return value * GRAMS_PER_POUND / gramsForOneUnit(unit);
+  }
+
+  function basisWeight(grams, unitLike){
+    var grade = unitLike && typeof unitLike === "object" ? unitLike : gradeOf(unitLike);
+    if (!grade || !grade.area) fail("Basis weight needs a paper grade, not the metric unit.");
+    return grams * gramsForOneUnit(grade) / GRAMS_PER_POUND;
+  }
+
+  function group(text){
+    var parts = String(text).split(".");
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    return parts.join(".");
+  }
+
+  function format1(value){
+    /* ROUND_EPSILON lifts a binary value that should be an exact decimal half
+       (49.949999999999996 for 49.95) back onto the half so rounding is half-up. */
+    var fixed = (Math.round(value * 10 + ROUND_EPSILON) / 10).toFixed(1);
+    if (fixed.slice(-2) === ".0") fixed = fixed.slice(0, -2);
+    return group(fixed);
+  }
+
+  function convert(value, unitId){
+    var unit = unitOf(unitId);
+    var grams = toGrams(value, unit);
+    if (!(grams >= MIN_GRAMS)) fail("Enter a weight of at least 1.");
+    if (grams > MAX_GRAMS){
+      fail(unit.area
+        ? "That is heavier than 2,000 g/m\u00b2, the heaviest paper this converter covers."
+        : "Enter a weight of at most 2,000 g/m\u00b2.");
+    }
+    var rows = [];
+    for (var index = 0; index < GRADES.length; index += 1){
+      var grade = GRADES[index];
+      var pounds = basisWeight(grams, grade);
+      rows.push({
+        id: grade.id,
+        label: grade.label,
+        base: grade.base,
+        lb: pounds,
+        lbText: format1(pounds) + " lb"
+      });
+    }
+    var picked = unit.area ? gradeOf(unit.id) : null;
+    return {
+      unit: unit.id,
+      unitLabel: unit.short,
+      value: value,
+      grams: grams,
+      gsm: grams,
+      gsmText: format1(grams),
+      metric: format1(grams) + " g/m\u00b2",
+      fromText: format1(value) + " " + unit.short,
+      baseText: picked ? picked.base : null,
+      subText: picked
+        ? "Entered as " + format1(value) + " " + picked.short + " \u00b7 " + picked.base + " base sheet, 500 sheets"
+        : "Entered in grams per square metre",
+      rows: rows
+    };
+  }
+
+  function parse(input, unitId){
+    var raw = String(input == null ? "" : input).trim();
+    if (!raw) fail("Enter a paper weight to convert.");
+    if (!/^-?(?:(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?|\.\d+)$/.test(raw)){
+      fail("Enter the weight as a number, such as 80 or 118.4.");
+    }
+    var value = Number(raw.replace(/,/g, ""));
+    if (!isFinite(value)) fail("Enter the weight as a number, such as 80 or 118.4.");
+    return convert(value, unitId);
+  }
+
+  return {
+    MIN_GRAMS: MIN_GRAMS,
+    MAX_GRAMS: MAX_GRAMS,
+    GRAMS_PER_POUND: GRAMS_PER_POUND,
+    SQ_METRES_PER_SQ_INCH: SQ_METRES_PER_SQ_INCH,
+    SHEETS_PER_REAM: SHEETS_PER_REAM,
+    GRADES: GRADES,
+    DEFAULT_VALUE: DEFAULT_VALUE,
+    DEFAULT_UNIT: DEFAULT_UNIT,
+    gradeOf: gradeOf,
+    unitOf: unitOf,
+    toGrams: toGrams,
+    basisWeight: basisWeight,
+    format1: format1,
+    convert: convert,
+    parse: parse
+  };
+})();
+/* paper-weight-core:end */
+(function(){
+  "use strict";
+  var C = PaperWeightCore;
+  var els = {
+    form: document.getElementById("convert-form"),
+    weight: document.getElementById("weight"),
+    unit: document.getElementById("unit"),
+    clear: document.getElementById("clear"),
+    copy: document.getElementById("copy"),
+    status: document.getElementById("status"),
+    err: document.getElementById("err"),
+    out: document.getElementById("out")
+  };
+  var current = null;
+
+  function addRow(key, value){
+    var row = document.createElement("div");
+    row.className = "row";
+    var k = document.createElement("span");
+    k.className = "k";
+    k.textContent = key;
+    var v = document.createElement("span");
+    v.className = "v";
+    v.textContent = value;
+    row.appendChild(k);
+    row.appendChild(v);
+    els.out.appendChild(row);
+  }
+
+  function placeholder(message){
+    els.out.textContent = "";
+    var span = document.createElement("div");
+    span.className = "sub";
+    span.style.padding = "18px 0 6px";
+    span.textContent = message;
+    els.out.appendChild(span);
+  }
+
+  function render(result){
+    els.out.textContent = "";
+    var label = document.createElement("div");
+    label.className = "label";
+    label.textContent = "Metric weight";
+    var big = document.createElement("div");
+    big.className = "big";
+    big.textContent = result.metric;
+    var sub = document.createElement("div");
+    sub.className = "sub";
+    sub.textContent = result.subText;
+    els.out.appendChild(label);
+    els.out.appendChild(big);
+    els.out.appendChild(sub);
+    for (var index = 0; index < result.rows.length; index += 1){
+      var row = result.rows[index];
+      addRow(row.label + " \u00b7 " + row.base, row.lbText);
+    }
+  }
+
+  function calculate(announce){
+    var value = els.weight.value;
+    var result;
+    if (!String(value).trim()){
+      current = null;
+      els.copy.disabled = true;
+      els.err.textContent = announce ? "Enter a paper weight to convert." : "";
+      els.status.textContent = "";
+      placeholder("Enter a weight and pick the unit it is written in.");
+      return;
+    }
+    try {
+      result = C.parse(value, els.unit.value);
+    } catch (error){
+      current = null;
+      els.copy.disabled = true;
+      els.err.textContent = error.message;
+      els.status.textContent = "";
+      placeholder("Enter a weight between 1 and 2,000 g/m\u00b2 to see the conversion.");
+      return;
+    }
+    els.err.textContent = "";
+    els.copy.disabled = false;
+    els.status.textContent = "";
+    current = result;
+    render(result);
+  }
+
+  function copyMetric(){
+    if (!current) return;
+    var text = current.metric;
+    if (!navigator.clipboard || !navigator.clipboard.writeText){
+      els.status.textContent = "Copy is unavailable here; select the metric weight above.";
+      return;
+    }
+    navigator.clipboard.writeText(text).then(function(){
+      els.status.textContent = "Copied " + text;
+    }, function(){
+      els.status.textContent = "Copy was refused; select the metric weight above.";
+    });
+  }
+
+  els.form.addEventListener("submit", function(event){
+    event.preventDefault();
+    calculate(true);
+  });
+  els.weight.addEventListener("input", function(){ calculate(false); });
+  els.unit.addEventListener("change", function(){ calculate(false); });
+  els.copy.addEventListener("click", copyMetric);
+  els.clear.addEventListener("click", function(){
+    els.weight.value = "";
+    els.unit.value = C.DEFAULT_UNIT;
+    els.status.textContent = "";
+    calculate(false);
+    els.weight.focus();
+  });
+
+  calculate(false);
+})();
+</script>
+</body>
+</html>
