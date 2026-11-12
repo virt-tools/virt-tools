@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Cycling Power Zone Calculator — Virtual Tools</title>
+<meta name="description" content="Turn an FTP into Coggan cycling power zones with wattage and watts-per-kilogram bands, or estimate FTP from a 20-minute, 8-minute or ramp test.">
+<link rel="stylesheet" href="/assets/style.css">
+<link rel="stylesheet" href="/assets/tool-css/tool-form-3c8cf9e7.css">
+<style>
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button.ghost{background:transparent;color:var(--text,#e6e6e6);border-color:var(--border,#2a2f3a)}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.hint{color:var(--text-dim,#9aa3b2);font-size:13px}
+.out .big{font-size:clamp(1.25rem,5.4vw,2rem);word-break:break-word;padding-bottom:2px}
+.sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 10px;word-break:break-word}
+.out .row{flex-wrap:wrap;gap:2px 12px}
+.out .row .v{text-align:right;word-break:break-word}
+.tok{white-space:nowrap}
+.out .row.zone{padding:5px 0}
+.out .row.zone .k{color:var(--text,#e6e6e6)}
+.zonehead{margin:14px 0 2px;font-size:12.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--text-dim,#9aa3b2)}
+.status-note{font-size:12.5px;color:var(--text-dim,#9aa3b2);line-height:1.5;margin:10px 0 0}
+.tools{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px;padding-top:10px;border-top:1px solid var(--border,#2a2f3a)}
+.tools button{font:inherit;font-size:13px;padding:6px 12px;border-radius:7px;border:1px solid var(--border,#2a2f3a);background:transparent;color:var(--text,#e6e6e6);cursor:pointer;min-height:36px}
+.tools button:hover{border-color:var(--accent,#6ea8fe)}
+.tools button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.status{font-size:12.5px;color:var(--text-dim,#9aa3b2)}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;margin-top:12px;line-height:1.55}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>Cycling Power Zone Calculator</h1>
+<p>Enter your FTP — or a test effort you can convert to one — and your body mass. The page lays out the seven Coggan power zones in watts and in watts per kilogram, plus the power at a target intensity. Everything runs in your browser.</p>
+</div>
+<div class="panel">
+<form id="power-form" novalidate>
+<div class="grid2">
+<div class="field"><label class="f" for="source">FTP from</label><select id="source"><option value="ftp" selected>Known FTP</option><option value="test20">20-minute test (&times; 0.95)</option><option value="test8">8-minute test (&times; 0.90)</option><option value="ramp">Ramp test MAP (&times; 0.75)</option></select><div class="unit" id="source-hint">the value below is your FTP</div></div>
+<div class="field"><label class="f" for="power" id="power-label">FTP</label><input id="power" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="245"><div class="unit" id="power-hint">watts, 40 to 2000</div></div>
+<div class="field"><label class="f" for="mass">Body mass</label><input id="mass" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="75"><div class="unit">kilograms, 20 to 300</div></div>
+<div class="field"><label class="f" for="intensity">Target intensity</label><input id="intensity" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="70"><div class="unit">percent of FTP, 1 to 200</div></div>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions"><button type="submit">Show zones</button><button type="button" class="ghost" id="reset">Reset</button></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"><span class="hint">Enter an FTP, a test power or a body mass to see the zones.</span></div>
+<p class="note">The zones use the seven-level Coggan model as fractions of functional threshold power: active recovery under 55%, endurance 56&ndash;75%, tempo 76&ndash;90%, lactate threshold 91&ndash;105%, VO<sub>2</sub> max 106&ndash;120%, anaerobic capacity 121&ndash;150% and neuromuscular over 150%. Each boundary is the percentage of FTP rounded to the nearest whole watt, and each band runs from one watt above the previous boundary, so no watt belongs to two zones. A 20-minute test is converted at 0.95, an 8-minute test at 0.90 and a ramp-test MAP at 0.75; those factors are population approximations, not measurements of your physiology, and a test only means something if it was paced or ridden all out as the protocol requires. Watts per kilogram divides by the body mass you enter, so it changes nothing about the zones themselves. This is a training-planning aid: it does not set targets for you, diagnose anything, or replace a coach or a medical opinion. Nothing is stored and the page makes no network requests.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+(function(){
+"use strict";
+/* powerzone-core:start */
+var PowerZoneCore = (function(){
+  "use strict";
+  var FTP_MIN = 40, FTP_MAX = 2000, TEST_MAX = 2500;
+  var MASS_MIN = 20, MASS_MAX = 300;
+  var PCT_MIN = 1, PCT_MAX = 200;
+  var ZONES = [
+    {code: "Z1", name: "Active recovery", lowPct: 0, highPct: 55},
+    {code: "Z2", name: "Endurance", lowPct: 56, highPct: 75},
+    {code: "Z3", name: "Tempo", lowPct: 76, highPct: 90},
+    {code: "Z4", name: "Lactate threshold", lowPct: 91, highPct: 105},
+    {code: "Z5", name: "VO2 max", lowPct: 106, highPct: 120},
+    {code: "Z6", name: "Anaerobic capacity", lowPct: 121, highPct: 150},
+    {code: "Z7", name: "Neuromuscular", lowPct: 151, highPct: null}
+  ];
+  var SOURCES = {
+    ftp: {noun: "FTP", label: "FTP", unit: "watts, 40 to 2000", hint: "the value below is your FTP", factor: 1, min: FTP_MIN, max: FTP_MAX, derived: false},
+    test20: {noun: "20-minute test power", label: "20-minute power", unit: "watts, 40 to 2500", hint: "average power over 20 minutes, times 0.95", factor: 0.95, min: FTP_MIN, max: TEST_MAX, derived: true},
+    test8: {noun: "8-minute test power", label: "8-minute power", unit: "watts, 40 to 2500", hint: "average power over 8 minutes, times 0.90", factor: 0.9, min: FTP_MIN, max: TEST_MAX, derived: true},
+    ramp: {noun: "ramp test MAP", label: "Ramp test MAP", unit: "watts, 40 to 2500", hint: "final minute of a ramp test, times 0.75", factor: 0.75, min: FTP_MIN, max: TEST_MAX, derived: true}
+  };
+
+  function text(raw){
+    return String(raw === undefined || raw === null ? "" : raw).trim();
+  }
+  function parseDecimal(raw, noun){
+    var value = text(raw);
+    if (!value) throw new Error("Enter the " + noun + ".");
+    var cleaned = value.replace(/,/g, ".");
+    if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(cleaned)){
+      if (/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)[eE][+-]?\d+$/.test(cleaned)){
+        throw new Error("The " + noun + " must be a decimal number without exponent notation.");
+      }
+      throw new Error("The " + noun + " must be a decimal number.");
+    }
+    return Number(cleaned);
+  }
+  function inRange(value, noun, min, max, unit){
+    if (!(value >= min && value <= max)){
+      throw new Error("The " + noun + " must be between " + min + " and " + max + " " + unit + ".");
+    }
+    return value;
+  }
+  function sourceFor(key){
+    return SOURCES[key] ? key : "ftp";
+  }
+
+  function analyze(input){
+    input = input || {};
+    var key = sourceFor(input.source);
+    var source = SOURCES[key];
+    var raw = parseDecimal(input.power, source.noun);
+    inRange(raw, source.noun, source.min, source.max, "watts");
+    var mass = parseDecimal(input.mass, "body mass");
+    inRange(mass, "body mass", MASS_MIN, MASS_MAX, "kilograms");
+    var intensity = parseDecimal(input.intensity, "target intensity");
+    inRange(intensity, "target intensity", PCT_MIN, PCT_MAX, "percent of FTP");
+
+    var ftp = Math.round(raw * source.factor);
+    var wPerKg = ftp / mass;
+    var bounds = [55, 75, 90, 105, 120, 150].map(function(pct){
+      return Math.round((pct / 100) * ftp);
+    });
+    var zones = ZONES.map(function(zone, index){
+      var lowWatts = index === 0 ? 0 : bounds[index - 1] + 1;
+      var highWatts = zone.highPct === null ? null : bounds[index];
+      return {
+        code: zone.code,
+        name: zone.name,
+        lowPct: zone.lowPct,
+        highPct: zone.highPct,
+        lowWatts: lowWatts,
+        highWatts: highWatts,
+        lowWkg: lowWatts / mass,
+        highWkg: highWatts === null ? null : highWatts / mass,
+        text: zoneText(lowWatts, highWatts)
+      };
+    });
+    var targetWatts = Math.round((intensity / 100) * ftp);
+    var targetZone = zones.filter(function(zone){
+      return targetWatts >= zone.lowWatts && (zone.highWatts === null || targetWatts <= zone.highWatts);
+    })[0];
+    return {
+      source: key,
+      sourceLabel: source.label,
+      derived: source.derived,
+      factor: source.factor,
+      inputPower: raw,
+      ftp: ftp,
+      ftpText: ftp + " W",
+      bodyMass: mass,
+      wPerKg: wPerKg,
+      wPerKgText: formatWkg(wPerKg),
+      ftpBasis: source.derived
+        ? "FTP estimated as " + source.label.toLowerCase() + " " + round(raw) + " W \u00d7 " + source.factor
+        : "FTP " + ftp + " W entered directly",
+      zones: zones,
+      target: {
+        pct: intensity,
+        watts: targetWatts,
+        wkg: targetWatts / mass,
+        zone: targetZone ? targetZone.code + " " + targetZone.name : ""
+      }
+    };
+  }
+
+  function round(value){
+    return Math.round(value * 100) / 100;
+  }
+  function zoneText(low, high){
+    if (high === null) return "\u2265 " + low + " W";
+    if (low <= 0) return "\u2264 " + high + " W";
+    return low + "\u2013" + high + " W";
+  }
+  function zoneWkgText(zone){
+    if (zone.highWkg === null) return "\u2265 " + formatWkg(zone.lowWkg);
+    if (zone.lowWatts <= 0) return "\u2264 " + formatWkg(zone.highWkg);
+    return zone.lowWkg.toFixed(2) + "\u2013" + formatWkg(zone.highWkg);
+  }
+  function formatWkg(value){
+    return value.toFixed(2) + " W/kg";
+  }
+  function zonePctText(zone){
+    return zone.highPct === null ? "over " + (zone.lowPct - 1) + "%" : zone.lowPct + "\u2013" + zone.highPct + "%";
+  }
+  function zoneLabel(zone){
+    return zone.code + " \u00b7 " + zone.name + " \u00b7 " + zonePctText(zone);
+  }
+  function copyText(result){
+    var parts = result.zones.map(function(zone){
+      return zoneLabel(zone) + " " + zone.text;
+    });
+    return "Cycling power zones at FTP " + result.ftpText + " (" + result.wPerKgText + "). " +
+      parts.join("; ") + ". Target " + result.target.pct + "% FTP = " + result.target.watts +
+      " W (" + formatWkg(result.target.wkg) + "), " + result.target.zone + ".";
+  }
+
+  return {
+    analyze: analyze,
+    sourceKey: sourceFor,
+    zoneText: zoneText,
+    zonePctText: zonePctText,
+    zoneWkgText: zoneWkgText,
+    zoneLabel: zoneLabel,
+    formatWkg: formatWkg,
+    copyText: copyText,
+    ZONES: ZONES,
+    SOURCES: SOURCES,
+    FTP_MIN: FTP_MIN,
+    FTP_MAX: FTP_MAX,
+    TEST_MAX: TEST_MAX,
+    MASS_MIN: MASS_MIN,
+    MASS_MAX: MASS_MAX
+  };
+})();
+/* powerzone-core:end */
+
+var form = document.getElementById("power-form");
+var fields = {
+  source: document.getElementById("source"),
+  power: document.getElementById("power"),
+  mass: document.getElementById("mass"),
+  intensity: document.getElementById("intensity")
+};
+var labels = {
+  power: document.getElementById("power-label"),
+  powerHint: document.getElementById("power-hint"),
+  sourceHint: document.getElementById("source-hint")
+};
+var errEl = document.getElementById("err");
+var outEl = document.getElementById("out");
+var HINT = "Enter an FTP, a test power or a body mass to see the zones.";
+var DEFAULTS = {source: "ftp", power: "245", mass: "75", intensity: "70"};
+var state = null;
+
+function el(tag, className, content){
+  var node = document.createElement(tag);
+  if (className) node.className = className;
+  if (content !== undefined) node.textContent = content;
+  return node;
+}
+function clearNode(node){ while (node.firstChild) node.removeChild(node.firstChild); }
+function row(label, parts, extraClass){
+  var line = el("div", extraClass ? "row " + extraClass : "row");
+  line.appendChild(el("span", "k", label));
+  var value = el("span", "v");
+  parts.forEach(function(part, index){
+    value.appendChild(el("span", "tok", (index ? " \u00b7 " : "") + part));
+  });
+  line.appendChild(value);
+  return line;
+}
+function zoneRow(zone){
+  var line = el("div", "row zone");
+  var key = el("span", "k");
+  key.appendChild(el("span", "tok", zone.code + " \u00b7 " + zone.name));
+  key.appendChild(el("span", "tok", " \u00b7 " + PowerZoneCore.zonePctText(zone)));
+  line.appendChild(key);
+  var value = el("span", "v");
+  value.appendChild(el("span", "tok", zone.text));
+  value.appendChild(el("span", "tok", " \u00b7 " + PowerZoneCore.zoneWkgText(zone)));
+  line.appendChild(value);
+  return line;
+}
+
+function syncSource(){
+  var source = PowerZoneCore.SOURCES[PowerZoneCore.sourceKey(fields.source.value)] || PowerZoneCore.SOURCES.ftp;
+  labels.power.textContent = source.label;
+  labels.powerHint.textContent = source.unit;
+  labels.sourceHint.textContent = source.hint;
+  fields.power.setAttribute("aria-label", source.label);
+}
+
+function showHint(){
+  state = null;
+  clearNode(outEl);
+  outEl.appendChild(el("span", "hint", HINT));
+}
+
+function render(result){
+  clearNode(outEl);
+  outEl.appendChild(el("div", "big", result.ftpText + " \u00b7 " + result.wPerKgText));
+  outEl.appendChild(el("div", "sub", result.ftpBasis));
+
+  outEl.appendChild(row("Target " + result.target.pct + "% FTP", [result.target.watts + " W",
+    PowerZoneCore.formatWkg(result.target.wkg), result.target.zone]));
+
+  outEl.appendChild(el("div", "zonehead", "Zones at this FTP"));
+  result.zones.forEach(function(zone){
+    outEl.appendChild(zoneRow(zone));
+  });
+
+  outEl.appendChild(el("p", "status-note", "Zones are fractions of FTP rounded to whole watts, so a rider near a boundary can sit on either side of it by a watt. Test-based factors (0.95, 0.90, 0.75) are population approximations; treat the result as a starting point and adjust it from how you actually ride."));
+
+  var tools = el("div", "tools");
+  var copyBtn = el("button", "", "Copy zones");
+  copyBtn.type = "button";
+  var status = el("span", "status");
+  status.setAttribute("role", "status");
+  tools.appendChild(copyBtn);
+  tools.appendChild(status);
+  outEl.appendChild(tools);
+
+  copyBtn.addEventListener("click", function(){
+    var text = PowerZoneCore.copyText(state);
+    function done(){ status.textContent = "Zones copied."; }
+    function failed(){ status.textContent = "Copy blocked by the browser."; }
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(done, function(){ if (legacyCopy(text)) done(); else failed(); });
+    } else if (legacyCopy(text)) done();
+    else failed();
+  });
+}
+
+function legacyCopy(text){
+  var area = document.createElement("textarea");
+  area.value = text;
+  area.setAttribute("readonly", "readonly");
+  area.style.position = "fixed";
+  area.style.top = "-1000px";
+  document.body.appendChild(area);
+  area.select();
+  var ok = false;
+  try { ok = document.execCommand("copy"); } catch (error) { ok = false; }
+  area.remove();
+  return ok;
+}
+
+function readInput(){
+  return {
+    source: fields.source.value,
+    power: fields.power.value,
+    mass: fields.mass.value,
+    intensity: fields.intensity.value
+  };
+}
+
+function run(){
+  try {
+    state = PowerZoneCore.analyze(readInput());
+    errEl.textContent = "";
+    render(state);
+  } catch (error) {
+    errEl.textContent = error.message;
+    showHint();
+  }
+}
+
+form.addEventListener("submit", function(event){
+  event.preventDefault();
+  run();
+});
+
+form.addEventListener("input", function(){ if (errEl.textContent) errEl.textContent = ""; });
+
+fields.source.addEventListener("change", function(){
+  syncSource();
+  errEl.textContent = "";
+  run();
+});
+
+document.getElementById("reset").addEventListener("click", function(){
+  Object.keys(fields).forEach(function(key){ fields[key].value = DEFAULTS[key]; });
+  syncSource();
+  errEl.textContent = "";
+  run();
+  fields.power.focus();
+});
+
+syncSource();
+run();
+})();
+</script>
+</body>
+</html>
