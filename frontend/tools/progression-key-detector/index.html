@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Progression Key Detector — Virtual Tools</title>
+<meta name="description" content="Find the key of a chord progression: every major and minor key is scored by how much of the progression is diatonic, with Roman numerals for the best fit.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.field{background:var(--bg,#14181f);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px;margin:10px 0}
+.field:focus-within{border-color:var(--accent,#6ea8fe);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#6ea8fe) 18%,transparent)}
+label.f{font-size:13px;opacity:.85;display:block;margin-bottom:4px}
+.field input{box-sizing:border-box;min-width:0;width:100%;min-height:44px;background:transparent;color:var(--text,#e6e6e6);border:none;font-family:ui-monospace,monospace;font-size:17px;padding:2px 0;outline:none}
+.help{color:var(--text-dim,#9aa3b2);font-size:12px;line-height:1.45;margin:2px 0 8px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:12px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 20px;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);color:var(--text,#e6e6e6);cursor:pointer;min-height:44px}
+.actions button.primary{background:var(--accent,#6ea8fe);border-color:var(--accent,#6ea8fe);color:#0b1017;padding:10px 24px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:14px 0}
+.out .big{font-size:clamp(1.5rem,6.5vw,2.2rem);font-weight:800;text-align:center;padding:4px 0 2px;overflow-wrap:anywhere;color:var(--accent,#6ea8fe)}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45;overflow-wrap:anywhere}
+.out .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:7px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:14px}
+.out .row:last-child{border-bottom:none}
+.out .row .k{color:var(--text-dim,#9aa3b2)}
+.out .row .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right;overflow-wrap:anywhere}
+.err{color:var(--bad,#f87171);font-size:13px;margin:6px 0;min-height:1.2em;line-height:1.4}
+.warn{font-size:13px;margin:8px 0 0;padding:9px 11px;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);line-height:1.45}
+.table-wrap{overflow-x:auto;margin:8px 0 0}
+.table-wrap table{display:table;width:100%;border-collapse:collapse;font-size:14px}
+caption{text-align:left;font-size:13px;color:var(--text-dim,#9aa3b2);padding:4px 0 8px}
+th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--border,#2a2f3a);vertical-align:top}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim,#9aa3b2)}
+td.num{font-family:ui-monospace,monospace;font-weight:700}
+tr.best td{background:color-mix(in srgb,var(--accent,#6ea8fe) 10%,transparent)}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;line-height:1.5;margin:14px 0 0}
+@media(max-width:520px){th,td{padding:7px 6px;font-size:13px}}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>Progression Key Detector</h1>
+<p>Type a chord progression to see which major or minor key fits it best, ranked by how much of every chord is inside the key.</p>
+</div>
+<div class="panel">
+<form id="key-form" novalidate>
+<div class="field">
+<label class="f" for="chords">Chord progression</label>
+<input type="text" id="chords" value="C G Am F" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="chords-help">
+</div>
+<p class="help" id="chords-help">Chords separated by spaces, commas or bar lines: <code>Am F C G</code>, <code>Dm7 | G7 | Cmaj7</code>. A slash bass is allowed, for example <code>C/E</code>.</p>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions">
+<button type="submit" class="primary">Detect key</button>
+<button type="button" id="clear">Clear</button>
+</div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"></div>
+<p class="warn" id="warn" hidden></p>
+</div>
+<div class="panel">
+<h2>Candidate keys</h2>
+<div class="table-wrap">
+<table>
+<caption>Fit is the weighted share of chord tones inside the key's seven-note scale; ties are broken by where the tonic chord appears.</caption>
+<thead><tr><th scope="col">Key</th><th scope="col">Fit</th><th scope="col">Chords in key</th><th scope="col">Outside the key</th></tr></thead>
+<tbody id="candidates"></tbody>
+</table>
+</div>
+</div>
+<div class="panel">
+<h2 id="analysis-heading">Roman numerals</h2>
+<div class="table-wrap">
+<table>
+<caption>Numerals use the best-fit key, natural minor for minor keys, and mark any chord with tones outside the scale.</caption>
+<thead><tr><th scope="col">#</th><th scope="col">Chord</th><th scope="col">Numeral</th><th scope="col">Status</th></tr></thead>
+<tbody id="analysis"></tbody>
+</table>
+</div>
+<p class="note">The detector compares pitch classes only: inversions, voicings and rhythm are ignored, and a short loop can fit two related keys equally well. Everything runs in your browser with no storage, uploads or network access.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* progression-key-core:start */
+var ProgressionKeyCore = (function(){
+  "use strict";
+  var LETTERS = ["C", "D", "E", "F", "G", "A", "B"];
+  var NATURAL = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+  var ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII"];
+  var SHARP_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+  var FLAT_NAMES = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"];
+  var MAX_CHORDS = 64;
+  var WEIGHTS_FIRST = 2;
+  var WEIGHTS_LAST = 3;
+  var WEIGHTS_MIDDLE = 2;
+  var MESSAGES = {
+    chords: "Enter a chord progression such as C G Am F.",
+    unsupported: "Only plain chord symbols are supported: triads, 5, 6, 7, maj7, m7, m7b5, dim, dim7, aug, sus, add9, 9, 11 and 13, with an optional slash bass.",
+    limit: "Use at most 64 chords.",
+    long: "That progression is too long to read."
+  };
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function normalize(raw){
+    return String(raw == null ? "" : raw)
+      .replace(/[\u266D]/g, "b")
+      .replace(/[\u266F]/g, "#")
+      .replace(/[\u00A0]/g, " ");
+  }
+
+  function signedDiff(left, right){
+    var value = ((left - right) % 12 + 12) % 12;
+    return value > 6 ? value - 12 : value;
+  }
+
+  function accidentalText(offset){
+    if (offset === 0) return "";
+    if (offset === 1) return "#";
+    if (offset === -1) return "b";
+    if (offset === 2) return "##";
+    if (offset === -2) return "bb";
+    return "";
+  }
+
+  var QUALITIES = {
+    "": { tones: [[0, 0], [4, 2], [7, 4]], kind: "maj", suffix: "" },
+    "M": { tones: [[0, 0], [4, 2], [7, 4]], kind: "maj", suffix: "" },
+    "maj": { tones: [[0, 0], [4, 2], [7, 4]], kind: "maj", suffix: "" },
+    "major": { tones: [[0, 0], [4, 2], [7, 4]], kind: "maj", suffix: "" },
+    "m": { tones: [[0, 0], [3, 2], [7, 4]], kind: "min", suffix: "" },
+    "min": { tones: [[0, 0], [3, 2], [7, 4]], kind: "min", suffix: "" },
+    "minor": { tones: [[0, 0], [3, 2], [7, 4]], kind: "min", suffix: "" },
+    "-": { tones: [[0, 0], [3, 2], [7, 4]], kind: "min", suffix: "" },
+    "5": { tones: [[0, 0], [7, 4]], kind: "maj", suffix: "5" },
+    "6": { tones: [[0, 0], [4, 2], [7, 4], [9, 5]], kind: "maj", suffix: "6" },
+    "M6": { tones: [[0, 0], [4, 2], [7, 4], [9, 5]], kind: "maj", suffix: "6" },
+    "m6": { tones: [[0, 0], [3, 2], [7, 4], [9, 5]], kind: "min", suffix: "6" },
+    "min6": { tones: [[0, 0], [3, 2], [7, 4], [9, 5]], kind: "min", suffix: "6" },
+    "7": { tones: [[0, 0], [4, 2], [7, 4], [10, 6]], kind: "dom", suffix: "7" },
+    "dom7": { tones: [[0, 0], [4, 2], [7, 4], [10, 6]], kind: "dom", suffix: "7" },
+    "maj7": { tones: [[0, 0], [4, 2], [7, 4], [11, 6]], kind: "maj", suffix: "maj7" },
+    "M7": { tones: [[0, 0], [4, 2], [7, 4], [11, 6]], kind: "maj", suffix: "maj7" },
+    "m7": { tones: [[0, 0], [3, 2], [7, 4], [10, 6]], kind: "min", suffix: "7" },
+    "min7": { tones: [[0, 0], [3, 2], [7, 4], [10, 6]], kind: "min", suffix: "7" },
+    "m7b5": { tones: [[0, 0], [3, 2], [6, 4], [10, 6]], kind: "dim", suffix: "\u00F87" },
+    "min7b5": { tones: [[0, 0], [3, 2], [6, 4], [10, 6]], kind: "dim", suffix: "\u00F87" },
+    "dim": { tones: [[0, 0], [3, 2], [6, 4]], kind: "dim", suffix: "\u00B0" },
+    "dim7": { tones: [[0, 0], [3, 2], [6, 4], [9, 6]], kind: "dim", suffix: "\u00B07" },
+    "aug": { tones: [[0, 0], [4, 2], [8, 4]], kind: "aug", suffix: "+" },
+    "+": { tones: [[0, 0], [4, 2], [8, 4]], kind: "aug", suffix: "+" },
+    "sus2": { tones: [[0, 0], [2, 1], [7, 4]], kind: "sus", suffix: "sus2" },
+    "sus4": { tones: [[0, 0], [5, 3], [7, 4]], kind: "sus", suffix: "sus4" },
+    "sus": { tones: [[0, 0], [5, 3], [7, 4]], kind: "sus", suffix: "sus4" },
+    "7sus4": { tones: [[0, 0], [5, 3], [7, 4], [10, 6]], kind: "sus", suffix: "7sus4" },
+    "7sus": { tones: [[0, 0], [5, 3], [7, 4], [10, 6]], kind: "sus", suffix: "7sus4" },
+    "add9": { tones: [[0, 0], [4, 2], [7, 4], [2, 1]], kind: "maj", suffix: "add9" },
+    "madd9": { tones: [[0, 0], [3, 2], [7, 4], [2, 1]], kind: "min", suffix: "add9" },
+    "9": { tones: [[0, 0], [4, 2], [7, 4], [10, 6], [2, 1]], kind: "dom", suffix: "9" },
+    "maj9": { tones: [[0, 0], [4, 2], [7, 4], [11, 6], [2, 1]], kind: "maj", suffix: "maj9" },
+    "M9": { tones: [[0, 0], [4, 2], [7, 4], [11, 6], [2, 1]], kind: "maj", suffix: "maj9" },
+    "m9": { tones: [[0, 0], [3, 2], [7, 4], [10, 6], [2, 1]], kind: "min", suffix: "9" },
+    "11": { tones: [[0, 0], [4, 2], [7, 4], [10, 6], [2, 1], [5, 3]], kind: "dom", suffix: "11" },
+    "m11": { tones: [[0, 0], [3, 2], [7, 4], [10, 6], [2, 1], [5, 3]], kind: "min", suffix: "11" },
+    "13": { tones: [[0, 0], [4, 2], [7, 4], [10, 6], [2, 1], [9, 5]], kind: "dom", suffix: "13" },
+    "m13": { tones: [[0, 0], [3, 2], [7, 4], [10, 6], [2, 1], [9, 5]], kind: "min", suffix: "13" },
+    "maj13": { tones: [[0, 0], [4, 2], [7, 4], [11, 6], [2, 1], [9, 5]], kind: "maj", suffix: "maj13" }
+  };
+
+  function normalizeQuality(raw){
+    var text = String(raw || "")
+      .replace(/\u0394|\u25B3|\^/g, "maj")
+      .replace(/\u00F8/g, "m7b5")
+      .replace(/\u00B0/g, "dim")
+      .replace(/\u2212|\u2013/g, "-")
+      .trim();
+    if (Object.prototype.hasOwnProperty.call(QUALITIES, text)) return text;
+    var lower = text.toLowerCase();
+    if (Object.prototype.hasOwnProperty.call(QUALITIES, lower)) return lower;
+    return null;
+  }
+
+  function parseToken(raw){
+    var text = normalize(raw).replace(/[()\[\]{}]/g, "").trim();
+    if (!text) return null;
+    var match = /^([A-Ga-g])([#b]{0,2})([^\/]*)(?:\/([A-Ga-g])([#b]{0,2}))?$/.exec(text);
+    if (!match) return null;
+    var letter = match[1].toUpperCase();
+    var accidental = match[2] || "";
+    var qualityKey = normalizeQuality(match[3]);
+    if (qualityKey === null) return null;
+    var rootOffset = accidental.length ? (accidental.charAt(0) === "b" ? -accidental.length : accidental.length) : 0;
+    var rootPc = ((NATURAL[letter] + rootOffset) % 12 + 12) % 12;
+    var quality = QUALITIES[qualityKey];
+    var tones = [];
+    var names = [];
+    var rootLetterIndex = LETTERS.indexOf(letter);
+    for (var index = 0; index < quality.tones.length; index += 1){
+      var interval = quality.tones[index];
+      var tonePc = (rootPc + interval[0]) % 12;
+      var toneLetter = LETTERS[(rootLetterIndex + interval[1]) % 7];
+      var toneOffset = signedDiff(tonePc, NATURAL[toneLetter]);
+      tones.push(tonePc);
+      names.push(Math.abs(toneOffset) <= 2
+        ? toneLetter + accidentalText(toneOffset)
+        : spell(tonePc, accidental.indexOf("b") !== -1));
+    }
+    var bass = null;
+    if (match[4]){
+      var bassLetter = match[4].toUpperCase();
+      var bassAccidental = match[5] || "";
+      var bassOffset = bassAccidental.length ? (bassAccidental.charAt(0) === "b" ? -bassAccidental.length : bassAccidental.length) : 0;
+      bass = { letter: bassLetter, pc: ((NATURAL[bassLetter] + bassOffset) % 12 + 12) % 12 };
+    }
+    return {
+      token: text,
+      label: text,
+      root: letter + accidental,
+      rootLetter: letter,
+      rootPc: rootPc,
+      quality: qualityKey,
+      kind: quality.kind,
+      suffix: quality.suffix,
+      tones: tones,
+      names: names,
+      bass: bass
+    };
+  }
+
+  function splitProgression(text){
+    var normalized = normalize(text).replace(/[|;:,]+/g, " ").replace(/\s+/g, " ").trim();
+    if (!normalized) return [];
+    return normalized.split(" ").filter(function(part){ return part.length > 0; });
+  }
+
+  function buildKey(tonicName, tonicPc, mode){
+    var steps = mode === "major" ? [0, 2, 4, 5, 7, 9, 11] : [0, 2, 3, 5, 7, 8, 10];
+    var tonicLetter = tonicName.charAt(0).toUpperCase();
+    var tonicLetterIndex = LETTERS.indexOf(tonicLetter);
+    var degreePcs = [];
+    var degreeNames = [];
+    var flats = 0;
+    var sharps = 0;
+    for (var degree = 0; degree < 7; degree += 1){
+      var letter = LETTERS[(tonicLetterIndex + degree) % 7];
+      var desired = (tonicPc + steps[degree]) % 12;
+      var offset = signedDiff(desired, NATURAL[letter]);
+      degreePcs.push(desired);
+      degreeNames.push(letter + accidentalText(offset));
+      if (offset < 0) flats += 1;
+      if (offset > 0) sharps += 1;
+    }
+    var set = {};
+    for (var index = 0; index < degreePcs.length; index += 1) set[degreePcs[index]] = true;
+    return {
+      label: degreeNames[0] + " " + mode,
+      tonic: degreeNames[0],
+      tonicLetter: tonicLetter,
+      tonicLetterIndex: tonicLetterIndex,
+      tonicPc: tonicPc,
+      mode: mode,
+      degreePcs: degreePcs,
+      degreeNames: degreeNames,
+      set: set,
+      preferFlat: flats > sharps
+    };
+  }
+
+  var MAJOR_TONICS = [
+    ["C", 0], ["Db", 1], ["D", 2], ["Eb", 3], ["E", 4], ["F", 5],
+    ["F#", 6], ["G", 7], ["Ab", 8], ["A", 9], ["Bb", 10], ["B", 11]
+  ];
+  var MINOR_TONICS = [
+    ["C", 0], ["C#", 1], ["D", 2], ["Eb", 3], ["E", 4], ["F", 5],
+    ["F#", 6], ["G", 7], ["G#", 8], ["A", 9], ["Bb", 10], ["B", 11]
+  ];
+
+  function allKeys(){
+    var keys = [];
+    for (var index = 0; index < 12; index += 1){
+      keys.push(buildKey(MAJOR_TONICS[index][0], MAJOR_TONICS[index][1], "major"));
+      keys.push(buildKey(MINOR_TONICS[index][0], MINOR_TONICS[index][1], "minor"));
+    }
+    return keys;
+  }
+
+  function weightFor(index, count){
+    if (count === 1) return WEIGHTS_LAST;
+    if (index === count - 1) return WEIGHTS_LAST;
+    if (index === 0) return WEIGHTS_FIRST;
+    return WEIGHTS_MIDDLE;
+  }
+
+  function isTonicChord(key, chord){
+    if (chord.rootPc !== key.tonicPc) return false;
+    return key.mode === "major" ? chord.kind === "maj" : chord.kind === "min";
+  }
+
+  function scoreKey(key, chords){
+    var numerator = 0;
+    var denominator = 0;
+    var matched = 0;
+    var outsideChords = [];
+    for (var index = 0; index < chords.length; index += 1){
+      var chord = chords[index];
+      var weight = weightFor(index, chords.length);
+      var hits = 0;
+      for (var tone = 0; tone < chord.tones.length; tone += 1){
+        if (key.set[chord.tones[tone]]) hits += 1;
+      }
+      numerator += weight * hits;
+      denominator += weight * chord.tones.length;
+      if (hits === chord.tones.length) matched += 1;
+      else outsideChords.push(chord.label);
+    }
+    var first = chords[0];
+    var last = chords[chords.length - 1];
+    var bonus = 0;
+    var hasTonic = false;
+    for (var scan = 0; scan < chords.length; scan += 1){
+      if (isTonicChord(key, chords[scan])) hasTonic = true;
+    }
+    if (hasTonic) bonus += 2;
+    if (isTonicChord(key, first)) bonus += 10;
+    if (isTonicChord(key, last)) bonus += 4;
+    if (chords.length >= 2){
+      var penultimate = chords[chords.length - 2];
+      var dominant = (key.tonicPc + 7) % 12;
+      if (penultimate.rootPc === dominant && (penultimate.kind === "maj" || penultimate.kind === "dom")
+        && isTonicChord(key, last)) bonus += 6;
+    }
+    return {
+      key: key,
+      label: key.label,
+      tonic: key.tonic,
+      mode: key.mode,
+      tonicPc: key.tonicPc,
+      tonePoints: numerator,
+      toneTotal: denominator,
+      fit: Math.round(100 * numerator / denominator),
+      matched: matched,
+      total: chords.length,
+      outsideChords: outsideChords,
+      bonus: bonus
+    };
+  }
+
+  function spell(pc, preferFlat){
+    var names = preferFlat ? FLAT_NAMES : SHARP_NAMES;
+    return names[((pc % 12) + 12) % 12];
+  }
+
+  function numeralFor(key, chord){
+    var degree = ((LETTERS.indexOf(chord.rootLetter) - key.tonicLetterIndex) % 7 + 7) % 7;
+    var offset = signedDiff(chord.rootPc, key.degreePcs[degree]);
+    var prefix = accidentalText(offset);
+    var base = ROMAN[degree];
+    var lower = chord.kind === "min" || chord.kind === "dim";
+    var numeral = prefix + (lower ? base.toLowerCase() : base) + chord.suffix;
+    var outside = [];
+    for (var tone = 0; tone < chord.tones.length; tone += 1){
+      if (!key.set[chord.tones[tone]]) outside.push(chord.names[tone]);
+    }
+    return {
+      chord: chord.label,
+      numeral: numeral,
+      status: outside.length === 0 ? "diatonic" : "outside",
+      outside: outside
+    };
+  }
+
+  function analyze(options){
+    var input = options || {};
+    var raw = normalize(input.chords);
+    if (raw.length > 4000) fail(MESSAGES.long);
+    var tokens = splitProgression(raw);
+    if (tokens.length === 0) fail(MESSAGES.chords);
+    var chords = [];
+    var skipped = [];
+    for (var index = 0; index < tokens.length; index += 1){
+      var token = tokens[index];
+      if (/^n\.?c\.?$/i.test(token)){
+        skipped.push(token);
+        continue;
+      }
+      var parsed = parseToken(token);
+      if (!parsed) fail(MESSAGES.unsupported + ' Could not read "' + token + '".');
+      chords.push(parsed);
+    }
+    if (chords.length === 0) fail(MESSAGES.chords);
+    if (chords.length > MAX_CHORDS) fail(MESSAGES.limit);
+
+    var scored = allKeys().map(function(key){ return scoreKey(key, chords); });
+    scored.sort(function(left, right){
+      if (left.tonePoints !== right.tonePoints) return right.tonePoints - left.tonePoints;
+      if (left.bonus !== right.bonus) return right.bonus - left.bonus;
+      if (left.mode !== right.mode) return left.mode === "major" ? -1 : 1;
+      return left.tonicPc - right.tonicPc;
+    });
+    var best = scored[0];
+    var analysis = chords.map(function(chord){ return numeralFor(best.key, chord); });
+    var warnings = [];
+    if (skipped.length) warnings.push("Ignored " + skipped.length + " no-chord marker" + (skipped.length === 1 ? "" : "s") + ".");
+    if (chords.length === 1) warnings.push("A single chord fits many keys equally well; add the chords around it.");
+    if (best.fit < 100) warnings.push(best.label + " covers " + best.fit + "% of the chord tones in weighted terms; the closest other keys are listed in the table.");
+    if (scored[1] && scored[1].tonePoints === best.tonePoints && scored[1].fit === best.fit){
+      warnings.push(scored[1].label + " fits this progression equally well, so the key is ambiguous from the chords alone.");
+    }
+    return {
+      chords: chords.map(function(chord){ return chord.label; }),
+      count: chords.length,
+      candidates: scored.slice(0, 6),
+      best: best,
+      analysis: analysis,
+      fit: best.fit,
+      matched: best.matched,
+      ambiguous: Boolean(scored[1] && scored[1].fit === best.fit),
+      warnings: warnings
+    };
+  }
+
+  return {
+    MESSAGES: MESSAGES,
+    MAX_CHORDS: MAX_CHORDS,
+    parseChord: parseToken,
+    splitProgression: splitProgression,
+    analyze: analyze,
+    buildKey: buildKey
+  };
+})();
+/* progression-key-core:end */
+(function(){
+"use strict";
+
+var defaults = { chords: "C G Am F" };
+var els = {
+  form: document.getElementById("key-form"),
+  chords: document.getElementById("chords"),
+  err: document.getElementById("err"),
+  out: document.getElementById("out"),
+  warn: document.getElementById("warn"),
+  candidates: document.getElementById("candidates"),
+  analysis: document.getElementById("analysis"),
+  analysisHeading: document.getElementById("analysis-heading"),
+  clear: document.getElementById("clear")
+};
+
+function clearNode(node){
+  while (node.firstChild) node.removeChild(node.firstChild);
+}
+
+function addRow(parent, key, value){
+  var row = document.createElement("div");
+  row.className = "row";
+  var name = document.createElement("span");
+  name.className = "k";
+  name.textContent = key;
+  var val = document.createElement("span");
+  val.className = "v";
+  val.textContent = value;
+  row.appendChild(name);
+  row.appendChild(val);
+  parent.appendChild(row);
+}
+
+function cell(text, className){
+  var td = document.createElement("td");
+  if (className) td.className = className;
+  td.textContent = text;
+  return td;
+}
+
+function resetTables(){
+  clearNode(els.candidates);
+  clearNode(els.analysis);
+}
+
+function showError(message){
+  els.err.textContent = message;
+  clearNode(els.out);
+  resetTables();
+  var placeholder = document.createElement("div");
+  placeholder.className = "sub";
+  placeholder.textContent = "Fix the progression to see a key.";
+  els.out.appendChild(placeholder);
+  els.warn.hidden = true;
+  els.warn.textContent = "";
+}
+
+function render(result){
+  els.err.textContent = "";
+  clearNode(els.out);
+  resetTables();
+
+  var big = document.createElement("div");
+  big.className = "big";
+  big.textContent = result.best.label;
+  var sub = document.createElement("div");
+  sub.className = "sub";
+  sub.textContent = result.matched + " of " + result.count + " chord" + (result.count === 1 ? "" : "s")
+    + " sit entirely inside the scale \u00B7 weighted fit " + result.fit + "%";
+  els.out.appendChild(big);
+  els.out.appendChild(sub);
+
+  addRow(els.out, "Tonic", result.best.tonic);
+  addRow(els.out, "Mode", result.best.mode === "major" ? "Major" : "Natural minor");
+  addRow(els.out, "Scale", result.best.key.degreeNames.join(" "));
+  addRow(els.out, "Chords in key", result.matched + " / " + result.count);
+  if (result.candidates[1]) addRow(els.out, "Next best", result.candidates[1].label + " (" + result.candidates[1].fit + "%)");
+
+  if (result.warnings.length){
+    els.warn.hidden = false;
+    els.warn.textContent = result.warnings.join(" ");
+  } else {
+    els.warn.hidden = true;
+    els.warn.textContent = "";
+  }
+
+  for (var index = 0; index < result.candidates.length; index += 1){
+    var candidate = result.candidates[index];
+    var row = document.createElement("tr");
+    if (index === 0) row.className = "best";
+    row.appendChild(cell(candidate.label, "num"));
+    row.appendChild(cell(candidate.fit + "%"));
+    row.appendChild(cell(candidate.matched + " / " + candidate.total));
+    row.appendChild(cell(candidate.outsideChords.length ? candidate.outsideChords.slice(0, 4).join(", ") : "\u2014"));
+    els.candidates.appendChild(row);
+  }
+
+  els.analysisHeading.textContent = "Roman numerals in " + result.best.label;
+  for (var position = 0; position < result.analysis.length; position += 1){
+    var item = result.analysis[position];
+    var line = document.createElement("tr");
+    line.appendChild(cell(String(position + 1)));
+    line.appendChild(cell(item.chord, "num"));
+    line.appendChild(cell(item.numeral, "num"));
+    line.appendChild(cell(item.status === "diatonic" ? "Diatonic" : "Outside: " + item.outside.join(", ")));
+    els.analysis.appendChild(line);
+  }
+}
+
+function run(){
+  try {
+    var result = ProgressionKeyCore.analyze({ chords: els.chords.value });
+    render(result);
+  } catch (error){
+    showError(error.message);
+  }
+}
+
+els.form.addEventListener("submit", function(event){
+  event.preventDefault();
+  run();
+  if (els.err.textContent) els.chords.focus();
+});
+
+els.clear.addEventListener("click", function(){
+  els.chords.value = "";
+  run();
+  els.chords.focus();
+});
+
+els.chords.addEventListener("change", run);
+
+run();
+})();
+</script>
+</body>
+</html>
