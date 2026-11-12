@@ -21,7 +21,7 @@ const C = sandbox.module.exports;
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
 const matches = catalog.tools.filter((tool) => tool.slug === slug);
 assert.equal(matches.length, 1, 'slug must exist exactly once');
-assert.equal(catalog.tools.length, 2221, 'catalog total');
+assert.equal(catalog.tools.length, 2222, 'catalog total');
 const entry = matches[0];
 assert.equal(entry.name, 'Egg Size Converter');
 assert.equal(entry.category, 'Food');

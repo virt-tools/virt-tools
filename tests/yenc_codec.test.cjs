@@ -258,7 +258,7 @@ assert.ok(entry.method.includes('42') && entry.method.includes('106') && entry.m
   && entry.method.includes('browser'), 'method must state the shift, the inverse, the checksum and local execution');
 assert.equal(new Set(entry.tags).size, entry.tags.length, 'duplicate tags');
 assert.equal(new Set(entry.aliases).size, entry.aliases.length, 'duplicate aliases');
-assert.equal(catalog.tools.length, 2221);
+assert.equal(catalog.tools.length, 2222);
 const allAliases = new Map();
 for (const tool of catalog.tools) {
   for (const alias of tool.aliases || []) {

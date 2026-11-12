@@ -230,6 +230,7 @@ node tests/lut_grid_size_calculator.test.cjs
 node tests/jet_lag_adjustment_planner.test.cjs
 node tests/backpack_base_weight_planner.test.cjs
 node tests/docker_image_reference_parser.test.cjs
+node tests/gelatin_sheet_powder_converter.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
