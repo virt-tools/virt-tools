@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Grid Convergence Calculator — Virtual Tools</title>
+<meta name="description" content="Find the grid convergence between true north and a UTM zone's grid north at a latitude and longitude, and convert a bearing between true and grid azimuths.">
+<link rel="stylesheet" href="/assets/style.css">
+<link rel="stylesheet" href="/assets/tool-css/tool-form-3c8cf9e7.css">
+<style>
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button.ghost{background:transparent;color:var(--text,#e6e6e6);border-color:var(--border,#2a2f3a)}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.hint{color:var(--text-dim,#9aa3b2);font-size:13px}
+.out .big{font-size:clamp(1.3rem,5.6vw,2rem);word-break:break-word;padding-bottom:2px}
+.sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 10px;word-break:break-word}
+.out .row{flex-wrap:wrap;gap:2px 12px}
+.out .row .v{text-align:right;word-break:break-word}
+.status-note{font-size:12.5px;color:var(--text-dim,#9aa3b2);line-height:1.5;margin:10px 0 0}
+.tools{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px;padding-top:10px;border-top:1px solid var(--border,#2a2f3a)}
+.tools button{font:inherit;font-size:13px;padding:6px 12px;border-radius:7px;border:1px solid var(--border,#2a2f3a);background:transparent;color:var(--text,#e6e6e6);cursor:pointer;min-height:36px}
+.tools button:hover{border-color:var(--accent,#6ea8fe)}
+.tools button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.status{font-size:12.5px;color:var(--text-dim,#9aa3b2)}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;margin-top:12px;line-height:1.55}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>Grid Convergence Calculator</h1>
+<p>Enter a latitude, longitude and the UTM zone of your map sheet. The page reports the grid convergence — the angle between grid north and true north at that point — and converts a bearing between true and grid azimuths. Everything runs in your browser.</p>
+</div>
+<div class="panel">
+<form id="grid-form" novalidate>
+<div class="grid2">
+<div class="field"><label class="f" for="lat">Latitude</label><input id="lat" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="51.4779"><div class="unit">degrees, &minus;80 to 84</div></div>
+<div class="field"><label class="f" for="lon">Longitude</label><input id="lon" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="-0.0015"><div class="unit">degrees, &minus;180 to 180</div></div>
+<div class="field"><label class="f" for="zone">UTM zone</label><input id="zone" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" value="30"><div class="unit">1 to 60; blank uses the zone of this longitude</div></div>
+<div class="field"><label class="f" for="bearing">Bearing</label><input id="bearing" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="90"><div class="unit">degrees, 0 to 360</div></div>
+<div class="field"><label class="f" for="direction">Bearing is given as</label><select id="direction"><option value="true-to-grid" selected>True &rarr; grid</option><option value="grid-to-true">Grid &rarr; true</option></select><div class="unit">convergence is added or subtracted</div></div>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions"><button type="submit">Convert bearing</button><button type="button" class="ghost" id="reset">Reset</button></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"><span class="hint">Enter a position, a zone and a bearing to see the convergence.</span></div>
+<p class="note">Grid convergence is the angle at your position between true north and grid north, where grid north is parallel to the central meridian of the UTM zone. It is positive when grid north lies east of true north, so true azimuth = grid azimuth + convergence and grid azimuth = true azimuth &minus; convergence. Convergence is zero on the central meridian and at the equator, and grows with the distance from the central meridian and with latitude. It is not magnetic declination: apply that separately for a compass bearing. The value uses a transverse Mercator series on the WGS84 ellipsoid; within &plusmn;3&deg; of the central meridian it matches a full projection to about 0.01&Prime;, and out to &plusmn;6&deg; to about 0.1&Prime;. Beyond 6&deg; the page refuses because the series is no longer that accurate. This is a mapping and planning aid, not survey control or a navigation system. Nothing is stored and the page makes no network requests.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+(function(){
+"use strict";
+/* gridconv-core:start */
+var GridConvCore = (function(){
+  "use strict";
+  var RAD = Math.PI / 180, DEG = 180 / Math.PI;
+  var F = 1 / 298.257223563;
+  var E2 = F * (2 - F);
+  var EP2 = E2 / (1 - E2);
+  var LAT_MIN = -80, LAT_MAX = 84, LON_LIMIT = 180;
+  var BAND_LIMIT = 3, OUTER_LIMIT = 6, ALIGNED = 0.0005;
+
+  function text(raw){
+    return String(raw === undefined || raw === null ? "" : raw).trim();
+  }
+  function parseDecimal(raw, label, min, max){
+    var value = text(raw);
+    if (!value) throw new Error("Enter the " + label + ".");
+    var cleaned = value.replace(/,/g, ".");
+    if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(cleaned)){
+      if (/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)[eE][+-]?\d+$/.test(cleaned)){
+        throw new Error("The " + label + " must be a decimal number without exponent notation.");
+      }
+      throw new Error("The " + label + " must be a decimal number.");
+    }
+    var number = Number(cleaned);
+    if (!(number >= min && number <= max)){
+      throw new Error("The " + label + " must be between " + min + " and " + max + " degrees.");
+    }
+    return number;
+  }
+  function zoneFromLongitude(lon){
+    var zone = Math.floor((lon + LON_LIMIT) / 6) + 1;
+    if (zone < 1) zone = 1;
+    if (zone > 60) zone = 60;
+    return zone;
+  }
+  function parseZone(raw, lon){
+    var value = text(raw);
+    if (!value) return zoneFromLongitude(lon);
+    if (!/^\d+$/.test(value)) throw new Error("The zone must be a whole number.");
+    var zone = Number(value);
+    if (!(zone >= 1 && zone <= 60)) throw new Error("The zone must be a whole number from 1 to 60.");
+    return zone;
+  }
+  function centralMeridian(zone){
+    return zone * 6 - 183;
+  }
+  function normaliseLongitude(value){
+    var wrapped = ((value + 540) % 360) - 180;
+    return wrapped === -180 ? 180 : wrapped;
+  }
+  function normaliseAzimuth(value){
+    var wrapped = ((value % 360) + 360) % 360;
+    return wrapped === 360 ? 0 : wrapped;
+  }
+  function convergence(lat, deltaLon){
+    var phi = lat * RAD, dl = deltaLon * RAD;
+    var sinP = Math.sin(phi), cosP = Math.cos(phi);
+    var eta2 = EP2 * cosP * cosP;
+    var gamma = dl * sinP + (dl * dl * dl) / 3 * sinP * cosP * cosP * (1 + 3 * eta2);
+    return gamma * DEG;
+  }
+
+  function analyze(input){
+    input = input || {};
+    var lat = parseDecimal(input.lat, "latitude", LAT_MIN, LAT_MAX);
+    var lon = parseDecimal(input.lon, "longitude", -LON_LIMIT, LON_LIMIT);
+    var zone = parseZone(input.zone, lon);
+    var bearing = parseDecimal(input.bearing, "bearing", 0, 360);
+    if (bearing === 360) bearing = 0;
+    var direction = input.direction === "grid-to-true" ? "grid-to-true" : "true-to-grid";
+
+    var meridian = centralMeridian(zone);
+    var deltaLon = normaliseLongitude(lon - meridian);
+    if (Math.abs(deltaLon) > OUTER_LIMIT){
+      var suggested = zoneFromLongitude(lon);
+      throw new Error("This longitude is more than 6 degrees from the central meridian of zone " +
+        zone + ". Zone " + suggested + " contains it.");
+    }
+    var gamma = convergence(lat, deltaLon);
+    var gridAzimuth, trueAzimuth;
+    if (direction === "grid-to-true"){
+      gridAzimuth = bearing;
+      trueAzimuth = normaliseAzimuth(bearing + gamma);
+    } else {
+      trueAzimuth = bearing;
+      gridAzimuth = normaliseAzimuth(bearing - gamma);
+    }
+    var magnitude = Math.abs(gamma);
+    return {
+      lat: lat,
+      lon: lon,
+      zone: zone,
+      hemisphere: lat < 0 ? "S" : "N",
+      zoneLabel: zone + " " + (lat < 0 ? "S" : "N"),
+      centralMeridian: meridian,
+      centralMeridianLabel: formatLongitude(meridian),
+      deltaLon: deltaLon,
+      convergence: gamma,
+      convergenceAbs: magnitude,
+      convergenceDirection: magnitude < ALIGNED ? "aligned" : (gamma > 0 ? "east" : "west"),
+      convergenceDms: formatDms(gamma),
+      gridNorthText: magnitude < ALIGNED
+        ? "grid north is aligned with true north"
+        : "grid north lies " + dmsBody(gamma) + (gamma > 0 ? " east" : " west") + " of true north",
+      convergenceArcmin: magnitude * 60,
+      bearingIn: bearing,
+      direction: direction,
+      gridAzimuth: gridAzimuth,
+      trueAzimuth: trueAzimuth,
+      outsideZone: Math.abs(deltaLon) > BAND_LIMIT
+    };
+  }
+
+  function pad(value){
+    return value < 10 ? "0" + value : String(value);
+  }
+  function dmsBody(value){
+    var total = Math.round(Math.abs(value) * 3600);
+    var degrees = Math.floor(total / 3600);
+    var minutes = Math.floor((total % 3600) / 60);
+    var seconds = total % 60;
+    return degrees + "\u00b0" + pad(minutes) + "\u2032" + pad(seconds) + "\u2033";
+  }
+  function formatDms(value){
+    var magnitude = Math.abs(value);
+    var letter = magnitude < ALIGNED ? "" : (value > 0 ? " E" : " W");
+    return dmsBody(value) + letter;
+  }
+  function formatLongitude(value){
+    var magnitude = Math.abs(value);
+    return magnitude + "\u00b0" + (value < 0 ? "W" : (value > 0 ? "E" : ""));
+  }
+  function formatSigned(value, digits){
+    var magnitude = Math.abs(value) < 0.00005 ? 0 : value;
+    var body = Math.abs(magnitude).toFixed(digits);
+    if (magnitude === 0) return body + "\u00b0";
+    return (magnitude > 0 ? "+" : "\u2212") + body + "\u00b0";
+  }
+  function formatConvergence(result){
+    var magnitude = result.convergenceAbs;
+    if (magnitude < 0.00005) return "0.0000\u00b0";
+    return magnitude.toFixed(4) + "\u00b0 " + result.convergenceDirection;
+  }
+  function formatAzimuth(value){
+    var prefix = value < 10 ? "00" : (value < 100 ? "0" : "");
+    return prefix + value.toFixed(1) + "\u00b0";
+  }
+  function copyText(result){
+    return "Grid convergence " + formatConvergence(result) + " (" + result.gridNorthText + ") in zone " +
+      result.zoneLabel + ", central meridian " + result.centralMeridianLabel + ". True azimuth " +
+      formatAzimuth(result.trueAzimuth) + ", grid azimuth " + formatAzimuth(result.gridAzimuth) + ".";
+  }
+
+  return {
+    analyze: analyze,
+    convergence: convergence,
+    centralMeridian: centralMeridian,
+    zoneFromLongitude: zoneFromLongitude,
+    formatDms: formatDms,
+    formatLongitude: formatLongitude,
+    formatSigned: formatSigned,
+    formatConvergence: formatConvergence,
+    formatAzimuth: formatAzimuth,
+    copyText: copyText,
+    LAT_MIN: LAT_MIN,
+    LAT_MAX: LAT_MAX,
+    OUTER_LIMIT: OUTER_LIMIT
+  };
+})();
+/* gridconv-core:end */
+
+var form = document.getElementById("grid-form");
+var fields = {
+  lat: document.getElementById("lat"),
+  lon: document.getElementById("lon"),
+  zone: document.getElementById("zone"),
+  bearing: document.getElementById("bearing"),
+  direction: document.getElementById("direction")
+};
+var errEl = document.getElementById("err");
+var outEl = document.getElementById("out");
+var HINT = "Enter a position, a zone and a bearing to see the convergence.";
+var DEFAULTS = {lat: "51.4779", lon: "-0.0015", zone: "30", bearing: "90", direction: "true-to-grid"};
+var state = null;
+
+function el(tag, className, content){
+  var node = document.createElement(tag);
+  if (className) node.className = className;
+  if (content !== undefined) node.textContent = content;
+  return node;
+}
+function clearNode(node){ while (node.firstChild) node.removeChild(node.firstChild); }
+function row(label, value){
+  var line = el("div", "row");
+  line.appendChild(el("span", "k", label));
+  line.appendChild(el("span", "v", value));
+  return line;
+}
+
+function showHint(){
+  state = null;
+  clearNode(outEl);
+  outEl.appendChild(el("span", "hint", HINT));
+}
+
+function render(result){
+  clearNode(outEl);
+  outEl.appendChild(el("div", "big", GridConvCore.formatConvergence(result)));
+  outEl.appendChild(el("div", "sub", result.gridNorthText));
+
+  var rows = el("div", "rows");
+  rows.appendChild(row("UTM zone", result.zoneLabel + " \u00b7 central meridian " + result.centralMeridianLabel));
+  rows.appendChild(row("Longitude from central meridian", GridConvCore.formatSigned(result.deltaLon, 4)));
+  rows.appendChild(row("True azimuth", GridConvCore.formatAzimuth(result.trueAzimuth)));
+  rows.appendChild(row("Grid azimuth", GridConvCore.formatAzimuth(result.gridAzimuth)));
+  rows.appendChild(row("Convergence", result.convergenceAbs.toFixed(4) + "\u00b0 (" + result.convergenceArcmin.toFixed(2) + "\u2032)"));
+  outEl.appendChild(rows);
+
+  if (result.outsideZone){
+    outEl.appendChild(el("p", "status-note", "This longitude is outside the zone band (\u00b13\u00b0 of the central meridian). Convergence is larger here and UTM scale distortion grows; check that the zone matches the map sheet you are working on."));
+  }
+
+  var tools = el("div", "tools");
+  var copyBtn = el("button", "", "Copy result");
+  copyBtn.type = "button";
+  var status = el("span", "status");
+  status.setAttribute("role", "status");
+  tools.appendChild(copyBtn);
+  tools.appendChild(status);
+  outEl.appendChild(tools);
+
+  copyBtn.addEventListener("click", function(){
+    var text = GridConvCore.copyText(state);
+    function done(){ status.textContent = "Result copied."; }
+    function failed(){ status.textContent = "Copy blocked by the browser."; }
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(done, function(){ if (legacyCopy(text)) done(); else failed(); });
+    } else if (legacyCopy(text)) done();
+    else failed();
+  });
+}
+
+function legacyCopy(text){
+  var area = document.createElement("textarea");
+  area.value = text;
+  area.setAttribute("readonly", "readonly");
+  area.style.position = "fixed";
+  area.style.top = "-1000px";
+  document.body.appendChild(area);
+  area.select();
+  var ok = false;
+  try { ok = document.execCommand("copy"); } catch (error) { ok = false; }
+  area.remove();
+  return ok;
+}
+
+function readInput(){
+  return {
+    lat: fields.lat.value,
+    lon: fields.lon.value,
+    zone: fields.zone.value,
+    bearing: fields.bearing.value,
+    direction: fields.direction.value
+  };
+}
+
+function run(){
+  try {
+    state = GridConvCore.analyze(readInput());
+    errEl.textContent = "";
+    render(state);
+  } catch (error) {
+    errEl.textContent = error.message;
+    showHint();
+  }
+}
+
+form.addEventListener("submit", function(event){
+  event.preventDefault();
+  run();
+});
+
+form.addEventListener("input", function(){ if (errEl.textContent) errEl.textContent = ""; });
+
+fields.lon.addEventListener("change", function(){
+  if (!String(fields.zone.value).trim()){
+    try {
+      var lon = Number(String(fields.lon.value).replace(/,/g, "."));
+      if (lon >= -180 && lon <= 180) fields.zone.placeholder = "auto: " + GridConvCore.zoneFromLongitude(lon);
+    } catch (error) { /* the next submit reports the field */ }
+  }
+});
+
+document.getElementById("reset").addEventListener("click", function(){
+  Object.keys(fields).forEach(function(key){ fields[key].value = DEFAULTS[key]; });
+  errEl.textContent = "";
+  run();
+  fields.lat.focus();
+});
+
+run();
+})();
+</script>
+</body>
+</html>
