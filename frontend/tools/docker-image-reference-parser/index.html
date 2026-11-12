@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Split a Docker or OCI image reference into registry, repository, tag and digest, and get the normalized pull name with the registry API manifest path. Runs entirely in your browser.">
+<script src="/assets/theme-init.js"></script>
+<title>Docker Image Reference Parser — virt.tools</title>
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.dr-shell{max-width:860px;margin:0 auto}
+.lead,.hint,.detail{color:var(--text-secondary,#8b949e)}
+.panel{background:var(--surface,#161b22);border:1px solid var(--border,#30363d);border-radius:10px;padding:1rem;margin:1rem 0}
+.field{display:flex;flex-direction:column;gap:.35rem}
+.field label{font-weight:600}
+.field input{box-sizing:border-box;width:100%;background:var(--background,#0d1117);color:var(--text,#c9d1d9);border:1px solid var(--border,#30363d);border-radius:6px;padding:.62rem;font:inherit;font-size:1rem;min-height:44px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+.field input:focus-visible,button:focus-visible,.copy-btn:focus-visible{outline:2px solid var(--accent,#58a6ff);outline-offset:2px}
+.actions{display:flex;flex-wrap:wrap;gap:.6rem;margin:.9rem 0 .2rem}
+button{border:1px solid var(--border,#30363d);border-radius:6px;background:var(--surface-raised,#21262d);color:var(--text,#c9d1d9);padding:.58rem .85rem;min-height:44px;font:inherit;font-size:.95rem;cursor:pointer}
+button.primary{border-color:var(--accent,#58a6ff);background:var(--accent-soft,#1e3a5f)}
+.examples{display:flex;flex-wrap:wrap;gap:.45rem;margin:.55rem 0 0;padding:0;list-style:none}
+.examples button{font-size:.85rem;min-height:44px;padding:.35rem .6rem;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+.copy-btn{font-size:.8rem;min-height:44px;padding:.25rem .55rem;margin-left:.4rem;vertical-align:middle}
+.status{min-height:1.4rem;margin:.55rem 0 .3rem}
+.status.ok{color:#3fb950}.status.warn{color:#d29922}.status.error{color:#f85149}.status.info{color:var(--text-secondary,#8b949e)}
+.results{margin:.2rem 0 0;display:grid;gap:.7rem}
+.results>div{display:grid;grid-template-columns:11rem 1fr;gap:.4rem 1rem;align-items:baseline}
+.results dt{font-weight:600}
+.results dd{margin:0;overflow-wrap:anywhere}
+.results output{font:600 .98rem/1.45 ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--accent,#58a6ff)}
+.results .sub{display:block;font-weight:400;font-size:.82rem;color:var(--text-secondary,#8b949e);margin-top:.2rem}
+.mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.9rem}
+.notes{margin:.3rem 0 0;padding-left:1.2rem}
+.notes li{margin:.3rem 0}
+.notes:empty{display:none}
+h2{font-size:1.05rem;margin:.2rem 0 .8rem}
+h2 span{font-weight:500;font-size:.85rem;color:var(--text-secondary,#8b949e)}
+.explain p{margin:.5rem 0}
+.explain ul{margin:.4rem 0 0;padding-left:1.2rem}
+.explain li{margin:.3rem 0}
+.explain code{background:var(--surface-raised,#21262d);padding:.05rem .3rem;border-radius:4px;font-size:.88em}
+@media(max-width:600px){
+.results>div{grid-template-columns:1fr;gap:.15rem}
+.panel{padding:.85rem}
+.actions>*{flex:1 1 9rem}
+.copy-btn{margin-left:0}
+}
+</style>
+</head>
+<body><div id="site-header"></div><main class="tool-container"><div class="dr-shell">
+<a href="/">← Back to all tools</a>
+<h1>Docker Image Reference Parser</h1>
+<p class="lead">Paste an image reference such as <span class="mono">ghcr.io/acme/api:1.4.2</span> and see how it splits into registry, repository, tag and digest, what Docker will actually pull after normalization, and the registry API path for that manifest.</p>
+
+<form id="dr-form" novalidate>
+<section class="panel" aria-labelledby="input-title">
+<h2 id="input-title">Image reference</h2>
+<div class="field">
+<label for="reference">Reference to parse</label>
+<input id="reference" type="text" value="ghcr.io/acme/worker:2.1.0" autocomplete="off" spellcheck="false" autocapitalize="off" aria-describedby="reference-hint">
+<p class="hint" id="reference-hint">A registry host, repository path, tag, digest or any combination, for example <span class="mono">registry.example.com:5000/team/api:1.4.2</span>.</p>
+</div>
+<div class="actions"><button id="parse" class="primary" type="submit">Parse reference</button></div>
+<ul class="examples" aria-label="Example references">
+<li><button type="button" data-example="nginx">nginx</button></li>
+<li><button type="button" data-example="ubuntu@sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08">ubuntu with a digest</button></li>
+<li><button type="button" data-example="registry.example.com:5000/team/api:1.4.2">private registry with a port</button></li>
+<li><button type="button" data-example="index.docker.io/library/nginx:1.27-alpine">Docker Hub alias</button></li>
+</ul>
+<p id="dr-status" class="status info" role="status" aria-live="polite"></p>
+</section>
+</form>
+
+<section class="panel" aria-labelledby="result-title">
+<h2 id="result-title">Parsed reference <span>after Docker's normalization</span></h2>
+<dl class="results">
+<div><dt>Normalized reference</dt><dd><output id="normalized-out">—</output><button id="copy" class="copy-btn" type="button">Copy</button><span class="sub" id="copy-status"></span></dd></div>
+<div><dt>Registry</dt><dd><output id="registry-out">—</output><span class="sub" id="registry-sub"></span></dd></div>
+<div><dt>Repository</dt><dd><output id="repository-out">—</output><span class="sub" id="repository-sub"></span></dd></div>
+<div><dt>Tag</dt><dd><output id="tag-out">—</output><span class="sub" id="tag-sub"></span></dd></div>
+<div><dt>Digest</dt><dd><output id="digest-out">—</output><span class="sub" id="digest-sub"></span></dd></div>
+<div><dt>Manifest path</dt><dd><output id="manifest-out">—</output><span class="sub">Registry API request path; the host is the registry above.</span></dd></div>
+<div><dt>Name length</dt><dd><output id="length-out">—</output><span class="sub">Registry and repository only; tags and digests are not counted.</span></dd></div>
+<div><dt>Official image</dt><dd><output id="official-out">—</output><span class="sub" id="official-sub"></span></dd></div>
+</dl>
+<h2 style="margin-top:1rem">Normalization notes</h2>
+<ul class="notes" id="notes"></ul>
+<p class="detail" id="dr-note"></p>
+</section>
+
+<section class="panel explain" aria-labelledby="how-title">
+<h2 id="how-title">How a reference is split</h2>
+<ul>
+<li><strong>Digest first.</strong> Everything after <code>@</code> is a digest of the form <code>algorithm:encoded</code>. A digest pins exact content, so a reference that has one does not need a tag.</li>
+<li><strong>Then the tag.</strong> A colon after the last slash introduces a tag. Colons before the last slash belong to a registry port, which is why <code>localhost:5000/app</code> is registry <code>localhost:5000</code> with no tag.</li>
+<li><strong>Then the registry.</strong> The first path component is a registry when the reference has more than one component and that component contains a dot or a colon, is <code>localhost</code>, or is a bracketed IPv6 address. Without one, Docker uses <code>docker.io</code>.</li>
+<li><strong>Then normalization.</strong> <code>index.docker.io</code> and <code>registry-1.docker.io</code> are aliases of <code>docker.io</code>; a single-component Docker Hub name gains the <code>library/</code> namespace; and a reference with neither tag nor digest resolves to the moving tag <code>latest</code>.</li>
+<li><strong>Limits.</strong> Names are lowercase and at most 255 characters, path components allow single <code>.</code>, <code>_</code> or <code>-</code> separators, and tags are at most 128 characters. A <code>sha256</code> digest must carry 64 hexadecimal characters and a <code>sha512</code> digest 128; other algorithms are accepted but not length-checked.</li>
+<li>This is a parser for reference syntax and Docker's client-side normalization. It does not contact a registry, verify that the image exists, or check whether the tag exists. Everything runs in your browser with no storage, uploads or network requests.</li>
+</ul>
+</section>
+</div></main><script src="/assets/tools.js"></script><script src="/assets/app.js"></script>
+<script>
+/* docker-ref-core:start */
+const DockerRef = (() => {
+  'use strict';
+  const MAX_INPUT = 1024;
+  const MAX_NAME = 255;
+  const DEFAULT_REGISTRY = 'docker.io';
+  const DEFAULT_TAG = 'latest';
+  const ALIASES = { 'index.docker.io': 'docker.io', 'registry-1.docker.io': 'docker.io' };
+  const COMPONENT = /^[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*$/;
+  const DIGEST_ALGORITHM = /^[a-z0-9]+(?:[+._-][a-z0-9]+)*$/;
+
+  function fail(message) {
+    throw new Error(message);
+  }
+
+  function checkPort(port) {
+    if (!/^\d{1,5}$/.test(port) || Number(port) < 1 || Number(port) > 65535) {
+      fail('The registry port must be a number from 1 to 65535.');
+    }
+  }
+
+  function checkRegistry(registry) {
+    if (registry === 'localhost') return;
+    if (registry.charAt(0) === '[') {
+      const match = /^\[[0-9A-Fa-f:.]+\](?::(\d{1,5}))?$/.exec(registry);
+      if (!match) fail('The registry host is not a valid IPv6 address.');
+      if (match[1] !== undefined) checkPort(match[1]);
+      return;
+    }
+    const colon = registry.lastIndexOf(':');
+    let host = registry;
+    if (colon >= 0) {
+      host = registry.slice(0, colon);
+      checkPort(registry.slice(colon + 1));
+    }
+    if (host === '') fail('The registry host is missing before the port.');
+    if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(host)) {
+      if (host.split('.').some((part) => Number(part) > 255)) {
+        fail('The registry IPv4 address has an octet above 255.');
+      }
+      return;
+    }
+    const labels = host.split('.');
+    for (const label of labels) {
+      if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label)) {
+        fail('The registry host must be lowercase letters, digits, hyphens or dots (or localhost).');
+      }
+    }
+  }
+
+  function compute(input) {
+    const source = input || {};
+    const raw = source.reference == null ? '' : String(source.reference);
+    const reference = raw.trim();
+    if (reference === '') fail('Enter an image reference, for example nginx:1.27-alpine.');
+    if (raw.length > MAX_INPUT) fail('Enter a shorter reference: image references are limited to 1024 characters.');
+    if (/\s/.test(reference)) fail('An image reference cannot contain spaces or tabs.');
+
+    let rest = reference;
+    let digest = null;
+    let digestAlgorithm = null;
+    let digestHex = null;
+    const at = reference.indexOf('@');
+    if (at >= 0) {
+      if (reference.indexOf('@', at + 1) >= 0) {
+        fail('An image reference can contain at most one digest (@...).');
+      }
+      rest = reference.slice(0, at);
+      const digestText = reference.slice(at + 1);
+      if (digestText === '') fail('Add a digest after @, for example @sha256:<64 hex characters>.');
+      const colon = digestText.indexOf(':');
+      if (colon <= 0 || colon === digestText.length - 1) {
+        fail('A digest must look like sha256:<hex> (algorithm:encoded).');
+      }
+      digestAlgorithm = digestText.slice(0, colon);
+      digestHex = digestText.slice(colon + 1);
+      if (!DIGEST_ALGORITHM.test(digestAlgorithm)) {
+        fail('The digest algorithm must be lowercase letters, digits or separators, for example sha256.');
+      }
+      if (digestAlgorithm === 'sha256' || digestAlgorithm === 'sha512') {
+        const wanted = digestAlgorithm === 'sha256' ? 64 : 128;
+        if (!/^[0-9a-f]+$/.test(digestHex)) {
+          fail('A ' + digestAlgorithm + ' digest must contain only lowercase hexadecimal characters.');
+        }
+        if (digestHex.length !== wanted) {
+          fail('A ' + digestAlgorithm + ' digest must have ' + wanted +
+            ' hexadecimal characters; this one has ' + digestHex.length + '.');
+        }
+      } else if (!/^[A-Za-z0-9=_-]+$/.test(digestHex)) {
+        fail('A digest must contain only letters, digits, =, _ or -.');
+      }
+      digest = digestAlgorithm + ':' + digestHex;
+    }
+
+    let tag = null;
+    const slash = rest.lastIndexOf('/');
+    const colon = rest.lastIndexOf(':');
+    if (colon > slash) {
+      tag = rest.slice(colon + 1);
+      rest = rest.slice(0, colon);
+      if (tag === '') fail('Add a tag after the colon, for example nginx:1.27.');
+      if (!/^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$/.test(tag)) {
+        fail('A tag must start with a letter, digit or underscore and contain at most 128 letters, digits, dots, underscores or hyphens.');
+      }
+    }
+    if (rest === '') fail('Enter an image name before the tag or digest.');
+    if (/[A-Z]/.test(rest)) {
+      fail('Repository names must be lowercase; only the tag may contain uppercase letters.');
+    }
+
+    const parts = rest.split('/');
+    if (parts.some((part) => part === '')) {
+      fail('The reference contains an empty path segment; check for doubled slashes.');
+    }
+
+    let registry = DEFAULT_REGISTRY;
+    let registryExplicit = false;
+    let alias = false;
+    let repository = rest;
+    const first = parts[0];
+    if (parts.length > 1 && (first === 'localhost' || first.indexOf('.') >= 0 ||
+        first.indexOf(':') >= 0 || first.charAt(0) === '[')) {
+      registryExplicit = true;
+      registry = first;
+      repository = parts.slice(1).join('/');
+      if (Object.prototype.hasOwnProperty.call(ALIASES, registry)) {
+        registry = ALIASES[registry];
+        alias = true;
+      }
+    }
+
+    checkRegistry(registry);
+    for (const component of repository.split('/')) {
+      if (!COMPONENT.test(component)) {
+        fail('Repository path "' + component +
+          '" must use lowercase letters and digits with single ., _ or - separators.');
+      }
+    }
+
+    const prefixed = registry === DEFAULT_REGISTRY && repository.indexOf('/') < 0;
+    if (prefixed) repository = 'library/' + repository;
+    const official = registry === DEFAULT_REGISTRY && /^library\/[^/]+$/.test(repository);
+    const nameLength = registry.length + 1 + repository.length;
+    if (nameLength > MAX_NAME) {
+      fail('The image name is ' + nameLength + ' characters; registry references are limited to 255.');
+    }
+
+    const effectiveTag = tag !== null ? tag : (digest === null ? DEFAULT_TAG : null);
+    let normalized = registry + '/' + repository;
+    if (tag !== null) normalized += ':' + tag;
+    else if (digest === null) normalized += ':' + DEFAULT_TAG;
+    if (digest !== null) normalized += '@' + digest;
+    const manifestReference = digest !== null ? digest : (tag !== null ? tag : DEFAULT_TAG);
+    const manifestPath = '/v2/' + repository + '/manifests/' + manifestReference;
+
+    const warnings = [];
+    if (!registryExplicit) warnings.push('No registry host was given, so Docker uses docker.io.');
+    if (alias) warnings.push('index.docker.io and registry-1.docker.io are aliases of docker.io; the registry was normalized.');
+    if (prefixed) warnings.push('A single-component Docker Hub name lives under the library/ namespace; the prefix was added.');
+    if (tag === null && digest === null) warnings.push('No tag or digest was given, so the moving tag latest is used.');
+    if (tag !== null && digest !== null) warnings.push('The tag and digest are both present; the digest selects the image and the tag is not used for lookup.');
+    if (digestAlgorithm !== null && digestAlgorithm !== 'sha256' && digestAlgorithm !== 'sha512') {
+      warnings.push('Only sha256 and sha512 digests are length-checked here; the registry must support ' + digestAlgorithm + '.');
+    }
+
+    return {
+      input: raw,
+      reference: reference,
+      registry: registry,
+      registryExplicit: registryExplicit,
+      alias: alias,
+      repository: repository,
+      tag: tag,
+      effectiveTag: effectiveTag,
+      digest: digest,
+      digestAlgorithm: digestAlgorithm,
+      official: official,
+      prefixed: prefixed,
+      nameLength: nameLength,
+      normalized: normalized,
+      manifestPath: manifestPath,
+      warnings: warnings,
+      warningCount: warnings.length
+    };
+  }
+
+  return {
+    MAX_INPUT: MAX_INPUT,
+    MAX_NAME: MAX_NAME,
+    DEFAULT_REGISTRY: DEFAULT_REGISTRY,
+    DEFAULT_TAG: DEFAULT_TAG,
+    compute: compute
+  };
+})();
+/* docker-ref-core:end */
+(() => {
+'use strict';
+const $ = (id) => document.getElementById(id);
+const form = $('dr-form');
+const input = $('reference');
+const status = $('dr-status');
+const note = $('dr-note');
+const notes = $('notes');
+const copyButton = $('copy');
+const copyStatus = $('copy-status');
+const normalizedOut = $('normalized-out');
+const registryOut = $('registry-out'), registrySub = $('registry-sub');
+const repositoryOut = $('repository-out'), repositorySub = $('repository-sub');
+const tagOut = $('tag-out'), tagSub = $('tag-sub');
+const digestOut = $('digest-out'), digestSub = $('digest-sub');
+const manifestOut = $('manifest-out');
+const lengthOut = $('length-out');
+const officialOut = $('official-out'), officialSub = $('official-sub');
+
+function setStatus(message, kind) {
+  status.textContent = message;
+  status.className = 'status ' + (kind || 'info');
+}
+function setText(node, text) {
+  node.textContent = text;
+}
+function clearOutputs() {
+  for (const node of [normalizedOut, registryOut, repositoryOut, tagOut, digestOut, manifestOut, lengthOut, officialOut]) {
+    setText(node, '—');
+  }
+  for (const node of [registrySub, repositorySub, tagSub, digestSub, officialSub]) setText(node, '');
+  setText(note, '');
+  notes.replaceChildren();
+  copyButton.disabled = true;
+}
+function addNote(text) {
+  const item = document.createElement('li');
+  item.textContent = text;
+  notes.append(item);
+}
+function showResult(result) {
+  setText(normalizedOut, result.normalized);
+  setText(registryOut, result.registry);
+  setText(registrySub, result.registryExplicit ? 'Written in the reference.' : 'Implicit default for Docker Hub.');
+  setText(repositoryOut, result.repository);
+  setText(repositorySub, result.official ? 'Official Docker Hub namespace.' : (result.repository.indexOf('/') > -1 ? 'Registry namespace and repository.' : 'Repository name.'));
+  if (result.tag !== null) {
+    setText(tagOut, result.tag);
+    setText(tagSub, result.digest !== null ? 'Not used for lookup while a digest is present.' : 'Explicit tag.');
+  } else if (result.digest !== null) {
+    setText(tagOut, 'none');
+    setText(tagSub, 'Pinned by digest instead of a tag.');
+  } else {
+    setText(tagOut, 'latest (implicit)');
+    setText(tagSub, 'Default when neither a tag nor a digest is given.');
+  }
+  setText(digestOut, result.digest === null ? 'none' : result.digest);
+  setText(digestSub, result.digest === null ? 'The tag decides which image is pulled.' : 'Pins the exact image manifest.');
+  setText(manifestOut, result.manifestPath);
+  setText(lengthOut, result.nameLength + ' / 255 characters');
+  setText(officialOut, result.official ? 'Yes' : 'No');
+  setText(officialSub, result.official ? 'docker.io/library/<name> is the Docker Hub official-image namespace.'
+    : 'Not in the Docker Hub library/ namespace.');
+  setText(note, result.warningCount === 0
+    ? 'The reference is already canonical: no registry, namespace, or tag normalization was needed.'
+    : '');
+  notes.replaceChildren();
+  for (const warning of result.warnings) addNote(warning);
+  copyButton.disabled = false;
+  setStatus(result.warningCount === 0
+    ? 'Valid reference; nothing needed normalizing.'
+    : 'Valid reference with ' + result.warningCount + (result.warningCount === 1 ? ' note.' : ' notes.'), 'warn');
+}
+function render() {
+  const value = input.value;
+  if (value.trim() === '') {
+    clearOutputs();
+    setStatus('Enter an image reference to parse.', 'info');
+    return;
+  }
+  try {
+    showResult(DockerRef.compute({ reference: value }));
+  } catch (error) {
+    clearOutputs();
+    setStatus(error.message || String(error), 'error');
+  }
+}
+
+form.addEventListener('submit', (event) => {
+  event.preventDefault();
+  render();
+  input.focus();
+});
+input.addEventListener('input', render);
+document.querySelectorAll('[data-example]').forEach((button) => {
+  button.addEventListener('click', () => {
+    input.value = button.getAttribute('data-example');
+    render();
+    input.focus();
+  });
+});
+copyButton.addEventListener('click', async () => {
+  const text = normalizedOut.textContent || '';
+  if (!text || text === '—') return;
+  try {
+    await navigator.clipboard.writeText(text);
+    setText(copyStatus, 'Copied to the clipboard.');
+  } catch (error) {
+    setText(copyStatus, 'Copy failed; select the reference and copy it manually.');
+  }
+});
+
+render();
+})();
+</script></body></html>
