@@ -241,6 +241,8 @@ node tests/warmup_set_planner.test.cjs
 node tests/sweat_rate_calculator.test.cjs
 node tests/rep_tempo_calculator.test.cjs
 node tests/strength_volume_load_calculator.test.cjs
+node tests/grade_adjusted_pace_calculator.test.cjs
+node tests/stereoscopic_parallax_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
