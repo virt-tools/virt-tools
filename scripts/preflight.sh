@@ -232,6 +232,7 @@ node tests/backpack_base_weight_planner.test.cjs
 node tests/docker_image_reference_parser.test.cjs
 node tests/gelatin_sheet_powder_converter.test.cjs
 node tests/knitting_needle_size_converter.test.cjs
+node tests/barbell_plate_loading_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
