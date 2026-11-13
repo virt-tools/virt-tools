@@ -92,7 +92,7 @@ refuse({ power: '1e3' }, 'Peak power must be a number.');
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record present');
-assert.equal(catalog.tools.length, 2237, 'catalog total');
+assert.equal(catalog.tools.length, 2238, 'catalog total');
 assert.equal(record.category, 'Communications Engineering');
 assert.equal(record.subcategory, 'Estimation & calculation');
 assert.equal(record.risk, 'low');
