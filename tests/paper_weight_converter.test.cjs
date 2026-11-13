@@ -174,7 +174,7 @@ assert.equal(run('.5', 'bond').fromText, '0.5 lb bond');
 
 // ---- Catalog record and its cases must agree with the core.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2253, 'catalog total');
+assert.equal(catalog.tools.length, 2254, 'catalog total');
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record missing');
 assert.equal(record.name, 'Paper Weight Converter');

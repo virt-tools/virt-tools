@@ -262,6 +262,7 @@ node tests/beat_cut_planner.test.cjs
 node tests/altitude_oxygen_calculator.test.cjs
 node tests/multicast_mac_mapper.test.cjs
 node tests/linux_device_number_decoder.test.cjs
+node tests/triathlon_split_planner.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
