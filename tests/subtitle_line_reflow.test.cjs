@@ -206,7 +206,7 @@ assert.ok(checked >= 216, 'sweep covered every limit combination');
 
 // Replay every canonical catalog test case against the core.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2244, 'catalog total');
+assert.equal(catalog.tools.length, 2245, 'catalog total');
 const record = catalog.tools.find((tool) => tool.slug === 'subtitle-line-reflow');
 assert.ok(record, 'catalog entry present');
 assert.equal(record.category, 'Video');
