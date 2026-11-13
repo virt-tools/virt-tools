@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Linux Device Number Decoder — Virtual Tools</title>
+<meta name="description" content="Decode a Linux device number between major:minor and dev_t, with the glibc bit packing, the kernel value, the node name, a mknod line and the registered driver for the major.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+[hidden]{display:none !important}
+label.f{font-size:13px;opacity:.85;display:block;margin-bottom:4px}
+.field{background:var(--bg,#14181f);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px}
+.field:focus-within{border-color:var(--accent,#6ea8fe);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#6ea8fe) 18%,transparent)}
+.field input{box-sizing:border-box;min-width:0;width:100%;min-height:44px;background:transparent;color:var(--text,#e6e6e6);border:none;font-family:ui-monospace,monospace;font-size:17px;padding:2px 0;outline:none}
+.field .unit{font-size:11px;color:var(--text-dim,#9aa3b2);margin-top:4px;line-height:1.45;overflow-wrap:anywhere}
+.picker{border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:10px 12px;margin:14px 0}
+.picker legend{padding:0 6px;font-size:13px;color:var(--text-dim,#9aa3b2)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 2px}
+.chips button{min-height:44px;font:inherit;font-family:ui-monospace,monospace;font-size:12px;font-weight:600;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg,#14181f);color:var(--text,#e6e6e6);cursor:pointer;padding:6px 10px}
+.chips button .num{color:var(--text-dim,#9aa3b2);font-weight:400}
+.chips button:hover{border-color:var(--accent,#6ea8fe)}
+.chips button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:12px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 20px;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);color:var(--text,#e6e6e6);cursor:pointer;min-height:44px}
+.actions button.primary{background:var(--accent,#6ea8fe);border-color:var(--accent,#6ea8fe);color:#0b1017;padding:10px 24px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:14px 0}
+.out:empty{display:none}
+.out .big{font-size:clamp(1.6rem,7vw,2.6rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:4px 0 2px;overflow-wrap:anywhere;color:var(--accent,#6ea8fe)}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45;overflow-wrap:anywhere}
+.out .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:7px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:13.5px}
+.out .row:last-of-type{border-bottom:none}
+.out .row .k{color:var(--text-dim,#9aa3b2);flex:0 0 auto}
+.out .row .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right;overflow-wrap:anywhere;word-break:break-word}
+.out .hint{margin:12px 0 0;padding:10px 12px;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg,#14181f);font-size:13.5px;line-height:1.5}
+.out .hint strong{color:var(--text,#e6e6e6)}
+.err{color:var(--bad,#f87171);font-size:13px;margin:6px 0;min-height:1.2em;line-height:1.4}
+.status{font-size:13px;color:var(--text-dim,#9aa3b2);margin:6px 0 0;min-height:1.2em}
+.details h2{font-size:1rem;margin:22px 0 8px}
+.bits{display:grid;gap:8px;margin:10px 0 4px}
+.bit{display:grid;grid-template-columns:5.6rem 8.5rem minmax(0,1fr);gap:10px;align-items:baseline;font-size:13.5px;padding:6px 0;border-bottom:1px solid var(--border,#2a2f3a)}
+.bit:last-child{border-bottom:none}
+.bit .range{font-family:ui-monospace,monospace;color:var(--text-dim,#9aa3b2)}
+.bit .val{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);overflow-wrap:anywhere}
+.bit .what{line-height:1.45;overflow-wrap:anywhere}
+.formula{font-family:ui-monospace,monospace;font-size:12.5px;line-height:1.6;background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px 12px;margin:12px 0;overflow-x:auto;white-space:pre}
+.maj-wrap{overflow-x:auto;border:1px solid var(--border,#2a2f3a);border-radius:8px}
+.maj{width:100%;border-collapse:collapse;font-size:13.5px;min-width:32rem}
+.maj th,.maj td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border,#2a2f3a);vertical-align:top}
+.maj th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim,#9aa3b2);font-weight:700}
+.maj tr:last-child td{border-bottom:none}
+.maj td.major{font-family:ui-monospace,monospace;white-space:nowrap;font-weight:700;color:var(--accent,#6ea8fe)}
+.maj td.type{color:var(--text-dim,#9aa3b2);white-space:nowrap}
+.maj td .ex{font-family:ui-monospace,monospace;font-size:12.5px;color:var(--text-dim,#9aa3b2);display:block;margin-top:3px;overflow-wrap:anywhere}
+.maj td .nm{font-weight:600}
+@media (max-width:560px){
+.chips{flex-wrap:nowrap;overflow-x:auto;padding-bottom:6px}
+.chips button{flex:0 0 auto}
+.bit{grid-template-columns:4.9rem minmax(0,1fr)}
+.bit .what{grid-column:1 / -1;font-size:12.5px;color:var(--text-dim,#9aa3b2)}
+.out .row{flex-wrap:wrap;row-gap:2px}
+.out .row .v{flex:1 1 100%;text-align:left}
+}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;margin:18px 0 0;line-height:1.55}
+.note code{font-size:.95em}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>Linux Device Number Decoder</h1>
+<p>Turn a <code>major:minor</code> pair into its <code>dev_t</code>, or a <code>dev_t</code> back into major and minor — with the node name, the <code>mknod</code> line and the driver that owns the major.</p>
+</div>
+<div class="panel">
+<form id="dev-form" novalidate>
+<div class="field">
+<label class="f" for="dev">Device number</label>
+<input type="text" id="dev" inputmode="text" autocomplete="off" spellcheck="false" value="8:1" aria-describedby="dev-help">
+<div class="unit" id="dev-help"><code>8:1</code> from /proc/partitions or lsblk, <code>8, 1</code> from ls -l, or a <code>dev_t</code> such as <code>2049</code> or <code>0x0801</code></div>
+</div>
+<fieldset class="picker">
+<legend>Common devices</legend>
+<div class="chips" aria-label="Common device numbers">
+<button type="button" class="chip" data-value="1:3">null <span class="num">1:3</span></button>
+<button type="button" class="chip" data-value="1:8">random <span class="num">1:8</span></button>
+<button type="button" class="chip" data-value="5:1">console <span class="num">5:1</span></button>
+<button type="button" class="chip" data-value="8:0">sda <span class="num">8:0</span></button>
+<button type="button" class="chip" data-value="8:1">sda1 <span class="num">8:1</span></button>
+<button type="button" class="chip" data-value="8:17">sdb1 <span class="num">8:17</span></button>
+<button type="button" class="chip" data-value="7:0">loop0 <span class="num">7:0</span></button>
+<button type="button" class="chip" data-value="9:0">md0 <span class="num">9:0</span></button>
+<button type="button" class="chip" data-value="136:3">pts/3 <span class="num">136:3</span></button>
+<button type="button" class="chip" data-value="179:1">mmcblk0p1 <span class="num">179:1</span></button>
+<button type="button" class="chip" data-value="0x0801">dev_t <span class="num">0x0801</span></button>
+</div>
+<div class="actions">
+<button type="submit" class="primary">Decode</button>
+<button type="button" id="reset" class="secondary">Reset</button>
+</div>
+</fieldset>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"></div>
+<p class="status" id="status" role="status" aria-live="polite"></p>
+</div>
+<section class="details" aria-labelledby="bits-title">
+<h2 id="bits-title">How the 32-bit value is packed</h2>
+<div class="bits" id="bits"></div>
+<p class="formula" id="formula"></p>
+<h2 id="majors-title">Major numbers in this page's table</h2>
+<div class="maj-wrap">
+<table class="maj">
+<thead><tr><th scope="col">Major</th><th scope="col">Type</th><th scope="col">Registered use</th></tr></thead>
+<tbody id="maj-body"></tbody>
+</table>
+</div>
+</section>
+<p class="note">A Linux device number is a pair: the <strong>major</strong> picks the driver and the <strong>minor</strong> picks the unit. The kernel allows majors 0 to 4095 (12 bits) and minors 0 to 1048575 (20 bits). Userspace packs them into one <code>dev_t</code> in a different order from the kernel: <code>makedev</code> puts the major in bits 8–19 and splits the minor across bits 0–7 and 20–31, while the kernel's own <code>MKDEV</code> packs the minor low and the major high. That is why <code>8:1</code> is <code>0x0801</code> as a <code>dev_t</code> but <code>0x00800001</code> as a kernel value. <code>ls -l</code> shows the pair as <code>8, 1</code>; <code>/proc/partitions</code> and <code>lsblk</code> use <code>8:1</code>; <code>stat</code> exposes the same number as <code>st_rdev</code> for a device node and <code>st_dev</code> for a mounted filesystem. Majors are assigned in the kernel's <code>devices.txt</code> registry, but majors 234 to 254 (character) and 240 to 254 (block) are handed out at run time, so the driver behind one of those depends on the host — <code>/proc/devices</code> is the authority there. Everything on this page is computed locally in your browser; nothing is stored or sent.</p>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* devnum-core:start */
+var LinuxDeviceNumberCore = (function(){
+  "use strict";
+  var MAX_MAJOR = 4095;
+  var MAX_MINOR = 1048575;
+  var MAX_DEVT = 4294967295;
+  var MAJORS = [
+    {type:"char", from:1, to:1, name:"Memory devices", examples:"/dev/null 1:3, /dev/zero 1:5, /dev/random 1:8, /dev/kmsg 1:11"},
+    {type:"char", from:4, to:4, name:"TTY devices", examples:"/dev/tty0 to tty63 at 4:0-4:63, /dev/ttyS0 at 4:64"},
+    {type:"char", from:5, to:5, name:"Alternate TTY devices", examples:"/dev/tty 5:0, /dev/console 5:1, /dev/ptmx 5:2"},
+    {type:"char", from:10, to:10, name:"Miscellaneous devices", examples:"/dev/beep 10:128, /dev/watchdog 10:130, /dev/rtc 10:135"},
+    {type:"char", from:13, to:13, name:"Input core", examples:"/dev/input/js0 13:0, /dev/input/mice 13:63, /dev/input/event0 13:64"},
+    {type:"char", from:128, to:135, name:"Unix98 PTY masters", examples:"master side of the /dev/pts entries"},
+    {type:"char", from:136, to:143, name:"Unix98 PTY slaves", examples:"/dev/pts/0 136:0, /dev/pts/3 136:3"},
+    {type:"char", from:180, to:180, name:"USB devices", examples:"/dev/usb/lp0 180:0, /dev/usb/scanner0 180:48"},
+    {type:"char", from:188, to:188, name:"USB serial converters", examples:"/dev/ttyUSB0 188:0"},
+    {type:"char", from:226, to:226, name:"Direct Rendering Infrastructure", examples:"/dev/dri/card0 226:0"},
+    {type:"char", from:234, to:254, name:"Reserved for dynamic assignment", examples:"handed out at run time, starting at 254 and working down"},
+    {type:"block", from:1, to:1, name:"RAM disk", examples:"/dev/ram0 1:0, /dev/initrd 1:250"},
+    {type:"block", from:7, to:7, name:"Loopback devices", examples:"/dev/loop0 7:0"},
+    {type:"block", from:8, to:8, name:"SCSI disk devices", examples:"/dev/sda 8:0, /dev/sda1 8:1, /dev/sdb 8:16"},
+    {type:"block", from:9, to:9, name:"Metadisk (RAID) devices", examples:"/dev/md0 9:0"},
+    {type:"block", from:11, to:11, name:"SCSI CD-ROM devices", examples:"/dev/sr0 11:0"},
+    {type:"block", from:179, to:179, name:"MMC block devices", examples:"/dev/mmcblk0 179:0, /dev/mmcblk0p1 179:1"},
+    {type:"block", from:240, to:254, name:"Local or experimental use", examples:"for drivers with no officially assigned number"},
+    {type:"block", from:259, to:259, name:"Block extended major", examples:"used dynamically for extra partition minors"}
+  ];
+  var MEMORY_NODES = {1:"/dev/mem", 3:"/dev/null", 4:"/dev/port", 5:"/dev/zero", 7:"/dev/full", 8:"/dev/random", 9:"/dev/urandom", 10:"/dev/aio", 11:"/dev/kmsg"};
+  var ALT_TTY_NODES = {0:"/dev/tty", 1:"/dev/console", 2:"/dev/ptmx", 3:"/dev/ttyprintk"};
+
+  function fail(message){ throw new Error(message); }
+  function clip(value){
+    var text = String(value);
+    return text.length > 40 ? text.slice(0, 37) + "..." : text;
+  }
+  function pad4(hexDigits){
+    var text = String(hexDigits).toUpperCase();
+    return text.length < 4 ? ("0000" + text).slice(-4) : text;
+  }
+  function hexDevt(value){ return "0x" + pad4((value >>> 0).toString(16)); }
+  function hexKernel(value){
+    var text = value.toString(16).toUpperCase();
+    while (text.length < 8) text = "0" + text;
+    return "0x" + text;
+  }
+
+  function makedev(major, minor){
+    return (((minor & 0xff) | ((major & 0xfff) << 8) | ((minor & -256) << 12)) >>> 0);
+  }
+  function split(devt){
+    return {
+      major: (devt >>> 8) & 0xfff,
+      minor: (devt & 0xff) | ((devt >>> 12) & 0xfff00)
+    };
+  }
+
+  function registrationsFor(major){
+    var out = [];
+    for (var i = 0; i < MAJORS.length; i += 1) {
+      var entry = MAJORS[i];
+      if (major >= entry.from && major <= entry.to) out.push(entry);
+    }
+    return out;
+  }
+
+  function nodeFor(type, major, minor){
+    if (major === 1 && type === "char" && MEMORY_NODES[minor]) {
+      return { node: MEMORY_NODES[minor], note: "Memory device " + minor + "." };
+    }
+    if (major === 1 && type === "block") {
+      if (minor === 250) return { node: "/dev/initrd", note: "Initial RAM disk alias." };
+      if (minor <= 249) return { node: "/dev/ram" + minor, note: "RAM disk " + minor + "." };
+      return { node: null, note: "Major 1 registers RAM disks on minors 0 to 249 plus /dev/initrd at 250; " + minor + " is outside that range." };
+    }
+    if (major === 4) {
+      if (minor <= 63) return { node: "/dev/tty" + minor, note: minor === 0 ? "Current virtual console." : "Virtual console " + minor + "." };
+      if (minor <= 255) return { node: "/dev/ttyS" + (minor - 64), note: "UART serial port " + (minor - 64) + "; /dev/ttyS0 is 4:64." };
+      return { node: null, note: "Major 4 registers 64 virtual consoles and 192 UART ports (minor 255 is the last); " + minor + " is outside that range." };
+    }
+    if (major === 5) {
+      if (ALT_TTY_NODES[minor]) return { node: ALT_TTY_NODES[minor], note: "Alternate TTY device " + minor + "." };
+      return { node: null, note: "Major 5 registers minors 0 to 3 (/dev/tty, /dev/console, /dev/ptmx, /dev/ttyprintk)." };
+    }
+    if (major === 7) return { node: "/dev/loop" + minor, note: "Loop device " + minor + "; the number of usable loops is set by the kernel and modprobe." };
+    if (major === 8) {
+      var disk = minor >> 4;
+      var part = minor & 15;
+      if (disk > 15) return { node: null, note: "Major 8 carries 16 disks (sda to sdp) with 16 minors each; " + minor + " is beyond that range." };
+      var letter = String.fromCharCode(97 + disk);
+      if (!part) return { node: "/dev/sd" + letter, note: "Whole disk sd" + letter + "; partitions 1 to 15 start at " + (minor + 1) + "." };
+      return { node: "/dev/sd" + letter + part, note: "Partition " + part + " of sd" + letter + "; minor " + (minor & ~15) + " is the whole disk." };
+    }
+    if (major === 9) return { node: "/dev/md" + minor, note: "RAID array " + minor + "." };
+    if (major === 11) return { node: "/dev/sr" + minor, note: "SCSI CD-ROM drive " + minor + "." };
+    if (major === 13) {
+      if (minor <= 31) return { node: "/dev/input/js" + minor, note: "Joystick " + minor + "." };
+      if (minor <= 62) return { node: "/dev/input/mouse" + (minor - 32), note: "Mouse device " + (minor - 32) + "." };
+      if (minor === 63) return { node: "/dev/input/mice", note: "Merged stream from all mice." };
+      return { node: "/dev/input/event" + (minor - 64), note: "Event queue " + (minor - 64) + "; evdev numbers are assigned per device in probe order." };
+    }
+    if (major === 136) return { node: "/dev/pts/" + minor, note: "Pseudo-terminal " + minor + "; the devpts mount assigns these on demand." };
+    if (major >= 137 && major <= 143) return { node: null, note: "Majors 137 to 143 hold further Unix98 slave ranges; the /dev/pts name comes from the devpts mount rather than this pair." };
+    if (major === 179) {
+      var card = minor >> 3;
+      var slice = minor & 7;
+      if (!slice) return { node: "/dev/mmcblk" + card, note: "Whole SD/MMC card " + card + "." };
+      return { node: "/dev/mmcblk" + card + "p" + slice, note: "Partition " + slice + " of mmcblk" + card + "; the 8-minor stride is the default and can be changed with mmcblk.perdev_minors." };
+    }
+    if (major === 188) return { node: "/dev/ttyUSB" + minor, note: "USB serial converter " + minor + "; the number follows probe order." };
+    if (major === 180 && minor <= 15) return { node: "/dev/usb/lp" + minor, note: "USB printer " + minor + "." };
+    if (major === 10) return { node: null, note: "Misc minors are registered by drivers at load time, so /proc/misc is what names them on the host." };
+    if (major === 226 && minor < 64) return { node: "/dev/dri/card" + minor, note: "DRM graphics card " + minor + "." };
+    return { node: null, note: "" };
+  }
+
+  function typeWords(regs){
+    var hasChar = false;
+    var hasBlock = false;
+    for (var i = 0; i < regs.length; i += 1) {
+      if (regs[i].type === "char") hasChar = true;
+      if (regs[i].type === "block") hasBlock = true;
+    }
+    if (hasChar && hasBlock) return "both";
+    if (hasChar) return "char";
+    if (hasBlock) return "block";
+    return "unknown";
+  }
+
+  function describe(major, minor, inputKind, raw){
+    var regs = registrationsFor(major);
+    var kind = typeWords(regs);
+    var names = [];
+    for (var i = 0; i < regs.length; i += 1) names.push(regs[i].name);
+    var devt = makedev(major, minor);
+    var kernel = major * 1048576 + minor;
+    var word = kind === "char" ? "character device" : kind === "block" ? "block device" : kind === "both" ? "block and character device" : "unregistered major";
+    var node = null;
+    var note = "";
+    if (kind === "both") {
+      var c = nodeFor("char", major, minor);
+      var b = nodeFor("block", major, minor);
+      var bits = [];
+      if (c.node) bits.push(c.node + " as a character device");
+      if (b.node) bits.push(b.node + " as a block device");
+      note = "Major " + major + " is registered for both types, so the pair alone does not name a node" + (bits.length ? ": " + bits.join(", ") + "." : ".");
+    } else if (kind === "unknown") {
+      note = "Major " + major + " is not in this page's table. It may be a vendor or local major; grep ' " + major + " ' /proc/devices on the host to see what owns it.";
+    } else {
+      var resolved = nodeFor(kind, major, minor);
+      node = resolved.node;
+      note = resolved.note;
+      if (!node && !note) note = "This page derives node names only for the majors it lists; the pair is still valid.";
+    }
+    return {
+      inputKind: inputKind,
+      raw: raw,
+      major: major,
+      minor: minor,
+      devt: devt,
+      devtHex: hexDevt(devt),
+      devtDec: String(devt),
+      kernel: kernel,
+      kernelHex: hexKernel(kernel),
+      type: kind,
+      typeWord: word,
+      majorName: names.length ? names.join(" / ") : "no registration in this page's table",
+      registrations: regs,
+      node: node,
+      note: note,
+      mknod: "mknod " + (node || "NAME") + " " + (kind === "block" ? "b" : kind === "char" ? "c" : "b|c") + " " + major + " " + minor,
+      bits: {
+        minorLow: devt & 0xff,
+        majorField: (devt >>> 8) & 0xfff,
+        minorHigh: (devt >>> 20) & 0xfff
+      }
+    };
+  }
+
+  function checkMajor(value, shown){
+    var major = Number(value);
+    if (!/^[0-9]+$/.test(value)) fail("\"" + clip(shown) + "\" is not a whole number.");
+    if (major > MAX_MAJOR) fail("Linux allows major numbers 0 to 4095; " + major + " is outside that range.");
+    return major;
+  }
+  function checkMinor(value, shown){
+    var minor = Number(value);
+    if (!/^[0-9]+$/.test(value)) fail("\"" + clip(shown) + "\" is not a whole number.");
+    if (minor > MAX_MINOR) fail("Linux allows minor numbers 0 to 1048575; " + minor + " is outside that range.");
+    return minor;
+  }
+
+  function parse(input){
+    var text = String(input == null ? "" : input).trim();
+    if (!text) fail("Enter a device number such as 8:1, a dev_t such as 2049 or 0x0801, or an ls -l column such as 8, 1.");
+    if (text.charAt(0) === "-") fail("Device numbers are not negative.");
+    var pair = /^([0-9]+)\s*:\s*([0-9]+)$/.exec(text);
+    if (pair) return describe(checkMajor(pair[1], text), checkMinor(pair[2], text), "major:minor", text);
+    var listed = /^([0-9]+)\s*,\s*([0-9]+)$/.exec(text);
+    if (listed) return describe(checkMajor(listed[1], text), checkMinor(listed[2], text), "ls -l column", text);
+    if (/^[0-9]+\s*:\s*$/.test(text)) fail("Enter the minor number after the colon, such as 8:1.");
+    if (/^\s*:\s*[0-9]+$/.test(text)) fail("Enter the major number before the colon, such as 8:1.");
+    if (/^[0-9]+(?:\s*:\s*[0-9]+){2,}$/.test(text)) fail("A device number has one colon: major:minor, such as 8:1.");
+    if (/^0[xX][0-9a-fA-F]+$/.test(text)) {
+      var fromHex = parseInt(text.slice(2), 16);
+      if (fromHex > MAX_DEVT) fail("A 32-bit device number is at most 0xffffffff; " + clip(text) + " is larger.");
+      return fromDevt(fromHex, "dev_t (hex)", text);
+    }
+    if (/^[0-9]+$/.test(text)) {
+      var fromDec = Number(text);
+      if (fromDec > MAX_DEVT) fail("A 32-bit device number is at most 0xffffffff; " + clip(text) + " is larger.");
+      return fromDevt(fromDec, "dev_t (decimal)", text);
+    }
+    if (/^[0-9a-fA-F]+\s*[:,]\s*[0-9a-fA-F]+$/.test(text)) fail("Write device numbers in decimal, or a single dev_t with a 0x prefix for hex.");
+    fail("\"" + clip(text) + "\" is not a device number. Use major:minor such as 8:1, an ls -l column such as 8, 1, or a dev_t such as 2049.");
+  }
+
+  function fromDevt(value, label, raw){
+    var devt = value >>> 0;
+    var parts = split(devt);
+    var result = describe(parts.major, parts.minor, label, raw);
+    result.devt = devt;
+    result.devtHex = hexDevt(devt);
+    result.devtDec = String(devt);
+    result.bits = {
+      minorLow: devt & 0xff,
+      majorField: (devt >>> 8) & 0xfff,
+      minorHigh: (devt >>> 20) & 0xfff
+    };
+    return result;
+  }
+
+  return {
+    MAJORS: MAJORS,
+    MAX_MAJOR: MAX_MAJOR,
+    MAX_MINOR: MAX_MINOR,
+    MAX_DEVT: MAX_DEVT,
+    parse: parse,
+    makedev: makedev,
+    split: split,
+    describe: describe
+  };
+})();
+/* devnum-core:end */
+(function(){
+  "use strict";
+  var C = LinuxDeviceNumberCore;
+  function $(id){ return document.getElementById(id); }
+  function el(tag, cls, text){
+    var node = document.createElement(tag);
+    if (cls) node.className = cls;
+    if (text != null) node.textContent = text;
+    return node;
+  }
+  var els = { form: $("dev-form"), input: $("dev"), err: $("err"), out: $("out"), status: $("status"), reset: $("reset"), bits: $("bits"), formula: $("formula"), body: $("maj-body") };
+  var timer = null;
+  var defaults = { value: "8:1" };
+  var FORMULA = [
+    "dev_t  = (minor & 0xff) | ((major & 0xfff) << 8) | ((minor & ~0xff) << 12)",
+    "major  = (dev_t >> 8) & 0xfff",
+    "minor  = (dev_t & 0xff) | ((dev_t >> 12) & 0xfff00)",
+    "kernel = (major << 20) | minor"
+  ].join("\n");
+
+  function row(key, value){
+    var line = el("div", "row");
+    line.appendChild(el("span", "k", key));
+    line.appendChild(el("span", "v", value));
+    return line;
+  }
+
+  function bitRow(range, value, what){
+    var line = el("div", "bit");
+    line.appendChild(el("span", "range", range));
+    line.appendChild(el("span", "val", value));
+    line.appendChild(el("span", "what", what));
+    return line;
+  }
+
+  function renderBits(result){
+    var box = els.bits;
+    box.textContent = "";
+    box.appendChild(bitRow("bits 0-7", "0x" + ("0" + result.bits.minorLow.toString(16).toUpperCase()).slice(-2), "low byte of the minor"));
+    box.appendChild(bitRow("bits 8-19", "0x" + ("000" + result.bits.majorField.toString(16).toUpperCase()).slice(-3), "the 12-bit major"));
+    box.appendChild(bitRow("bits 20-31", "0x" + ("000" + result.bits.minorHigh.toString(16).toUpperCase()).slice(-3), "minor bits 8 to 19"));
+    els.formula.textContent = FORMULA;
+  }
+
+  function render(result){
+    var out = els.out;
+    out.textContent = "";
+    out.appendChild(el("div", "big", result.major + ":" + result.minor));
+    out.appendChild(el("p", "sub", result.typeWord + " · " + result.majorName));
+    out.appendChild(row("Read as", result.inputKind));
+    out.appendChild(row("Major", result.major + " — " + result.majorName));
+    out.appendChild(row("Minor", String(result.minor)));
+    out.appendChild(row("Node", result.node || "—"));
+    out.appendChild(row("dev_t (glibc)", result.devtHex + " · " + result.devtDec));
+    out.appendChild(row("Kernel value", result.kernel + " (" + result.kernelHex + ")"));
+    out.appendChild(row("mknod", result.mknod));
+    if (result.note) {
+      var hint = el("p", "hint");
+      hint.appendChild(el("strong", "", "Note"));
+      hint.appendChild(document.createTextNode(" — " + result.note));
+      out.appendChild(hint);
+    }
+    renderBits(result);
+  }
+
+  function showError(message){
+    els.err.textContent = message;
+    els.out.textContent = "";
+    els.bits.textContent = "";
+    els.formula.textContent = FORMULA;
+    els.status.textContent = "The value above could not be decoded.";
+  }
+
+  function run(){
+    var text = els.input.value;
+    try {
+      var result = C.parse(text);
+      els.err.textContent = "";
+      render(result);
+      els.status.textContent = "Decoded in the browser: " + result.typeWord + " " + result.major + ":" + result.minor + (result.node ? ", " + result.node : "") + ".";
+    } catch (error) {
+      showError(error.message);
+    }
+  }
+
+  function later(){
+    if (timer) window.clearTimeout(timer);
+    timer = window.setTimeout(run, 120);
+  }
+
+  function buildTable(){
+    C.MAJORS.slice().sort(function(a, b){
+      if (a.from !== b.from) return a.from - b.from;
+      return a.type === b.type ? 0 : a.type === "char" ? -1 : 1;
+    }).forEach(function(entry){
+      var tr = document.createElement("tr");
+      var major = document.createElement("td");
+      major.className = "major";
+      major.textContent = entry.from === entry.to ? String(entry.from) : entry.from + "-" + entry.to;
+      var type = document.createElement("td");
+      type.className = "type";
+      type.textContent = entry.type === "char" ? "char" : "block";
+      var use = document.createElement("td");
+      var name = document.createElement("span");
+      name.className = "nm";
+      name.textContent = entry.name;
+      var ex = document.createElement("span");
+      ex.className = "ex";
+      ex.textContent = entry.examples;
+      use.appendChild(name);
+      use.appendChild(ex);
+      tr.appendChild(major);
+      tr.appendChild(type);
+      tr.appendChild(use);
+      els.body.appendChild(tr);
+    });
+  }
+
+  els.input.addEventListener("input", later);
+  els.form.addEventListener("submit", function(event){
+    event.preventDefault();
+    if (timer) window.clearTimeout(timer);
+    run();
+    if (els.err.textContent) els.input.focus();
+  });
+  els.reset.addEventListener("click", function(){
+    els.input.value = defaults.value;
+    if (timer) window.clearTimeout(timer);
+    run();
+    els.input.focus();
+  });
+  Array.prototype.forEach.call(document.querySelectorAll(".chip"), function(chip){
+    chip.addEventListener("click", function(){
+      els.input.value = chip.getAttribute("data-value");
+      if (timer) window.clearTimeout(timer);
+      run();
+    });
+  });
+
+  buildTable();
+  run();
+})();
+</script>
+</body>
+</html>
