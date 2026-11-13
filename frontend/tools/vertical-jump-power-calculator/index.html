@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Vertical Jump Power Calculator — Virtual Tools</title>
+<meta name="description" content="Turn a vertical jump height, or a flight time from a jump mat, into takeoff velocity and estimated peak power from the Sayers and Harman jump-power equations.">
+<link rel="stylesheet" href="/assets/style.css">
+<link rel="stylesheet" href="/assets/tool-css/tool-form-3c8cf9e7.css">
+<style>
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button.ghost{background:transparent;color:var(--text,#e6e6e6);border-color:var(--border,#2a2f3a)}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.field input,.field select{min-height:44px}
+@media (min-width:640px){ .grid2{grid-template-columns:repeat(2,minmax(0,1fr))} }
+.hint{color:var(--text-dim,#9aa3b2);font-size:13px}
+.out .big{font-size:clamp(1.3rem,5.6vw,2rem);word-break:break-word;padding-bottom:2px}
+.sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 10px;word-break:break-word}
+.out .row{flex-wrap:wrap;gap:2px 12px}
+.out .row .v{text-align:right;word-break:break-word}
+.tok{white-space:nowrap}
+.status-note{font-size:12.5px;color:var(--text-dim,#9aa3b2);line-height:1.5;margin:10px 0 0}
+.tools{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px;padding-top:10px;border-top:1px solid var(--border,#2a2f3a)}
+.tools button{font:inherit;font-size:13px;padding:6px 12px;border-radius:7px;border:1px solid var(--border,#2a2f3a);background:transparent;color:var(--text,#e6e6e6);cursor:pointer;min-height:44px}
+.tools button:hover{border-color:var(--accent,#6ea8fe)}
+.tools button:focus{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.status{font-size:12.5px;color:var(--text-dim,#9aa3b2)}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;margin-top:12px;line-height:1.55}
+@media (max-width:480px){
+  .out .row{flex-direction:column;align-items:flex-start}
+  .out .row .v{text-align:left}
+}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>Vertical Jump Power Calculator</h1>
+<p>Enter a jump height, or the flight time from a jump mat, plus your body mass. The page returns takeoff velocity and two published peak-power estimates. Everything runs in your browser.</p>
+</div>
+<div class="panel">
+<form id="jump-form" novalidate>
+<div class="grid2">
+<div class="field"><label class="f" for="source">Measured</label><select id="source"><option value="height" selected>Jump height</option><option value="flight">Flight time</option></select><div class="unit" id="source-hint">the value below is the jump height</div></div>
+<div class="field"><label class="f" for="value" id="value-label">Jump height</label><input id="value" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="45"><div class="unit" id="value-hint">centimetres, 5 to 150</div></div>
+<div class="field"><label class="f" for="units">Units</label><select id="units"><option value="metric" selected>Metric (cm, kg)</option><option value="imperial">Imperial (in, lb)</option></select><div class="unit">height and body mass</div></div>
+<div class="field"><label class="f" for="mass">Body mass</label><input id="mass" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="75"><div class="unit" id="mass-hint">kilograms, 20 to 300</div></div>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions"><button type="submit">Estimate power</button><button type="button" class="ghost" id="reset">Reset</button></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"><span class="hint">Enter the measurements above to see the estimate.</span></div>
+<p class="note">Jump height is the difference between standing reach and reach at the top of the jump, or you can derive it from a measured flight time with h = g&middot;t&sup2;/8, using g = 9.80665 m/s&sup2;. Takeoff velocity follows from v = &radic;(2gh) and the flight time from t = 2&radic;(2h/g), so height, time and velocity are three views of the same jump. Peak power comes from two published regressions on squat-jump height and body mass: Sayers et al. (1999), 60.7 &times; height (cm) + 45.3 &times; mass (kg) &minus; 2055, and Harman et al. (1991), 61.9 &times; height (cm) + 36.0 &times; mass (kg) &minus; 1822. Both were fitted to jump-and-reach scores against force-plate measurements, so they estimate mechanical power at takeoff to within a few hundred watts rather than measuring the force you produce. A mat, a phone app and a wall test each measure height with different errors, and arm swing, landing and technique all move the result. The tool refuses a height-and-mass pair at which either regression returns a non-positive number. Metric input is centimetres and kilograms, imperial is inches and pounds, and flight time is always in seconds; blank, non-numeric, exponent-notation and out-of-range values are refused with the failing field named. Nothing is stored and the page makes no network requests.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+(function(){
+"use strict";
+/* jump-core:start */
+var JumpPowerCore = (function(){
+  "use strict";
+  var G = 9.80665;
+  var KG_PER_LB = 0.45359237;
+  var LB_PER_KG = 2.2046226218487757;
+  var CM_PER_IN = 2.54;
+  var MASS_LIMITS = {
+    metric: {min: 20, max: 300, unit: "kilograms"},
+    imperial: {min: 44, max: 661, unit: "pounds"}
+  };
+  var HEIGHT_LIMITS = {
+    metric: {min: 5, max: 150, unit: "centimetres"},
+    imperial: {min: 2, max: 59, unit: "inches"}
+  };
+  var FLIGHT_MIN = 0.1, FLIGHT_MAX = 1.2;
+  var NO_POWER = "The power equations return no positive estimate at this jump height and body mass; increase the jump height or the body mass.";
+
+  function text(raw){
+    return String(raw === undefined || raw === null ? "" : raw).trim();
+  }
+  function parseDecimal(raw, noun){
+    var value = text(raw);
+    if (!value) throw new Error("Enter the " + noun + ".");
+    var cleaned = value.replace(/,/g, ".");
+    if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(cleaned)){
+      if (/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)[eE][+-]?\d+$/.test(cleaned)){
+        throw new Error("The " + noun + " must be a decimal number without exponent notation.");
+      }
+      throw new Error("The " + noun + " must be a decimal number.");
+    }
+    return Number(cleaned);
+  }
+  function inRange(value, noun, min, max, unit){
+    if (!(value >= min && value <= max)){
+      throw new Error("The " + noun + " must be between " + min + " and " + max + " " + unit + ".");
+    }
+    return value;
+  }
+  function sourceKey(key){
+    return key === "flight" ? "flight" : "height";
+  }
+  function unitKey(key){
+    return key === "imperial" ? "imperial" : "metric";
+  }
+  function fix(value, places){
+    var factor = Math.pow(10, places === undefined ? 6 : places);
+    return Math.round(value * factor) / factor;
+  }
+
+  function analyze(input){
+    input = input || {};
+    var source = sourceKey(input.source);
+    var units = unitKey(input.units);
+    var massLimits = MASS_LIMITS[units];
+    var massEntered = parseDecimal(input.mass, "body mass");
+    inRange(massEntered, "body mass", massLimits.min, massLimits.max, massLimits.unit);
+    var massKg = units === "metric" ? massEntered : massEntered * KG_PER_LB;
+
+    var measured, heightCm, flightSeconds, derived;
+    if (source === "height"){
+      var heightLimits = HEIGHT_LIMITS[units];
+      measured = parseDecimal(input.value, "jump height");
+      inRange(measured, "jump height", heightLimits.min, heightLimits.max, heightLimits.unit);
+      heightCm = units === "metric" ? measured : measured * CM_PER_IN;
+      flightSeconds = 2 * Math.sqrt(2 * (heightCm / 100) / G);
+      derived = false;
+    } else {
+      measured = parseDecimal(input.value, "flight time");
+      inRange(measured, "flight time", FLIGHT_MIN, FLIGHT_MAX, "seconds");
+      flightSeconds = measured;
+      heightCm = (G * flightSeconds * flightSeconds / 8) * 100;
+      derived = true;
+    }
+
+    var takeoff = Math.sqrt(2 * G * (heightCm / 100));
+    var sayers = 60.7 * heightCm + 45.3 * massKg - 2055;
+    var harman = 61.9 * heightCm + 36.0 * massKg - 1822;
+    if (!(sayers > 0) || !(harman > 0)) throw new Error(NO_POWER);
+
+    var low = Math.min(sayers, harman);
+    var high = Math.max(sayers, harman);
+    return {
+      source: source,
+      units: units,
+      derived: derived,
+      measured: fix(measured, 4),
+      massEntered: fix(massEntered, 4),
+      massKg: fix(massKg, 6),
+      heightCm: fix(heightCm, 6),
+      heightIn: fix(heightCm / CM_PER_IN, 6),
+      flightSeconds: fix(flightSeconds, 6),
+      takeoffVelocity: fix(takeoff, 6),
+      sayersW: fix(sayers, 3),
+      harmanW: fix(harman, 3),
+      lowW: fix(low, 3),
+      highW: fix(high, 3),
+      relativeWkg: fix(sayers / massKg, 6),
+      gapPct: fix(((high - low) / ((high + low) / 2)) * 100, 2)
+    };
+  }
+
+  function fmtHeight(result){
+    return result.heightCm.toFixed(1) + " cm \u00b7 " + result.heightIn.toFixed(1) + " in";
+  }
+  function fmtMass(result){
+    return result.massKg.toFixed(1) + " kg \u00b7 " + (result.massKg * LB_PER_KG).toFixed(1) + " lb";
+  }
+  function fmtFlight(result){
+    return result.flightSeconds.toFixed(3) + " s";
+  }
+  function fmtSpeed(result){
+    return result.takeoffVelocity.toFixed(2) + " m/s";
+  }
+  function fmtPower(value){
+    return Math.round(value) + " W";
+  }
+  function fmtRelative(result){
+    return result.relativeWkg.toFixed(2) + " W/kg";
+  }
+  function copyText(result){
+    return "Vertical jump " + fmtHeight(result) + " with a body mass of " + fmtMass(result) +
+      ": flight time " + fmtFlight(result) + ", takeoff velocity " + fmtSpeed(result) +
+      ". Peak power " + fmtPower(result.sayersW) + " (Sayers 1999) and " +
+      fmtPower(result.harmanW) + " (Harman 1991), " + fmtRelative(result) + " from the Sayers estimate.";
+  }
+
+  return {
+    analyze: analyze,
+    sourceKey: sourceKey,
+    unitKey: unitKey,
+    fmtHeight: fmtHeight,
+    fmtMass: fmtMass,
+    fmtFlight: fmtFlight,
+    fmtSpeed: fmtSpeed,
+    fmtPower: fmtPower,
+    fmtRelative: fmtRelative,
+    copyText: copyText,
+    G: G,
+    CM_PER_IN: CM_PER_IN,
+    KG_PER_LB: KG_PER_LB,
+    LB_PER_KG: LB_PER_KG,
+    MASS_LIMITS: MASS_LIMITS,
+    HEIGHT_LIMITS: HEIGHT_LIMITS,
+    FLIGHT_MIN: FLIGHT_MIN,
+    FLIGHT_MAX: FLIGHT_MAX,
+    NO_POWER: NO_POWER
+  };
+})();
+/* jump-core:end */
+
+var form = document.getElementById("jump-form");
+var fields = {
+  source: document.getElementById("source"),
+  value: document.getElementById("value"),
+  units: document.getElementById("units"),
+  mass: document.getElementById("mass")
+};
+var labels = {
+  value: document.getElementById("value-label"),
+  valueHint: document.getElementById("value-hint"),
+  massHint: document.getElementById("mass-hint"),
+  sourceHint: document.getElementById("source-hint")
+};
+var errEl = document.getElementById("err");
+var outEl = document.getElementById("out");
+var HINT = "Enter the measurements above to see the estimate.";
+var DEFAULTS = {source: "height", value: "45", units: "metric", mass: "75"};
+var state = null;
+
+function el(tag, className, content){
+  var node = document.createElement(tag);
+  if (className) node.className = className;
+  if (content !== undefined) node.textContent = content;
+  return node;
+}
+function clearNode(node){ while (node.firstChild) node.removeChild(node.firstChild); }
+function row(label, parts){
+  var line = el("div", "row");
+  line.appendChild(el("span", "k", label));
+  var value = el("span", "v");
+  parts.forEach(function(part, index){
+    value.appendChild(el("span", "tok", (index ? " \u00b7 " : "") + part));
+  });
+  line.appendChild(value);
+  return line;
+}
+
+function syncLabels(){
+  var units = JumpPowerCore.unitKey(fields.units.value);
+  var source = JumpPowerCore.sourceKey(fields.source.value);
+  if (source === "height"){
+    var limits = JumpPowerCore.HEIGHT_LIMITS[units];
+    labels.value.textContent = "Jump height";
+    labels.valueHint.textContent = limits.unit + ", " + limits.min + " to " + limits.max;
+    labels.sourceHint.textContent = "the value below is the jump height";
+    fields.value.setAttribute("aria-label", "Jump height in " + limits.unit);
+  } else {
+    labels.value.textContent = "Flight time";
+    labels.valueHint.textContent = "seconds, " + JumpPowerCore.FLIGHT_MIN + " to " + JumpPowerCore.FLIGHT_MAX;
+    labels.sourceHint.textContent = "the value below is the flight time";
+    fields.value.setAttribute("aria-label", "Flight time in seconds");
+  }
+  var massLimits = JumpPowerCore.MASS_LIMITS[units];
+  labels.massHint.textContent = massLimits.unit + ", " + massLimits.min + " to " + massLimits.max;
+  fields.mass.setAttribute("aria-label", "Body mass in " + massLimits.unit);
+}
+
+function showHint(){
+  state = null;
+  clearNode(outEl);
+  outEl.appendChild(el("span", "hint", HINT));
+}
+
+function render(result){
+  clearNode(outEl);
+  outEl.appendChild(el("div", "big", JumpPowerCore.fmtPower(result.sayersW) + " peak power"));
+  outEl.appendChild(el("div", "sub", "Sayers estimate at " + JumpPowerCore.fmtHeight(result) +
+    (result.derived ? ", derived from the flight time" : "")));
+
+  outEl.appendChild(row("Jump height", [JumpPowerCore.fmtHeight(result)]));
+  outEl.appendChild(row("Flight time", [JumpPowerCore.fmtFlight(result)]));
+  outEl.appendChild(row("Takeoff velocity", [JumpPowerCore.fmtSpeed(result)]));
+  outEl.appendChild(row("Peak power \u00b7 Sayers (1999)", [JumpPowerCore.fmtPower(result.sayersW), JumpPowerCore.fmtRelative(result)]));
+  outEl.appendChild(row("Peak power \u00b7 Harman (1991)", [JumpPowerCore.fmtPower(result.harmanW)]));
+  outEl.appendChild(row("Body mass", [JumpPowerCore.fmtMass(result)]));
+
+  outEl.appendChild(el("p", "status-note", "The two regressions differ by " + result.gapPct.toFixed(1) +
+    "% here. Both are fits to jump-and-reach scores, so treat the figure as an estimate of takeoff power rather than a measurement."));
+
+  var tools = el("div", "tools");
+  var copyBtn = el("button", "", "Copy result");
+  copyBtn.type = "button";
+  var status = el("span", "status");
+  status.setAttribute("role", "status");
+  tools.appendChild(copyBtn);
+  tools.appendChild(status);
+  outEl.appendChild(tools);
+
+  copyBtn.addEventListener("click", function(){
+    var text = JumpPowerCore.copyText(state);
+    function done(){ status.textContent = "Result copied."; }
+    function failed(){ status.textContent = "Copy blocked by the browser."; }
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(done, function(){ if (legacyCopy(text)) done(); else failed(); });
+    } else if (legacyCopy(text)) done();
+    else failed();
+  });
+}
+
+function legacyCopy(text){
+  var area = document.createElement("textarea");
+  area.value = text;
+  area.setAttribute("readonly", "readonly");
+  area.style.position = "fixed";
+  area.style.top = "-1000px";
+  document.body.appendChild(area);
+  area.select();
+  var ok = false;
+  try { ok = document.execCommand("copy"); } catch (error) { ok = false; }
+  area.remove();
+  return ok;
+}
+
+function readInput(){
+  return {
+    source: fields.source.value,
+    value: fields.value.value,
+    units: fields.units.value,
+    mass: fields.mass.value
+  };
+}
+
+function run(){
+  try {
+    state = JumpPowerCore.analyze(readInput());
+    errEl.textContent = "";
+    render(state);
+  } catch (error) {
+    errEl.textContent = error.message;
+    showHint();
+  }
+}
+
+function number(raw){
+  var value = Number(String(raw).trim().replace(/,/g, "."));
+  return isFinite(value) ? value : null;
+}
+
+function convertUnits(from, to){
+  if (from === to) return;
+  var value = number(fields.value.value);
+  var mass = number(fields.mass.value);
+  var heightMode = JumpPowerCore.sourceKey(fields.source.value) === "height";
+  if (heightMode && value !== null){
+    fields.value.value = from === "metric"
+      ? (value / JumpPowerCore.CM_PER_IN).toFixed(2)
+      : (value * JumpPowerCore.CM_PER_IN).toFixed(2);
+  }
+  if (mass !== null){
+    fields.mass.value = from === "metric"
+      ? (mass * JumpPowerCore.LB_PER_KG).toFixed(1)
+      : (mass / JumpPowerCore.LB_PER_KG).toFixed(1);
+  }
+}
+
+form.addEventListener("submit", function(event){
+  event.preventDefault();
+  run();
+});
+
+form.addEventListener("input", function(){ if (errEl.textContent) errEl.textContent = ""; });
+
+fields.source.addEventListener("change", function(){
+  var units = JumpPowerCore.unitKey(fields.units.value);
+  // The value changes meaning with the source, so reset it instead of
+  // reinterpreting the previous number as the other quantity.
+  fields.value.value = JumpPowerCore.sourceKey(fields.source.value) === "height"
+    ? (units === "metric" ? "45" : (45 / JumpPowerCore.CM_PER_IN).toFixed(2))
+    : "0.6";
+  syncLabels();
+  errEl.textContent = "";
+  run();
+});
+
+fields.units.addEventListener("change", function(){
+  var previous = fields.units.getAttribute("data-previous") || "metric";
+  convertUnits(previous, fields.units.value);
+  fields.units.setAttribute("data-previous", fields.units.value);
+  syncLabels();
+  errEl.textContent = "";
+  run();
+});
+
+document.getElementById("reset").addEventListener("click", function(){
+  Object.keys(fields).forEach(function(key){ fields[key].value = DEFAULTS[key]; });
+  fields.units.setAttribute("data-previous", DEFAULTS.units);
+  syncLabels();
+  errEl.textContent = "";
+  run();
+  fields.value.focus();
+});
+
+fields.units.setAttribute("data-previous", DEFAULTS.units);
+syncLabels();
+run();
+})();
+</script>
+</body>
+</html>

@@ -247,6 +247,7 @@ node tests/qos_codepoint_mapper.test.cjs
 node tests/grid_convergence_calculator.test.cjs
 node tests/cycling_power_zones.test.cjs
 node tests/subtitle_line_reflow.test.cjs
+node tests/vertical_jump_power_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
