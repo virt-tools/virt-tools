@@ -259,6 +259,7 @@ node tests/hrv_baseline_calculator.test.cjs
 node tests/flicker_free_shutter_planner.test.cjs
 node tests/critical_swim_speed_calculator.test.cjs
 node tests/beat_cut_planner.test.cjs
+node tests/altitude_oxygen_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
