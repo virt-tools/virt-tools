@@ -252,6 +252,7 @@ node tests/h264_level_checker.test.cjs
 node tests/yarn_count_converter.test.cjs
 node tests/time_scale_converter.test.cjs
 node tests/projector_brightness_calculator.test.cjs
+node tests/aerobic_decoupling_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
