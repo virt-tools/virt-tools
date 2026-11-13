@@ -212,7 +212,7 @@ assert.equal(plain(C.LEAP_TABLE).length, 28, 'the table is not mutated by use');
 
 // ---- Catalog record and its cases must agree with the core.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2256, 'catalog total');
+assert.equal(catalog.tools.length, 2257, 'catalog total');
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record missing');
 assert.equal(record.name, 'Time Scale Converter');

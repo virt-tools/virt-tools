@@ -113,7 +113,7 @@ assert.equal(mono.insideBudget, true);
 
 // Catalog record and its cases.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2256, 'catalog total');
+assert.equal(catalog.tools.length, 2257, 'catalog total');
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record present');
 assert.equal(record.name, 'Stereoscopic Parallax Calculator');
