@@ -275,7 +275,7 @@ const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool
 const matches = catalog.tools.filter((tool) => tool.slug === slug);
 assert.equal(matches.length, 1, 'slug appears exactly once');
 const record = matches[0];
-assert.equal(catalog.tools.length, 2245, 'catalog total');
+assert.equal(catalog.tools.length, 2246, 'catalog total');
 assert.equal(record.name, 'H.264 Level Checker');
 assert.equal(record.category, 'Video');
 assert.equal(record.subcategory, 'Analysis & validation');

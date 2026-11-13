@@ -50,7 +50,7 @@ function referenceZones(ftp) {
 }
 
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2245, 'catalog total');
+assert.equal(catalog.tools.length, 2246, 'catalog total');
 const entry = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(entry, 'catalog record present');
 assert.equal(entry.name, 'Cycling Power Zone Calculator');
