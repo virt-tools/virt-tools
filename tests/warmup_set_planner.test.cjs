@@ -121,7 +121,7 @@ for (const testCase of record.testCases) {
 }
 
 // The catalog record replays through this core.
-assert.equal(catalog.tools.length, 2251, 'catalog total');
+assert.equal(catalog.tools.length, 2252, 'catalog total');
 assert.equal(record.name, 'Warm-Up Set Planner');
 assert.equal(record.category, 'Health');
 assert.equal(record.subcategory, 'Planning');
