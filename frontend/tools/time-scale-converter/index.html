@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Time Scale Converter &mdash; Virtual Tools</title>
+<meta name="description" content="Convert a UTC instant into TAI, GPS time, GPS week and seconds of week, and TT, using the IERS leap-second table.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.field{display:flex;flex-direction:column;gap:6px;margin:0}
+.field label{font-size:13px;color:var(--text-dim,#9aa3b2)}
+input#date,input#time{box-sizing:border-box;width:100%;max-width:none;min-height:46px;padding:10px 12px;border-radius:8px;
+  border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);color:var(--text,#e6e6e6);
+  font:inherit;font-size:16px;line-height:1.3;outline:none;font-family:ui-monospace,monospace}
+input#date:focus,input#time:focus{outline:2px solid var(--accent,#6ea8fe);outline-offset:1px;box-shadow:none}
+input#date::placeholder,input#time::placeholder{color:var(--text-dim,#9aa3b2)}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:12px 0 0}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover:not(:disabled){filter:brightness(1.08)}
+.actions button:disabled{opacity:.55;cursor:default}
+.actions button:focus{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.actions button.ghost{background:transparent;color:var(--accent,#6ea8fe)}
+.err{color:var(--bad,#f87171);font-size:13px;margin:10px 0 0;min-height:1.2em}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:16px 0 0}
+.out .label{text-align:center;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-dim,#9aa3b2)}
+.out .big{font-size:clamp(1.35rem,6vw,1.9rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:2px 0 4px;overflow-wrap:anywhere;line-height:1.25}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45;overflow-wrap:anywhere}
+.out .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:7px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:14px}
+.out .row:last-child{border-bottom:none}
+.out .row .k{color:var(--text-dim,#9aa3b2);flex:1 1 auto;min-width:0}
+.out .row .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right;white-space:nowrap}
+.status{color:var(--good,#4ade80);font-size:13px;min-height:1.2em}
+@media (max-width:560px){
+  .grid{grid-template-columns:minmax(0,1fr)}
+  .actions button{flex:1 1 auto}
+  .out .row{flex-direction:column;align-items:flex-start;gap:2px}
+  .out .row .v{text-align:left}
+}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">&larr; All tools</a>
+<h1>Time Scale Converter</h1>
+<p>Turn a UTC date and time into TAI, GPS time, GPS week and seconds of week, and TT, using the IERS leap-second table.</p>
+</div>
+<div class="panel">
+<form id="time-scale-form" novalidate>
+<div class="grid">
+<div class="field">
+<label for="date">Date (UTC)</label>
+<input id="date" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" value="2026-11-13" placeholder="2026-11-13">
+</div>
+<div class="field">
+<label for="time">Time (UTC)</label>
+<input id="time" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" value="05:06:44" placeholder="05:06:44">
+</div>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions">
+<button type="submit">Convert</button>
+<button type="button" class="ghost" id="now">Now</button>
+<button type="button" class="ghost" id="clear">Clear</button>
+</div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"></div>
+<div class="actions">
+<button type="button" class="ghost" id="copy">Copy TAI</button>
+<span class="status" id="status" role="status" aria-live="polite"></span>
+</div>
+<p class="note">UTC keeps within 0.9 s of the Earth's rotation by inserting leap seconds; TAI runs on atomic clocks and never stops for one, so TAI sits 37 s ahead of UTC today. GPS time is TAI minus 19 s and also ignores leap seconds, so it runs 18 s ahead of UTC: week 0 began 1980-01-06 and the week counter rolls over every 1,024 weeks. TT (terrestrial time) is TAI plus 32.184 s. The table holds the 27 leap seconds announced between 1972 and 2016, so dates after 2016-12-31 assume no further leap second. Enter 23:59:60 on a leap-second day to convert that inserted second itself. Everything is calculated in your browser; nothing is sent or stored.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* time-scale-core:start */
+var TimeScaleCore = (function(){
+  "use strict";
+  /* TAI minus UTC from IANA's leap-seconds.list: each row is the instant the
+     new offset takes effect, so a row after the first also marks a leap second
+     inserted at 23:59:60 on the day before. */
+  var LEAP_TABLE = [
+    { unix: 63072000, offset: 10 },
+    { unix: 78796800, offset: 11 },
+    { unix: 94694400, offset: 12 },
+    { unix: 126230400, offset: 13 },
+    { unix: 157766400, offset: 14 },
+    { unix: 189302400, offset: 15 },
+    { unix: 220924800, offset: 16 },
+    { unix: 252460800, offset: 17 },
+    { unix: 283996800, offset: 18 },
+    { unix: 315532800, offset: 19 },
+    { unix: 362793600, offset: 20 },
+    { unix: 394329600, offset: 21 },
+    { unix: 425865600, offset: 22 },
+    { unix: 489024000, offset: 23 },
+    { unix: 567993600, offset: 24 },
+    { unix: 631152000, offset: 25 },
+    { unix: 662688000, offset: 26 },
+    { unix: 709948800, offset: 27 },
+    { unix: 741484800, offset: 28 },
+    { unix: 773020800, offset: 29 },
+    { unix: 820454400, offset: 30 },
+    { unix: 867715200, offset: 31 },
+    { unix: 915148800, offset: 32 },
+    { unix: 1136073600, offset: 33 },
+    { unix: 1230768000, offset: 34 },
+    { unix: 1341100800, offset: 35 },
+    { unix: 1435708800, offset: 36 },
+    { unix: 1483228800, offset: 37 }
+  ];
+  var GPS_EPOCH_UNIX = 315964800;
+  var GPS_EPOCH_TAI_MINUS_UTC = 19;
+  var TT_MINUS_TAI_SECONDS = 32.184;
+  var TT_OFFSET_MILLIS = 32184;
+  var WEEK_SECONDS = 604800;
+  var MIN_DATE = "1972-01-01";
+  var MAX_DATE = "2100-12-31";
+  var RANGE_MESSAGE = "This converter covers UTC from 1972-01-01 through 2100-12-31.";
+  var SECOND_MESSAGE = "Second must be 0-59, or 60 at an inserted leap second.";
+  var WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  var DEFAULT_DATE = "2026-11-13";
+  var DEFAULT_TIME = "05:06:44";
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function pad(value, width){
+    var text = String(value);
+    while (text.length < width) text = "0" + text;
+    return text;
+  }
+
+  function group(value){
+    var parts = String(value).split(".");
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    return parts.join(".");
+  }
+
+  /* Howard Hinnant's civil-from-days algorithms: exact integer day counts in
+     the proleptic Gregorian calendar, counted from 1970-01-01. */
+  function daysFromCivil(year, month, day){
+    var y = year - (month <= 2 ? 1 : 0);
+    var era = Math.floor(y / 400);
+    var yoe = y - era * 400;
+    var doy = Math.floor((153 * (month + (month > 2 ? -3 : 9)) + 2) / 5) + day - 1;
+    var doe = yoe * 365 + Math.floor(yoe / 4) - Math.floor(yoe / 100) + doy;
+    return era * 146097 + doe - 719468;
+  }
+
+  function civilFromDays(days){
+    var z = days + 719468;
+    var era = Math.floor(z / 146097);
+    var doe = z - era * 146097;
+    var yoe = Math.floor((doe - Math.floor(doe / 1460) + Math.floor(doe / 36524) - Math.floor(doe / 146096)) / 365);
+    var y = yoe + era * 400;
+    var doy = doe - (365 * yoe + Math.floor(yoe / 4) - Math.floor(yoe / 100));
+    var mp = Math.floor((5 * doy + 2) / 153);
+    var d = doy - Math.floor((153 * mp + 2) / 5) + 1;
+    var m = mp + (mp < 10 ? 3 : -9);
+    return { y: y + (m <= 2 ? 1 : 0), m: m, d: d };
+  }
+
+  function isLeapYear(year){
+    return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  }
+
+  function daysInMonth(year, month){
+    var lengths = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    if (month === 2 && isLeapYear(year)) return 29;
+    return lengths[month - 1];
+  }
+
+  function dateKey(year, month, day){
+    return pad(year, 4) + "-" + pad(month, 2) + "-" + pad(day, 2);
+  }
+
+  /* Leap-second days are the day before each step in the table. */
+  var LEAP_DAYS = (function(){
+    var days = {};
+    for (var index = 1; index < LEAP_TABLE.length; index += 1){
+      var civil = civilFromDays(LEAP_TABLE[index].unix / 86400 - 1);
+      days[dateKey(civil.y, civil.m, civil.d)] = true;
+    }
+    return days;
+  })();
+
+  function offsetAt(unixSeconds){
+    for (var index = LEAP_TABLE.length - 1; index >= 0; index -= 1){
+      if (unixSeconds >= LEAP_TABLE[index].unix) return LEAP_TABLE[index].offset;
+    }
+    return LEAP_TABLE[0].offset;
+  }
+
+  function lastLeapSecond(){
+    var index = LEAP_TABLE.length - 1;
+    var civil = civilFromDays(LEAP_TABLE[index].unix / 86400 - 1);
+    return {
+      text: dateKey(civil.y, civil.m, civil.d) + "T23:59:60Z",
+      offset: LEAP_TABLE[index].offset,
+      since: dateKey(civilFromDays(LEAP_TABLE[index].unix / 86400).y,
+        civilFromDays(LEAP_TABLE[index].unix / 86400).m,
+        civilFromDays(LEAP_TABLE[index].unix / 86400).d)
+    };
+  }
+
+  function parseDate(raw){
+    var text = String(raw == null ? "" : raw).trim();
+    var match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+    if (!match) fail("Enter the date as YYYY-MM-DD.");
+    var year = Number(match[1]), month = Number(match[2]), day = Number(match[3]);
+    if (month < 1 || month > 12) fail("Month must be 1-12.");
+    if (day < 1 || day > daysInMonth(year, month)) fail("Day is out of range for " + dateKey(year, month, 1).slice(0, 7) + ".");
+    return { y: year, m: month, d: day };
+  }
+
+  function parseTime(raw, leapDay){
+    var text = String(raw == null ? "" : raw).trim();
+    var match = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(text);
+    if (!match) fail("Enter the time as HH:MM:SS in 24-hour UTC.");
+    var hour = Number(match[1]), minute = Number(match[2]);
+    var second = match[3] === undefined ? 0 : Number(match[3]);
+    if (hour > 23) fail("Hour must be 0-23.");
+    if (minute > 59) fail("Minute must be 0-59.");
+    if (second > 60) fail(SECOND_MESSAGE);
+    if (second === 60 && !(hour === 23 && minute === 59 && leapDay === true)) fail(SECOND_MESSAGE);
+    return { h: hour, mi: minute, s: second };
+  }
+
+  function stamp(seconds){
+    var days = Math.floor(seconds / 86400);
+    var rest = seconds - days * 86400;
+    var civil = civilFromDays(days);
+    return dateKey(civil.y, civil.m, civil.d) + " " +
+      pad(Math.floor(rest / 3600), 2) + ":" + pad(Math.floor((rest % 3600) / 60), 2) + ":" + pad(rest % 60, 2);
+  }
+
+  function convert(dateRaw, timeRaw){
+    var date = parseDate(dateRaw);
+    var key = dateKey(date.y, date.m, date.d);
+    if (key < MIN_DATE || key > MAX_DATE) fail(RANGE_MESSAGE);
+    var time = parseTime(timeRaw, LEAP_DAYS[key] === true);
+    var daySeconds = daysFromCivil(date.y, date.m, date.d) * 86400;
+    var utcSeconds = daySeconds + time.h * 3600 + time.mi * 60 + time.s;
+    var leapSecond = time.s === 60;
+    /* A leap-second label sits at the next day's midnight count, so the offset
+       in force during it is still the one before the step. */
+    var offset = offsetAt(leapSecond ? utcSeconds - 1 : utcSeconds);
+    var taiSeconds = utcSeconds + offset;
+    var utcText = key + " " + pad(time.h, 2) + ":" + pad(time.mi, 2) + ":" + pad(time.s, 2);
+    var taiText = stamp(taiSeconds);
+    var gpsSeconds = taiSeconds - (GPS_EPOCH_UNIX + GPS_EPOCH_TAI_MINUS_UTC);
+    var gpsAvailable = gpsSeconds >= 0;
+    var gpsWeek = null, gpsDay = null, gpsWeekSeconds = null, gpsText = "", gpsOffsetText = "";
+    if (gpsAvailable){
+      gpsWeek = Math.floor(gpsSeconds / WEEK_SECONDS);
+      gpsWeekSeconds = gpsSeconds - gpsWeek * WEEK_SECONDS;
+      gpsDay = Math.floor(gpsWeekSeconds / 86400);
+      /* GPS counts from its own epoch, so the calendar label is the epoch plus
+         the elapsed GPS seconds, never 1970 plus them. */
+      gpsText = stamp(GPS_EPOCH_UNIX + gpsSeconds);
+      gpsOffsetText = (taiSeconds - utcSeconds - GPS_EPOCH_TAI_MINUS_UTC) + " s";
+    }
+    var ttMillis = taiSeconds * 1000 + TT_OFFSET_MILLIS;
+    var ttSeconds = Math.floor(ttMillis / 1000);
+    var ttText = stamp(ttSeconds) + "." + pad(ttMillis - ttSeconds * 1000, 3);
+    var subText = "UTC " + utcText + " \u00b7 TAI \u2212 UTC " + offset + " s" +
+      (leapSecond ? " \u00b7 the inserted leap second itself" : "") +
+      (gpsAvailable ? "" : " \u00b7 GPS time starts 1980-01-06");
+    var rows = [
+      { k: "GPS time", v: gpsAvailable ? gpsText + " GPS" : "\u2014" },
+      { k: "GPS \u2212 UTC", v: gpsAvailable ? gpsOffsetText : "\u2014" },
+      { k: "GPS week", v: gpsAvailable ? group(gpsWeek) : "\u2014" },
+      { k: "GPS week day (Sunday = 0)", v: gpsAvailable ? gpsDay + " (" + WEEKDAYS[gpsDay] + ")" : "\u2014" },
+      { k: "GPS seconds of week", v: gpsAvailable ? group(gpsWeekSeconds) : "\u2014" },
+      { k: "TT (terrestrial time)", v: ttText + " TT" }
+    ];
+    return {
+      utc: utcText,
+      tai: taiText,
+      taiLabel: taiText + " TAI",
+      offset: offset,
+      offsetText: offset + " s",
+      subText: subText,
+      gps: gpsAvailable ? gpsText : null,
+      gpsAvailable: gpsAvailable,
+      gpsWeek: gpsWeek,
+      gpsDay: gpsDay,
+      gpsWeekSeconds: gpsWeekSeconds,
+      tt: ttText,
+      leapSecond: leapSecond,
+      lastLeap: lastLeapSecond(),
+      rows: rows
+    };
+  }
+
+  return {
+    LEAP_TABLE: LEAP_TABLE,
+    GPS_EPOCH_UNIX: GPS_EPOCH_UNIX,
+    GPS_EPOCH_TAI_MINUS_UTC: GPS_EPOCH_TAI_MINUS_UTC,
+    TT_MINUS_TAI_SECONDS: TT_MINUS_TAI_SECONDS,
+    WEEK_SECONDS: WEEK_SECONDS,
+    MIN_DATE: MIN_DATE,
+    MAX_DATE: MAX_DATE,
+    DEFAULT_DATE: DEFAULT_DATE,
+    DEFAULT_TIME: DEFAULT_TIME,
+    WEEKDAYS: WEEKDAYS,
+    daysFromCivil: daysFromCivil,
+    civilFromDays: civilFromDays,
+    daysInMonth: daysInMonth,
+    isLeapYear: isLeapYear,
+    leapDays: function(){ return Object.keys(LEAP_DAYS).sort(); },
+    offsetAt: offsetAt,
+    lastLeapSecond: lastLeapSecond,
+    parseDate: parseDate,
+    parseTime: parseTime,
+    stamp: stamp,
+    group: group,
+    convert: convert
+  };
+})();
+/* time-scale-core:end */
+(function(){
+  "use strict";
+  var C = TimeScaleCore;
+  var els = {
+    form: document.getElementById("time-scale-form"),
+    date: document.getElementById("date"),
+    time: document.getElementById("time"),
+    now: document.getElementById("now"),
+    clear: document.getElementById("clear"),
+    copy: document.getElementById("copy"),
+    status: document.getElementById("status"),
+    err: document.getElementById("err"),
+    out: document.getElementById("out")
+  };
+  var current = null;
+
+  function addRow(key, value){
+    var row = document.createElement("div");
+    row.className = "row";
+    var k = document.createElement("span");
+    k.className = "k";
+    k.textContent = key;
+    var v = document.createElement("span");
+    v.className = "v";
+    v.textContent = value;
+    row.appendChild(k);
+    row.appendChild(v);
+    els.out.appendChild(row);
+  }
+
+  function placeholder(message){
+    els.out.textContent = "";
+    var span = document.createElement("div");
+    span.className = "sub";
+    span.style.padding = "18px 0 6px";
+    span.textContent = message;
+    els.out.appendChild(span);
+  }
+
+  function render(result){
+    els.out.textContent = "";
+    var label = document.createElement("div");
+    label.className = "label";
+    label.textContent = result.leapSecond ? "TAI of the inserted leap second" : "International Atomic Time";
+    var big = document.createElement("div");
+    big.className = "big";
+    big.textContent = result.taiLabel;
+    var sub = document.createElement("div");
+    sub.className = "sub";
+    sub.textContent = result.subText;
+    els.out.appendChild(label);
+    els.out.appendChild(big);
+    els.out.appendChild(sub);
+    for (var index = 0; index < result.rows.length; index += 1){
+      addRow(result.rows[index].k, result.rows[index].v);
+    }
+  }
+
+  function calculate(announce){
+    var date = els.date.value;
+    var time = els.time.value;
+    var result;
+    if (!String(date).trim() || !String(time).trim()){
+      current = null;
+      els.copy.disabled = true;
+      els.err.textContent = announce ? "Enter a UTC date and time to convert." : "";
+      els.status.textContent = "";
+      placeholder("Enter a UTC date and time to see the atomic time scales.");
+      return;
+    }
+    try {
+      result = C.convert(date, time);
+    } catch (error){
+      current = null;
+      els.copy.disabled = true;
+      els.err.textContent = error.message;
+      els.status.textContent = "";
+      placeholder("Enter a UTC date and time within 1972 to 2100.");
+      return;
+    }
+    els.err.textContent = "";
+    els.copy.disabled = false;
+    els.status.textContent = "";
+    current = result;
+    render(result);
+  }
+
+  function copyTai(){
+    if (!current) return;
+    var text = current.taiLabel;
+    if (!navigator.clipboard || !navigator.clipboard.writeText){
+      els.status.textContent = "Copy is unavailable here; select the TAI time above.";
+      return;
+    }
+    navigator.clipboard.writeText(text).then(function(){
+      els.status.textContent = "Copied " + text;
+    }, function(){
+      els.status.textContent = "Copy was refused; select the TAI time above.";
+    });
+  }
+
+  els.form.addEventListener("submit", function(event){
+    event.preventDefault();
+    calculate(true);
+  });
+  els.date.addEventListener("input", function(){ calculate(false); });
+  els.time.addEventListener("input", function(){ calculate(false); });
+  els.copy.addEventListener("click", copyTai);
+  els.now.addEventListener("click", function(){
+    var d = new Date();
+    var two = function(part){ return (part < 10 ? "0" : "") + part; };
+    els.date.value = d.getUTCFullYear() + "-" + two(d.getUTCMonth() + 1) + "-" + two(d.getUTCDate());
+    els.time.value = two(d.getUTCHours()) + ":" + two(d.getUTCMinutes()) + ":" + two(d.getUTCSeconds());
+    calculate(false);
+  });
+  els.clear.addEventListener("click", function(){
+    els.date.value = "";
+    els.time.value = "";
+    els.status.textContent = "";
+    calculate(false);
+    els.date.focus();
+  });
+
+  calculate(false);
+})();
+</script>
+</body>
+</html>

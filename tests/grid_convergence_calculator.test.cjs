@@ -66,7 +66,7 @@ const closeTo = (actual, expected, label, epsilon) => assert.ok(
 );
 
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2241, 'catalog total');
+assert.equal(catalog.tools.length, 2242, 'catalog total');
 const entry = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(entry, 'catalog record present');
 assert.equal(entry.name, 'Grid Convergence Calculator');

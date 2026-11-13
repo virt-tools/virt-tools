@@ -220,7 +220,7 @@ for (let iteration = 0; iteration < 300; iteration += 1) {
 
 // ---- Catalog record and its cases must agree with the core.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2241, 'catalog total');
+assert.equal(catalog.tools.length, 2242, 'catalog total');
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record missing');
 assert.equal(record.name, 'Yarn Count Converter');
