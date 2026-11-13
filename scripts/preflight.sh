@@ -264,6 +264,7 @@ node tests/multicast_mac_mapper.test.cjs
 node tests/linux_device_number_decoder.test.cjs
 node tests/triathlon_split_planner.test.cjs
 node tests/junit_xml_report_summarizer.test.cjs
+node tests/coffee_cupping_score_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
