@@ -256,6 +256,7 @@ node tests/aerobic_decoupling_calculator.test.cjs
 node tests/cbor_encoder_decoder.test.cjs
 node tests/riaa_equalization_calculator.test.cjs
 node tests/hrv_baseline_calculator.test.cjs
+node tests/flicker_free_shutter_planner.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
