@@ -204,7 +204,9 @@ assert.ok(html.includes('/assets/style.css'), 'shared stylesheet missing');
 assert.ok(html.includes('type="submit"'), 'submit button missing');
 assert.ok(html.includes('id="reset"'), 'reset button missing');
 assert.ok(html.includes('<h1>Gather &amp; Ruffle Calculator</h1>'), 'heading missing');
-assert.ok(html.includes('href="/">← All tools</a>'), 'back link missing');
+// Navigation is owned by the shell (app.js injects nav.tool-breadcrumbs on every
+// tool page), so a page-level back link would be a second affordance next to it.
+assert.ok(!/href="\/">\s*(?:←\s*)?(?:Back to\s+)?[Aa]ll tools</.test(html), 'page must not carry a back link');
 assert.ok(html.includes('name="viewport"'), 'viewport meta missing');
 
 console.log('Gather & ruffle calculator: ' + entry.testCases.length + ' catalog cases and '

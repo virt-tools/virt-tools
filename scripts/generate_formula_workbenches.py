@@ -68,7 +68,6 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   <header id="site-header"></header>
   <main class="tool-container formula-workbench">
     <div class="tool-header">
-      <a class="back" href="/">← All tools</a>
       <h1>{title}</h1>
       <p>{description}</p>
     </div>
