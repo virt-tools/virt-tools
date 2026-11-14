@@ -239,7 +239,7 @@ assert.equal(failure(' P1D ', '2026-01-31', '09:00'), null, 'surrounding whitesp
 
 // ---- Catalog record and its cases must agree with the core.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2277, 'catalog total');
+assert.equal(catalog.tools.length, 2278, 'catalog total');
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record missing');
 assert.equal(record.name, 'ISO 8601 Duration Calculator');

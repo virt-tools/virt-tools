@@ -186,7 +186,7 @@ assert.equal(C.analyze(eight).chords.length, 8);
 
 // Catalog integrity and recorded cases.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2277, 'catalog total');
+assert.equal(catalog.tools.length, 2278, 'catalog total');
 const record = catalog.tools.find((tool) => tool.slug === 'four-part-writing-checker');
 assert.ok(record, 'catalog record');
 assert.equal(record.name, 'Four-Part Writing Checker');
@@ -200,7 +200,7 @@ assert.ok(record.tags.includes('music'));
 assert.ok(record.tags.includes('voice-leading'));
 assert.ok(record.method.length > 700);
 assert.ok(record.testCases.length >= 10);
-assert.equal(catalog.tools.filter((tool) => tool.category === record.category).length, 43, 'Music count');
+assert.equal(catalog.tools.filter((tool) => tool.category === record.category).length, 44, 'Music count');
 
 const names = new Map();
 for (const tool of catalog.tools) {
