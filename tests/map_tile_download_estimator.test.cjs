@@ -241,7 +241,7 @@ assert.equal(run({ ...base, west: '-180', east: '180' }).wraps, false);
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
 const entry = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(entry, 'catalog entry missing');
-assert.equal(catalog.tools.length, 2267, 'catalog total');
+assert.equal(catalog.tools.length, 2268, 'catalog total');
 assert.equal(entry.category, 'Geography');
 assert.equal(entry.subcategory, 'Planning');
 assert.equal(entry.risk, 'low');

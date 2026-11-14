@@ -276,6 +276,7 @@ node tests/climbing_grade_converter.test.cjs
 node tests/thermal_conductivity_converter.test.cjs
 node tests/stereo_width_calculator.test.cjs
 node tests/easter_date_calculator.test.cjs
+node tests/bencode_encoder_decoder.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"

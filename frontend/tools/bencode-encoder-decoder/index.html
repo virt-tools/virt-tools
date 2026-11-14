@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Bencode Encoder / Decoder — Virtual Tools</title>
+<meta name="description" content="Decode BitTorrent bencode to JSON or encode JSON back to canonical bencode. Strict byte offsets, sorted dictionary keys and no network use, all in your browser.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+[hidden]{display:none!important}
+.direction{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}
+.direction button{min-height:44px;padding:9px 18px;border:1px solid var(--border,#2a2f3a);border-radius:8px;background:transparent;color:var(--text,#e6e6e6);font:inherit;font-weight:650;cursor:pointer}
+.direction button[aria-pressed="true"]{border-color:var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017}
+.direction button:focus-visible,.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+label.output-label{display:block;font-size:13px;font-weight:650;margin:0 0 6px}
+textarea{box-sizing:border-box;width:100%;max-width:none;padding:12px;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg,#14181f);color:var(--text,#e6e6e6);font-family:ui-monospace,monospace;font-size:16px;line-height:1.5;resize:vertical;overflow-wrap:anywhere}
+textarea:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+#input{min-height:150px}#output{min-height:150px;font-size:15px}
+.help,.note{font-size:13px;color:var(--text-dim,#9aa3b2);line-height:1.5}.help{margin:6px 0 0}.note{margin:12px 0 0}
+.err{color:var(--bad,#f87171);font-size:14px;margin:10px 0 0;min-height:1.3em}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:650;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button.secondary{background:transparent;color:var(--accent,#6ea8fe)}.actions button:hover{filter:brightness(1.08)}.actions button:disabled{opacity:.5;cursor:not-allowed}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:16px 0}
+.big{font-size:clamp(1.5rem,5.5vw,2.1rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:4px 0 2px;color:var(--accent,#6ea8fe);overflow-wrap:anywhere}
+.summary{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 14px;line-height:1.45}
+.copy-status{font-size:13px;color:var(--text-dim,#9aa3b2)}.empty{color:var(--text-dim,#9aa3b2);margin:16px 0}
+@media(max-width:480px){.direction{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.direction button{padding-inline:8px}.actions button{flex:1 1 140px}.out{padding:12px}}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>Bencode Encoder / Decoder</h1>
+<p>Read <strong>bencode</strong> — the compact byte-oriented format inside <code>.torrent</code> metainfo files — as JSON, or write canonical bencode back from JSON.</p>
+</div>
+<div class="panel">
+<div class="direction" role="group" aria-label="Conversion direction">
+<button type="button" id="decode-mode" aria-pressed="true">bencode → JSON</button>
+<button type="button" id="encode-mode" aria-pressed="false">JSON → bencode</button>
+</div>
+<form id="codec-form" novalidate>
+<label class="output-label" for="input" id="input-label">Bencoded data</label>
+<textarea id="input" spellcheck="false" autocomplete="off" autocapitalize="off" aria-describedby="input-help">d4:infod6:lengthi1024e4:name5:hello12:piece lengthi16384eee</textarea>
+<p class="help" id="input-help">Paste one complete bencoded value. Byte-string lengths count bytes, not characters, and the whole input is read as UTF-8.</p>
+<div class="err" id="error" role="alert" aria-live="polite"></div>
+<div class="actions">
+<button type="submit" id="convert">Decode to JSON</button>
+<button type="button" class="secondary" id="reset">Reset</button>
+</div>
+</form>
+<p class="empty" id="empty">Choose Decode to JSON to read the sample metainfo value.</p>
+<section class="out" id="result" hidden>
+<div class="big" id="headline"></div>
+<p class="summary" id="summary" role="status" aria-live="polite"></p>
+<label class="output-label" for="output" id="output-label">JSON</label>
+<textarea id="output" readonly spellcheck="false"></textarea>
+<div class="actions">
+<button type="button" class="secondary" id="copy" disabled>Copy output</button>
+<button type="button" class="secondary" id="reverse" disabled>Use output as input</button>
+<span class="copy-status" id="copy-status" aria-live="polite"></span>
+</div>
+</section>
+<p class="note">Bencode (BitTorrent BEP 3) has four types: <code>i…e</code> integers, <code>length:bytes</code> byte strings, <code>l…e</code> lists and <code>d…e</code> dictionaries whose byte-string keys are sorted bytewise. Decoding refuses unsorted or duplicate keys, leading zeros, truncation and trailing data, and reports the byte offset. Byte strings that are not valid UTF-8 are shown as <code>0x…</code> hex. All processing stays in your browser.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* bencode-core:start */
+var BencodeCore = (function(){
+  "use strict";
+  var MAX_INPUT_CHARS = 200000;
+  var MAX_DEPTH = 64;
+  var SAFE = 9007199254740991;
+  var DEFAULT_BENCODE = "d4:infod6:lengthi1024e4:name5:hello12:piece lengthi16384eee";
+  var DEFAULT_JSON = "{\n  \"info\": {\n    \"length\": 1024,\n    \"name\": \"hello\",\n    \"piece length\": 16384\n  }\n}";
+  var ENCODER = new TextEncoder();
+  var decoder = null;
+  var textDecoder = null;
+
+  function fail(message){ throw new Error(message); }
+  function bounded(text){
+    if (text.length > MAX_INPUT_CHARS) fail("Input must be 200,000 characters or fewer.");
+  }
+  function utf8(text){ return ENCODER.encode(String(text)); }
+  function textOf(bytes){
+    if (!decoder) decoder = new TextDecoder("utf-8", { fatal: true });
+    try { return decoder.decode(bytes); } catch (error){ return null; }
+  }
+  function hex(bytes){
+    var out = "";
+    for (var i = 0; i < bytes.length; i += 1) out += (bytes[i] < 16 ? "0" : "") + bytes[i].toString(16).toUpperCase();
+    return out;
+  }
+  function displayText(bytes){
+    var text = textOf(bytes);
+    return text === null ? "0x" + hex(bytes) : text;
+  }
+  function normalizeUtf8(bytes){
+    if (!textDecoder) textDecoder = new TextDecoder("utf-8", { fatal: false });
+    return textDecoder.decode(bytes);
+  }
+  function compareBytes(a, b){
+    var length = Math.min(a.length, b.length);
+    for (var i = 0; i < length; i += 1){
+      if (a[i] !== b[i]) return a[i] < b[i] ? -1 : 1;
+    }
+    return a.length === b.length ? 0 : (a.length < b.length ? -1 : 1);
+  }
+
+  function parse(bytes){
+    var stats = { pos: 0, nodes: 0, depth: 0 };
+    function readValue(depth){
+      if (stats.pos >= bytes.length) fail("Unexpected end of input at byte " + stats.pos + ".");
+      var start = stats.pos;
+      var marker = bytes[stats.pos];
+      if (marker === 0x69){ stats.pos += 1; return readInteger(start, depth); }
+      if (marker === 0x6c){ stats.pos += 1; return readList(start, depth); }
+      if (marker === 0x64){ stats.pos += 1; return readDictionary(start, depth); }
+      if (marker >= 0x30 && marker <= 0x39) return readBytes(start, depth);
+      fail("Invalid bencode at byte " + start + ": a value must start with i, l, d or a digit.");
+    }
+    function readInteger(start, depth){
+      var negative = false;
+      if (bytes[stats.pos] === 0x2d){ negative = true; stats.pos += 1; }
+      var digits = "";
+      while (stats.pos < bytes.length){
+        var byte = bytes[stats.pos];
+        if (byte === 0x65) break;
+        if (byte < 0x30 || byte > 0x39) fail("Integer at byte " + start + " contains a non-digit character.");
+        digits += String.fromCharCode(byte);
+        stats.pos += 1;
+      }
+      if (stats.pos >= bytes.length) fail("Integer at byte " + start + " is not closed with 'e'.");
+      stats.pos += 1;
+      if (!digits) fail("Integer at byte " + start + " has no digits.");
+      if (digits.length > 1 && digits.charAt(0) === "0") fail("Integer at byte " + start + " must not have leading zeros.");
+      if (negative && digits === "0") fail("Integer at byte " + start + " must not be negative zero.");
+      var magnitude = Number(digits);
+      if (!Number.isSafeInteger(magnitude) || magnitude > SAFE) fail("Integer at byte " + start + " is outside the safe integer range.");
+      var value = negative ? -magnitude : magnitude;
+      if (depth > stats.depth) stats.depth = depth;
+      stats.nodes += 1;
+      return { kind: "int", value: value };
+    }
+    function readBytes(start, depth){
+      var length = 0, digits = 0;
+      while (stats.pos < bytes.length){
+        var byte = bytes[stats.pos];
+        if (byte === 0x3a) break;
+        if (byte < 0x30 || byte > 0x39) fail("Byte string at byte " + start + " is missing its ':' separator.");
+        if (digits === 1 && length === 0) fail("Byte string at byte " + start + " has a leading zero in its length.");
+        length = length * 10 + (byte - 0x30);
+        digits += 1;
+        stats.pos += 1;
+        if (length > bytes.length) break;
+      }
+      if (!digits) fail("Byte string at byte " + start + " declares no length.");
+      if (length > bytes.length) fail("Byte string at byte " + start + " ends before its declared length.");
+      stats.pos += 1;
+      if (stats.pos + length > bytes.length) fail("Byte string at byte " + start + " ends before its declared length.");
+      var slice = bytes.slice(stats.pos, stats.pos + length);
+      stats.pos += length;
+      if (depth > stats.depth) stats.depth = depth;
+      stats.nodes += 1;
+      return { kind: "bytes", bytes: slice };
+    }
+    function readList(start, depth){
+      if (depth > MAX_DEPTH) fail("Nesting deeper than " + MAX_DEPTH + " levels at byte " + start + ".");
+      stats.depth = Math.max(stats.depth, depth);
+      stats.nodes += 1;
+      var items = [];
+      while (true){
+        if (stats.pos >= bytes.length) fail("List at byte " + start + " is not closed with 'e'.");
+        if (bytes[stats.pos] === 0x65){ stats.pos += 1; return { kind: "list", value: items }; }
+        items.push(readValue(depth + 1));
+      }
+    }
+    function readDictionary(start, depth){
+      if (depth > MAX_DEPTH) fail("Nesting deeper than " + MAX_DEPTH + " levels at byte " + start + ".");
+      stats.depth = Math.max(stats.depth, depth);
+      stats.nodes += 1;
+      var entries = [], previous = null;
+      while (true){
+        if (stats.pos >= bytes.length) fail("Dictionary at byte " + start + " is not closed with 'e'.");
+        if (bytes[stats.pos] === 0x65){ stats.pos += 1; return { kind: "dict", value: entries }; }
+        var keyAt = stats.pos;
+        if (bytes[stats.pos] < 0x30 || bytes[stats.pos] > 0x39) fail("Dictionary key at byte " + keyAt + " is not a byte string.");
+        var key = readBytes(keyAt, depth + 1);
+        if (previous !== null){
+          var order = compareBytes(previous.bytes, key.bytes);
+          if (order === 0) fail("Dictionary key at byte " + keyAt + " is duplicated.");
+          if (order > 0) fail("Dictionary keys at byte " + keyAt + " are not in bytewise sorted order.");
+        }
+        previous = key;
+        entries.push([key, readValue(depth + 1)]);
+      }
+    }
+    var root = readValue(1);
+    if (stats.pos !== bytes.length) fail("Trailing data at byte " + stats.pos + ".");
+    return { root: root, nodes: stats.nodes, depth: stats.depth };
+  }
+
+  function encodeValue(value, depth, stats){
+    if (depth > MAX_DEPTH) fail("JSON nesting is deeper than " + MAX_DEPTH + " levels.");
+    stats.depth = Math.max(stats.depth, depth);
+    stats.nodes += 1;
+    if (typeof value === "string"){
+      var bytes = utf8(value);
+      return bytes.length + ":" + normalizeUtf8(bytes);
+    }
+    if (typeof value === "number"){
+      if (!Number.isSafeInteger(value)) fail("Bencode integers must be whole numbers within \u00b19,007,199,254,740,991.");
+      return "i" + String(value) + "e";
+    }
+    if (Array.isArray(value)){
+      var parts = ["l"];
+      for (var i = 0; i < value.length; i += 1) parts.push(encodeValue(value[i], depth + 1, stats));
+      parts.push("e");
+      return parts.join("");
+    }
+    if (value && typeof value === "object"){
+      var keys = Object.keys(value).sort(function(a, b){ return compareBytes(utf8(a), utf8(b)); });
+      var entries = ["d"];
+      for (var k = 0; k < keys.length; k += 1){
+        entries.push(encodeValue(keys[k], depth + 1, stats));
+        entries.push(encodeValue(value[keys[k]], depth + 1, stats));
+      }
+      entries.push("e");
+      return entries.join("");
+    }
+    if (value === null) fail("Bencode has no null; remove the value or use an integer.");
+    if (typeof value === "boolean") fail("Bencode has no booleans; use 1 or 0 instead.");
+    fail("Bencode can encode only objects, arrays, strings and integers.");
+  }
+
+  function toJson(node){
+    if (node.kind === "int") return node.value;
+    if (node.kind === "bytes") return displayText(node.bytes);
+    if (node.kind === "list") return node.value.map(toJson);
+    var out = {};
+    for (var i = 0; i < node.value.length; i += 1){
+      var key = displayText(node.value[i][0].bytes);
+      if (Object.prototype.hasOwnProperty.call(out, key)) fail("Decoded keys collide after UTF-8 display at \"" + key + "\".");
+      out[key] = toJson(node.value[i][1]);
+    }
+    return out;
+  }
+
+  function run(input){
+    input = input && typeof input === "object" ? input : {};
+    var mode = Object.prototype.hasOwnProperty.call(input, "mode") ? input.mode : "decode";
+    var supplied = Object.prototype.hasOwnProperty.call(input, "input");
+    if (mode === "decode"){
+      var text = supplied ? input.input : DEFAULT_BENCODE;
+      text = String(text === null || text === undefined ? "" : text);
+      bounded(text);
+      if (!text) fail("Enter bencoded data to decode.");
+      var bytes = utf8(text);
+      var parsed = parse(bytes);
+      var json = toJson(parsed.root);
+      var output = JSON.stringify(json, null, 2);
+      return { mode: mode, kind: parsed.root.kind, output: output, nodes: parsed.nodes, depth: parsed.depth,
+        bytesIn: bytes.length, bytesOut: utf8(output).length, json: json, root: parsed.root };
+    }
+    if (mode === "encode"){
+      var source = supplied ? input.input : DEFAULT_JSON;
+      source = String(source === null || source === undefined ? "" : source);
+      bounded(source);
+      if (!source.trim()) fail("Enter JSON to encode.");
+      var value;
+      try { value = JSON.parse(source); }
+      catch (error){ fail("Invalid JSON. Check for a missing comma, quote or bracket."); }
+      var stats = { nodes: 0, depth: 0 };
+      var encoded = encodeValue(value, 1, stats);
+      return { mode: mode, kind: value && typeof value === "object" ? (Array.isArray(value) ? "list" : "dict") : (typeof value === "number" ? "int" : "bytes"),
+        output: encoded, nodes: stats.nodes, depth: stats.depth,
+        bytesIn: utf8(source).length, bytesOut: utf8(encoded).length, json: value };
+    }
+    fail("Choose either decode or encode mode.");
+  }
+
+  return { run: run, parse: parse, encodeValue: encodeValue, toJson: toJson, utf8: utf8, hex: hex,
+    displayText: displayText, compareBytes: compareBytes, DEFAULT_BENCODE: DEFAULT_BENCODE, DEFAULT_JSON: DEFAULT_JSON,
+    MAX_INPUT_CHARS: MAX_INPUT_CHARS, MAX_DEPTH: MAX_DEPTH, SAFE: SAFE };
+})();
+/* bencode-core:end */
+(function(){
+  "use strict";
+  var $ = function(id){ return document.getElementById(id); };
+  var mode = "decode", latest = null;
+  var LABELS = { int: "integer", bytes: "byte string", list: "list", dict: "dictionary" };
+  function clearResult(message){
+    latest = null;
+    $("result").hidden = true;
+    $("empty").hidden = false;
+    $("empty").textContent = message;
+    $("error").textContent = "";
+    $("copy").disabled = true;
+    $("reverse").disabled = true;
+    $("output").value = "";
+    $("copy-status").textContent = "";
+  }
+  function setMode(next){
+    if (next === mode) return;
+    mode = next;
+    $("decode-mode").setAttribute("aria-pressed", String(mode === "decode"));
+    $("encode-mode").setAttribute("aria-pressed", String(mode === "encode"));
+    $("input-label").textContent = mode === "decode" ? "Bencoded data" : "JSON";
+    $("input-help").textContent = mode === "decode"
+      ? "Paste one complete bencoded value. Byte-string lengths count bytes, not characters, and the whole input is read as UTF-8."
+      : "Paste one JSON value. Objects become dictionaries with bytewise-sorted keys; booleans, null and decimals are refused.";
+    $("convert").textContent = mode === "decode" ? "Decode to JSON" : "Encode to bencode";
+    $("output-label").textContent = mode === "decode" ? "JSON" : "Bencoded data";
+    clearResult(mode === "decode" ? "Enter bencoded data, then choose Decode to JSON." : "Enter JSON, then choose Encode to bencode.");
+  }
+  function calculate(event){
+    if (event) event.preventDefault();
+    $("copy-status").textContent = "";
+    try {
+      latest = BencodeCore.run({ mode: mode, input: $("input").value });
+      $("error").textContent = "";
+      $("empty").hidden = true;
+      $("result").hidden = false;
+      $("copy").disabled = false;
+      $("reverse").disabled = false;
+      $("headline").textContent = LABELS[latest.kind] || latest.kind;
+      $("summary").textContent = latest.nodes + (latest.nodes === 1 ? " value" : " values")
+        + " · depth " + latest.depth + " · " + latest.bytesIn + " bytes in · " + latest.bytesOut + " bytes out";
+      $("output").value = latest.output;
+    } catch (error) {
+      clearResult("Correct the input, then convert again.");
+      $("error").textContent = error.message;
+    }
+  }
+  $("decode-mode").addEventListener("click", function(){ setMode("decode"); });
+  $("encode-mode").addEventListener("click", function(){ setMode("encode"); });
+  $("codec-form").addEventListener("submit", calculate);
+  $("input").addEventListener("input", function(){
+    if ($("error").textContent) $("error").textContent = "";
+  });
+  $("reset").addEventListener("click", function(){
+    mode = "encode";
+    setMode("decode");
+    clearResult("Choose Decode to JSON to read the sample metainfo value.");
+    $("input").focus();
+  });
+  $("copy").addEventListener("click", async function(){
+    if (!latest) return;
+    try {
+      await navigator.clipboard.writeText(latest.output);
+      $("copy-status").textContent = "Copied output.";
+    } catch (error) {
+      $("copy-status").textContent = "Clipboard unavailable; select the output to copy it.";
+      $("output").focus();
+      $("output").select();
+    }
+  });
+  $("reverse").addEventListener("click", function(){
+    if (!latest) return;
+    var output = latest.output;
+    setMode(mode === "decode" ? "encode" : "decode");
+    $("input").value = output;
+    $("input").focus();
+  });
+})();
+</script>
+</body>
+</html>

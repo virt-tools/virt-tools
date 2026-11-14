@@ -224,7 +224,7 @@ assert.ok(simulated > 300, 'enough random plans were compared');
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
 const record = catalog.tools.find((tool) => tool.slug === 'call-sheet-builder');
 assert.ok(record, 'catalog entry present');
-assert.equal(catalog.tools.length, 2267, 'catalog total');
+assert.equal(catalog.tools.length, 2268, 'catalog total');
 assert.equal(record.category, 'Video');
 assert.equal(record.subcategory, 'Planning');
 assert.equal(record.risk, 'moderate');
