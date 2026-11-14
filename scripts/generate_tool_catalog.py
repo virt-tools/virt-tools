@@ -419,8 +419,12 @@ def validate_catalog(tools: list[dict[str, Any]], frontend: Path) -> list[str]:
             for source in tool["sources"]:
                 if not isinstance(source, dict) or not isinstance(source.get("title"), str):
                     issues.append(f"{label}: each source requires a title")
+                elif not source["title"].strip():
+                    issues.append(f"{label}: source title must not be blank")
                 elif source.get("url") is not None and not isinstance(source.get("url"), str):
                     issues.append(f"{label}: source URL must be a string")
+                elif source.get("url") is not None and not re.fullmatch(r"https?://[^\s]+", source["url"]):
+                    issues.append(f"{label}: source URL must be an absolute http(s) URL")
                 elif set(source) - {"title", "url"}:
                     issues.append(f"{label}: source contains unsupported fields")
         if not isinstance(tool.get("testCases"), list) or any(not isinstance(v, dict) for v in tool.get("testCases", [])):

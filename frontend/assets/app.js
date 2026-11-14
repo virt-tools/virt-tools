@@ -81,6 +81,7 @@
     "tool.favoriteRemoveAria": "Remove {title} from favorites",
     "tool.report": "Report an issue",
     "tool.privacy": "Privacy & local data",
+    "tool.sources": "Sources",
     "tool.feedbackMessage": "Feedback about {title} ({slug}): ",
     "tool.boardRegion": "{title} board; scroll horizontally on small screens",
     "privacy.noStorage": "No Virtual Tools preferences are stored in this browser.",
@@ -779,6 +780,30 @@
     main.appendChild(section);
   }
 
+  function renderSources(main, metadata) {
+    var old = main.querySelector(".tool-sources");
+    if (old) old.remove();
+    if (!Array.isArray(metadata.sources)) return;
+    var entries = metadata.sources.filter(function (item) {
+      return item && typeof item.title === "string" && item.title.trim();
+    });
+    if (!entries.length) return;
+    var section = el("section", { class: "tool-sources", "aria-labelledby": "tool-sources-title" });
+    section.appendChild(el("h2", { id: "tool-sources-title" }, [t("tool.sources")]));
+    var list = el("ul");
+    entries.forEach(function (item) {
+      // Only http(s) links are ever rendered: a catalog record is data, and a
+      // javascript: URL there would otherwise become a clickable sink.
+      var url = typeof item.url === "string" && /^https?:\/\//i.test(item.url.trim()) ? item.url.trim() : null;
+      var label = url
+        ? el("a", { href: url, target: "_blank", rel: "noopener noreferrer" }, [item.title])
+        : el("span", {}, [item.title]);
+      list.appendChild(el("li", {}, [label]));
+    });
+    section.appendChild(list);
+    main.appendChild(section);
+  }
+
   function injectToolShell() {
     var slug = slugFromPath();
     if (!slug) return;
@@ -864,8 +889,10 @@
       if (pageGuidance) metadata.guidance = pageGuidance;
       renderGuidance(metadata);
       renderRelated(main, metadata);
+      renderSources(main, metadata);
     }).catch(function () {
       renderRelated(main, metadata);
+      renderSources(main, metadata);
     });
   }
 
