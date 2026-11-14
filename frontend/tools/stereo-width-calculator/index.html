@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Mid/Side Stereo Width Calculator &mdash; Virtual Tools</title>
+<meta name="description" content="Narrow or widen a stereo pair and see the resulting left and right peak levels, mid and side levels, mono fold-down and peak headroom, with a sweep across common width settings.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
+.field{display:flex;flex-direction:column;gap:6px;margin:0}
+.field.wide{grid-column:1 / -1}
+.field label{font-size:13px;color:var(--text-dim,#9aa3b2)}
+input#left,input#right,input#width{box-sizing:border-box;width:100%;min-height:46px;padding:10px 12px;border-radius:8px;
+  border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);color:var(--text,#e6e6e6);
+  font:inherit;font-size:16px;line-height:1.3;outline:none;font-family:ui-monospace,monospace}
+input:focus-visible{outline:2px solid var(--accent,#6ea8fe);outline-offset:1px}
+input::placeholder{color:var(--text-dim,#9aa3b2)}
+.hint{color:var(--text-dim,#9aa3b2);font-size:12.5px;margin:10px 0 0;line-height:1.45}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:12px 0 0}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.err{color:var(--bad,#f87171);font-size:13px;margin:10px 0 0;min-height:1.2em}
+.warn{color:var(--warn,#fbbf24);font-size:13px;margin:10px 0 0;line-height:1.45}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:16px 0 0}
+.out .label{text-align:center;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-dim,#9aa3b2)}
+.out .big{font-size:clamp(1.35rem,6.4vw,2rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:2px 0 4px;overflow-wrap:anywhere;line-height:1.25}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:6px 0 0;line-height:1.45;overflow-wrap:anywhere}
+.ref{width:100%;border-collapse:collapse;margin:18px 0 0;font-size:13.5px}
+.ref caption{caption-side:top;text-align:left;color:var(--text-dim,#9aa3b2);font-size:12.5px;padding:0 0 6px}
+.ref th,.ref td{border-bottom:1px solid var(--border,#2a2f3a);padding:7px 8px;text-align:left}
+.ref thead th{color:var(--text-dim,#9aa3b2);font-weight:600;font-size:12px;letter-spacing:.03em}
+.ref tbody th{font-weight:500}
+.ref td.num,.ref tbody th+td{font-family:ui-monospace,monospace;text-align:right;white-space:nowrap}
+.ref td.empty{text-align:left;color:var(--text-dim,#9aa3b2);font-family:inherit;white-space:normal}
+.note{color:var(--text-dim,#9aa3b2);font-size:12.5px;line-height:1.55;margin:18px 0 0}
+@media (max-width:560px){
+  .grid{grid-template-columns:minmax(0,1fr)}
+  .actions button{flex:1 1 auto}
+  .ref th,.ref td{padding:6px 4px;font-size:12.5px}
+}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">&larr; All tools</a>
+<h1>Mid/Side Stereo Width Calculator</h1>
+<p>Narrow or widen a stereo pair and see where its peaks land. Give the left and right channel levels in dBFS and a width percentage: below 100&nbsp;% both channels move toward the mono mid signal, above 100&nbsp;% they move apart.</p>
+</div>
+<div class="panel">
+<form id="width-form" novalidate>
+<div class="grid">
+<div class="field">
+<label for="left">Left channel level (dBFS)</label>
+<input id="left" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="-12" placeholder="-12">
+</div>
+<div class="field">
+<label for="right">Right channel level (dBFS)</label>
+<input id="right" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="-9" placeholder="-9">
+</div>
+<div class="field wide">
+<label for="width">Width (%)</label>
+<input id="width" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="150" placeholder="150">
+</div>
+</div>
+<p class="hint">0 dBFS is full scale. 0&nbsp;% is mono, 100&nbsp;% leaves the pair untouched, 200&nbsp;% doubles the side gain.</p>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions">
+<button type="submit">Calculate</button>
+</div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"></div>
+<div class="warn" id="warn" aria-live="polite"></div>
+<table class="ref" id="details">
+<caption>Signal levels at this width</caption>
+<thead>
+<tr><th scope="col">Measure</th><th scope="col">Value</th></tr>
+</thead>
+<tbody>
+<tr><th scope="row">Mid (mono) level</th><td id="mid-level"></td></tr>
+<tr><th scope="row">Side level</th><td id="side-level"></td></tr>
+<tr><th scope="row">Side-to-mid ratio</th><td id="side-ratio"></td></tr>
+<tr><th scope="row">Peak headroom</th><td id="headroom"></td></tr>
+</tbody>
+</table>
+<table class="ref" id="sweep">
+<caption>Peak levels across common width settings (dBFS)</caption>
+<thead>
+<tr><th scope="col">Width</th><th scope="col">Left out</th><th scope="col">Right out</th><th scope="col">Peak</th></tr>
+</thead>
+<tbody id="sweep-body"></tbody>
+</table>
+<p class="note">A stereo pair splits into a mid signal M = (L + R) / 2, the part that survives a mono fold-down, and a side signal S = (L - R) / 2, the part that cancels. A width w rebuilds the channels as L' = M + wS and R' = M - wS and applies only to the difference between them, which is why equal channels come back unchanged at any width. Levels are peak amplitudes converted from dBFS (10^(dB/20)), and both channels are assumed to peak at the same instant, the worst case for a width change; decorrelated program material peaks lower. Because L' + R' = 2M, the mono fold-down is exactly the mid signal and does not move with width. Extreme widening can leave one output negative, which is a polarity inversion rather than a level. Everything is calculated in your browser; nothing is sent or stored.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* stereo-width-core:start */
+var StereoWidthCore = (function(){
+  "use strict";
+  var MIN_LEVEL_DB = -120;
+  var MAX_LEVEL_DB = 0;
+  var MIN_WIDTH = 0;
+  var MAX_WIDTH = 200;
+  var SWEEP_WIDTHS = [0, 50, 100, 150, 200];
+  var DEFAULT_LEFT = "-12";
+  var DEFAULT_RIGHT = "-9";
+  var DEFAULT_WIDTH = "150";
+  var NUMBER_PATTERN = /^-?(?:\d+(?:\.\d+)?|\.\d+)$/;
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function amplitude(dbValue){
+    return Math.pow(10, dbValue / 20);
+  }
+
+  function gainDb(ratio){
+    if (ratio === 0) return -Infinity;
+    return 20 * Math.log10(ratio);
+  }
+
+  function round2(value){
+    var rounded = Math.round(value * 100) / 100;
+    return rounded === 0 ? 0 : rounded;
+  }
+
+  function fixed2(value){
+    var rounded = round2(value);
+    return (rounded < 0 ? "-" : "") + Math.abs(rounded).toFixed(2);
+  }
+
+  function formatLevel(dbValue){
+    if (!isFinite(dbValue)) return "silent";
+    return fixed2(dbValue) + " dBFS";
+  }
+
+  function formatDelta(dbValue){
+    if (!isFinite(dbValue)) return "silent";
+    var rounded = round2(dbValue);
+    return (rounded > 0 ? "+" : "") + fixed2(rounded) + " dB";
+  }
+
+  function formatPercent(value){
+    var rounded = round2(value);
+    var text = Math.abs(rounded - Math.round(rounded)) < 1e-9
+      ? String(Math.round(rounded)) : fixed2(rounded);
+    return text + "%";
+  }
+
+  function parseLevel(input, channel){
+    var raw = String(input == null ? "" : input).trim();
+    var name = channel === "right" ? "right" : "left";
+    if (!raw) fail("Enter the " + name + " channel level in dBFS, such as -12.");
+    if (!NUMBER_PATTERN.test(raw)){
+      fail("Enter the " + name + " channel level as a number in dBFS, such as -12.");
+    }
+    var value = Number(raw);
+    if (!isFinite(value)){
+      fail("Enter the " + name + " channel level as a number in dBFS, such as -12.");
+    }
+    if (value < MIN_LEVEL_DB || value > MAX_LEVEL_DB){
+      fail("Channel levels must be between -120 and 0 dBFS.");
+    }
+    return value;
+  }
+
+  function parseWidth(input){
+    var raw = String(input == null ? "" : input).trim();
+    if (!raw) fail("Enter a width percentage, such as 100.");
+    if (!NUMBER_PATTERN.test(raw)){
+      fail("Enter the width as a percentage, such as 100.");
+    }
+    var value = Number(raw);
+    if (!isFinite(value)){
+      fail("Enter the width as a percentage, such as 100.");
+    }
+    if (value < MIN_WIDTH || value > MAX_WIDTH){
+      fail("Width must be between 0 and 200 percent.");
+    }
+    return value;
+  }
+
+  function compute(leftDb, rightDb, widthPercent){
+    var left = amplitude(leftDb);
+    var right = amplitude(rightDb);
+    var width = widthPercent / 100;
+    var mid = (left + right) / 2;
+    var side = (left - right) / 2;
+    var outLeft = mid + width * side;
+    var outRight = mid - width * side;
+    var peak = Math.max(Math.abs(outLeft), Math.abs(outRight));
+    var peakDb = gainDb(peak);
+    var midDb = gainDb(mid);
+    var sideDb = gainDb(Math.abs(side));
+    return {
+      leftDb: leftDb,
+      rightDb: rightDb,
+      widthPercent: widthPercent,
+      left: left,
+      right: right,
+      width: width,
+      mid: mid,
+      side: side,
+      outLeft: outLeft,
+      outRight: outRight,
+      peak: peak,
+      midDb: midDb,
+      sideDb: sideDb,
+      sideRatioDb: gainDb(Math.abs(side) / mid),
+      monoDb: midDb,
+      outLeftDb: gainDb(Math.abs(outLeft)),
+      outRightDb: gainDb(Math.abs(outRight)),
+      peakDb: peakDb,
+      headroomDb: -peakDb,
+      deltaLeftDb: gainDb(Math.abs(outLeft) / left),
+      deltaRightDb: gainDb(Math.abs(outRight) / right),
+      leftInverted: outLeft < 0,
+      rightInverted: outRight < 0,
+      clipping: peak > 1,
+      trimDb: peak > 1 ? peakDb : 0,
+      peakText: formatLevel(peakDb),
+      outLeftText: formatLevel(gainDb(Math.abs(outLeft))),
+      outRightText: formatLevel(gainDb(Math.abs(outRight))),
+      monoText: formatLevel(midDb),
+      midText: formatLevel(midDb),
+      sideText: formatLevel(sideDb),
+      sideRatioText: isFinite(gainDb(Math.abs(side) / mid)) ? formatDelta(gainDb(Math.abs(side) / mid)) : "-inf dB",
+      headroomText: fixed2(-peakDb) + " dB",
+      deltaLeftText: formatDelta(gainDb(Math.abs(outLeft) / left)),
+      deltaRightText: formatDelta(gainDb(Math.abs(outRight) / right))
+    };
+  }
+
+  function calculate(leftInput, rightInput, widthInput){
+    var leftDb = parseLevel(leftInput, "left");
+    var rightDb = parseLevel(rightInput, "right");
+    var widthPercent = parseWidth(widthInput);
+    return compute(leftDb, rightDb, widthPercent);
+  }
+
+  function sweep(leftDb, rightDb){
+    return SWEEP_WIDTHS.map(function(widthPercent){
+      var result = compute(leftDb, rightDb, widthPercent);
+      return {
+        widthPercent: widthPercent,
+        widthText: formatPercent(widthPercent),
+        outLeftText: result.outLeftText,
+        outRightText: result.outRightText,
+        peakText: result.peakText,
+        monoText: result.monoText,
+        clipping: result.clipping
+      };
+    });
+  }
+
+  return {
+    MIN_LEVEL_DB: MIN_LEVEL_DB,
+    MAX_LEVEL_DB: MAX_LEVEL_DB,
+    MIN_WIDTH: MIN_WIDTH,
+    MAX_WIDTH: MAX_WIDTH,
+    SWEEP_WIDTHS: SWEEP_WIDTHS,
+    DEFAULT_LEFT: DEFAULT_LEFT,
+    DEFAULT_RIGHT: DEFAULT_RIGHT,
+    DEFAULT_WIDTH: DEFAULT_WIDTH,
+    amplitude: amplitude,
+    gainDb: gainDb,
+    formatLevel: formatLevel,
+    formatDelta: formatDelta,
+    formatPercent: formatPercent,
+    parseLevel: parseLevel,
+    parseWidth: parseWidth,
+    compute: compute,
+    calculate: calculate,
+    sweep: sweep
+  };
+})();
+/* stereo-width-core:end */
+(function(){
+  "use strict";
+  var C = StereoWidthCore;
+  var els = {
+    form: document.getElementById("width-form"),
+    left: document.getElementById("left"),
+    right: document.getElementById("right"),
+    width: document.getElementById("width"),
+    err: document.getElementById("err"),
+    out: document.getElementById("out"),
+    warn: document.getElementById("warn"),
+    midLevel: document.getElementById("mid-level"),
+    sideLevel: document.getElementById("side-level"),
+    sideRatio: document.getElementById("side-ratio"),
+    headroom: document.getElementById("headroom"),
+    sweepBody: document.getElementById("sweep-body")
+  };
+
+  function line(text, className){
+    var node = document.createElement("div");
+    node.className = className || "sub";
+    node.textContent = text;
+    return node;
+  }
+
+  function placeholder(message){
+    els.out.textContent = "";
+    var node = line(message);
+    node.style.padding = "18px 0 6px";
+    els.out.appendChild(node);
+  }
+
+  function clearDetails(){
+    els.midLevel.textContent = "";
+    els.sideLevel.textContent = "";
+    els.sideRatio.textContent = "";
+    els.headroom.textContent = "";
+    els.sweepBody.textContent = "";
+    var row = document.createElement("tr");
+    var cell = document.createElement("td");
+    cell.className = "empty";
+    cell.colSpan = 4;
+    cell.textContent = "Enter valid channel levels to compare widths.";
+    row.appendChild(cell);
+    els.sweepBody.appendChild(row);
+  }
+
+  function render(result){
+    els.out.textContent = "";
+    els.out.appendChild(line("Peak output level", "label"));
+    els.out.appendChild(line(result.peakText, "big"));
+    els.out.appendChild(line("Left " + result.outLeftText + (result.leftInverted ? ", inverted" : "")
+      + " (" + result.deltaLeftText + "), right " + result.outRightText
+      + (result.rightInverted ? ", inverted" : "") + " (" + result.deltaRightText + ")."));
+    els.out.appendChild(line("Mono fold-down " + result.monoText + "."));
+
+    els.warn.textContent = "";
+    var warnings = [];
+    if (result.clipping){
+      warnings.push("Peaks land " + fixed2(result.trimDb) + " dB above 0 dBFS; trim the input by "
+        + fixed2(result.trimDb) + " dB or pull the width back.");
+    }
+    if (result.leftInverted) warnings.push("The left output is inverted in polarity at this width.");
+    if (result.rightInverted) warnings.push("The right output is inverted in polarity at this width.");
+    if (warnings.length) els.warn.appendChild(line(warnings.join(" ")));
+
+    els.midLevel.textContent = result.midText;
+    els.sideLevel.textContent = result.sideText;
+    els.sideRatio.textContent = result.sideRatioText;
+    els.headroom.textContent = result.headroomText;
+
+    els.sweepBody.textContent = "";
+    C.sweep(result.leftDb, result.rightDb).forEach(function(row){
+      var tr = document.createElement("tr");
+      [row.widthText, row.outLeftText.replace(" dBFS", ""), row.outRightText.replace(" dBFS", ""),
+        row.peakText.replace(" dBFS", "")].forEach(function(text, index){
+        var cell = document.createElement("td");
+        cell.textContent = text;
+        if (index > 0) cell.className = "num";
+        tr.appendChild(cell);
+      });
+      if (row.widthPercent === result.widthPercent) tr.setAttribute("aria-current", "true");
+      els.sweepBody.appendChild(tr);
+    });
+  }
+
+  function fixed2(value){
+    var rounded = Math.round(value * 100) / 100;
+    return (rounded < 0 ? "-" : "") + Math.abs(rounded).toFixed(2);
+  }
+
+  function calculate(announce){
+    var rawLeft = els.left.value;
+    var rawRight = els.right.value;
+    var rawWidth = els.width.value;
+    if (!String(rawLeft).trim() || !String(rawRight).trim() || !String(rawWidth).trim()){
+      els.err.textContent = announce ? "Enter both channel levels and a width." : "";
+      els.warn.textContent = "";
+      clearDetails();
+      placeholder("Enter the left and right channel levels and a width to see the result.");
+      return;
+    }
+    var result;
+    try {
+      result = C.calculate(rawLeft, rawRight, rawWidth);
+    } catch (error){
+      els.err.textContent = error.message;
+      els.warn.textContent = "";
+      clearDetails();
+      placeholder("Enter channel levels between -120 and 0 dBFS and a width between 0 and 200 percent.");
+      return;
+    }
+    els.err.textContent = "";
+    render(result);
+  }
+
+  els.form.addEventListener("submit", function(event){
+    event.preventDefault();
+    calculate(true);
+  });
+  [els.left, els.right, els.width].forEach(function(input){
+    input.addEventListener("input", function(){ calculate(false); });
+  });
+
+  calculate(false);
+})();
+</script>
+</body>
+</html>

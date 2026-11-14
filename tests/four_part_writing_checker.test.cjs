@@ -186,7 +186,7 @@ assert.equal(C.analyze(eight).chords.length, 8);
 
 // Catalog integrity and recorded cases.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2265, 'catalog total');
+assert.equal(catalog.tools.length, 2266, 'catalog total');
 const record = catalog.tools.find((tool) => tool.slug === 'four-part-writing-checker');
 assert.ok(record, 'catalog record');
 assert.equal(record.name, 'Four-Part Writing Checker');
