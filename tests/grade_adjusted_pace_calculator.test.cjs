@@ -85,7 +85,7 @@ close(mile.gainFtPerMile, 264, 1e-9, 'mile vertical gain');
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record present');
-assert.equal(catalog.tools.length, 2264, 'catalog total');
+assert.equal(catalog.tools.length, 2265, 'catalog total');
 assert.equal(record.name, 'Grade-Adjusted Pace Calculator');
 assert.equal(record.category, 'Health');
 assert.equal(record.subcategory, 'Estimation & calculation');

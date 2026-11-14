@@ -216,7 +216,7 @@ assert.ok(html.includes('not medical advice'), 'the limits reject clinical use')
 
 // ---- Catalog record and every case in it must agree with the core.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2264, 'catalog total');
+assert.equal(catalog.tools.length, 2265, 'catalog total');
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record missing');
 assert.equal(record.name, 'Altitude Oxygen Calculator');
