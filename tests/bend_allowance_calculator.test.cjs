@@ -176,7 +176,7 @@ assert.ok(checked > 300, `checked only ${checked} valid parts`);
 
 // Catalog integrity and recorded cases.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2284, 'catalog total');
+assert.equal(catalog.tools.length, 2285, 'catalog total');
 const record = catalog.tools.find((tool) => tool.slug === 'bend-allowance-calculator');
 assert.ok(record, 'catalog record');
 assert.equal(record.name, 'Sheet Metal Bend Allowance Calculator');
@@ -190,7 +190,7 @@ assert.ok(record.tags.includes('mechanical-&-structural-engineering'));
 assert.ok(record.tags.includes('estimation-calculation'));
 assert.ok(record.method.length > 400);
 assert.equal(record.testCases.length, 25);
-assert.equal(catalog.tools.filter((tool) => tool.category === record.category).length, 44, 'Mechanical count');
+assert.equal(catalog.tools.filter((tool) => tool.category === record.category).length, 45, 'Mechanical count');
 
 const names = new Map();
 for (const tool of catalog.tools) {
