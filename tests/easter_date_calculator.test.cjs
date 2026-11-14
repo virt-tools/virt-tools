@@ -235,7 +235,7 @@ assert.equal(failure('2026') === null, true);
 
 // ---- Catalog record and its cases must agree with the core.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2274, 'catalog total');
+assert.equal(catalog.tools.length, 2275, 'catalog total');
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record missing');
 assert.equal(record.name, 'Easter Date Calculator');

@@ -212,7 +212,7 @@ assert.equal(entry.sources.length, 3);
 assert.ok(entry.method.includes('90% title-safe box') && entry.method.includes('2 px'));
 assert.equal(new Set(entry.tags).size, entry.tags.length, 'duplicate tags');
 assert.equal(new Set(entry.aliases).size, entry.aliases.length, 'duplicate aliases');
-assert.equal(catalog.tools.length, 2274);
+assert.equal(catalog.tools.length, 2275);
 const allAliases = new Map();
 for (const tool of catalog.tools) {
   for (const alias of tool.aliases || []) {
