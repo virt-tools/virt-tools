@@ -70,7 +70,7 @@ close(hard.rateLph, 3.4, 1e-9, 'short session rate');
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record present');
-assert.equal(catalog.tools.length, 2273, 'catalog total');
+assert.equal(catalog.tools.length, 2274, 'catalog total');
 assert.equal(record.name, 'Sweat Rate Calculator');
 assert.equal(record.category, 'Health');
 assert.equal(record.subcategory, 'Estimation & calculation');

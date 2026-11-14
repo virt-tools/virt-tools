@@ -185,7 +185,7 @@ assert.equal(failure({ ...base, period: 'Month' }), C.PERIOD_ERROR);
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
 const entry = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(entry, 'catalog entry missing');
-assert.equal(catalog.tools.length, 2273, 'catalog total');
+assert.equal(catalog.tools.length, 2274, 'catalog total');
 assert.equal(entry.category, 'IT & Networking');
 assert.equal(entry.subcategory, 'Estimation & calculation');
 assert.equal(entry.risk, 'low');
