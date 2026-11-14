@@ -162,7 +162,7 @@ const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool
 const matches = catalog.tools.filter((tool) => tool.slug === slug);
 assert.equal(matches.length, 1, 'slug appears exactly once');
 const record = matches[0];
-assert.equal(catalog.tools.length, 2270, 'catalog total');
+assert.equal(catalog.tools.length, 2271, 'catalog total');
 assert.equal(record.name, 'Vertical Jump Power Calculator');
 assert.equal(record.category, 'Health');
 assert.equal(record.subcategory, 'Estimation & calculation');

@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>JSON Patch Applier (RFC 6902) — Virtual Tools</title>
+<meta name="description" content="Apply an RFC 6902 JSON Patch to a JSON document in your browser: add, remove, replace, move, copy and test operations against RFC 6901 pointers, with an operation log or the exact failing operation.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+[hidden]{display:none!important}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:4px 0 6px}
+.field label{display:block;font-size:13px;font-weight:650;margin:0 0 5px;color:var(--text-dim,#9aa3b2);overflow-wrap:anywhere}
+.field textarea{box-sizing:border-box;width:100%;min-height:210px;padding:10px 12px;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg,#14181f);color:var(--text,#e6e6e6);font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;resize:vertical;tab-size:2}
+.field textarea:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:650;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button.secondary{background:transparent;color:var(--accent,#6ea8fe)}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.err{color:var(--bad,#f87171);font-size:14px;margin:10px 0 0;min-height:1.3em;overflow-wrap:anywhere}
+.empty{color:var(--text-dim,#9aa3b2);margin:16px 0}
+.summary{color:var(--text-dim,#9aa3b2);font-size:13.5px;margin:2px 0 14px;line-height:1.5}
+table{width:100%;border-collapse:collapse;margin:0;min-width:480px}
+.table-wrap{overflow-x:auto;margin:0 0 16px;border-radius:8px}
+th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--border,#2a2f3a);font-size:13px;vertical-align:top}
+thead th{font-weight:650;color:var(--text-dim,#9aa3b2);white-space:nowrap}
+td.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:nowrap}
+td.effect{overflow-wrap:anywhere}
+td.num{font-variant-numeric:tabular-nums;color:var(--text-dim,#9aa3b2);width:2.2em}
+h2{font-size:15px;margin:0 0 8px;font-weight:700}
+pre{margin:0;padding:12px 14px;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;overflow:auto;max-height:420px}
+pre:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.note{font-size:13px;color:var(--text-dim,#9aa3b2);line-height:1.55;margin:16px 0 0}
+.note code{background:var(--bg-elev-2,#1e222b);padding:1px 5px;border-radius:4px}
+@media(max-width:640px){.grid{grid-template-columns:1fr}.field textarea{min-height:150px}.actions button{flex:1 1 140px}table{min-width:0}thead{display:none}tbody,tr,td{display:block}tr{padding:7px 0;border-bottom:1px solid var(--border,#2a2f3a)}td{border:none;padding:1px 2px;white-space:normal;overflow-wrap:anywhere}td.num{display:none}tr td:nth-child(2){font-weight:700;color:var(--text-dim,#9aa3b2)}pre{white-space:pre-wrap;overflow-wrap:anywhere}}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>JSON Patch Applier</h1>
+<p>Run an <strong>RFC 6902 JSON Patch</strong> against a JSON document: <code>add</code>, <code>remove</code>, <code>replace</code>, <code>move</code>, <code>copy</code> and <code>test</code>, addressing values with <strong>RFC 6901 JSON Pointers</strong>. Every operation is applied to a copy, so a failing <code>test</code> or a bad pointer leaves the original untouched.</p>
+</div>
+<div class="panel">
+<form id="patch-form" novalidate>
+<div class="grid">
+<div class="field"><label for="document">JSON document</label><textarea id="document" rows="13" spellcheck="false" autocapitalize="off" autocomplete="off">{
+  "user": { "name": "Ada", "roles": ["admin"] },
+  "version": 1,
+  "schema": 0
+}</textarea></div>
+<div class="field"><label for="patch">JSON Patch (RFC 6902)</label><textarea id="patch" rows="13" spellcheck="false" autocapitalize="off" autocomplete="off">[
+  { "op": "test", "path": "/version", "value": 1 },
+  { "op": "replace", "path": "/user/name", "value": "Ada Lovelace" },
+  { "op": "add", "path": "/user/roles/-", "value": "editor" },
+  { "op": "copy", "from": "/user/name", "path": "/lastEditor" },
+  { "op": "move", "from": "/version", "path": "/schema" }
+]</textarea></div>
+</div>
+<div class="actions">
+<button type="submit" id="apply">Apply patch</button>
+<button type="button" class="secondary" id="reset">Reset</button>
+</div>
+</form>
+<p class="err" id="error" role="alert" aria-live="polite"></p>
+<p class="empty" id="empty">Choose Apply patch to run every operation in order and see the patched document.</p>
+<section id="result" hidden>
+<p class="summary" id="summary" role="status" aria-live="polite"></p>
+<div class="table-wrap">
+<table>
+<thead><tr><th scope="col">#</th><th scope="col">Operation</th><th scope="col">Path</th><th scope="col">Effect</th></tr></thead>
+<tbody id="log"></tbody>
+</table>
+</div>
+<h2>Patched document</h2>
+<pre id="output" tabindex="0"></pre>
+</section>
+<p class="note">A JSON Patch is an ordered array of operations, each with an <code>op</code> and a <code>path</code>; <code>move</code> and <code>copy</code> also need <code>from</code>, and <code>add</code>, <code>replace</code> and <code>test</code> need <code>value</code>. Pointers start with <code>/</code>, address array elements by index, use <code>-</code> to append in an <code>add</code>, and escape <code>~</code> as <code>~0</code> and <code>/</code> as <code>~1</code>. Operations are atomic here: the document is copied first, and the first failure stops the run with the exact operation. Everything runs locally in your browser.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* json-patch-core:start */
+var JsonPatchCore = (function(){
+  "use strict";
+  var MAX_DOCUMENT = 200000;
+  var MAX_PATCH = 200000;
+  var MAX_OPERATIONS = 200;
+  var OPS = ["add", "remove", "replace", "move", "copy", "test"];
+  var DEFAULTS = {
+    document: '{\n  "user": { "name": "Ada", "roles": ["admin"] },\n  "version": 1,\n  "schema": 0\n}',
+    patch: '[\n  { "op": "test", "path": "/version", "value": 1 },\n  { "op": "replace", "path": "/user/name", "value": "Ada Lovelace" },\n  { "op": "add", "path": "/user/roles/-", "value": "editor" },\n  { "op": "copy", "from": "/user/name", "path": "/lastEditor" },\n  { "op": "move", "from": "/version", "path": "/schema" }\n]'
+  };
+
+  function fail(message){ throw new Error(message); }
+  function has(value, key){ return Object.prototype.hasOwnProperty.call(value, key); }
+  function isObject(value){ return value !== null && typeof value === "object" && !Array.isArray(value); }
+  function clone(value){ return JSON.parse(JSON.stringify(value)); }
+  function label(path){ return path === "" ? "the document" : path; }
+  function show(value){
+    var text = JSON.stringify(value);
+    if (text === undefined) text = String(value);
+    return text.length > 80 ? text.slice(0, 77) + "..." : text;
+  }
+  function typeName(value){
+    if (value === null) return "null";
+    if (Array.isArray(value)) return "array";
+    return typeof value;
+  }
+  function byteLength(text){
+    if (typeof TextEncoder === "function") return new TextEncoder().encode(text).length;
+    return text.length;
+  }
+
+  function parseDocument(text){
+    if (typeof text !== "string" || text.trim() === "") fail("Document is required.");
+    if (text.length > MAX_DOCUMENT) fail("Document is " + text.length + " characters; the limit is " + MAX_DOCUMENT + ".");
+    try {
+      return JSON.parse(text);
+    } catch (problem) {
+      fail("Document is not valid JSON.");
+    }
+  }
+  function parsePatch(text){
+    if (typeof text !== "string" || text.trim() === "") fail("Patch is required.");
+    if (text.length > MAX_PATCH) fail("Patch is " + text.length + " characters; the limit is " + MAX_PATCH + ".");
+    var patch;
+    try {
+      patch = JSON.parse(text);
+    } catch (problem) {
+      fail("Patch is not valid JSON.");
+    }
+    if (!Array.isArray(patch)) fail("Patch must be a JSON array of operations.");
+    if (patch.length > MAX_OPERATIONS) fail("Patch has " + patch.length + " operations; the limit is " + MAX_OPERATIONS + ".");
+    return patch;
+  }
+
+  function operation(entry, index){
+    if (!isObject(entry)) fail("Operation " + index + ": each operation must be a JSON object.");
+    if (typeof entry.op !== "string") fail("Operation " + index + ": op must be add, remove, replace, move, copy or test.");
+    if (OPS.indexOf(entry.op) < 0) fail("Operation " + index + ": \"" + entry.op + "\" is not a supported operation.");
+    return entry;
+  }
+  function pointer(path, field, index, op){
+    if (typeof path !== "string") fail("Operation " + index + " (" + op + "): " + field + " must be a JSON Pointer string.");
+    if (path !== "" && path.charAt(0) !== "/") fail("Operation " + index + " (" + op + "): " + field + " \"" + path + "\" is not a JSON Pointer.");
+    if (path === "") return [];
+    return path.slice(1).split("/").map(function(token){
+      return token.replace(/~1/g, "/").replace(/~0/g, "~");
+    });
+  }
+  function prefixOf(short, long){
+    if (short.length >= long.length) return false;
+    for (var at = 0; at < short.length; at += 1) if (short[at] !== long[at]) return false;
+    return true;
+  }
+  function sameTokens(left, right){
+    if (left.length !== right.length) return false;
+    for (var at = 0; at < left.length; at += 1) if (left[at] !== right[at]) return false;
+    return true;
+  }
+  function arrayIndex(token, length, op, index, path, append){
+    if (token === "-") {
+      if (append) return length;
+      fail("Operation " + index + " (" + op + "): " + path + " cannot be resolved because \"-\" only appends at the end of an add path.");
+    }
+    if (!/^(0|[1-9][0-9]*)$/.test(token)) fail("Operation " + index + " (" + op + "): " + path + " is not an array index.");
+    var position = Number(token);
+    if (position > (append ? length : length - 1)) {
+      fail("Operation " + index + " (" + op + "): " + path + " is out of range for an array of " + length + " elements.");
+    }
+    return position;
+  }
+  function parentOf(root, tokens, op, index, path){
+    var node = root;
+    for (var at = 0; at < tokens.length - 1; at += 1) {
+      var token = tokens[at];
+      if (Array.isArray(node)) node = node[arrayIndex(token, node.length, op, index, path, false)];
+      else if (isObject(node) && has(node, token)) node = node[token];
+      else fail("Operation " + index + " (" + op + "): " + path + " does not exist.");
+    }
+    return node;
+  }
+  function valueAt(root, tokens, op, index, path){
+    var node = root;
+    for (var at = 0; at < tokens.length; at += 1) {
+      var token = tokens[at];
+      if (Array.isArray(node)) node = node[arrayIndex(token, node.length, op, index, path, false)];
+      else if (isObject(node) && has(node, token)) node = node[token];
+      else fail("Operation " + index + " (" + op + "): " + path + " does not exist.");
+    }
+    return node;
+  }
+  function addTo(root, tokens, value, index, path){
+    if (tokens.length === 0) return { root: value, note: "document replaced" };
+    var parent = parentOf(root, tokens, "add", index, path);
+    var token = tokens[tokens.length - 1];
+    if (Array.isArray(parent)) {
+      var appended = token === "-";
+      parent.splice(arrayIndex(token, parent.length, "add", index, path, true), 0, value);
+      return { root: root, note: appended ? "appended" : "inserted" };
+    }
+    if (isObject(parent)) {
+      parent[token] = value;
+      return { root: root, note: "added" };
+    }
+    fail("Operation " + index + " (add): " + path + " does not exist.");
+  }
+  function removeFrom(root, tokens, index, path){
+    if (tokens.length === 0) fail("Operation " + index + " (remove): the whole document cannot be removed.");
+    var parent = parentOf(root, tokens, "remove", index, path);
+    var token = tokens[tokens.length - 1];
+    if (Array.isArray(parent)) {
+      parent.splice(arrayIndex(token, parent.length, "remove", index, path, false), 1);
+      return { root: root, note: "removed" };
+    }
+    if (isObject(parent) && has(parent, token)) {
+      delete parent[token];
+      return { root: root, note: "removed" };
+    }
+    fail("Operation " + index + " (remove): " + path + " does not exist.");
+  }
+  function replaceAt(root, tokens, value, index, path){
+    if (tokens.length === 0) return { root: value, note: "document replaced" };
+    var parent = parentOf(root, tokens, "replace", index, path);
+    var token = tokens[tokens.length - 1];
+    if (Array.isArray(parent)) {
+      parent[arrayIndex(token, parent.length, "replace", index, path, false)] = value;
+      return { root: root, note: "replaced" };
+    }
+    if (isObject(parent) && has(parent, token)) {
+      parent[token] = value;
+      return { root: root, note: "replaced" };
+    }
+    fail("Operation " + index + " (replace): " + path + " does not exist.");
+  }
+  function same(left, right){
+    if (left === right) return true;
+    if (Array.isArray(left) && Array.isArray(right)) {
+      if (left.length !== right.length) return false;
+      for (var at = 0; at < left.length; at += 1) if (!same(left[at], right[at])) return false;
+      return true;
+    }
+    if (isObject(left) && isObject(right)) {
+      var keys = Object.keys(left);
+      if (keys.length !== Object.keys(right).length) return false;
+      for (var key = 0; key < keys.length; key += 1) {
+        if (!has(right, keys[key]) || !same(left[keys[key]], right[keys[key]])) return false;
+      }
+      return true;
+    }
+    return false;
+  }
+
+  function apply(documentText, patchText){
+    var source = parseDocument(documentText);
+    var patch = parsePatch(patchText);
+    var root = clone(source);
+    var log = [];
+    var tests = 0;
+    for (var step = 0; step < patch.length; step += 1) {
+      var index = step + 1;
+      var entry = operation(patch[step], index);
+      var op = entry.op;
+      var path = entry.path;
+      var tokens = pointer(path, "path", index, op);
+      var note;
+      if (op === "add" || op === "replace" || op === "test") {
+        if (!has(entry, "value")) fail("Operation " + index + " (" + op + "): " + op + " requires a value.");
+      }
+      if (op === "add") {
+        var added = addTo(root, tokens, clone(entry.value), index, path);
+        root = added.root;
+        note = added.note;
+      } else if (op === "remove") {
+        root = removeFrom(root, tokens, index, path).root;
+        note = "removed";
+      } else if (op === "replace") {
+        var replaced = replaceAt(root, tokens, clone(entry.value), index, path);
+        root = replaced.root;
+        note = replaced.note;
+      } else if (op === "test") {
+        var found = valueAt(root, tokens, "test", index, path);
+        if (!same(found, entry.value)) fail("Operation " + index + " (test): " + label(path) + " is " + show(found) + ", not " + show(entry.value) + ".");
+        tests += 1;
+        note = "passed";
+      } else {
+        var from = pointer(entry.from, "from", index, op);
+        if (op === "move") {
+          if (sameTokens(from, tokens)) {
+            note = "unchanged";
+          } else {
+            if (prefixOf(from, tokens)) fail("Operation " + index + " (move): " + label(entry.from) + " must not be a proper prefix of " + label(path) + ".");
+            var moved = valueAt(root, from, "move", index, entry.from);
+            root = removeFrom(root, from, index, entry.from).root;
+            root = addTo(root, tokens, moved, index, path).root;
+            note = "moved";
+          }
+        } else {
+          var copied = clone(valueAt(root, from, "copy", index, entry.from));
+          root = addTo(root, tokens, copied, index, path).root;
+          note = "copied";
+        }
+      }
+      log.push({ op: op, path: path, from: op === "move" || op === "copy" ? entry.from : null, note: note });
+    }
+    var result = JSON.stringify(root, null, 2);
+    return {
+      document: root,
+      result: result,
+      log: log,
+      applied: log.length,
+      tests: tests,
+      bytes: byteLength(result),
+      rootType: typeName(root)
+    };
+  }
+
+  return {
+    DEFAULTS: DEFAULTS,
+    OPS: OPS,
+    MAX_DOCUMENT: MAX_DOCUMENT,
+    MAX_PATCH: MAX_PATCH,
+    MAX_OPERATIONS: MAX_OPERATIONS,
+    apply: apply
+  };
+}());
+/* json-patch-core:end */
+(function(){
+  "use strict";
+  var form = document.getElementById("patch-form");
+  var error = document.getElementById("error");
+  var empty = document.getElementById("empty");
+  var result = document.getElementById("result");
+  var summary = document.getElementById("summary");
+  var rows = document.getElementById("log");
+  var output = document.getElementById("output");
+
+  function field(id){ return document.getElementById(id); }
+  function count(value){ return new Intl.NumberFormat("en-US").format(value); }
+  function plural(value, word){ return count(value) + " " + word + (value === 1 ? "" : "s"); }
+  function cell(text, className){
+    var part = document.createElement("td");
+    if (className) part.className = className;
+    part.textContent = text;
+    return part;
+  }
+  function effect(entry){
+    if (entry.from === null) return entry.note;
+    return entry.note + " from " + entry.from;
+  }
+  function render(outcome){
+    summary.textContent = plural(outcome.applied, "operation") + " processed · " + plural(outcome.tests, "test") + " passed · " + count(outcome.bytes) + " bytes · " + outcome.rootType;
+    rows.textContent = "";
+    outcome.log.forEach(function(entry, position){
+      var tr = document.createElement("tr");
+      tr.appendChild(cell(String(position + 1), "num"));
+      tr.appendChild(cell(entry.op, "mono"));
+      tr.appendChild(cell(entry.path === "" ? "(whole document)" : entry.path, "mono"));
+      tr.appendChild(cell(effect(entry), "effect"));
+      rows.appendChild(tr);
+    });
+    output.textContent = outcome.result;
+    empty.hidden = true;
+    result.hidden = false;
+  }
+  function run(){
+    try {
+      var outcome = JsonPatchCore.apply(field("document").value, field("patch").value);
+      error.textContent = "";
+      render(outcome);
+    } catch (problem) {
+      error.textContent = problem.message;
+      result.hidden = true;
+      empty.hidden = false;
+    }
+  }
+  form.addEventListener("submit", function(event){
+    event.preventDefault();
+    run();
+  });
+  document.getElementById("reset").addEventListener("click", function(){
+    field("document").value = JsonPatchCore.DEFAULTS.document;
+    field("patch").value = JsonPatchCore.DEFAULTS.patch;
+    error.textContent = "";
+    run();
+    field("document").focus();
+  });
+  ["document", "patch"].forEach(function(id){
+    field(id).addEventListener("input", function(){
+      if (error.textContent) error.textContent = "";
+    });
+  });
+}());
+</script>
+</body>
+</html>

@@ -127,7 +127,7 @@ assert.equal(C.SYSTEMS.boulders.length, 2);
 
 // Catalog integrity and recorded cases.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2270, 'catalog total');
+assert.equal(catalog.tools.length, 2271, 'catalog total');
 const record = catalog.tools.find((tool) => tool.slug === 'climbing-grade-converter');
 assert.ok(record, 'catalog record');
 assert.equal(record.name, 'Climbing Grade Converter');
