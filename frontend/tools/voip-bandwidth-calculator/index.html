@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="VoIP bandwidth calculator: work out how much bandwidth one call really needs from the codec, packet time, IP version and Ethernet framing, and how many calls fit on a link.">
+<script src="/assets/theme-init.js"></script>
+<title>VoIP Bandwidth Calculator — virt.tools</title>
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+[hidden]{display:none!important}
+.voip-shell{max-width:860px;margin:0 auto}
+.lead,.hint,.detail{color:var(--text-secondary,#8b949e)}
+.hint{font-size:.82rem;line-height:1.4;margin:0}
+.panel{background:var(--surface,#161b22);border:1px solid var(--border,#30363d);border-radius:10px;padding:1rem;margin:1rem 0}
+.field{display:flex;flex-direction:column;gap:.35rem;min-width:0}
+.field label{font-weight:600}
+.field input,.field select{box-sizing:border-box;width:100%;background:var(--background,#0d1117);color:var(--text,#c9d1d9);border:1px solid var(--border,#30363d);border-radius:6px;padding:.55rem;font:inherit;font-size:1rem;min-height:44px}
+.field input{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+.field:focus-within{outline:2px solid var(--accent,#58a6ff);outline-offset:2px;border-radius:8px}
+.field input:focus-visible,.field select:focus-visible,button:focus-visible{outline:2px solid var(--accent,#58a6ff);outline-offset:2px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:.8rem;margin:.8rem 0}
+.actions{display:flex;flex-wrap:wrap;gap:.6rem;margin:.9rem 0 .2rem}
+button{border:1px solid var(--border,#30363d);border-radius:6px;background:var(--surface-raised,#21262d);color:var(--text,#c9d1d9);padding:.58rem .85rem;min-height:44px;font:inherit;font-size:.95rem;cursor:pointer}
+button.primary{border-color:var(--accent,#58a6ff);background:var(--accent-soft,#1e3a5f)}
+button:disabled{opacity:.55;cursor:not-allowed}
+.examples{display:flex;flex-wrap:wrap;gap:.45rem;margin:.55rem 0 0;padding:0;list-style:none}
+.examples button{font-size:.85rem;min-height:44px;padding:.35rem .6rem}
+.copy-btn{font-size:.8rem;min-height:44px;padding:.25rem .55rem;margin-left:.8rem;vertical-align:middle}
+.copy-sub{display:inline-block;margin-left:.5rem;font-size:.8rem;color:var(--text-secondary,#8b949e)}
+.status{min-height:1.4rem;margin:.55rem 0 .3rem}
+.status.ok{color:#3fb950}.status.warn{color:#d29922}.status.error{color:#f85149}.status.info{color:var(--text-secondary,#8b949e)}
+.headline{text-align:center;padding:.6rem 0 .1rem}
+.headline output.big{font:800 clamp(1.4rem,5.4vw,2rem)/1.15 ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--accent,#58a6ff);overflow-wrap:anywhere}
+.headline .cap{display:block;font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:var(--text-secondary,#8b949e);margin-bottom:.3rem}
+.headline .sub{display:block;margin-top:.35rem;font-size:.86rem;color:var(--text-secondary,#8b949e)}
+.table-wrap{overflow-x:auto;margin:.4rem 0 .2rem}
+.sheet{display:table;width:100%;border-collapse:collapse;font-size:.93rem;margin:0}
+.sheet caption{text-align:left;font-size:.82rem;color:var(--text-secondary,#8b949e);padding:0 0 .45rem}
+.sheet th,.sheet td{padding:.45rem .5rem;border-bottom:1px solid var(--border,#30363d);text-align:left;vertical-align:middle}
+.sheet thead th{font-size:.76rem;letter-spacing:.05em;text-transform:uppercase;color:var(--text-secondary,#8b949e);font-weight:600}
+.sheet tbody th{font-weight:600;white-space:nowrap}
+.sheet .num{text-align:right;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+.sheet tr.target th,.sheet tr.target td{color:#58a6ff}
+.sheet tr.target th{font-weight:700}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.7rem;margin:.9rem 0 .2rem}
+.stats div{background:var(--background,#0d1117);border:1px solid var(--border,#30363d);border-radius:8px;padding:.55rem .65rem}
+.stats dt{font-size:.74rem;letter-spacing:.05em;text-transform:uppercase;color:var(--text-secondary,#8b949e);margin:0 0 .2rem}
+.stats dd{margin:0;font:600 .98rem/1.4 ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:anywhere}
+.verdict{margin:.9rem 0 0;padding:.7rem .8rem;border:1px solid var(--border,#30363d);border-left:3px solid var(--accent,#58a6ff);border-radius:6px;background:var(--background,#0d1117)}
+.verdict strong{display:block;margin-bottom:.2rem}
+.verdict p{margin:0;font-size:.92rem;color:var(--text-secondary,#8b949e)}
+.notes{margin:.8rem 0 0;padding-left:1.2rem}
+.notes li{margin:.3rem 0}
+.notes:empty{display:none}
+h2{font-size:1.05rem;margin:.2rem 0 .8rem}
+h2 span{font-weight:500;font-size:.85rem;color:var(--text-secondary,#8b949e)}
+.explain p{margin:.5rem 0}
+.explain ul{margin:.4rem 0 0;padding-left:1.2rem}
+.explain li{margin:.3rem 0}
+.explain code{overflow-wrap:anywhere}
+@media(max-width:600px){
+.panel{padding:.85rem}
+.actions>*{flex:1 1 9rem}
+.copy-btn{margin-left:0;flex:0 0 auto;display:block;margin:.55rem auto 0}
+.copy-sub{display:block;margin:.35rem 0 0}
+.sheet{font-size:.87rem}
+.sheet th,.sheet td{padding:.4rem .3rem}
+.stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+.stats dd{font-size:.9rem}
+}
+</style>
+</head>
+<body><div id="site-header"></div><main class="tool-container"><div class="voip-shell">
+<h1>VoIP Bandwidth Calculator</h1>
+<p class="lead">A voice codec quote such as "8 kb/s" is only the payload. Every packet also carries RTP, UDP, IP and often an Ethernet header, and at twenty milliseconds those headers are a large share of the total. Pick a codec and framing, and this returns the bandwidth one call needs, both directions, and how many calls fit on a link.</p>
+
+<form id="voip-form" novalidate>
+<section class="panel" aria-labelledby="input-title">
+<h2 id="input-title">Codec and framing</h2>
+<div class="grid2">
+<div class="field">
+<label for="codec">Codec</label>
+<select id="codec">
+<option value="g711" selected>G.711 (PCMU/PCMA), 64 kb/s</option>
+<option value="g722">G.722 wideband, 64 kb/s</option>
+<option value="g726">G.726-32, 32 kb/s</option>
+<option value="g729">G.729 (CS-ACELP), 8 kb/s</option>
+</select>
+<p class="hint">the payload rate the phone encodes at</p>
+</div>
+<div class="field">
+<label for="ptime">Packet time (ms)</label>
+<input id="ptime" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" value="20">
+<p class="hint">how much voice rides in each packet</p>
+</div>
+<div class="field">
+<label for="ip">IP version</label>
+<select id="ip">
+<option value="ipv4" selected>IPv4 (20-byte header)</option>
+<option value="ipv6">IPv6 (40-byte header)</option>
+</select>
+<p class="hint">IPv6 adds twenty bytes per packet</p>
+</div>
+<div class="field">
+<label for="layer">Layer 2 framing</label>
+<select id="layer">
+<option value="ethernet" selected>Ethernet, 18 B header and FCS</option>
+<option value="ethernet-preamble">Ethernet incl. preamble and IFG, 38 B</option>
+<option value="none">None, layer 3 view</option>
+</select>
+<p class="hint">what the packet looks like on the wire</p>
+</div>
+<div class="field">
+<label for="capacity">Link capacity (Mb/s)</label>
+<input id="capacity" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="10">
+<p class="hint">used for the call count only</p>
+</div>
+</div>
+<div class="actions">
+<button id="calculate" class="primary" type="submit">Work out the bandwidth</button>
+<button id="reset" type="button">Reset</button>
+</div>
+<ul class="examples" aria-label="Example configurations">
+<li><button type="button" data-example="desk">G.711 desk phone</button></li>
+<li><button type="button" data-example="wan">G.729 on a 2 Mb/s WAN</button></li>
+<li><button type="button" data-example="v6">G.722 over IPv6</button></li>
+<li><button type="button" data-example="long">G.729 at 30 ms</button></li>
+</ul>
+<p id="voip-status" class="status info" role="status" aria-live="polite"></p>
+<p class="hint">Packet times and codec rates are the ones the codec defines; the tool refuses combinations a codec cannot produce.</p>
+</section>
+</form>
+
+<section class="panel" aria-labelledby="result-title">
+<h2 id="result-title">What one call needs <span id="mode-cap"></span></h2>
+<p class="headline"><span class="cap">On the wire, per direction <span id="level-cap"></span></span><output id="bandwidth-out" class="big">—</output><button id="copy" class="copy-btn" type="button" disabled>Copy summary</button><span id="copy-status" class="copy-sub"></span><span class="sub" id="bandwidth-sub"></span></p>
+<dl class="stats">
+<div><dt>Voice per packet</dt><dd><output id="stat-payload">—</output></dd></div>
+<div><dt>Headers per packet</dt><dd><output id="stat-headers">—</output></dd></div>
+<div><dt>Packets per second</dt><dd><output id="stat-pps">—</output></dd></div>
+<div><dt>Layer 3 rate</dt><dd><output id="stat-l3">—</output></dd></div>
+<div><dt>Both directions</dt><dd><output id="stat-bidir">—</output></dd></div>
+<div><dt>Calls on link</dt><dd><output id="stat-calls">—</output></dd></div>
+</dl>
+<div class="verdict"><strong id="verdict-title">—</strong><p id="verdict-text"></p></div>
+<ul class="notes" id="notes"></ul>
+<p class="detail" id="voip-note"></p>
+<div class="table-wrap">
+<table class="sheet">
+<caption>Other packet times for this codec and framing; the highlighted row is the one you asked for</caption>
+<thead><tr><th scope="col">Packet time</th><th scope="col" class="num">Packets/s</th><th scope="col" class="num">Voice bytes</th><th scope="col" class="num">On the wire</th></tr></thead>
+<tbody id="ptime-body"></tbody>
+</table>
+</div>
+</section>
+
+<section class="panel explain" aria-labelledby="how-title">
+<h2 id="how-title">How the bandwidth is worked out</h2>
+<ul>
+<li><strong>Payload follows from the codec and the packet time.</strong> A 64 kb/s codec carries <code>64 × ptime / 8</code> bytes of encoded voice per packet, so twenty milliseconds is 160 bytes. A 10 ms packet carries half of that, and the packet rate doubles to a hundred packets a second.</li>
+<li><strong>Headers do not shrink with the codec.</strong> Each packet adds 12 bytes of RTP, 8 of UDP and 20 of IPv4 (40 for IPv6). Ethernet adds 18 bytes of header and frame check sequence, or 38 if the preamble and inter-frame gap are counted as well. G.711 at 20 ms therefore carries 160 bytes of voice in a 218-byte frame.</li>
+<li><strong>Bandwidth is the frame size times the packet rate.</strong> Fifty packets a second of 218 bytes is 87.2 kb/s on the wire for a 64 kb/s codec, and 80 kb/s if the Ethernet framing is left out. Doubling the link's scope to both directions doubles that figure again.</li>
+<li><strong>Low-bitrate codecs save less than the ratio suggests.</strong> G.729 at 20 ms puts 20 bytes of voice against 58 bytes of headers, so it still needs 31.2 kb/s on Ethernet: the payload fell by eight times, the total by less than three. That is why header compression and packet aggregation matter on narrow links.</li>
+<li><strong>The call count divides the link by both directions.</strong> A call is symmetric, so a link carrying each call in both directions loses twice the per-call figure per call; the result is rounded down, and a single call that does not fit returns zero. Signalling, jitter buffers and protocol overhead on top of RTP are not part of it.</li>
+<li><strong>What it does not do.</strong> No silence suppression, no RTP header compression, no SRTP overhead, no retransmission, no codec lookahead or jitter-buffer delay, no traffic shaping and no variable-rate codecs such as Opus, whose payload size depends on the encoder's setting and mode. Everything runs in your browser with no storage, uploads or network access.</li>
+</ul>
+</section>
+</div></main><script src="/assets/tools.js"></script><script src="/assets/app.js"></script>
+<script>
+/* voip-bandwidth-core:start */
+const VoipBandwidth = (() => {
+  'use strict';
+  const CODECS = {
+    g711: { name: 'G.711 (PCMU/PCMA)', kbps: 64, step: 1, minPtime: 5, maxPtime: 120 },
+    g722: { name: 'G.722 wideband', kbps: 64, step: 1, minPtime: 5, maxPtime: 120 },
+    g726: { name: 'G.726-32', kbps: 32, step: 1, minPtime: 5, maxPtime: 120 },
+    g729: { name: 'G.729 (CS-ACELP)', kbps: 8, step: 10, minPtime: 10, maxPtime: 120 }
+  };
+  const IP_VERSIONS = {
+    ipv4: { name: 'IPv4', bytes: 20 },
+    ipv6: { name: 'IPv6', bytes: 40 }
+  };
+  const LAYERS = {
+    ethernet: { name: 'Ethernet framing', bytes: 18 },
+    'ethernet-preamble': { name: 'Ethernet framing with preamble and IFG', bytes: 38 },
+    none: { name: 'no layer 2 framing', bytes: 0 }
+  };
+  const RTP_BYTES = 12;
+  const UDP_BYTES = 8;
+  const ROWS = [10, 20, 30, 40];
+  const BOUNDS = { ptime: { min: 5, max: 120 }, capacity: { min: 0.1, max: 100000 } };
+  const DEFAULTS = { codec: 'g711', ptime: '20', ip: 'ipv4', layer: 'ethernet', capacity: '10' };
+  const OVERHEAD_LOW = 0.5;
+  const OVERHEAD_HIGH = 0.7;
+  const SIG_DIGITS = 3;
+  const COMPARE_CODEC = 'g711';
+
+  function fail(message) { throw new Error(message); }
+
+  function pick(table, raw, message) {
+    const key = String(raw == null ? '' : raw).trim().toLowerCase();
+    if (!Object.prototype.hasOwnProperty.call(table, key)) fail(message);
+    return key;
+  }
+
+  function parseInteger(raw, message) {
+    const text = String(raw == null ? '' : raw).trim();
+    if (!/^\d{1,3}$/.test(text)) fail(message);
+    return Number(text);
+  }
+
+  function parseDecimal(raw, message) {
+    const text = String(raw == null ? '' : raw).trim();
+    if (!/^\d{1,6}(?:\.\d{1,3})?$/.test(text)) fail(message);
+    return Number(text);
+  }
+
+  function sig(value, digits) {
+    const places = digits == null ? SIG_DIGITS : digits;
+    if (value == null || !isFinite(value)) return '—';
+    if (value === 0) return '0';
+    const sign = value < 0 ? '-' : '';
+    const abs = Math.abs(value);
+    const exponent = Math.floor(Math.log10(abs));
+    const decimals = places - 1 - exponent;
+    if (decimals >= 0) {
+      const scale = Math.pow(10, Math.min(decimals, 6));
+      const scaled = Math.round(abs * scale);
+      return sign + (scaled / scale).toFixed(Math.min(decimals, 6));
+    }
+    const step = Math.pow(10, -decimals);
+    return sign + String(Math.round(abs / step) * step);
+  }
+
+  function rateText(bitsPerSecond) {
+    if (bitsPerSecond == null || !isFinite(bitsPerSecond)) return '—';
+    if (bitsPerSecond >= 1e9) return sig(bitsPerSecond / 1e9) + ' Gb/s';
+    if (bitsPerSecond >= 1e6) return sig(bitsPerSecond / 1e6) + ' Mb/s';
+    if (bitsPerSecond >= 1e3) return sig(bitsPerSecond / 1e3) + ' kb/s';
+    return sig(bitsPerSecond) + ' b/s';
+  }
+
+  function percentText(share) {
+    if (share == null || !isFinite(share)) return '—';
+    return sig(share * 100) + '%';
+  }
+
+  function callCount(capacityMegabits, perCallBidirectionalBits) {
+    if (!isFinite(capacityMegabits) || !isFinite(perCallBidirectionalBits) || perCallBidirectionalBits <= 0) return 0;
+    return Math.floor((capacityMegabits * 1e6) / perCallBidirectionalBits);
+  }
+
+  function sizesFor(codecKey, ptime, ipKey, layerKey) {
+    const codec = CODECS[codecKey];
+    const payloadBytes = (codec.kbps * ptime) / 8;
+    if (!Number.isInteger(payloadBytes) || payloadBytes < 1) {
+      fail('This codec cannot produce a whole number of payload bytes in ' + ptime + ' ms.');
+    }
+    const ipBytes = IP_VERSIONS[ipKey].bytes;
+    const headerBytes = RTP_BYTES + UDP_BYTES + ipBytes;
+    const l3Bytes = payloadBytes + headerBytes;
+    const l2Bytes = LAYERS[layerKey].bytes;
+    const wireBytes = l3Bytes + l2Bytes;
+    const pps = 1000 / ptime;
+    return {
+      payloadBytes: payloadBytes,
+      headerBytes: headerBytes,
+      l2Bytes: l2Bytes,
+      l3Bytes: l3Bytes,
+      wireBytes: wireBytes,
+      pps: pps,
+      payloadBps: payloadBytes * 8 * pps,
+      l3Bps: l3Bytes * 8 * pps,
+      wireBps: wireBytes * 8 * pps,
+      bidirBps: wireBytes * 8 * pps * 2,
+      overheadShare: (wireBytes - payloadBytes) / wireBytes
+    };
+  }
+
+  function classify(share) {
+    if (share < OVERHEAD_LOW) {
+      return {
+        key: 'payload',
+        title: 'The voice payload is still the larger part',
+        text: 'Under half of each packet is protocol header, so the codec rate is a fair guide to what the call costs. On a congested link the packet rate, not the payload, is what limits how many calls fit.'
+      };
+    }
+    if (share <= OVERHEAD_HIGH) {
+      return {
+        key: 'balanced',
+        title: 'Headers cost more than the voice payload',
+        text: 'Most of each packet is now protocol overhead. Shortening the packet time or dropping to a lower-rate codec will not shrink the headers, so the saving is smaller than the codec ratio suggests.'
+      };
+    }
+    return {
+      key: 'header-heavy',
+      title: 'The headers dominate every packet',
+      text: 'More than 70% of what goes on the wire is header. At this rate the codec choice barely changes the total: longer packet times, header compression or packet aggregation are what actually save bandwidth.'
+    };
+  }
+
+  function compute(input) {
+    const source = input || {};
+    const codecKey = pick(CODECS, source.codec == null ? DEFAULTS.codec : source.codec,
+      'Choose one of the listed codecs.');
+    const codec = CODECS[codecKey];
+    const ptime = parseInteger(source.ptime == null ? DEFAULTS.ptime : source.ptime,
+      'Enter the packet time in milliseconds.');
+    if (ptime < codec.minPtime || ptime > codec.maxPtime) {
+      fail('Packet time must stay between ' + codec.minPtime + ' and ' + codec.maxPtime + ' ms for ' + codec.name + '.');
+    }
+    if (ptime % codec.step !== 0) {
+      fail(codec.name + ' carries a ' + codec.step + ' ms frame, so the packet time must be a multiple of ' +
+        codec.step + ' ms.');
+    }
+    const ipKey = pick(IP_VERSIONS, source.ip == null ? DEFAULTS.ip : source.ip,
+      'Choose IPv4 or IPv6.');
+    const layerKey = pick(LAYERS, source.layer == null ? DEFAULTS.layer : source.layer,
+      'Choose a layer 2 framing option.');
+    const capacity = parseDecimal(source.capacity == null ? DEFAULTS.capacity : source.capacity,
+      'Enter the link capacity in Mb/s.');
+    if (capacity < BOUNDS.capacity.min || capacity > BOUNDS.capacity.max) {
+      fail('Link capacity must stay between ' + BOUNDS.capacity.min + ' and ' + BOUNDS.capacity.max + ' Mb/s.');
+    }
+
+    const sizes = sizesFor(codecKey, ptime, ipKey, layerKey);
+    const calls = callCount(capacity, sizes.bidirBps);
+    const compareSizes = sizesFor(COMPARE_CODEC, ptime, ipKey, layerKey);
+    const compareCalls = callCount(capacity, compareSizes.bidirBps);
+    const verdict = classify(sizes.overheadShare);
+
+    const rows = [];
+    const seen = [];
+    for (const rowPtime of ROWS.concat([ptime])) {
+      if (seen.indexOf(rowPtime) > -1) continue;
+      if (rowPtime < codec.minPtime || rowPtime > codec.maxPtime) continue;
+      if (rowPtime % codec.step !== 0) continue;
+      seen.push(rowPtime);
+      const row = sizesFor(codecKey, rowPtime, ipKey, layerKey);
+      rows.push({
+        ptime: rowPtime,
+        pps: row.pps,
+        payloadBytes: row.payloadBytes,
+        wireBytes: row.wireBytes,
+        wireBps: row.wireBps,
+        isTarget: rowPtime === ptime
+      });
+    }
+    rows.sort((left, right) => left.ptime - right.ptime);
+
+    const notes = [];
+    notes.push('Each packet carries ' + sizes.payloadBytes + ' bytes of voice against ' + sizes.headerBytes +
+      ' bytes of RTP, UDP and ' + IP_VERSIONS[ipKey].name + ' headers' +
+      (sizes.l2Bytes > 0 ? ' plus ' + sizes.l2Bytes + ' bytes of ' + LAYERS[layerKey].name : '') +
+      ', so ' + percentText(sizes.overheadShare) + ' of the traffic is overhead.');
+    notes.push('At ' + ptime + ' ms the phone sends ' + sig(sizes.pps) + ' packets per second in each direction: ' +
+      rateText(sizes.wireBps) + ' on the wire, ' + rateText(sizes.l3Bps) + ' at layer 3, and ' +
+      rateText(sizes.bidirBps) + ' once both directions are counted.');
+    const firstRow = rows[0];
+    const lastRow = rows[rows.length - 1];
+    notes.push('Packet time is the lever: the same codec needs ' + rateText(firstRow.wireBps) + ' at ' +
+      firstRow.ptime + ' ms against ' + rateText(lastRow.wireBps) + ' at ' + lastRow.ptime +
+      ' ms, because the headers are paid once per packet either way.');
+    notes.push(capacity + ' Mb/s carries ' + calls + ' calls of ' + codec.name + ' at ' + ptime + ' ms with both directions on the link' +
+      (compareCalls !== calls ? ', against ' + compareCalls + ' calls of G.711 with the same framing and packet time.' : '.'));
+    notes.push('Payload rate alone is a poor guide: ' + codec.kbps + ' kb/s of voice becomes ' +
+      sig(sizes.wireBps / 1000) + ' kb/s of wire traffic, a factor of ' + sig(sizes.wireBps / (codec.kbps * 1000)) + '.');
+    notes.push('Not modelled: SRTP adds its own authentication and encryption bytes, silence suppression removes some packets, header compression removes some header bytes, and Opus and other variable-rate codecs depend on the encoder setting.');
+    const warnings = [];
+    if (calls === 0) {
+      warnings.push('A single call does not fit on ' + capacity + ' Mb/s with both directions counted; raise the capacity or shorten the packet time.');
+    }
+    if (sizes.overheadShare >= OVERHEAD_HIGH) {
+      warnings.push('Header overhead above 70% means header compression or packet aggregation, not a lower-rate codec, is what saves bandwidth on this link.');
+    }
+    for (const line of warnings) notes.push(line);
+
+    return {
+      codec: codecKey,
+      codecName: codec.name,
+      codecKbps: codec.kbps,
+      ptime: ptime,
+      ip: ipKey,
+      ipName: IP_VERSIONS[ipKey].name,
+      layer: layerKey,
+      layerName: LAYERS[layerKey].name,
+      capacity: capacity,
+      payloadBytes: sizes.payloadBytes,
+      headerBytes: sizes.headerBytes,
+      l2Bytes: sizes.l2Bytes,
+      l3Bytes: sizes.l3Bytes,
+      wireBytes: sizes.wireBytes,
+      pps: sizes.pps,
+      payloadBps: sizes.payloadBps,
+      l3Bps: sizes.l3Bps,
+      wireBps: sizes.wireBps,
+      bidirBps: sizes.bidirBps,
+      overheadShare: sizes.overheadShare,
+      calls: calls,
+      compareCodec: COMPARE_CODEC,
+      compareCalls: compareCalls,
+      rows: rows,
+      verdict: verdict,
+      notes: notes,
+      warnings: warnings
+    };
+  }
+
+  return {
+    CODECS: CODECS,
+    IP_VERSIONS: IP_VERSIONS,
+    LAYERS: LAYERS,
+    RTP_BYTES: RTP_BYTES,
+    UDP_BYTES: UDP_BYTES,
+    ROWS: ROWS,
+    BOUNDS: BOUNDS,
+    DEFAULTS: DEFAULTS,
+    OVERHEAD_LOW: OVERHEAD_LOW,
+    OVERHEAD_HIGH: OVERHEAD_HIGH,
+    SIG_DIGITS: SIG_DIGITS,
+    COMPARE_CODEC: COMPARE_CODEC,
+    sig: sig,
+    rateText: rateText,
+    percentText: percentText,
+    callCount: callCount,
+    sizesFor: sizesFor,
+    classify: classify,
+    compute: compute
+  };
+})();
+/* voip-bandwidth-core:end */
+(() => {
+'use strict';
+const $ = (id) => document.getElementById(id);
+const form = $('voip-form');
+const codecSelect = $('codec');
+const ptimeInput = $('ptime');
+const ipSelect = $('ip');
+const layerSelect = $('layer');
+const capacityInput = $('capacity');
+const status = $('voip-status');
+const ptimeBody = $('ptime-body');
+const notes = $('notes');
+const note = $('voip-note');
+const modeCap = $('mode-cap');
+const levelCap = $('level-cap');
+const bandwidthOut = $('bandwidth-out');
+const bandwidthSub = $('bandwidth-sub');
+const statPayload = $('stat-payload');
+const statHeaders = $('stat-headers');
+const statPps = $('stat-pps');
+const statL3 = $('stat-l3');
+const statBidir = $('stat-bidir');
+const statCalls = $('stat-calls');
+const verdictTitle = $('verdict-title');
+const verdictText = $('verdict-text');
+const copyButton = $('copy');
+const copyStatus = $('copy-status');
+let lastResult = null;
+
+const PRESETS = {
+  desk: { codec: 'g711', ptime: '20', ip: 'ipv4', layer: 'ethernet', capacity: '10' },
+  wan: { codec: 'g729', ptime: '20', ip: 'ipv4', layer: 'ethernet', capacity: '2' },
+  v6: { codec: 'g722', ptime: '20', ip: 'ipv6', layer: 'ethernet', capacity: '100' },
+  long: { codec: 'g729', ptime: '30', ip: 'ipv4', layer: 'ethernet', capacity: '1' }
+};
+const DEFAULTS = { codec: 'g711', ptime: '20', ip: 'ipv4', layer: 'ethernet', capacity: '10' };
+
+function setStatus(message, kind) {
+  status.textContent = message;
+  status.className = 'status ' + (kind || 'info');
+}
+
+function clearOutputs() {
+  lastResult = null;
+  bandwidthOut.textContent = '—';
+  bandwidthSub.textContent = '';
+  modeCap.textContent = '';
+  levelCap.textContent = '';
+  for (const node of [statPayload, statHeaders, statPps, statL3, statBidir, statCalls]) {
+    node.textContent = '—';
+  }
+  verdictTitle.textContent = '—';
+  verdictText.textContent = '';
+  ptimeBody.replaceChildren();
+  notes.replaceChildren();
+  note.textContent = '';
+  copyButton.disabled = true;
+  copyStatus.textContent = '';
+}
+
+function renderTable(result) {
+  ptimeBody.replaceChildren();
+  for (const row of result.rows) {
+    const tr = document.createElement('tr');
+    if (row.isTarget) {
+      tr.className = 'target';
+      tr.setAttribute('aria-current', 'true');
+    }
+    const ptime = document.createElement('th');
+    ptime.scope = 'row';
+    ptime.textContent = row.ptime + ' ms';
+    const pps = document.createElement('td');
+    pps.className = 'num';
+    pps.textContent = VoipBandwidth.sig(row.pps);
+    const voice = document.createElement('td');
+    voice.className = 'num';
+    voice.textContent = row.payloadBytes + ' B';
+    const wire = document.createElement('td');
+    wire.className = 'num';
+    wire.textContent = VoipBandwidth.rateText(row.wireBps);
+    tr.append(ptime, pps, voice, wire);
+    ptimeBody.append(tr);
+  }
+}
+
+function showResult(result) {
+  lastResult = result;
+  modeCap.textContent = result.codecName;
+  levelCap.textContent = 'at ' + result.ptime + ' ms, ' + result.ipName + ', ' + result.layerName;
+  bandwidthOut.textContent = VoipBandwidth.rateText(result.wireBps);
+  bandwidthSub.textContent = result.wireBytes + '-byte packets at ' + VoipBandwidth.sig(result.pps) +
+    ' packets/s, ' + VoipBandwidth.percentText(result.overheadShare) + ' overhead';
+  statPayload.textContent = result.payloadBytes + ' B';
+  statHeaders.textContent = result.headerBytes + ' B' + (result.l2Bytes > 0 ? ' + ' + result.l2Bytes + ' B' : '');
+  statPps.textContent = VoipBandwidth.sig(result.pps) + ' /s';
+  statL3.textContent = VoipBandwidth.rateText(result.l3Bps);
+  statBidir.textContent = VoipBandwidth.rateText(result.bidirBps);
+  statCalls.textContent = result.calls + ' on ' + result.capacity + ' Mb/s';
+  verdictTitle.textContent = result.verdict.title;
+  verdictText.textContent = result.verdict.text;
+  renderTable(result);
+  notes.replaceChildren();
+  for (const line of result.notes) {
+    const item = document.createElement('li');
+    item.textContent = line;
+    notes.append(item);
+  }
+  note.textContent = 'One ' + result.codecName + ' call at ' + result.ptime + ' ms needs ' +
+    VoipBandwidth.rateText(result.wireBps) + ' in each direction (' + VoipBandwidth.rateText(result.bidirBps) +
+    ' both ways), so ' + result.capacity + ' Mb/s carries ' + result.calls + ' calls with both directions counted.';
+  copyButton.disabled = false;
+  const line = result.codecName + ' at ' + result.ptime + ' ms over ' + result.ipName + ' with ' + result.layerName +
+    ': ' + result.wireBytes + ' bytes per packet, ' + VoipBandwidth.sig(result.pps) + ' packets/s, ' +
+    VoipBandwidth.rateText(result.wireBps) + ' per direction and ' + VoipBandwidth.rateText(result.bidirBps) +
+    ' both ways; ' + result.capacity + ' Mb/s carries ' + result.calls + ' calls.';
+  setStatus(line,
+    result.warnings.length > 0 || result.verdict.key === 'header-heavy' ? 'warn' : 'ok');
+}
+
+function readForm() {
+  return {
+    codec: codecSelect.value,
+    ptime: ptimeInput.value,
+    ip: ipSelect.value,
+    layer: layerSelect.value,
+    capacity: capacityInput.value
+  };
+}
+
+function render() {
+  try {
+    showResult(VoipBandwidth.compute(readForm()));
+  } catch (error) {
+    clearOutputs();
+    setStatus(error.message || String(error), 'error');
+  }
+}
+
+function applyPreset(key) {
+  const preset = PRESETS[key];
+  if (!preset) return;
+  codecSelect.value = preset.codec;
+  ptimeInput.value = preset.ptime;
+  ipSelect.value = preset.ip;
+  layerSelect.value = preset.layer;
+  capacityInput.value = preset.capacity;
+  render();
+  codecSelect.focus();
+}
+
+form.addEventListener('submit', (event) => {
+  event.preventDefault();
+  render();
+});
+for (const input of [ptimeInput, capacityInput]) {
+  input.addEventListener('input', render);
+}
+for (const select of [codecSelect, ipSelect, layerSelect]) {
+  select.addEventListener('change', render);
+}
+document.querySelectorAll('.examples button').forEach((button) => {
+  button.addEventListener('click', () => applyPreset(button.getAttribute('data-example')));
+});
+$('reset').addEventListener('click', () => {
+  codecSelect.value = DEFAULTS.codec;
+  ptimeInput.value = DEFAULTS.ptime;
+  ipSelect.value = DEFAULTS.ip;
+  layerSelect.value = DEFAULTS.layer;
+  capacityInput.value = DEFAULTS.capacity;
+  render();
+  codecSelect.focus();
+});
+copyButton.addEventListener('click', async () => {
+  if (!lastResult) return;
+  const result = lastResult;
+  const payload = 'VoIP bandwidth: ' + result.codecName + ' at ' + result.ptime + ' ms, ' + result.ipName + ', ' +
+    result.layerName + ' — ' + result.payloadBytes + ' bytes of voice plus ' + result.headerBytes +
+    ' bytes of headers per packet, ' + VoipBandwidth.sig(result.pps) + ' packets/s, ' +
+    VoipBandwidth.rateText(result.wireBps) + ' per direction, ' + VoipBandwidth.rateText(result.bidirBps) +
+    ' both ways, ' + result.calls + ' calls on ' + result.capacity + ' Mb/s.';
+  try {
+    await navigator.clipboard.writeText(payload);
+    copyStatus.textContent = 'Summary copied.';
+  } catch (error) {
+    copyStatus.textContent = 'Copy failed; select the summary and copy it manually.';
+  }
+});
+
+render();
+})();
+</script>
+</body>
+</html>
