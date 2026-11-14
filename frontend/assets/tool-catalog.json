@@ -174938,6 +174938,472 @@
         }
       ],
       "listed": true
+    },
+    {
+      "slug": "memory-overcommit-planner",
+      "name": "Memory Overcommit Planner",
+      "description": "Plan Linux commit-limit headroom: model vm.overcommit_memory modes 0, 1 and 2, derive CommitLimit from RAM, swap and vm.overcommit_ratio, and see whether a new allocation is admitted, refused with ENOMEM, or accepted into overcommit where the OOM killer decides.",
+      "category": "System",
+      "legacyCategory": null,
+      "subcategory": "Planning",
+      "tags": [
+        "system",
+        "memory",
+        "overcommit",
+        "commit-limit",
+        "oom-killer",
+        "capacity-planning",
+        "linux"
+      ],
+      "aliases": [
+        "Linux Memory Overcommit Planner",
+        "linux memory overcommit planner",
+        "CommitLimit Calculator",
+        "commitlimit calculator",
+        "vm.overcommit_memory Planner",
+        "vm.overcommit_memory planner",
+        "Overcommit Ratio Calculator",
+        "overcommit ratio calculator"
+      ],
+      "icon": "⚖️",
+      "added": "2026-11-14T14:40:00Z",
+      "risk": "low",
+      "maturity": "draft",
+      "reviewedAt": null,
+      "method": "Linux accounts for committed virtual memory rather than resident pages, so admission of a new mapping depends on the overcommit mode and on CommitLimit, both visible in /proc/meminfo. The RAM share available for commit is RAM multiplied by vm.overcommit_ratio and divided by 100, rounded half up to whole MiB, because the kernel works in pages and the tool reports whole MiB. In mode 2 (never overcommit) CommitLimit is that RAM share plus swap, and the kernel refuses a request that would push Committed_AS past it: the allocation fails with ENOMEM and nothing is killed. In mode 0 (heuristic) no arithmetic limit is enforced; the kernel only rejects obviously excessive requests, so the tool reports RAM plus swap as the reference ceiling at which the workload stops being supportable and labels anything above it as oversubscribed. In mode 1 (always overcommit) no limit exists, so the ceiling is reported for context only, required swap is not applicable, and any allocation is admitted while the OOM killer arbitrates once pages are touched. Committed after this request is current Committed_AS plus the new commit; headroom is the mode ceiling minus Committed_AS before and after; utilisation is committed after divided by the ceiling as a percentage to one decimal, reported as 100 % when the ceiling is zero and anything is committed; the largest request that still fits is the headroom before the request, floored at zero. The swap top-up needed to admit the request is the excess of committed memory over the RAM share (mode 2) or over RAM (mode 0) minus existing swap, floored at zero, because extra swap raises CommitLimit byte for byte. Verdict bands use the unrounded utilisation: refused in mode 2 when committed after exceeds the limit, oversubscribed in modes 0 and 1, tight from 85 %, watch from 70 %, otherwise healthy headroom. Inputs are whole MiB: RAM and swap 1-16,777,216 and 0-16,777,216, the overcommit ratio 1-100, Committed_AS 0-33,554,432 and the new commit 1-33,554,432; only mode 2 uses the ratio. This is a planning model of kernel accounting for a host you describe, not a reading of any host; it does not change sysctl values, and it ignores per-cgroup memory limits, memlock rlimits and hugetlb reservations. Everything runs in the browser.",
+      "sources": [
+        {
+          "title": "Linux kernel documentation: overcommit accounting (vm.overcommit_memory modes and CommitLimit)",
+          "url": "https://www.kernel.org/doc/Documentation/vm/overcommit-accounting.rst"
+        },
+        {
+          "title": "proc(5): /proc/meminfo CommitLimit and Committed_AS",
+          "url": "https://man7.org/linux/man-pages/man5/proc.5.html"
+        },
+        {
+          "title": "Linux kernel documentation: admin-guide sysctl vm.overcommit_memory and vm.overcommit_ratio",
+          "url": "https://docs.kernel.org/admin-guide/sysctl/vm.html"
+        }
+      ],
+      "testCases": [
+        {
+          "name": "Default strict sample",
+          "kind": "golden",
+          "input": {
+            "ramMib": 16384,
+            "swapMib": 4096,
+            "mode": "2",
+            "ratioPercent": 50,
+            "committedMib": 4096,
+            "requestMib": 4096
+          },
+          "expected": {
+            "ratioShareMib": 8192,
+            "strictLimitMib": 12288,
+            "admissionLimitMib": 12288,
+            "ceilingMib": 12288,
+            "committedAfterMib": 8192,
+            "headroomBeforeMib": 8192,
+            "headroomAfterMib": 4096,
+            "utilisationPercent": 66.7,
+            "maxRequestMib": 8192,
+            "requiredSwapMib": 0,
+            "swapTopUpMib": 0,
+            "fits": true,
+            "status": "healthy"
+          }
+        },
+        {
+          "name": "Heuristic mode past RAM plus swap",
+          "kind": "golden",
+          "input": {
+            "ramMib": 16384,
+            "swapMib": 4096,
+            "mode": "0",
+            "ratioPercent": 50,
+            "committedMib": 20000,
+            "requestMib": 4096
+          },
+          "expected": {
+            "ratioShareMib": 8192,
+            "strictLimitMib": 12288,
+            "admissionLimitMib": null,
+            "ceilingMib": 20480,
+            "committedAfterMib": 24096,
+            "headroomBeforeMib": 480,
+            "headroomAfterMib": -3616,
+            "utilisationPercent": 117.7,
+            "maxRequestMib": 480,
+            "requiredSwapMib": 7712,
+            "swapTopUpMib": 3616,
+            "fits": false,
+            "status": "oversubscribed"
+          }
+        },
+        {
+          "name": "Strict refusal without swap",
+          "kind": "golden",
+          "input": {
+            "ramMib": 8192,
+            "swapMib": 0,
+            "mode": "2",
+            "ratioPercent": 100,
+            "committedMib": 8000,
+            "requestMib": 1000
+          },
+          "expected": {
+            "ratioShareMib": 8192,
+            "strictLimitMib": 8192,
+            "admissionLimitMib": 8192,
+            "ceilingMib": 8192,
+            "committedAfterMib": 9000,
+            "headroomBeforeMib": 192,
+            "headroomAfterMib": -808,
+            "utilisationPercent": 109.9,
+            "maxRequestMib": 192,
+            "requiredSwapMib": 808,
+            "swapTopUpMib": 808,
+            "fits": false,
+            "status": "refused"
+          }
+        },
+        {
+          "name": "Tight strict headroom",
+          "kind": "golden",
+          "input": {
+            "ramMib": 32768,
+            "swapMib": 8192,
+            "mode": "2",
+            "ratioPercent": 25,
+            "committedMib": 12000,
+            "requestMib": 2000
+          },
+          "expected": {
+            "ratioShareMib": 8192,
+            "strictLimitMib": 16384,
+            "admissionLimitMib": 16384,
+            "ceilingMib": 16384,
+            "committedAfterMib": 14000,
+            "headroomBeforeMib": 4384,
+            "headroomAfterMib": 2384,
+            "utilisationPercent": 85.4,
+            "maxRequestMib": 4384,
+            "requiredSwapMib": 5808,
+            "swapTopUpMib": 0,
+            "fits": true,
+            "status": "tight"
+          }
+        },
+        {
+          "name": "Always-overcommit workload",
+          "kind": "golden",
+          "input": {
+            "ramMib": 65536,
+            "swapMib": 0,
+            "mode": "1",
+            "ratioPercent": 50,
+            "committedMib": 100000,
+            "requestMib": 50000
+          },
+          "expected": {
+            "ratioShareMib": 32768,
+            "strictLimitMib": 32768,
+            "admissionLimitMib": null,
+            "ceilingMib": 65536,
+            "committedAfterMib": 150000,
+            "headroomBeforeMib": -34464,
+            "headroomAfterMib": -84464,
+            "utilisationPercent": 228.9,
+            "maxRequestMib": 0,
+            "requiredSwapMib": null,
+            "swapTopUpMib": null,
+            "fits": true,
+            "status": "oversubscribed"
+          }
+        },
+        {
+          "name": "Swap-backed strict limit reached",
+          "kind": "golden",
+          "input": {
+            "ramMib": 4096,
+            "swapMib": 8192,
+            "mode": "2",
+            "ratioPercent": 100,
+            "committedMib": 8192,
+            "requestMib": 4096
+          },
+          "expected": {
+            "ratioShareMib": 4096,
+            "strictLimitMib": 12288,
+            "admissionLimitMib": 12288,
+            "ceilingMib": 12288,
+            "committedAfterMib": 12288,
+            "headroomBeforeMib": 4096,
+            "headroomAfterMib": 0,
+            "utilisationPercent": 100,
+            "maxRequestMib": 4096,
+            "requiredSwapMib": 8192,
+            "swapTopUpMib": 0,
+            "fits": true,
+            "status": "tight"
+          }
+        },
+        {
+          "name": "Smallest RAM and ratio",
+          "kind": "boundary",
+          "input": {
+            "ramMib": 1,
+            "swapMib": 0,
+            "mode": "2",
+            "ratioPercent": 100,
+            "committedMib": 0,
+            "requestMib": 1
+          },
+          "expected": {
+            "ratioShareMib": 1,
+            "strictLimitMib": 1,
+            "ceilingMib": 1,
+            "committedAfterMib": 1,
+            "headroomAfterMib": 0,
+            "utilisationPercent": 100,
+            "maxRequestMib": 1,
+            "swapTopUpMib": 0,
+            "fits": true,
+            "status": "tight"
+          }
+        },
+        {
+          "name": "Zero commit limit",
+          "kind": "boundary",
+          "input": {
+            "ramMib": 1,
+            "swapMib": 0,
+            "mode": "2",
+            "ratioPercent": 1,
+            "committedMib": 0,
+            "requestMib": 1
+          },
+          "expected": {
+            "ratioShareMib": 0,
+            "strictLimitMib": 0,
+            "ceilingMib": 0,
+            "committedAfterMib": 1,
+            "headroomBeforeMib": 0,
+            "headroomAfterMib": -1,
+            "utilisationPercent": 100,
+            "maxRequestMib": 0,
+            "requiredSwapMib": 1,
+            "swapTopUpMib": 1,
+            "fits": false,
+            "status": "refused"
+          }
+        },
+        {
+          "name": "Largest supported RAM and swap",
+          "kind": "boundary",
+          "input": {
+            "ramMib": 16777216,
+            "swapMib": 16777216,
+            "mode": "2",
+            "ratioPercent": 100,
+            "committedMib": 0,
+            "requestMib": 1
+          },
+          "expected": {
+            "ratioShareMib": 16777216,
+            "strictLimitMib": 33554432,
+            "ceilingMib": 33554432,
+            "committedAfterMib": 1,
+            "headroomBeforeMib": 33554432,
+            "headroomAfterMib": 33554431,
+            "utilisationPercent": 0,
+            "maxRequestMib": 33554432,
+            "swapTopUpMib": 0,
+            "fits": true,
+            "status": "healthy"
+          }
+        },
+        {
+          "name": "Always mode on an idle host",
+          "kind": "boundary",
+          "input": {
+            "ramMib": 1024,
+            "swapMib": 0,
+            "mode": "1",
+            "ratioPercent": 50,
+            "committedMib": 0,
+            "requestMib": 1
+          },
+          "expected": {
+            "ratioShareMib": 512,
+            "strictLimitMib": 512,
+            "admissionLimitMib": null,
+            "ceilingMib": 1024,
+            "committedAfterMib": 1,
+            "headroomBeforeMib": 1024,
+            "headroomAfterMib": 1023,
+            "utilisationPercent": 0.1,
+            "maxRequestMib": 1024,
+            "requiredSwapMib": null,
+            "swapTopUpMib": null,
+            "fits": true,
+            "status": "healthy"
+          }
+        },
+        {
+          "name": "Exactly at the strict limit",
+          "kind": "boundary",
+          "input": {
+            "ramMib": 2048,
+            "swapMib": 0,
+            "mode": "2",
+            "ratioPercent": 50,
+            "committedMib": 1000,
+            "requestMib": 24
+          },
+          "expected": {
+            "ratioShareMib": 1024,
+            "strictLimitMib": 1024,
+            "ceilingMib": 1024,
+            "committedAfterMib": 1024,
+            "headroomBeforeMib": 24,
+            "headroomAfterMib": 0,
+            "utilisationPercent": 100,
+            "maxRequestMib": 24,
+            "swapTopUpMib": 0,
+            "fits": true,
+            "status": "tight"
+          }
+        },
+        {
+          "name": "Ratio share rounds half up",
+          "kind": "boundary",
+          "input": {
+            "ramMib": 3,
+            "swapMib": 0,
+            "mode": "2",
+            "ratioPercent": 50,
+            "committedMib": 0,
+            "requestMib": 1
+          },
+          "expected": {
+            "ratioShareMib": 2,
+            "strictLimitMib": 2,
+            "ceilingMib": 2,
+            "committedAfterMib": 1,
+            "headroomAfterMib": 1,
+            "utilisationPercent": 50,
+            "maxRequestMib": 2,
+            "fits": true,
+            "status": "healthy"
+          }
+        },
+        {
+          "name": "Empty RAM",
+          "kind": "validation",
+          "input": {
+            "ramMib": "",
+            "swapMib": 0,
+            "mode": "2",
+            "ratioPercent": 50,
+            "committedMib": 0,
+            "requestMib": 1
+          },
+          "expectedError": "Physical RAM is required."
+        },
+        {
+          "name": "Fractional RAM",
+          "kind": "validation",
+          "input": {
+            "ramMib": 1.5,
+            "swapMib": 0,
+            "mode": "2",
+            "ratioPercent": 50,
+            "committedMib": 0,
+            "requestMib": 1
+          },
+          "expectedError": "Physical RAM must be a whole number between 1 and 16,777,216."
+        },
+        {
+          "name": "Negative swap",
+          "kind": "validation",
+          "input": {
+            "ramMib": 1024,
+            "swapMib": -1,
+            "mode": "2",
+            "ratioPercent": 50,
+            "committedMib": 0,
+            "requestMib": 1
+          },
+          "expectedError": "Swap must be a whole number between 0 and 16,777,216."
+        },
+        {
+          "name": "Unsupported overcommit mode",
+          "kind": "validation",
+          "input": {
+            "ramMib": 1024,
+            "swapMib": 0,
+            "mode": "3",
+            "ratioPercent": 50,
+            "committedMib": 0,
+            "requestMib": 1
+          },
+          "expectedError": "Choose overcommit mode 0, 1 or 2."
+        },
+        {
+          "name": "Zero ratio",
+          "kind": "validation",
+          "input": {
+            "ramMib": 1024,
+            "swapMib": 0,
+            "mode": "2",
+            "ratioPercent": 0,
+            "committedMib": 0,
+            "requestMib": 1
+          },
+          "expectedError": "Overcommit ratio must be a whole number between 1 and 100."
+        },
+        {
+          "name": "Non-numeric committed memory",
+          "kind": "validation",
+          "input": {
+            "ramMib": 1024,
+            "swapMib": 0,
+            "mode": "2",
+            "ratioPercent": 50,
+            "committedMib": "abc",
+            "requestMib": 1
+          },
+          "expectedError": "Currently committed memory must be a whole number between 0 and 33,554,432."
+        },
+        {
+          "name": "Zero request",
+          "kind": "validation",
+          "input": {
+            "ramMib": 1024,
+            "swapMib": 0,
+            "mode": "2",
+            "ratioPercent": 50,
+            "committedMib": 0,
+            "requestMib": 0
+          },
+          "expectedError": "New workload commit must be a whole number between 1 and 33,554,432."
+        },
+        {
+          "name": "Request above the supported ceiling",
+          "kind": "validation",
+          "input": {
+            "ramMib": 1024,
+            "swapMib": 0,
+            "mode": "2",
+            "ratioPercent": 50,
+            "committedMib": 0,
+            "requestMib": 33554433
+          },
+          "expectedError": "New workload commit must be a whole number between 1 and 33,554,432."
+        }
+      ],
+      "listed": true
     }
   ]
 }

@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Memory Overcommit Planner — Virtual Tools</title>
+<meta name="description" content="Plan Linux commit-limit headroom: model vm.overcommit_memory 0, 1 and 2, CommitLimit from RAM, swap and overcommit_ratio, and see whether a new allocation is refused with ENOMEM or risks the OOM killer. Runs locally.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+[hidden]{display:none!important}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;margin:4px 0 6px}
+.field label{display:block;font-size:13px;font-weight:650;margin:0 0 5px;color:var(--text-dim,#9aa3b2);overflow-wrap:anywhere}
+.field input,.field select{box-sizing:border-box;width:100%;min-height:44px;padding:9px 11px;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg,#14181f);color:var(--text,#e6e6e6);font:inherit;font-variant-numeric:tabular-nums}
+.field input:focus-visible,.field select:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:650;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button.secondary{background:transparent;color:var(--accent,#6ea8fe)}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.err{color:var(--bad,#f87171);font-size:14px;margin:10px 0 0;min-height:1.3em}
+.empty{color:var(--text-dim,#9aa3b2);margin:16px 0}
+.verdict{display:inline-block;padding:5px 13px;border-radius:999px;font-size:13px;font-weight:750;letter-spacing:.02em;border:1px solid var(--border,#2a2f3a)}
+.verdict[data-state="healthy"]{border-color:#2f9e64;background:rgba(47,158,100,.14);color:#5fd394}
+.verdict[data-state="watch"]{border-color:#c79a2b;background:rgba(199,154,43,.14);color:#e3bd63}
+.verdict[data-state="tight"]{border-color:#d97a2b;background:rgba(217,122,43,.14);color:#f0a469}
+.verdict[data-state="refused"],.verdict[data-state="oversubscribed"]{border-color:#c2453f;background:rgba(194,69,63,.16);color:#f08c86}
+.big{font-size:clamp(2rem,7vw,2.8rem);font-weight:800;font-variant-numeric:tabular-nums;text-align:center;padding:10px 0 0;overflow-wrap:anywhere}
+.big small{font-size:.42em;font-weight:650;color:var(--text-dim,#9aa3b2);margin-left:2px}
+.summary{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13.5px;margin:6px 0 16px;line-height:1.5}
+table{width:100%;border-collapse:collapse;margin:0 0 14px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border,#2a2f3a);font-size:13.5px;vertical-align:top}
+th{font-weight:600;color:var(--text-dim,#9aa3b2);width:46%}
+td{font-family:ui-monospace,monospace;font-variant-numeric:tabular-nums}
+tr.hi td{color:var(--bad,#f87171);font-weight:700}
+.advice{font-size:13.5px;line-height:1.6;margin:0;padding:12px 14px;border-left:3px solid var(--accent,#6ea8fe);background:var(--bg-elev,#171a21);border-radius:0 8px 8px 0}
+.note{font-size:13px;color:var(--text-dim,#9aa3b2);line-height:1.55;margin:14px 0 0}
+.note code{background:var(--bg-elev-2,#1e222b);padding:1px 5px;border-radius:4px}
+@media(max-width:480px){.grid{grid-template-columns:1fr 1fr;gap:10px}.actions button{flex:1 1 140px}th{width:54%}th,td{padding:7px 6px}}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>Memory Overcommit Planner</h1>
+<p>Work out a Linux kernel's <strong>commit limit</strong> from RAM, swap and <code>vm.overcommit_ratio</code>, then see whether a new allocation is admitted, refused with <code>ENOMEM</code>, or accepted into overcommit where the OOM killer decides.</p>
+</div>
+<div class="panel">
+<form id="plan-form" novalidate>
+<div class="grid">
+<div class="field"><label for="ram">Physical RAM (MiB)</label><input id="ram" type="number" inputmode="numeric" min="1" max="16777216" step="1" value="16384"></div>
+<div class="field"><label for="swap">Swap (MiB)</label><input id="swap" type="number" inputmode="numeric" min="0" max="16777216" step="1" value="4096"></div>
+<div class="field"><label for="mode">Overcommit mode</label><select id="mode"><option value="0">0 — heuristic</option><option value="1">1 — always overcommit</option><option value="2" selected>2 — never overcommit</option></select></div>
+<div class="field"><label for="ratio">Overcommit ratio (%)</label><input id="ratio" type="number" inputmode="numeric" min="1" max="100" step="1" value="50"></div>
+<div class="field"><label for="committed">Committed now (MiB)</label><input id="committed" type="number" inputmode="numeric" min="0" max="33554432" step="1" value="4096"></div>
+<div class="field"><label for="request">New commit (MiB)</label><input id="request" type="number" inputmode="numeric" min="1" max="33554432" step="1" value="4096"></div>
+</div>
+<div class="actions">
+<button type="submit" id="plan">Plan admission</button>
+<button type="button" class="secondary" id="reset">Reset</button>
+</div>
+</form>
+<p class="err" id="error" role="alert" aria-live="polite"></p>
+<p class="empty" id="empty">Choose Plan admission to see whether this allocation fits under the commit limit.</p>
+<section id="result" hidden>
+<div class="verdict" id="verdict" data-state="healthy">Healthy headroom</div>
+<div class="big" id="headline">0<small> % committed</small></div>
+<p class="summary" id="summary" role="status" aria-live="polite"></p>
+<table>
+<tbody id="rows"></tbody>
+</table>
+<p class="advice" id="advice"></p>
+</section>
+<p class="note">Linux accounts for virtual memory, not just resident pages. In <code>vm.overcommit_memory = 2</code> the kernel enforces <code>CommitLimit = swap + RAM × vm.overcommit_ratio / 100</code> (visible in <code>/proc/meminfo</code>) and refuses a request that would push <code>Committed_AS</code> past it with <code>ENOMEM</code>. Mode <code>0</code> only rejects obviously excessive requests and can still end in the OOM killer; mode <code>1</code> never refuses. Estimates only; all arithmetic stays in your browser.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* memory-overcommit-core:start */
+var MemoryOvercommitCore = (function(){
+  "use strict";
+  var DEFAULTS = {
+    ramMib: 16384,
+    swapMib: 4096,
+    mode: "2",
+    ratioPercent: 50,
+    committedMib: 4096,
+    requestMib: 4096
+  };
+  var MODES = { "0": "heuristic", "1": "always", "2": "never" };
+  var MODE_TEXT = {
+    "0": "0 — heuristic",
+    "1": "1 — always overcommit",
+    "2": "2 — never overcommit"
+  };
+  var ADMISSION = {
+    never: "Strict commit limit enforced",
+    heuristic: "Heuristic check only",
+    always: "No commit limit"
+  };
+  var LABELS = {
+    healthy: "Healthy headroom",
+    watch: "Watch",
+    tight: "Tight",
+    refused: "Refused — ENOMEM",
+    oversubscribed: "Oversubscribed — OOM risk"
+  };
+
+  function fail(message){ throw new Error(message); }
+  function group(value){
+    return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  }
+  function pick(value, fallback){
+    if (value === undefined || value === null) return fallback;
+    return value;
+  }
+  function whole(value, label, min, max){
+    var bound = " between " + group(min) + " and " + group(max) + ".";
+    if (typeof value === "number"){
+      if (!Number.isInteger(value) || value < min || value > max) fail(label + " must be a whole number" + bound);
+      return value;
+    }
+    var text = String(value).trim();
+    if (text === "") fail(label + " is required.");
+    if (!/^[0-9]{1,12}$/.test(text)) fail(label + " must be a whole number" + bound);
+    var number = Number(text);
+    if (number < min || number > max) fail(label + " must be a whole number" + bound);
+    return number;
+  }
+  function modeValue(value){
+    var text = String(pick(value, DEFAULTS.mode)).trim();
+    if (!Object.prototype.hasOwnProperty.call(MODES, text)) fail("Choose overcommit mode 0, 1 or 2.");
+    return text;
+  }
+  function round(value, places){
+    var factor = Math.pow(10, places);
+    return Math.round(value * factor) / factor;
+  }
+
+  function plan(input){
+    var data = input || {};
+    var ram = whole(pick(data.ramMib, DEFAULTS.ramMib), "Physical RAM", 1, 16777216);
+    var swap = whole(pick(data.swapMib, DEFAULTS.swapMib), "Swap", 0, 16777216);
+    var mode = modeValue(data.mode);
+    var ratio = whole(pick(data.ratioPercent, DEFAULTS.ratioPercent), "Overcommit ratio", 1, 100);
+    var committed = whole(pick(data.committedMib, DEFAULTS.committedMib), "Currently committed memory", 0, 33554432);
+    var request = whole(pick(data.requestMib, DEFAULTS.requestMib), "New workload commit", 1, 33554432);
+
+    var ratioShare = Math.round(ram * ratio / 100);
+    var strictLimit = swap + ratioShare;
+    var admitted = mode === "2";
+    var ceiling = admitted ? strictLimit : ram + swap;
+    var committedAfter = committed + request;
+    var headroomBefore = ceiling - committed;
+    var headroomAfter = ceiling - committedAfter;
+    var utilisation;
+    if (ceiling > 0) utilisation = round(committedAfter / ceiling * 100, 1);
+    else utilisation = committedAfter > 0 ? 100 : 0;
+
+    var base = mode === "2" ? ratioShare : ram;
+    var requiredSwap = mode === "1" ? null : Math.max(0, committedAfter - base);
+    var swapTopUp = mode === "1" ? null : Math.max(0, requiredSwap - swap);
+
+    var status;
+    if (committedAfter > ceiling) status = admitted ? "refused" : "oversubscribed";
+    else if (utilisation >= 85) status = "tight";
+    else if (utilisation >= 70) status = "watch";
+    else status = "healthy";
+
+    return {
+      ramMib: ram,
+      swapMib: swap,
+      mode: mode,
+      modeName: MODES[mode],
+      modeText: MODE_TEXT[mode],
+      ratioPercent: ratio,
+      committedMib: committed,
+      requestMib: request,
+      ratioShareMib: ratioShare,
+      strictLimitMib: strictLimit,
+      admissionLimitMib: admitted ? strictLimit : null,
+      ceilingMib: ceiling,
+      committedAfterMib: committedAfter,
+      headroomBeforeMib: headroomBefore,
+      headroomAfterMib: headroomAfter,
+      utilisationPercent: utilisation,
+      maxRequestMib: Math.max(0, headroomBefore),
+      requiredSwapMib: requiredSwap,
+      swapTopUpMib: swapTopUp,
+      fits: committedAfter <= ceiling || mode === "1",
+      enforced: admitted,
+      admissionLabel: ADMISSION[MODES[mode]],
+      status: status,
+      statusLabel: LABELS[status]
+    };
+  }
+
+  return {
+    DEFAULTS: DEFAULTS,
+    MODES: MODES,
+    ADMISSION: ADMISSION,
+    LABELS: LABELS,
+    plan: plan
+  };
+}());
+/* memory-overcommit-core:end */
+(function(){
+  "use strict";
+  var form = document.getElementById("plan-form");
+  var error = document.getElementById("error");
+  var empty = document.getElementById("empty");
+  var result = document.getElementById("result");
+  var rows = document.getElementById("rows");
+  var verdict = document.getElementById("verdict");
+  var headline = document.getElementById("headline");
+  var summary = document.getElementById("summary");
+  var advice = document.getElementById("advice");
+  var fields = ["ram", "swap", "mode", "ratio", "committed", "request"];
+
+  function number(value){
+    return new Intl.NumberFormat("en-US").format(value);
+  }
+  function mib(value){
+    return number(value) + " MiB";
+  }
+  function gib(value){
+    var size = Math.round(value / 1024 * 10) / 10;
+    return size + " GiB";
+  }
+  function field(id){ return document.getElementById(id); }
+  function read(){
+    return {
+      ramMib: field("ram").value,
+      swapMib: field("swap").value,
+      mode: field("mode").value,
+      ratioPercent: field("ratio").value,
+      committedMib: field("committed").value,
+      requestMib: field("request").value
+    };
+  }
+  function row(label, value, highlight){
+    var tr = document.createElement("tr");
+    if (highlight) tr.className = "hi";
+    var th = document.createElement("th");
+    th.scope = "row";
+    th.textContent = label;
+    var td = document.createElement("td");
+    td.textContent = value;
+    tr.appendChild(th);
+    tr.appendChild(td);
+    rows.appendChild(tr);
+  }
+  function limitText(plan){
+    if (plan.mode === "1") return "No limit — RAM + swap is " + mib(plan.ceilingMib);
+    if (plan.mode === "0") return mib(plan.ceilingMib) + " (RAM + swap)";
+    return mib(plan.admissionLimitMib);
+  }
+  function swapText(plan){
+    if (plan.mode === "1") return "Not applicable in mode 1";
+    if (plan.swapTopUpMib === 0) return "None needed";
+    return "+" + mib(plan.swapTopUpMib);
+  }
+  function adviceFor(plan){
+    if (plan.status === "refused") {
+      var perPoint = Math.round(plan.ratioShareMib / plan.ratioPercent);
+      var ratioHint = perPoint >= 1 ? ", or raise vm.overcommit_ratio, which lifts the limit by " + mib(perPoint) + " per point." : ".";
+      return "The kernel refuses this request with ENOMEM: committed memory would reach " + mib(plan.committedAfterMib) + " against a CommitLimit of " + mib(plan.ceilingMib) + ". Only " + mib(plan.maxRequestMib) + " can still be committed now. Add at least " + mib(plan.swapTopUpMib) + " of swap, or lower Committed_AS" + ratioHint;
+    }
+    if (plan.status === "oversubscribed") {
+      return "This mode does not enforce a commit limit, so the allocation is likely to succeed — but committed memory would reach " + mib(plan.committedAfterMib) + " against " + mib(plan.ceilingMib) + " of RAM plus swap. Once those pages are touched the OOM killer chooses a victim; add swap before touching them.";
+    }
+    if (plan.status === "tight") {
+      return "The commit limit is almost fully spoken for. At most " + mib(plan.maxRequestMib) + " more can be committed, so the next large allocation is likely to fail with ENOMEM.";
+    }
+    if (plan.status === "watch") {
+      return "This fits, with " + mib(plan.headroomAfterMib) + " of commit headroom left afterwards. Add swap or raise vm.overcommit_ratio before the workload doubles.";
+    }
+    return "Comfortable: " + mib(plan.headroomAfterMib) + " of commit headroom remains after this request, so further allocations can still be admitted.";
+  }
+  function render(plan){
+    verdict.textContent = plan.statusLabel;
+    verdict.setAttribute("data-state", plan.status);
+    headline.textContent = number(plan.utilisationPercent);
+    var percent = document.createElement("small");
+    percent.textContent = " % committed";
+    headline.appendChild(percent);
+    summary.textContent = mib(plan.committedAfterMib) + " committed against " + mib(plan.ceilingMib) + " · " + plan.admissionLabel;
+    rows.textContent = "";
+    row("Overcommit mode", plan.modeText);
+    row("Physical RAM", mib(plan.ramMib) + " (" + gib(plan.ramMib) + ")");
+    row("Swap", mib(plan.swapMib) + " (" + gib(plan.swapMib) + ")");
+    row("RAM share at " + plan.ratioPercent + " %", mib(plan.ratioShareMib));
+    row("Admission limit", limitText(plan));
+    row("Committed before", mib(plan.committedMib));
+    row("New commit", mib(plan.requestMib));
+    row("Committed after", mib(plan.committedAfterMib));
+    row("Headroom after", mib(plan.headroomAfterMib), plan.headroomAfterMib < 0);
+    row("Largest request that fits now", mib(plan.maxRequestMib));
+    row("Swap top-up to fit", swapText(plan), plan.swapTopUpMib > 0);
+    advice.textContent = adviceFor(plan);
+    empty.hidden = true;
+    result.hidden = false;
+  }
+  function run(){
+    try {
+      var plan = MemoryOvercommitCore.plan(read());
+      error.textContent = "";
+      render(plan);
+    } catch (problem) {
+      error.textContent = problem.message;
+      result.hidden = true;
+      empty.hidden = false;
+    }
+  }
+  form.addEventListener("submit", function(event){
+    event.preventDefault();
+    run();
+  });
+  document.getElementById("reset").addEventListener("click", function(){
+    var values = MemoryOvercommitCore.DEFAULTS;
+    field("ram").value = values.ramMib;
+    field("swap").value = values.swapMib;
+    field("mode").value = values.mode;
+    field("ratio").value = values.ratioPercent;
+    field("committed").value = values.committedMib;
+    field("request").value = values.requestMib;
+    error.textContent = "";
+    run();
+    field("ram").focus();
+  });
+  fields.forEach(function(id){
+    field(id).addEventListener("input", function(){
+      if (error.textContent) error.textContent = "";
+    });
+  });
+}());
+</script>
+</body>
+</html>

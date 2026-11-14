@@ -168,7 +168,7 @@ assert.ok(html.includes('overflow-x:auto'), 'the major table scrolls on narrow s
 
 // ---- Catalog record and every case in it must agree with the core.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2269, 'catalog total');
+assert.equal(catalog.tools.length, 2270, 'catalog total');
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record missing');
 assert.equal(record.name, 'Linux Device Number Decoder');
@@ -193,7 +193,7 @@ assert.equal(record.sources.length, 4, 'sources are cited');
 for (const source of record.sources) assert.match(source.url, /^https:\/\//);
 assert.ok(record.sources.some((source) => source.title.includes('devices.txt')));
 assert.ok(record.sources.some((source) => source.title.includes('makedev')));
-assert.equal(catalog.tools.filter((tool) => tool.category === 'System').length, 43, 'System count');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'System').length, 44, 'System count');
 assert.equal(catalog.tools.filter((tool) => tool.slug === slug).length, 1, 'one record');
 assert.equal(catalog.tools.filter((tool) => tool.name === record.name).length, 1, 'one name');
 assert.equal(catalog.tools.filter((tool) => (tool.tags || []).includes('makedev')).length, 1, 'one makedev tag');
