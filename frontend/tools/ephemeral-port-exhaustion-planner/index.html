@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Ephemeral Port Exhaustion Planner — Virtual Tools</title>
+<meta name="description" content="Estimate the ephemeral source ports an outbound connection rate keeps in TIME_WAIT per IP, and the safe sustained rate before NAT, proxy or client port exhaustion. Runs locally.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+[hidden]{display:none!important}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;margin:4px 0 6px}
+.field label{display:block;font-size:13px;font-weight:650;margin:0 0 5px;color:var(--text-dim,#9aa3b2)}
+.field input{box-sizing:border-box;width:100%;min-height:44px;padding:9px 11px;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg,#14181f);color:var(--text,#e6e6e6);font:inherit;font-variant-numeric:tabular-nums}
+.field input:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:650;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button.secondary{background:transparent;color:var(--accent,#6ea8fe)}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.err{color:var(--bad,#f87171);font-size:14px;margin:10px 0 0;min-height:1.3em}
+.empty{color:var(--text-dim,#9aa3b2);margin:16px 0}
+.verdict{display:inline-block;padding:5px 13px;border-radius:999px;font-size:13px;font-weight:750;letter-spacing:.02em;border:1px solid var(--border,#2a2f3a)}
+.verdict[data-state="healthy"]{border-color:#2f9e64;background:rgba(47,158,100,.14);color:#5fd394}
+.verdict[data-state="watch"]{border-color:#c79a2b;background:rgba(199,154,43,.14);color:#e3bd63}
+.verdict[data-state="tight"]{border-color:#d97a2b;background:rgba(217,122,43,.14);color:#f0a469}
+.verdict[data-state="exhausted"]{border-color:#c2453f;background:rgba(194,69,63,.16);color:#f08c86}
+.big{font-size:clamp(2rem,7vw,2.8rem);font-weight:800;font-variant-numeric:tabular-nums;text-align:center;padding:10px 0 0;overflow-wrap:anywhere}
+.big small{font-size:.42em;font-weight:650;color:var(--text-dim,#9aa3b2);margin-left:2px}
+.summary{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13.5px;margin:6px 0 16px;line-height:1.5}
+table{width:100%;border-collapse:collapse;margin:0 0 14px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border,#2a2f3a);font-size:13.5px;vertical-align:top}
+th{font-weight:600;color:var(--text-dim,#9aa3b2);width:44%}
+td{font-family:ui-monospace,monospace;font-variant-numeric:tabular-nums}
+td.nw{white-space:nowrap}
+tr.hi td{color:var(--bad,#f87171);font-weight:700}
+.advice{font-size:13.5px;line-height:1.6;margin:0;padding:12px 14px;border-left:3px solid var(--accent,#6ea8fe);background:var(--bg-elev,#171a21);border-radius:0 8px 8px 0}
+.note{font-size:13px;color:var(--text-dim,#9aa3b2);line-height:1.55;margin:14px 0 0}
+.note code{background:var(--bg-elev-2,#1e222b);padding:1px 5px;border-radius:4px}
+@media(max-width:480px){.grid{grid-template-columns:1fr 1fr;gap:10px}.actions button{flex:1 1 140px}th{width:52%}th,td{padding:7px 6px}}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<a class="back" href="/">← All tools</a>
+<h1>Ephemeral Port Exhaustion Planner</h1>
+<p>See how much of an operating system's <strong>ephemeral source-port range</strong> a given outbound connection rate keeps tied up in <code>TIME_WAIT</code>, per source IP, and the highest rate that still leaves headroom.</p>
+</div>
+<div class="panel">
+<form id="plan-form" novalidate>
+<div class="grid">
+<div class="field"><label for="port-start">Port range start</label><input id="port-start" type="number" inputmode="numeric" min="1" max="65535" step="1" value="32768"></div>
+<div class="field"><label for="port-end">Port range end</label><input id="port-end" type="number" inputmode="numeric" min="1" max="65535" step="1" value="60999"></div>
+<div class="field"><label for="time-wait">TIME_WAIT (seconds)</label><input id="time-wait" type="number" inputmode="numeric" min="1" max="3600" step="1" value="60"></div>
+<div class="field"><label for="concurrent">Concurrent sockets</label><input id="concurrent" type="number" inputmode="numeric" min="0" max="1000000" step="1" value="120"></div>
+<div class="field"><label for="rate">New connections / s</label><input id="rate" type="number" inputmode="decimal" min="0" max="1000000" step="0.01" value="300"></div>
+<div class="field"><label for="sources">Source IPs</label><input id="sources" type="number" inputmode="numeric" min="1" max="10000" step="1" value="1"></div>
+</div>
+<div class="actions">
+<button type="submit" id="plan">Plan capacity</button>
+<button type="button" class="secondary" id="reset">Reset</button>
+</div>
+</form>
+<p class="err" id="error" role="alert" aria-live="polite"></p>
+<p class="empty" id="empty">Choose Plan capacity to see how many source ports stay in use at this load.</p>
+<section id="result" hidden>
+<div class="verdict" id="verdict" data-state="healthy">Healthy headroom</div>
+<div class="big" id="headline">0<small> %</small></div>
+<p class="summary" id="summary" role="status" aria-live="polite"></p>
+<table>
+<caption class="empty" style="text-align:left;margin:0 0 8px;font-size:13px">Per source IP unless marked aggregate</caption>
+<tbody id="rows"></tbody>
+</table>
+<p class="advice" id="advice"></p>
+</section>
+<p class="note">Each completed outbound connection holds a source port for <code>TIME_WAIT</code> (2 × MSL, 60 s by default), so a steady rate of <em>r</em> connections per second pins about <code>r × TIME_WAIT</code> ports at once — Little's law. Linux defaults to <code>net.ipv4.ip_local_port_range = 32768 60999</code>; Windows uses 49152–65535. Listener ports and ports below 1024 are never ephemeral. Load balancers, NAT gateways and proxies share one pool per source address, which is why per-IP headroom matters. Estimates only; all arithmetic stays in your browser.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* port-exhaustion-core:start */
+var PortExhaustionCore = (function(){
+  "use strict";
+  var DEFAULTS = {
+    portStart: 32768,
+    portEnd: 60999,
+    timeWaitSeconds: 60,
+    concurrentSockets: 120,
+    connectionsPerSecond: 300,
+    sourceIps: 1
+  };
+  var LABELS = {
+    healthy: "Healthy headroom",
+    watch: "Watch",
+    tight: "Tight",
+    exhausted: "Exhausted"
+  };
+
+  function fail(message){ throw new Error(message); }
+  function group(value){
+    return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  }
+  function pick(value, fallback){
+    if (value === undefined || value === null) return fallback;
+    return value;
+  }
+  function whole(value, label, min, max){
+    var bound = " between " + group(min) + " and " + group(max) + ".";
+    if (typeof value === "number"){
+      if (!Number.isInteger(value) || value < min || value > max) fail(label + " must be a whole number" + bound);
+      return value;
+    }
+    var text = String(value).trim();
+    if (text === "") fail(label + " is required.");
+    if (!/^[0-9]{1,12}$/.test(text)) fail(label + " must be a whole number" + bound);
+    var number = Number(text);
+    if (number < min || number > max) fail(label + " must be a whole number" + bound);
+    return number;
+  }
+  function decimal(value, label, min, max){
+    var bound = " between " + group(min) + " and " + group(max) + ".";
+    if (typeof value === "number"){
+      if (!Number.isFinite(value) || value < min || value > max) fail(label + " must be a number" + bound);
+      return value;
+    }
+    var text = String(value).trim();
+    if (text === "") fail(label + " is required.");
+    if (!/^(?:[0-9]+(?:\.[0-9]{1,3})?|\.[0-9]{1,3})$/.test(text)) fail(label + " must be a number" + bound);
+    var number = Number(text);
+    if (!(number >= min && number <= max)) fail(label + " must be a number" + bound);
+    return number;
+  }
+  function round(value, places){
+    var factor = Math.pow(10, places);
+    return Math.round(value * factor) / factor;
+  }
+
+  function plan(input){
+    var data = input || {};
+    var start = whole(pick(data.portStart, DEFAULTS.portStart), "Port range start", 1, 65535);
+    var end = whole(pick(data.portEnd, DEFAULTS.portEnd), "Port range end", 1, 65535);
+    if (end < start) fail("Port range end must be greater than or equal to the start.");
+    var wait = whole(pick(data.timeWaitSeconds, DEFAULTS.timeWaitSeconds), "TIME_WAIT duration", 1, 3600);
+    var sockets = whole(pick(data.concurrentSockets, DEFAULTS.concurrentSockets), "Concurrent sockets", 0, 1000000);
+    var rate = decimal(pick(data.connectionsPerSecond, DEFAULTS.connectionsPerSecond), "Connection rate", 0, 1000000);
+    var ips = whole(pick(data.sourceIps, DEFAULTS.sourceIps), "Source IP count", 1, 10000);
+
+    var pool = end - start + 1;
+    var timeWaitPorts = rate === 0 ? 0 : Math.ceil(rate * wait);
+    var portsPerIp = timeWaitPorts + sockets;
+    var freePorts = pool - portsPerIp;
+    var ratio = portsPerIp / pool;
+    var status = "healthy";
+    if (portsPerIp >= pool) status = "exhausted";
+    else if (ratio >= 0.85) status = "tight";
+    else if (ratio >= 0.70) status = "watch";
+
+    return {
+      portStart: start,
+      portEnd: end,
+      poolPorts: pool,
+      timeWaitSeconds: wait,
+      concurrentSockets: sockets,
+      connectionsPerSecond: rate,
+      sourceIps: ips,
+      timeWaitPorts: timeWaitPorts,
+      portsPerIp: portsPerIp,
+      freePortsPerIp: freePorts,
+      utilisationPercent: round(ratio * 100, 1),
+      safeRatePerIp: round(Math.max(0, pool - sockets) / wait, 2),
+      churnCeilingPerSecond: round(pool / wait, 2),
+      fleetPoolPorts: pool * ips,
+      fleetPortsNeeded: portsPerIp * ips,
+      fleetConnectionsPerSecond: round(rate * ips, 2),
+      status: status,
+      statusLabel: LABELS[status],
+      overCapacity: portsPerIp > pool
+    };
+  }
+
+  return {
+    DEFAULTS: DEFAULTS,
+    LABELS: LABELS,
+    plan: plan
+  };
+}());
+/* port-exhaustion-core:end */
+(function(){
+  "use strict";
+  var form = document.getElementById("plan-form");
+  var error = document.getElementById("error");
+  var empty = document.getElementById("empty");
+  var result = document.getElementById("result");
+  var rows = document.getElementById("rows");
+  var verdict = document.getElementById("verdict");
+  var headline = document.getElementById("headline");
+  var summary = document.getElementById("summary");
+  var advice = document.getElementById("advice");
+  var fields = ["port-start", "port-end", "time-wait", "concurrent", "rate", "sources"];
+
+  function number(value){
+    return new Intl.NumberFormat("en-US").format(value);
+  }
+  function field(id){ return document.getElementById(id); }
+  function read(){
+    return {
+      portStart: field("port-start").value,
+      portEnd: field("port-end").value,
+      timeWaitSeconds: field("time-wait").value,
+      concurrentSockets: field("concurrent").value,
+      connectionsPerSecond: field("rate").value,
+      sourceIps: field("sources").value
+    };
+  }
+  function row(label, value, highlight, nowrap){
+    var tr = document.createElement("tr");
+    if (highlight) tr.className = "hi";
+    var th = document.createElement("th");
+    th.scope = "row";
+    th.textContent = label;
+    var td = document.createElement("td");
+    if (nowrap) td.className = "nw";
+    td.textContent = value;
+    tr.appendChild(th);
+    tr.appendChild(td);
+    rows.appendChild(tr);
+  }
+  function adviceFor(plan){
+    if (plan.status === "exhausted") {
+      return "This load needs more ports than the range holds: new connections will fail with EADDRNOTAVAIL once the pool is full. Cut the connection rate, raise TIME_WAIT reuse, or widen the range before scaling further.";
+    }
+    if (plan.status === "tight") {
+      return "Little headroom is left. Keep the rate under " + number(plan.safeRatePerIp) + " connections/s per source IP, add source addresses, or widen the port range.";
+    }
+    if (plan.status === "watch") {
+      return "Workable, but plan before doubling the rate: about " + number(plan.safeRatePerIp) + " connections/s per source IP is the ceiling at this TIME_WAIT.";
+    }
+    return "Comfortable. The pool supports about " + number(plan.safeRatePerIp) + " connections/s per source IP at this TIME_WAIT, with " + number(plan.freePortsPerIp) + " ports spare.";
+  }
+  function render(plan){
+    verdict.textContent = plan.statusLabel;
+    verdict.setAttribute("data-state", plan.status);
+    headline.textContent = number(plan.utilisationPercent);
+    var percent = document.createElement("small");
+    percent.textContent = " % used";
+    headline.appendChild(percent);
+    summary.textContent = number(plan.portsPerIp) + " of " + number(plan.poolPorts) + " ports held per source IP" + (plan.sourceIps > 1 ? " · " + number(plan.sourceIps) + " source IPs share the same per-IP ceiling" : "");
+    rows.textContent = "";
+    row("Port range", number(plan.portStart) + "–" + number(plan.portEnd), false, true);
+    row("Port pool size", number(plan.poolPorts) + " ports");
+    row("TIME_WAIT duration", number(plan.timeWaitSeconds) + " s");
+    row("Connection rate", number(plan.connectionsPerSecond) + " /s per IP");
+    row("Ports in TIME_WAIT", number(plan.timeWaitPorts));
+    row("Ports in active sockets", number(plan.concurrentSockets));
+    row("Ports needed per IP", number(plan.portsPerIp));
+    row("Free ports per IP", number(plan.freePortsPerIp), plan.freePortsPerIp < 0);
+    row("Safe sustained rate per IP", number(plan.safeRatePerIp) + " /s");
+    row("Port churn ceiling", number(plan.churnCeilingPerSecond) + " /s");
+    row("Aggregate connections", number(plan.fleetConnectionsPerSecond) + " /s");
+    row("Aggregate pool / demand", number(plan.fleetPoolPorts) + " / " + number(plan.fleetPortsNeeded) + " ports", plan.overCapacity);
+    advice.textContent = adviceFor(plan);
+    empty.hidden = true;
+    result.hidden = false;
+  }
+  function run(){
+    try {
+      var plan = PortExhaustionCore.plan(read());
+      error.textContent = "";
+      render(plan);
+    } catch (problem) {
+      error.textContent = problem.message;
+      result.hidden = true;
+      empty.hidden = false;
+    }
+  }
+  form.addEventListener("submit", function(event){
+    event.preventDefault();
+    run();
+  });
+  document.getElementById("reset").addEventListener("click", function(){
+    var values = PortExhaustionCore.DEFAULTS;
+    field("port-start").value = values.portStart;
+    field("port-end").value = values.portEnd;
+    field("time-wait").value = values.timeWaitSeconds;
+    field("concurrent").value = values.concurrentSockets;
+    field("rate").value = values.connectionsPerSecond;
+    field("sources").value = values.sourceIps;
+    error.textContent = "";
+    run();
+    field("port-start").focus();
+  });
+  fields.forEach(function(id){
+    field(id).addEventListener("input", function(){
+      if (error.textContent) error.textContent = "";
+    });
+  });
+}());
+</script>
+</body>
+</html>

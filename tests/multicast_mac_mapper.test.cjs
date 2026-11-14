@@ -227,7 +227,7 @@ assert.ok(html.includes('id="shared-panel" hidden'), 'the shared-group panel sta
 
 // ---- Catalog record and every case in it must agree with the core.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2268, 'catalog total');
+assert.equal(catalog.tools.length, 2269, 'catalog total');
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record missing');
 assert.equal(record.name, 'Multicast MAC Address Mapper');
@@ -258,7 +258,7 @@ assert.equal(new Set(record.tags).size, record.tags.length, 'tags are unique');
 assert.equal(new Set(record.aliases).size, record.aliases.length, 'aliases are unique');
 assert.ok(record.tags.includes('multicast'));
 assert.ok(record.aliases.includes('MAC to Multicast Group Lookup'));
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Networking').length, 43, 'Networking count');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Networking').length, 44, 'Networking count');
 assert.equal(catalog.tools.filter((tool) => tool.slug === slug).length, 1, 'one record');
 assert.equal(catalog.tools.filter((tool) => tool.name === record.name).length, 1, 'one name');
 assert.equal(catalog.tools.filter((tool) => (tool.tags || []).includes('multicast')).length, 1, 'one multicast tag');

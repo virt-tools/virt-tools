@@ -26,7 +26,7 @@ assert.equal(entry.maturity, 'draft');
 assert.equal(entry.listed, true);
 assert.equal(entry.icon, '🎒');
 assert.ok(Array.isArray(entry.aliases) && entry.aliases.length >= 5, 'aliases present');
-assert.equal(catalog.tools.length, 2268, 'catalog total');
+assert.equal(catalog.tools.length, 2269, 'catalog total');
 
 const failure = (fn) => {
   try {
