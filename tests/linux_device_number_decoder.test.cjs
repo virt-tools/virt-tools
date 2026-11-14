@@ -168,7 +168,7 @@ assert.ok(html.includes('overflow-x:auto'), 'the major table scrolls on narrow s
 
 // ---- Catalog record and every case in it must agree with the core.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2257, 'catalog total');
+assert.equal(catalog.tools.length, 2258, 'catalog total');
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record missing');
 assert.equal(record.name, 'Linux Device Number Decoder');
