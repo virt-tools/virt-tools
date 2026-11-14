@@ -175,7 +175,7 @@ assert.deepEqual(run('100', '16:9', '1000', '1.00', 'dci'), run('100', '16:9', '
 
 // ---- Catalog record and its cases must agree with the core.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2260, 'catalog total');
+assert.equal(catalog.tools.length, 2261, 'catalog total');
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record missing');
 assert.equal(record.name, 'Projector Brightness Calculator');

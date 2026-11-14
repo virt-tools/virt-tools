@@ -69,7 +69,7 @@ close(paused.setSeconds, 60, 1e-9, 'paused set');
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record present');
-assert.equal(catalog.tools.length, 2260, 'catalog total');
+assert.equal(catalog.tools.length, 2261, 'catalog total');
 assert.equal(record.name, 'Rep Tempo Calculator');
 assert.equal(record.category, 'Health');
 assert.equal(record.subcategory, 'Estimation & calculation');

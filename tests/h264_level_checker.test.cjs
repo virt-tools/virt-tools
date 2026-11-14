@@ -275,7 +275,7 @@ const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool
 const matches = catalog.tools.filter((tool) => tool.slug === slug);
 assert.equal(matches.length, 1, 'slug appears exactly once');
 const record = matches[0];
-assert.equal(catalog.tools.length, 2260, 'catalog total');
+assert.equal(catalog.tools.length, 2261, 'catalog total');
 assert.equal(record.name, 'H.264 Level Checker');
 assert.equal(record.category, 'Video');
 assert.equal(record.subcategory, 'Analysis & validation');
@@ -291,7 +291,7 @@ for (const alias of record.aliases) {
     .some((tool) => tool.name === alias || (tool.aliases || []).includes(alias));
   assert.equal(clash, false, 'alias is unique: ' + alias);
 }
-assert.equal(catalog.tools.filter((tool) => tool.category === record.category).length, 42, 'Video count');
+assert.equal(catalog.tools.filter((tool) => tool.category === record.category).length, 43, 'Video count');
 
 let goldens = 0;
 for (const testCase of record.testCases) {

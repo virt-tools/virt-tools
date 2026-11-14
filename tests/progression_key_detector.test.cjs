@@ -173,7 +173,7 @@ refuse('C G '.repeat(1400), C.MESSAGES.long);
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record present');
-assert.equal(catalog.tools.length, 2260, 'catalog total');
+assert.equal(catalog.tools.length, 2261, 'catalog total');
 assert.equal(record.category, 'Music');
 assert.equal(record.subcategory, 'Analysis & validation');
 assert.equal(record.risk, 'low');
