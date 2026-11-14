@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Work out which nginx location block answers a request URI: exact, longest prefix, ^~ and regex precedence, with the blocks that were skipped and why. Runs locally in your browser.">
+<script src="/assets/theme-init.js"></script>
+<title>Nginx Location Matcher — virt.tools</title>
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+[hidden]{display:none!important}
+.ngx-shell{max-width:900px;margin:0 auto}
+.lead,.hint,.detail{color:var(--text-secondary,#8b949e)}
+.hint{font-size:.82rem;line-height:1.4;margin:0}
+.panel{background:var(--surface,#161b22);border:1px solid var(--border,#30363d);border-radius:10px;padding:1rem;margin:1rem 0}
+.field{display:flex;flex-direction:column;gap:.35rem;min-width:0}
+.field label{font-weight:600}
+.field input,.field textarea{box-sizing:border-box;width:100%;background:var(--background,#0d1117);color:var(--text,#c9d1d9);border:1px solid var(--border,#30363d);border-radius:6px;padding:.55rem;font:inherit;font-size:1rem;min-height:44px}
+.field input,.field textarea{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+.field textarea{min-height:13rem;resize:vertical;line-height:1.5;font-size:.92rem}
+.field:focus-within{outline:2px solid var(--accent,#58a6ff);outline-offset:2px;border-radius:8px}
+.field input:focus-visible,.field textarea:focus-visible,button:focus-visible{outline:2px solid var(--accent,#58a6ff);outline-offset:2px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:.8rem;margin:.8rem 0}
+.actions{display:flex;flex-wrap:wrap;gap:.6rem;margin:.9rem 0 .2rem}
+button{border:1px solid var(--border,#30363d);border-radius:6px;background:var(--surface-raised,#21262d);color:var(--text,#c9d1d9);padding:.58rem .85rem;min-height:44px;font:inherit;font-size:.95rem;cursor:pointer}
+button.primary{border-color:var(--accent,#58a6ff);background:var(--accent-soft,#1e3a5f)}
+button:disabled{opacity:.55;cursor:not-allowed}
+.examples{display:flex;flex-wrap:wrap;gap:.45rem;margin:.55rem 0 0;padding:0;list-style:none}
+.examples button{font-size:.85rem;min-height:44px;padding:.35rem .6rem}
+.copy-btn{font-size:.8rem;min-height:44px;padding:.25rem .55rem;margin-left:.8rem;vertical-align:middle}
+.copy-sub{display:inline-block;margin-left:.5rem;font-size:.8rem;color:var(--text-secondary,#8b949e)}
+.status{min-height:1.4rem;margin:.55rem 0 .3rem}
+.status.ok{color:#3fb950}.status.warn{color:#d29922}.status.error{color:#f85149}.status.info{color:var(--text-secondary,#8b949e)}
+.headline{text-align:center;padding:.6rem 0 .1rem}
+.headline output.big{font:700 clamp(.95rem,3.4vw,1.35rem)/1.45 ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--accent,#58a6ff);overflow-wrap:anywhere}
+.headline .cap{display:block;font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:var(--text-secondary,#8b949e);margin-bottom:.3rem}
+.headline .sub{display:block;margin-top:.35rem;font-size:.86rem;color:var(--text-secondary,#8b949e);overflow-wrap:anywhere}
+.table-wrap{overflow-x:auto;margin:.4rem 0 .2rem}
+.sheet{display:table;width:100%;border-collapse:collapse;font-size:.9rem;margin:0}
+.sheet caption{text-align:left;font-size:.82rem;color:var(--text-secondary,#8b949e);padding:0 0 .45rem}
+.sheet th,.sheet td{padding:.45rem .5rem;border-bottom:1px solid var(--border,#30363d);text-align:left;vertical-align:top}
+.sheet thead th{font-size:.76rem;letter-spacing:.05em;text-transform:uppercase;color:var(--text-secondary,#8b949e);font-weight:600}
+.sheet tbody th{font-weight:600;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.85rem;overflow-wrap:anywhere}
+.sheet .num{text-align:right;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+.sheet tr.winner th,.sheet tr.winner td{color:#58a6ff}
+.sheet tr.winner th{font-weight:700}
+.sheet .tag{display:inline-block;font-size:.74rem;padding:.08rem .4rem;border:1px solid var(--border,#30363d);border-radius:999px;color:var(--text-secondary,#8b949e);white-space:nowrap}
+.sheet tr.winner .tag{border-color:#58a6ff;color:#58a6ff}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.7rem;margin:.9rem 0 .2rem}
+.stats div{background:var(--background,#0d1117);border:1px solid var(--border,#30363d);border-radius:8px;padding:.55rem .65rem}
+.stats dt{font-size:.72rem;letter-spacing:.04em;text-transform:uppercase;color:var(--text-secondary,#8b949e);margin:0 0 .2rem}
+.stats dd{margin:0;font:600 .95rem/1.4 ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:anywhere}
+.verdict{margin:.9rem 0 0;padding:.7rem .8rem;border:1px solid var(--border,#30363d);border-left:3px solid var(--accent,#58a6ff);border-radius:6px;background:var(--background,#0d1117)}
+.verdict strong{display:block;margin-bottom:.2rem}
+.verdict p{margin:0;font-size:.92rem;color:var(--text-secondary,#8b949e)}
+.notes{margin:.8rem 0 0;padding-left:1.2rem}
+.notes li{margin:.3rem 0}
+h2{font-size:1.05rem;margin:.2rem 0 .8rem}
+h2 span{font-weight:500;font-size:.85rem;color:var(--text-secondary,#8b949e)}
+.explain p{margin:.5rem 0}
+.explain ol,.explain ul{margin:.4rem 0 0;padding-left:1.2rem}
+.explain li{margin:.3rem 0}
+.explain code{overflow-wrap:anywhere}
+@media(max-width:600px){
+.panel{padding:.85rem}
+.actions>*{flex:1 1 9rem}
+.copy-btn{margin-left:0;display:block;margin:.55rem auto 0}
+.copy-sub{display:block;margin:.35rem 0 0}
+.sheet{font-size:.85rem}
+.sheet th,.sheet td{padding:.4rem .3rem}
+.sheet thead{display:none}
+.sheet tr{display:flex;flex-wrap:wrap;align-items:baseline;column-gap:.45rem;row-gap:.2rem;padding:.5rem 0;border-bottom:1px solid var(--border,#30363d)}
+.sheet tbody th,.sheet td{display:inline;border:0;padding:0}
+.sheet tbody th{white-space:normal}
+.sheet td:nth-child(2){font-size:.78rem;color:var(--text-secondary,#8b949e)}
+.sheet td:nth-child(2)::before{content:"· "}
+.sheet td:nth-child(3){flex:0 0 100%;font-size:.85rem}
+.stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+</style>
+</head>
+<body><div id="site-header"></div><main class="tool-container"><div class="ngx-shell">
+<h1>Nginx Location Matcher</h1>
+<p class="lead">nginx picks a <code>location</code> block by a rule order that surprises people: an exact match beats everything, the longest prefix normally wins, but a <code>^~</code> prefix stops the regex pass and a plain prefix can still lose to a regex. Paste the blocks and a URI to see which one answers, and what each of the others did.</p>
+
+<form id="ngx-form" novalidate>
+<section class="panel" aria-labelledby="input-title">
+<h2 id="input-title">Server configuration and request</h2>
+<div class="field">
+<label for="config">location blocks</label>
+<textarea id="config" spellcheck="false" aria-describedby="config-hint">location = /logo.png { }
+location ^~ /images/ { }
+location ~* \.(png|svg|woff2)$ { }
+location /api/ { }
+location / { }</textarea>
+<p class="hint" id="config-hint">one block per <code>location [modifier] pattern {</code>; bodies can be empty, braces on the next line are fine</p>
+</div>
+<div class="grid2">
+<div class="field">
+<label for="uri">Request URI</label>
+<input id="uri" type="text" autocomplete="off" spellcheck="false" value="/images/Logo.PNG?width=400">
+<p class="hint">the path, query string ignored</p>
+</div>
+</div>
+<div class="actions">
+<button id="match" class="primary" type="submit">Match the URI</button>
+<button id="reset" type="button">Reset</button>
+</div>
+<ul class="examples" aria-label="Example configurations">
+<li><button type="button" data-example="assets">Static assets with ^~</button></li>
+<li><button type="button" data-example="php">PHP front controller</button></li>
+<li><button type="button" data-example="exact">Exact match wins</button></li>
+<li><button type="button" data-example="api">API prefix</button></li>
+</ul>
+<p id="ngx-status" class="status info" role="status" aria-live="polite"></p>
+<p class="hint">Only the block headers are read, never the directives inside them; the answer is about which block runs, not what it does.</p>
+</section>
+</form>
+
+<section class="panel" aria-labelledby="result-title">
+<h2 id="result-title">Matched block <span id="reason-cap"></span></h2>
+<p class="headline"><span class="cap">nginx would hand this request to</span><output id="winner-out" class="big">—</output><button id="copy" class="copy-btn" type="button" disabled>Copy result</button><span id="copy-status" class="copy-sub"></span><span class="sub" id="winner-sub"></span></p>
+<dl class="stats">
+<div><dt>Match kind</dt><dd><output id="stat-kind">—</output></dd></div>
+<div><dt>Longest prefix</dt><dd><output id="stat-prefix">—</output></dd></div>
+<div><dt>Blocks read</dt><dd><output id="stat-count">—</output></dd></div>
+</dl>
+<div class="verdict"><strong id="verdict-title">—</strong><p id="verdict-text"></p></div>
+<ul class="notes" id="notes"></ul>
+<div class="table-wrap">
+<table class="sheet">
+<caption>Every block, in file order, and how far it got in the search</caption>
+<thead><tr><th scope="col">Location</th><th scope="col">Line</th><th scope="col">Outcome</th></tr></thead>
+<tbody id="block-body"></tbody>
+</table>
+</div>
+</section>
+
+<section class="panel explain" aria-labelledby="how-title">
+<h2 id="how-title">The order nginx searches</h2>
+<ol>
+<li><strong>Exact match first.</strong> A block written <code>location = /path</code> is compared literally against the request path; if it is equal the search ends there, whatever else is configured.</li>
+<li><strong>Then the longest prefix.</strong> All blocks without a modifier, and all <code>^~</code> blocks, are prefix matches; the longest pattern wins. A prefix matches on whole characters, so <code>/api</code> also matches <code>/apiary</code>, which is why trailing slashes are worth writing deliberately.</li>
+<li><strong><code>^~</code> stops the regex pass.</strong> When the winning prefix carries <code>^~</code>, nginx uses it and never tries a regex. Without the modifier, the prefix is only a candidate and a matching regex can still take the request.</li>
+<li><strong>Regexes run in file order.</strong> <code>~</code> is case-sensitive and <code>~*</code> is case-insensitive. The first regex that matches wins and the search ends, so a broad pattern placed above a narrow one shadows it.</li>
+<li><strong>Falling back.</strong> If no regex matches, the longest prefix from step 2 answers. If nothing matches at all, nginx returns 404 unless a server-level <code>try_files</code> or error page sends the request elsewhere.</li>
+<li><strong>Named locations are not candidates.</strong> A block named <code>@fallback</code> can only be reached by an explicit reference such as <code>try_files … @fallback</code> or <code>error_page 404 @fallback</code>, never by a URI, so it is listed but never matched.</li>
+</ol>
+<p><strong>What is not modelled.</strong> The URI is matched after the query string is removed, but percent-encoding, dot segments and repeated slashes are not normalised the way nginx normalises them, and <code>$uri</code> rewriting happens before location matching. Nested locations, <code>include</code> directives, <code>map</code> blocks and <code>try_files</code> fallbacks are not followed, and patterns are compiled as JavaScript regular expressions rather than PCRE, so lookbehind-free patterns behave the same while exotic PCRE syntax may not compile. Case sensitivity assumes a case-sensitive filesystem.</p>
+</section>
+</div></main><script src="/assets/tools.js"></script><script src="/assets/app.js"></script>
+<script>
+/* nginx-location-core:start */
+const NginxLocation = (() => {
+  'use strict';
+  const MODIFIERS = ['=', '^~', '~*', '~'];
+  const LIMITS = { blocks: 80, pattern: 200, config: 20000, uri: 1500 };
+  const STATUS_LABELS = {
+    winner: 'wins',
+    'exact-other': 'not this path',
+    'prefix-outranked': 'longest prefix, outranked',
+    'prefix-shorter': 'shorter prefix',
+    'prefix-other': 'no prefix match',
+    'regex-skipped': 'would match, ^~ prefix won',
+    'regex-exact-skipped': 'would match, exact match won',
+    'regex-later': 'would match, earlier regex won',
+    'regex-other': 'no regex match',
+    named: 'named, never reached by URI'
+  };
+  const DEFAULT_CONFIG = 'location = /logo.png { }\nlocation ^~ /images/ { }\nlocation ~* \\.(png|svg|woff2)$ { }\nlocation /api/ { }\nlocation / { }';
+  const DEFAULT_URI = '/images/Logo.PNG?width=400';
+  const EXAMPLES = {
+    assets: { uri: '/images/Logo.PNG?width=400', config: DEFAULT_CONFIG },
+    php: { uri: '/blog/post-one', config: 'location = /index.php { }\nlocation / { try_files $uri $uri/ /index.php?$query_string; }\nlocation ~ \\.php$ { }\nlocation ~ /\\.ht { deny all; }' },
+    exact: { uri: '/logo.png', config: 'location = /logo.png { }\nlocation ~ \\.png$ { }\nlocation / { }' },
+    api: { uri: '/api/v2/users/42', config: 'location ^~ /api/ { }\nlocation ~ ^/api/v\\d+/users/(?<id>\\d+)$ { }\nlocation / { }' }
+  };
+
+  function fail(message) { throw new Error(message); }
+
+  function lineAt(source, index) {
+    let line = 1;
+    for (let i = 0; i < index; i += 1) if (source.charCodeAt(i) === 10) line += 1;
+    return line;
+  }
+
+  function parseLocations(raw) {
+    const source = String(raw == null ? '' : raw);
+    if (source.trim() === '') fail('Paste at least one location block.');
+    if (source.length > LIMITS.config) fail('The configuration is longer than ' + LIMITS.config + ' characters; paste only the location blocks.');
+    const pattern = /location\s+(?:(=|\^~|~\*|~)\s+)?([^\s{;]+)\s*\{/g;
+    const found = [];
+    let match;
+    while ((match = pattern.exec(source)) !== null) {
+      found.push({
+        modifier: match[1] || '',
+        pattern: match[2],
+        line: lineAt(source, match.index),
+        position: found.length
+      });
+    }
+    if (found.length === 0) fail('No location blocks found: each one needs the form location [modifier] pattern {.');
+    if (found.length > LIMITS.blocks) fail('Too many blocks: this reads at most ' + LIMITS.blocks + '.');
+    const seen = new Set();
+    for (const block of found) {
+      if (block.pattern.length > LIMITS.pattern) fail('The pattern on line ' + block.line + ' is longer than ' + LIMITS.pattern + ' characters.');
+      const key = block.modifier + ' ' + block.pattern;
+      if (seen.has(key)) fail('Line ' + block.line + ' repeats ' + key + ', which nginx refuses as a duplicate location.');
+      seen.add(key);
+      if (block.pattern.indexOf('@') === 0) {
+        if (block.modifier !== '') fail('Line ' + block.line + ' puts a modifier on the named location ' + block.pattern + '; named locations take none.');
+        continue;
+      }
+      if (block.modifier === '~' || block.modifier === '~*') {
+        try {
+          new RegExp(block.pattern, block.modifier === '~*' ? 'i' : '');
+        } catch (error) {
+          fail('Line ' + block.line + ' has a regex that does not compile: ' + error.message);
+        }
+        continue;
+      }
+      if (block.pattern.charAt(0) !== '/') fail('Line ' + block.line + ' has the prefix ' + block.pattern + ', which must start with /.');
+    }
+    return found;
+  }
+
+  function classify(blocks, path) {
+    const exact = blocks.find((block) => block.modifier === '=' && block.pattern === path) || null;
+    const prefixes = blocks.filter((block) => (block.modifier === '' || block.modifier === '^~') &&
+      block.pattern.charAt(0) === '/' && path.indexOf(block.pattern) === 0);
+    let longest = null;
+    for (const block of prefixes) {
+      if (longest === null || block.pattern.length > longest.pattern.length) longest = block;
+    }
+    const regexes = blocks.filter((block) => block.modifier === '~' || block.modifier === '~*');
+    const regexHits = [];
+    for (const block of regexes) {
+      const re = new RegExp(block.pattern, block.modifier === '~*' ? 'i' : '');
+      if (re.test(path)) regexHits.push(block);
+    }
+    let winner = null;
+    let kind = 'none';
+    if (exact) {
+      winner = exact;
+      kind = 'exact';
+    } else if (longest && longest.modifier === '^~') {
+      winner = longest;
+      kind = 'prefix-no-regex';
+    } else if (regexHits.length > 0) {
+      winner = regexHits[0];
+      kind = 'regex';
+    } else if (longest) {
+      winner = longest;
+      kind = 'prefix';
+    }
+    return { exact: exact, prefixes: prefixes, longest: longest, regexHits: regexHits, winner: winner, kind: kind };
+  }
+
+  function statusFor(block, search, path) {
+    if (search.winner && block.position === search.winner.position) return 'winner';
+    if (block.pattern.charAt(0) === '@') return 'named';
+    if (block.modifier === '=') return 'exact-other';
+    if (block.modifier === '' || block.modifier === '^~') {
+      const matches = block.pattern.charAt(0) === '/' && path.indexOf(block.pattern) === 0;
+      if (!matches) return 'prefix-other';
+      return search.longest && block.position === search.longest.position ? 'prefix-outranked' : 'prefix-shorter';
+    }
+    const hit = search.regexHits.some((candidate) => candidate.position === block.position);
+    if (!hit) return 'regex-other';
+    if (search.kind === 'exact') return 'regex-exact-skipped';
+    if (search.kind === 'prefix-no-regex') return 'regex-skipped';
+    return 'regex-later';
+  }
+
+  function label(block) {
+    return 'location ' + (block.modifier ? block.modifier + ' ' : '') + block.pattern;
+  }
+
+  function analyze(input) {
+    const source = input || {};
+    const rawUri = String(source.uri == null ? DEFAULT_URI : source.uri).trim();
+    if (rawUri === '') fail('Enter the request URI to match.');
+    if (rawUri.length > LIMITS.uri) fail('The URI is longer than ' + LIMITS.uri + ' characters.');
+    if (rawUri.charAt(0) !== '/') fail('A request URI starts with /, so ' + rawUri + ' cannot be matched.');
+    const path = rawUri.split('?')[0].split('#')[0];
+    if (path === '') fail('The URI has a query string but no path.');
+    const blocks = parseLocations(source.config == null ? DEFAULT_CONFIG : source.config);
+    const search = classify(blocks, path);
+    const rows = blocks.map((block) => {
+      const statusKey = statusFor(block, search, path);
+      return {
+        line: block.line,
+        label: label(block),
+        status: statusKey,
+        outcome: STATUS_LABELS[statusKey],
+        winner: Boolean(search.winner && block.position === search.winner.position)
+      };
+    });
+
+    const winnerText = search.winner ? label(search.winner) : 'no location';
+    const kindText = {
+      exact: 'exact',
+      'prefix-no-regex': '^~ prefix',
+      regex: 'regex',
+      prefix: 'prefix',
+      none: 'nothing matched'
+    }[search.kind];
+    const rawQuery = rawUri.indexOf('?') > -1 ? rawUri.slice(rawUri.indexOf('?') + 1) : '';
+    const query = rawQuery.indexOf('#') > -1 ? rawQuery.slice(0, rawQuery.indexOf('#')) : rawQuery;
+
+    const verdicts = {
+      exact: () => ({
+        title: 'An exact match ends the search',
+        text: 'location = ' + search.winner.pattern + ' compares the path literally, so nginx stops here without looking at prefixes or regexes. This is how a single file gets its own behaviour even when a broader rule also covers it.'
+      }),
+      'prefix-no-regex': () => ({
+        title: 'A ^~ prefix beats every regex',
+        text: 'The longest prefix is ' + search.winner.pattern + ' and it carries ^~, so nginx commits to it and skips the regex pass entirely' +
+          (search.regexHits.length > 0 ? ' — ' + search.regexHits.length + ' regex block' + (search.regexHits.length === 1 ? '' : 's') + ' would have matched, and ' +
+            (search.regexHits.length === 1 ? 'it is' : 'they are') + ' never reached.' : '.')
+      }),
+      regex: () => ({
+        title: 'A regex outranked the longest prefix',
+        text: 'No exact match and no ^~ prefix applied, so nginx tried the regexes in file order and ' + label(search.winner) +
+          ' matched first. It wins over the prefix ' + (search.longest ? search.longest.pattern : '(none)') +
+          ', which was only a candidate; moving this regex below another regex, or adding ^~ to that prefix, would change the answer.'
+      }),
+      prefix: () => ({
+        title: 'No regex matched, so the prefix answers',
+        text: 'The longest prefix ' + search.winner.pattern + ' matched and none of the ' +
+          (blocks.filter((block) => block.modifier === '~' || block.modifier === '~*').length) + ' regex blocks did, so the prefix block handles the request.'
+      }),
+      none: () => ({
+        title: 'Nothing matched',
+        text: 'No exact match, no prefix covers this path and no regex matches it, so nginx answers 404 unless a server-level try_files or error_page sends the request to a named location or upstream.'
+      })
+    };
+
+    const notes = [];
+    if (query) notes.push('The query string ?' + query + ' is not part of the location match: nginx matches the path ' + path + ' and keeps the arguments available to the block.');
+    if (search.kind === 'regex' && search.regexHits.length > 1) {
+      notes.push(search.regexHits.length + ' regexes match this path; only the first in file order runs, so the later ' +
+        (search.regexHits.length - 1) + ' are dead for this URI.');
+    }
+    if (search.longest && search.winner && search.longest.position === search.winner.position && search.kind === 'prefix') {
+      notes.push('The prefix ' + search.longest.pattern + ' is the longest of ' + search.prefixes.length + ' prefix blocks that match the path.');
+    }
+    if (search.winner && search.winner.pattern === '/') {
+      notes.push('The catch-all location / is answering, which is correct but worth checking: a prefix or regex you expected may not cover this path.');
+    }
+    if (!search.winner) {
+      notes.push('Add a location / block if this server is meant to answer every path, or point an error_page at a named location.');
+    }
+    const named = blocks.filter((block) => block.pattern.indexOf('@') === 0);
+    if (named.length > 0) {
+      notes.push(named.length + ' named location' + (named.length === 1 ? '' : 's') + ' cannot be reached by a URI: ' +
+        named.map((block) => block.pattern).join(', ') + ' need an explicit try_files or error_page reference.');
+    }
+    notes.push('Paths are matched after the query string is removed but without percent-decoding, dot-segment or duplicate-slash normalisation, and without following try_files, includes or nested locations.');
+
+    return {
+      path: path,
+      uri: rawUri,
+      blocks: blocks,
+      rows: rows,
+      winner: search.winner,
+      winnerText: winnerText,
+      kind: search.kind,
+      kindText: kindText,
+      longest: search.longest,
+      regexHits: search.regexHits,
+      verdict: verdicts[search.kind](),
+      notes: notes,
+      summary: search.winner
+        ? path + ' is answered by ' + label(search.winner) + ' (' + kindText + ', line ' + search.winner.line + ').'
+        : path + ' matches no location block, so nginx would answer 404.'
+    };
+  }
+
+  return {
+    MODIFIERS: MODIFIERS,
+    LIMITS: LIMITS,
+    STATUS_LABELS: STATUS_LABELS,
+    EXAMPLES: EXAMPLES,
+    DEFAULT_CONFIG: DEFAULT_CONFIG,
+    DEFAULT_URI: DEFAULT_URI,
+    parseLocations: parseLocations,
+    classify: classify,
+    analyze: analyze
+  };
+})();
+/* nginx-location-core:end */
+(() => {
+'use strict';
+const $ = (id) => document.getElementById(id);
+const form = $('ngx-form');
+const configInput = $('config');
+const uriInput = $('uri');
+const status = $('ngx-status');
+const winnerOut = $('winner-out');
+const winnerSub = $('winner-sub');
+const reasonCap = $('reason-cap');
+const statKind = $('stat-kind');
+const statPrefix = $('stat-prefix');
+const statCount = $('stat-count');
+const verdictTitle = $('verdict-title');
+const verdictText = $('verdict-text');
+const notesList = $('notes');
+const blockBody = $('block-body');
+const copyButton = $('copy');
+const copyStatus = $('copy-status');
+let lastResult = null;
+
+function setStatus(message, kind) {
+  status.textContent = message;
+  status.className = 'status ' + (kind || 'info');
+}
+
+function clearOutputs() {
+  lastResult = null;
+  winnerOut.textContent = '—';
+  winnerSub.textContent = '';
+  reasonCap.textContent = '';
+  for (const node of [statKind, statPrefix, statCount]) node.textContent = '—';
+  verdictTitle.textContent = '—';
+  verdictText.textContent = '';
+  notesList.replaceChildren();
+  blockBody.replaceChildren();
+  copyButton.disabled = true;
+  copyStatus.textContent = '';
+}
+
+function renderRows(result) {
+  blockBody.replaceChildren();
+  for (const row of result.rows) {
+    const tr = document.createElement('tr');
+    if (row.winner) {
+      tr.className = 'winner';
+      tr.setAttribute('aria-current', 'true');
+    }
+    const name = document.createElement('th');
+    name.scope = 'row';
+    name.textContent = row.label;
+    const line = document.createElement('td');
+    line.className = 'num';
+    line.textContent = String(row.line);
+    const outcome = document.createElement('td');
+    const tag = document.createElement('span');
+    tag.className = 'tag';
+    tag.textContent = row.outcome;
+    outcome.append(tag);
+    tr.append(name, line, outcome);
+    blockBody.append(tr);
+  }
+}
+
+function showResult(result) {
+  lastResult = result;
+  winnerOut.textContent = result.winnerText;
+  winnerSub.textContent = result.summary;
+  reasonCap.textContent = result.kindText;
+  statKind.textContent = result.kindText;
+  statPrefix.textContent = result.longest ? result.longest.pattern : 'none';
+  statCount.textContent = String(result.blocks.length);
+  verdictTitle.textContent = result.verdict.title;
+  verdictText.textContent = result.verdict.text;
+  renderRows(result);
+  notesList.replaceChildren();
+  for (const line of result.notes) {
+    const item = document.createElement('li');
+    item.textContent = line;
+    notesList.append(item);
+  }
+  copyButton.disabled = false;
+  setStatus(result.summary, result.winner ? 'ok' : 'warn');
+}
+
+function readForm() {
+  return { config: configInput.value, uri: uriInput.value };
+}
+
+function render() {
+  try {
+    showResult(NginxLocation.analyze(readForm()));
+  } catch (error) {
+    clearOutputs();
+    setStatus(error.message || String(error), 'error');
+  }
+}
+
+function applyExample(key) {
+  const example = NginxLocation.EXAMPLES[key];
+  if (!example) return;
+  configInput.value = example.config;
+  uriInput.value = example.uri;
+  render();
+  uriInput.focus();
+}
+
+form.addEventListener('submit', (event) => {
+  event.preventDefault();
+  render();
+});
+uriInput.addEventListener('input', render);
+document.querySelectorAll('.examples button').forEach((button) => {
+  button.addEventListener('click', () => applyExample(button.getAttribute('data-example')));
+});
+$('reset').addEventListener('click', () => {
+  configInput.value = NginxLocation.DEFAULT_CONFIG;
+  uriInput.value = NginxLocation.DEFAULT_URI;
+  render();
+  uriInput.focus();
+});
+copyButton.addEventListener('click', async () => {
+  if (!lastResult) return;
+  try {
+    await navigator.clipboard.writeText(lastResult.summary);
+    copyStatus.textContent = 'Result copied.';
+  } catch (error) {
+    copyStatus.textContent = 'Copy failed; select the result and copy it manually.';
+  }
+});
+
+render();
+})();
+</script>
+</body>
+</html>
