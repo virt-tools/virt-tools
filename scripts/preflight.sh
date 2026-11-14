@@ -280,6 +280,7 @@ node tests/bencode_encoder_decoder.test.cjs
 node tests/ephemeral_port_exhaustion_planner.test.cjs
 node tests/memory_overcommit_planner.test.cjs
 node tests/json_patch_applier.test.cjs
+node tests/priming_sugar_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
