@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="ext4 stride and stripe-width calculator: turn a RAID level, disk count, chunk size and filesystem block size into the mkfs.ext4 -E stride,stripe-width values, the matching XFS su/sw, and the full-stripe size that avoids read-modify-write.">
+<script src="/assets/theme-init.js"></script>
+<title>ext4 Stride &amp; Stripe Width Calculator — virt.tools</title>
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+[hidden]{display:none!important}
+.stride-shell{max-width:860px;margin:0 auto}
+.lead,.hint,.detail{color:var(--text-secondary,#8b949e)}
+.hint{font-size:.82rem;line-height:1.4;margin:0}
+.panel{background:var(--surface,#161b22);border:1px solid var(--border,#30363d);border-radius:10px;padding:1rem;margin:1rem 0}
+.field{display:flex;flex-direction:column;gap:.35rem;min-width:0}
+.field label{font-weight:600}
+.field input,.field select{box-sizing:border-box;width:100%;background:var(--background,#0d1117);color:var(--text,#c9d1d9);border:1px solid var(--border,#30363d);border-radius:6px;padding:.55rem;font:inherit;font-size:1rem;min-height:44px}
+.field input{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+.field:focus-within{outline:2px solid var(--accent,#58a6ff);outline-offset:2px;border-radius:8px}
+.field input:focus-visible,.field select:focus-visible,button:focus-visible{outline:2px solid var(--accent,#58a6ff);outline-offset:2px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:.8rem;margin:.8rem 0}
+.actions{display:flex;flex-wrap:wrap;gap:.6rem;margin:.9rem 0 .2rem}
+button{border:1px solid var(--border,#30363d);border-radius:6px;background:var(--surface-raised,#21262d);color:var(--text,#c9d1d9);padding:.58rem .85rem;min-height:44px;font:inherit;font-size:.95rem;cursor:pointer}
+button.primary{border-color:var(--accent,#58a6ff);background:var(--accent-soft,#1e3a5f)}
+button:disabled{opacity:.55;cursor:not-allowed}
+.examples{display:flex;flex-wrap:wrap;gap:.45rem;margin:.55rem 0 0;padding:0;list-style:none}
+.examples button{font-size:.85rem;min-height:44px;padding:.35rem .6rem}
+.copy-btn{font-size:.8rem;min-height:44px;padding:.25rem .55rem;margin-left:.8rem;vertical-align:middle}
+.copy-sub{display:inline-block;margin-left:.5rem;font-size:.8rem;color:var(--text-secondary,#8b949e)}
+.status{min-height:1.4rem;margin:.55rem 0 .3rem}
+.status.ok{color:#3fb950}.status.warn{color:#d29922}.status.error{color:#f85149}.status.info{color:var(--text-secondary,#8b949e)}
+.headline{text-align:center;padding:.6rem 0 .1rem}
+.headline output.big{font:800 clamp(1.25rem,4.6vw,1.9rem)/1.2 ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--accent,#58a6ff);overflow-wrap:anywhere}
+.headline output.big span{display:inline-block}
+.headline .cap{display:block;font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:var(--text-secondary,#8b949e);margin-bottom:.3rem}
+.headline .sub{display:block;margin-top:.35rem;font-size:.86rem;color:var(--text-secondary,#8b949e)}
+.table-wrap{overflow-x:auto;margin:.4rem 0 .2rem}
+.sheet{display:table;width:100%;border-collapse:collapse;font-size:.93rem;margin:0}
+.sheet caption{text-align:left;font-size:.82rem;color:var(--text-secondary,#8b949e);padding:0 0 .45rem}
+.sheet th,.sheet td{padding:.45rem .5rem;border-bottom:1px solid var(--border,#30363d);text-align:left;vertical-align:middle}
+.sheet thead th{font-size:.76rem;letter-spacing:.05em;text-transform:uppercase;color:var(--text-secondary,#8b949e);font-weight:600}
+.sheet tbody th{font-weight:600;white-space:nowrap}
+.sheet .num{text-align:right;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+.sheet tr.target th,.sheet tr.target td{color:#58a6ff}
+.sheet tr.target th{font-weight:700}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.7rem;margin:.9rem 0 .2rem}
+.stats div{background:var(--background,#0d1117);border:1px solid var(--border,#30363d);border-radius:8px;padding:.55rem .65rem}
+.stats dt{font-size:.74rem;letter-spacing:.05em;text-transform:uppercase;color:var(--text-secondary,#8b949e);margin:0 0 .2rem}
+.stats dd{margin:0;font:600 .98rem/1.4 ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:anywhere}
+.verdict{margin:.9rem 0 0;padding:.7rem .8rem;border:1px solid var(--border,#30363d);border-left:3px solid var(--accent,#58a6ff);border-radius:6px;background:var(--background,#0d1117)}
+.verdict strong{display:block;margin-bottom:.2rem}
+.verdict p{margin:0;font-size:.92rem;color:var(--text-secondary,#8b949e)}
+.cmd{display:block;overflow-x:auto;margin:.45rem 0 0;padding:.6rem .7rem;border:1px solid var(--border,#30363d);border-radius:6px;background:var(--background,#0d1117);font:500 .88rem/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre}
+.cmd-label{display:block;font-size:.78rem;letter-spacing:.05em;text-transform:uppercase;color:var(--text-secondary,#8b949e);margin:.7rem 0 0}
+.notes{margin:.8rem 0 0;padding-left:1.2rem}
+.notes li{margin:.3rem 0}
+.notes:empty{display:none}
+h2{font-size:1.05rem;margin:.2rem 0 .8rem}
+h2 span{font-weight:500;font-size:.85rem;color:var(--text-secondary,#8b949e)}
+.explain p{margin:.5rem 0}
+.explain ul{margin:.4rem 0 0;padding-left:1.2rem}
+.explain li{margin:.3rem 0}
+.explain code,.cmd code{overflow-wrap:anywhere}
+@media(max-width:600px){
+.panel{padding:.85rem}
+.actions>*{flex:1 1 9rem}
+.copy-btn{margin-left:0;flex:0 0 auto;display:block;margin:.55rem auto 0}
+.copy-sub{display:block;margin:.35rem 0 0}
+.sheet{font-size:.87rem}
+.sheet th,.sheet td{padding:.4rem .3rem}
+.stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+.stats dd{font-size:.9rem}
+}
+</style>
+</head>
+<body><div id="site-header"></div><main class="tool-container"><div class="stride-shell">
+<h1>ext4 Stride &amp; Stripe Width Calculator</h1>
+<p class="lead">When a filesystem sits on a RAID array, <code>mkfs.ext4</code> needs to know how many blocks fit in one chunk (<code>stride</code>) and in one full stripe (<code>stripe-width</code>). Get them wrong and every parity update becomes a read-modify-write. Pick the array's geometry and this returns both numbers, the matching XFS options, and the size of a full stripe.</p>
+
+<form id="stride-form" novalidate>
+<section class="panel" aria-labelledby="input-title">
+<h2 id="input-title">Array and filesystem geometry</h2>
+<div class="grid2">
+<div class="field">
+<label for="level">RAID level</label>
+<select id="level">
+<option value="single">Single disk, no array</option>
+<option value="raid0">RAID 0, stripe</option>
+<option value="raid1">RAID 1, mirror</option>
+<option value="raid5">RAID 5, single parity</option>
+<option value="raid6" selected>RAID 6, double parity</option>
+<option value="raid10">RAID 10, mirror plus stripe</option>
+</select>
+<p class="hint">decides how many disks hold data</p>
+</div>
+<div class="field">
+<label for="disks">Disks in the array</label>
+<input id="disks" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" value="8">
+<p class="hint">member disks, parity included</p>
+</div>
+<div class="field">
+<label for="chunk">RAID chunk size (KiB)</label>
+<input id="chunk" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" value="64">
+<p class="hint">the array's stripe unit, 64 or 128 KiB is typical</p>
+</div>
+<div class="field">
+<label for="block">Filesystem block size</label>
+<select id="block">
+<option value="1024">1 KiB</option>
+<option value="2048">2 KiB</option>
+<option value="4096" selected>4 KiB</option>
+</select>
+<p class="hint">the <code>-b</code> value you will pass to mkfs</p>
+</div>
+</div>
+<div class="actions">
+<button id="calculate" class="primary" type="submit">Work out stride and stripe width</button>
+<button id="reset" type="button">Reset</button>
+</div>
+<ul class="examples" aria-label="Example configurations">
+<li><button type="button" data-example="raid6">RAID 6, eight disks</button></li>
+<li><button type="button" data-example="raid5">RAID 5, four disks</button></li>
+<li><button type="button" data-example="raid10">RAID 10, six disks, 128 KiB</button></li>
+<li><button type="button" data-example="mirror">Two-disk mirror</button></li>
+<li><button type="button" data-example="stripe">RAID 0, 512 KiB chunk</button></li>
+</ul>
+<p id="stride-status" class="status info" role="status" aria-live="polite"></p>
+<p class="hint">Chunk sizes are whole KiB multiples of four, so every block size divides them exactly; a combination the array cannot have is refused rather than guessed.</p>
+</section>
+</form>
+
+<section class="panel" aria-labelledby="result-title">
+<h2 id="result-title">mkfs options <span id="mode-cap"></span></h2>
+<p class="headline"><span class="cap">Pass these to <code>mkfs.ext4 -E</code> <span id="level-cap"></span></span><output id="stride-out" class="big"><span id="out-stride">—</span> <span id="out-width"></span></output><button id="copy" class="copy-btn" type="button" disabled>Copy summary</button><span id="copy-status" class="copy-sub"></span><span class="sub" id="stride-sub"></span></p>
+<dl class="stats">
+<div><dt>Stride</dt><dd><output id="stat-stride">—</output></dd></div>
+<div><dt>Stripe width</dt><dd><output id="stat-width">—</output></dd></div>
+<div><dt>Data disks</dt><dd><output id="stat-data">—</output></dd></div>
+<div><dt>Chunk</dt><dd><output id="stat-chunk">—</output></dd></div>
+<div><dt>Full stripe</dt><dd><output id="stat-stripe">—</output></dd></div>
+<div><dt>Array members</dt><dd><output id="stat-disks">—</output></dd></div>
+</dl>
+<div class="verdict"><strong id="verdict-title">—</strong><p id="verdict-text"></p></div>
+<ul class="notes" id="notes"></ul>
+<p class="detail" id="stride-note"></p>
+<span class="cmd-label">ext4</span>
+<code class="cmd" id="cmd-ext4">—</code>
+<span class="cmd-label">XFS, same geometry</span>
+<code class="cmd" id="cmd-xfs">—</code>
+<div class="table-wrap">
+<table class="sheet">
+<caption>What the same array becomes at each filesystem block size; the highlighted row is the one you asked for</caption>
+<thead><tr><th scope="col">Block size</th><th scope="col" class="num">Stride</th><th scope="col" class="num">Stripe width</th></tr></thead>
+<tbody id="block-body"></tbody>
+</table>
+</div>
+</section>
+
+<section class="panel explain" aria-labelledby="how-title">
+<h2 id="how-title">How the numbers are worked out</h2>
+<ul>
+<li><strong>Stride is the chunk expressed in filesystem blocks.</strong> A 64 KiB chunk with 4 KiB blocks is <code>65536 / 4096 = 16</code> blocks, so <code>stride=16</code>. The chunk size must be a whole multiple of the block size or no whole stride exists, which is why a 6 KiB chunk is refused.</li>
+<li><strong>Stripe width is the stride times the data disks.</strong> RAID 6 over eight disks keeps two for parity, so six hold data: <code>16 × 6 = 96</code>. RAID 5 over eight disks would give seven data disks and a width of 112; a mirror has one data disk, so its width equals the stride and the value does not matter.</li>
+<li><strong>A full stripe is the chunk times the data disks.</strong> Here that is 384 KiB. A write that covers a whole stripe needs no old parity read, so it never pays the read-modify-write penalty; that is the write pattern these two options exist to encourage.</li>
+<li><strong>ext4 uses the pair to size its allocation groups.</strong> With them set, the block allocator places file data in chunk-sized runs aligned to the array, so sequential writes line up with whole stripes instead of straddling them. Without them ext4 assumes the chunk is one block and spreads a write across every disk in the worst possible way.</li>
+<li><strong>XFS takes the geometry in bytes.</strong> <code>-d su=64k,sw=6</code> is the same information: the stripe unit and the count of data disks, with parity left out of <code>sw</code>. mdadm's <code>chunk</code> is the stripe unit, so it maps straight onto <code>su</code>.</li>
+<li><strong>What it does not do.</strong> No partition alignment, no 4Kn or 512e sector size, no SSD erase-block or zone alignment, no thin provisioning or snapshots, no mdadm layout other than near-2 for RAID 10, and no benchmark of the result. It reports geometry, not throughput; everything runs in your browser with no storage, uploads or network access.</li>
+</ul>
+</section>
+</div></main><script src="/assets/tools.js"></script><script src="/assets/app.js"></script>
+<script>
+/* ext4-stride-core:start */
+const Ext4Stride = (() => {
+  'use strict';
+  const LEVELS = {
+    single: { name: 'Single disk', plural: 'a single disk', minDisks: 1, dataDisks: () => 1, parity: () => 0, copies: () => 1 },
+    raid0: { name: 'RAID 0', plural: 'RAID 0', minDisks: 2, dataDisks: (disks) => disks, parity: () => 0, copies: () => 1 },
+    raid1: { name: 'RAID 1', plural: 'RAID 1', minDisks: 2, dataDisks: () => 1, parity: (disks) => disks - 1, copies: (disks) => disks },
+    raid5: { name: 'RAID 5', plural: 'RAID 5', minDisks: 3, dataDisks: (disks) => disks - 1, parity: () => 1, copies: () => 1 },
+    raid6: { name: 'RAID 6', plural: 'RAID 6', minDisks: 4, dataDisks: (disks) => disks - 2, parity: () => 2, copies: () => 1 },
+    raid10: { name: 'RAID 10', plural: 'RAID 10', minDisks: 2, dataDisks: (disks) => disks / 2, parity: (disks) => disks / 2, copies: () => 2 }
+  };
+  const BLOCKS = [1024, 2048, 4096];
+  const CHUNK = { min: 4, max: 4096, multiple: 4 };
+  const DISKS = { min: 1, max: 64 };
+  const NARROW_STRIDE = 4;
+  const DEFAULTS = { level: 'raid6', disks: '8', chunk: '64', block: '4096' };
+  const SIG_DIGITS = 3;
+
+  function fail(message) { throw new Error(message); }
+
+  function pick(table, raw, message) {
+    const key = String(raw == null ? '' : raw).trim().toLowerCase();
+    if (!Object.prototype.hasOwnProperty.call(table, key)) fail(message);
+    return key;
+  }
+
+  function parseWhole(raw, message) {
+    const text = String(raw == null ? '' : raw).trim();
+    if (!/^(?:0|[1-9]\d{0,3})$/.test(text)) fail(message);
+    return Number(text);
+  }
+
+  function sig(value, digits) {
+    const places = digits == null ? SIG_DIGITS : digits;
+    if (value == null || !isFinite(value)) return '—';
+    if (value === 0) return '0';
+    const sign = value < 0 ? '-' : '';
+    const abs = Math.abs(value);
+    const exponent = Math.floor(Math.log10(abs));
+    const decimals = places - 1 - exponent;
+    if (decimals >= 0) {
+      const scale = Math.pow(10, Math.min(decimals, 6));
+      const scaled = Math.round(abs * scale);
+      return sign + (scaled / scale).toFixed(Math.min(decimals, 6));
+    }
+    const step = Math.pow(10, -decimals);
+    return sign + String(Math.round(abs / step) * step);
+  }
+
+  function trimZeros(text) {
+    if (text.indexOf('.') === -1) return text;
+    return text.replace(/0+$/, '').replace(/\.$/, '');
+  }
+
+  function sizeText(bytes) {
+    if (bytes == null || !isFinite(bytes)) return '—';
+    if (bytes >= 1024 * 1024 * 1024) return trimZeros(sig(bytes / (1024 * 1024 * 1024))) + ' GiB';
+    if (bytes >= 1024 * 1024) return trimZeros(sig(bytes / (1024 * 1024))) + ' MiB';
+    return trimZeros(sig(bytes / 1024)) + ' KiB';
+  }
+
+  function blockText(bytes) {
+    if (bytes == null || !isFinite(bytes)) return '—';
+    return trimZeros(sig(bytes / 1024)) + ' KiB';
+  }
+
+  function dataDisksFor(levelKey, disks) {
+    return LEVELS[levelKey].dataDisks(disks);
+  }
+
+  function rowsFor(chunkBytes, dataDisks, block) {
+    return BLOCKS.map((size) => {
+      const stride = chunkBytes / size;
+      return {
+        block: size,
+        stride: stride,
+        stripeWidth: stride * dataDisks,
+        isTarget: size === block
+      };
+    });
+  }
+
+  function classify(dataDisks, stride, chunkBytes, fullStripeBytes, levelKey) {
+    if (dataDisks <= 1) {
+      return {
+        key: 'no-stripe',
+        title: 'There is no stripe to line up with',
+        text: (levelKey === 'raid1'
+          ? 'A mirror writes every chunk in full to each copy, so it has no stripe width: leave stride and stripe-width unset and let ext4 use the block size on its own.'
+          : 'A single disk has no striping, so stride and stripe-width would only add a false sense of alignment: leave both unset.')
+      };
+    }
+    if (stride < NARROW_STRIDE) {
+      return {
+        key: 'narrow',
+        title: 'A one-block chunk makes the setting meaningless',
+        text: 'Each RAID chunk is a single filesystem block, so consecutive blocks never share a chunk and the stripe is only ' +
+          dataDisks + ' blocks wide. ext4 already writes whole blocks; use a chunk of at least 16 KiB, or a smaller block size, for the option to do anything.'
+      };
+    }
+    return {
+      key: 'aligned',
+      title: 'The chunk holds whole blocks',
+      text: 'Every ' + sizeText(chunkBytes) + ' chunk is exactly ' + stride + ' filesystem blocks, so a full stripe writes ' +
+        sizeText(fullStripeBytes) + ' across the ' + dataDisks + ' data disks without a parity read.'
+    };
+  }
+
+  function compute(input) {
+    const source = input || {};
+    const levelKey = pick(LEVELS, source.level == null ? DEFAULTS.level : source.level,
+      'Choose one of the listed RAID levels.');
+    const level = LEVELS[levelKey];
+    const disks = parseWhole(source.disks == null ? DEFAULTS.disks : source.disks,
+      'Enter the number of disks as a whole number.');
+    if (disks < DISKS.min || disks > DISKS.max) {
+      fail('Disks must stay between ' + DISKS.min + ' and ' + DISKS.max + '.');
+    }
+    if (levelKey === 'single' && disks !== 1) {
+      fail('A single disk has no array; set the disk count to 1.');
+    }
+    if (levelKey !== 'single' && disks < level.minDisks) {
+      fail(level.name + ' needs at least ' + level.minDisks + ' disks.');
+    }
+    if (levelKey === 'raid10' && disks % 2 !== 0) {
+      fail('RAID 10 mirrors every stripe, so the disk count must be even.');
+    }
+    const chunkKb = parseWhole(source.chunk == null ? DEFAULTS.chunk : source.chunk,
+      'Enter the chunk size in whole KiB.');
+    if (chunkKb < CHUNK.min || chunkKb > CHUNK.max) {
+      fail('Chunk size must stay between ' + CHUNK.min + ' and ' + CHUNK.max + ' KiB.');
+    }
+    if (chunkKb % CHUNK.multiple !== 0) {
+      fail('Chunk size must be a multiple of ' + CHUNK.multiple + ' KiB so it lines up with every block size.');
+    }
+    const blockRaw = String(source.block == null ? DEFAULTS.block : source.block).trim();
+    const block = Number(blockRaw);
+    if (!/^(?:0|[1-9]\d{0,4})$/.test(blockRaw) || BLOCKS.indexOf(block) === -1) {
+      fail('Choose a 1 KiB, 2 KiB or 4 KiB block size.');
+    }
+
+    const chunkBytes = chunkKb * 1024;
+    const dataDisks = dataDisksFor(levelKey, disks);
+    const parity = level.parity(disks);
+    const stride = chunkBytes / block;
+    const stripeWidth = stride * dataDisks;
+    const fullStripeBytes = chunkBytes * dataDisks;
+    const rows = rowsFor(chunkBytes, dataDisks, block);
+    const verdict = classify(dataDisks, stride, chunkBytes, fullStripeBytes, levelKey);
+    const striping = dataDisks > 1;
+
+    const ext4Command = striping
+      ? 'mkfs.ext4 -b ' + block + ' -E stride=' + stride + ',stripe-width=' + stripeWidth + ' /dev/md0'
+      : 'mkfs.ext4 -b ' + block + ' /dev/md0';
+    const xfsCommand = striping
+      ? 'mkfs.xfs -b size=' + block + ' -d su=' + chunkKb + 'k,sw=' + dataDisks + ' /dev/md0'
+      : 'mkfs.xfs -b size=' + block + ' /dev/md0';
+
+    const notes = [];
+    notes.push('A ' + chunkKb + ' KiB chunk is ' + chunkBytes + ' bytes, which is ' + stride +
+      ' blocks of ' + sizeText(block) + ': that is the stride.');
+    notes.push(level.plural.charAt(0).toUpperCase() + level.plural.slice(1) + ' over ' + disks + ' disks ' +
+      (parity > 0
+        ? 'keeps ' + parity + (parity === 1 ? ' disk' : ' disks') + ' for parity or mirroring and leaves ' + dataDisks +
+          (dataDisks === 1 ? ' data disk' : ' data disks')
+        : 'keeps every disk for data') +
+      ', so the stripe width is ' + stride + ' × ' + dataDisks + ' = ' + stripeWidth + ' blocks.');
+    notes.push('One full stripe is ' + chunkKb + ' KiB × ' + dataDisks + ' = ' + sizeText(fullStripeBytes) +
+      ' of user data; a write of that size is written straight through without reading old parity.');
+    notes.push(striping
+      ? 'ext4 sizes its allocation groups from the pair, so file data lands in chunk-aligned runs that follow the array instead of straddling a stripe.'
+      : 'Without striping there is nothing to align to, so both options are omitted from the command.');
+    notes.push('The same geometry in XFS terms is a stripe unit of ' + chunkKb + ' KiB and a stripe width of ' +
+      dataDisks + ' data disks; the parity disks are not counted in sw.');
+    notes.push('Not modelled: partition offset and 1 MiB alignment, 4Kn and 512e sector sizes, SSD erase blocks and zones, thin provisioning, snapshots, and mdadm layouts other than near-2 for RAID 10.');
+    const warnings = [];
+    if (verdict.key === 'narrow') {
+      warnings.push('A stride of ' + stride + ' block' + (stride === 1 ? '' : 's') + ' is below the four-block rule of thumb; raise the chunk to at least ' +
+        (NARROW_STRIDE * block / 1024) + ' KiB or lower the block size.');
+    }
+    if (verdict.key === 'no-stripe') {
+      warnings.push('No striping here: leave stride and stripe-width unset rather than passing the numbers above.');
+    }
+    if (levelKey === 'raid10') {
+      warnings.push('RAID 10 is assumed to be mdadm near-2, where one stripe covers half the disks; far and offset layouts stripe differently.');
+    }
+    for (const line of warnings) notes.push(line);
+
+    return {
+      level: levelKey,
+      levelName: level.name,
+      disks: disks,
+      dataDisks: dataDisks,
+      parity: parity,
+      chunkKb: chunkKb,
+      chunkBytes: chunkBytes,
+      block: block,
+      stride: stride,
+      stripeWidth: stripeWidth,
+      fullStripeBytes: fullStripeBytes,
+      striping: striping,
+      rows: rows,
+      ext4Command: ext4Command,
+      xfsCommand: xfsCommand,
+      verdict: verdict,
+      notes: notes,
+      warnings: warnings
+    };
+  }
+
+  return {
+    LEVELS: LEVELS,
+    BLOCKS: BLOCKS,
+    CHUNK: CHUNK,
+    DISKS: DISKS,
+    NARROW_STRIDE: NARROW_STRIDE,
+    DEFAULTS: DEFAULTS,
+    SIG_DIGITS: SIG_DIGITS,
+    sig: sig,
+    sizeText: sizeText,
+    blockText: blockText,
+    dataDisksFor: dataDisksFor,
+    rowsFor: rowsFor,
+    classify: classify,
+    compute: compute
+  };
+})();
+/* ext4-stride-core:end */
+(() => {
+'use strict';
+const $ = (id) => document.getElementById(id);
+const form = $('stride-form');
+const levelSelect = $('level');
+const disksInput = $('disks');
+const chunkInput = $('chunk');
+const blockSelect = $('block');
+const status = $('stride-status');
+const blockBody = $('block-body');
+const notes = $('notes');
+const note = $('stride-note');
+const modeCap = $('mode-cap');
+const levelCap = $('level-cap');
+const outStride = $('out-stride');
+const outWidth = $('out-width');
+const strideSub = $('stride-sub');
+const statStride = $('stat-stride');
+const statWidth = $('stat-width');
+const statData = $('stat-data');
+const statChunk = $('stat-chunk');
+const statStripe = $('stat-stripe');
+const statDisks = $('stat-disks');
+const verdictTitle = $('verdict-title');
+const verdictText = $('verdict-text');
+const cmdExt4 = $('cmd-ext4');
+const cmdXfs = $('cmd-xfs');
+const copyButton = $('copy');
+const copyStatus = $('copy-status');
+let lastResult = null;
+
+const PRESETS = {
+  raid6: { level: 'raid6', disks: '8', chunk: '64', block: '4096' },
+  raid5: { level: 'raid5', disks: '4', chunk: '64', block: '4096' },
+  raid10: { level: 'raid10', disks: '6', chunk: '128', block: '4096' },
+  mirror: { level: 'raid1', disks: '2', chunk: '64', block: '4096' },
+  stripe: { level: 'raid0', disks: '2', chunk: '512', block: '4096' }
+};
+const DEFAULTS = { level: 'raid6', disks: '8', chunk: '64', block: '4096' };
+
+function setStatus(message, kind) {
+  status.textContent = message;
+  status.className = 'status ' + (kind || 'info');
+}
+
+function clearOutputs() {
+  lastResult = null;
+  outStride.textContent = '—';
+  outWidth.textContent = '';
+  strideSub.textContent = '';
+  modeCap.textContent = '';
+  levelCap.textContent = '';
+  for (const node of [statStride, statWidth, statData, statChunk, statStripe, statDisks]) {
+    node.textContent = '—';
+  }
+  verdictTitle.textContent = '—';
+  verdictText.textContent = '';
+  blockBody.replaceChildren();
+  notes.replaceChildren();
+  note.textContent = '';
+  cmdExt4.textContent = '—';
+  cmdXfs.textContent = '—';
+  copyButton.disabled = true;
+  copyStatus.textContent = '';
+}
+
+function renderTable(result) {
+  blockBody.replaceChildren();
+  for (const row of result.rows) {
+    const tr = document.createElement('tr');
+    if (row.isTarget) {
+      tr.className = 'target';
+      tr.setAttribute('aria-current', 'true');
+    }
+    const block = document.createElement('th');
+    block.scope = 'row';
+    block.textContent = Ext4Stride.blockText(row.block);
+    const stride = document.createElement('td');
+    stride.className = 'num';
+    stride.textContent = String(row.stride);
+    const width = document.createElement('td');
+    width.className = 'num';
+    width.textContent = String(row.stripeWidth);
+    tr.append(block, stride, width);
+    blockBody.append(tr);
+  }
+}
+
+function summaryLine(result) {
+  return result.striping
+    ? 'ext4 stride=' + result.stride + ', stripe-width=' + result.stripeWidth + ' for a ' + result.chunkKb +
+      ' KiB chunk and ' + Ext4Stride.blockText(result.block) + ' blocks on ' + result.dataDisks +
+      ' data disks (' + result.levelName + ' over ' + result.disks + ' disks); one full stripe is ' +
+      Ext4Stride.sizeText(result.fullStripeBytes) + '.'
+    : 'No striping: omit stride and stripe-width for a ' + result.chunkKb + ' KiB chunk and ' +
+      Ext4Stride.blockText(result.block) + ' blocks (' + result.levelName + ' over ' + result.disks + ' disks).';
+}
+
+function showResult(result) {
+  lastResult = result;
+  modeCap.textContent = result.levelName;
+  levelCap.textContent = 'for ' + result.levelName + ' over ' + result.disks + ' disks';
+  outStride.textContent = result.striping ? 'stride=' + result.stride + ',' : 'no stride needed';
+  outWidth.textContent = result.striping ? 'stripe-width=' + result.stripeWidth : '';
+  strideSub.textContent = result.chunkKb + ' KiB chunk over ' + result.dataDisks +
+    (result.dataDisks === 1 ? ' data disk' : ' data disks') + ', ' + Ext4Stride.blockText(result.block) +
+    ' blocks, full stripe ' + Ext4Stride.sizeText(result.fullStripeBytes);
+  statStride.textContent = result.stride + (result.stride === 1 ? ' block' : ' blocks');
+  statWidth.textContent = result.striping ? result.stripeWidth + ' blocks' : 'n/a';
+  statData.textContent = String(result.dataDisks);
+  statChunk.textContent = result.chunkKb + ' KiB';
+  statStripe.textContent = Ext4Stride.sizeText(result.fullStripeBytes);
+  statDisks.textContent = String(result.disks);
+  verdictTitle.textContent = result.verdict.title;
+  verdictText.textContent = result.verdict.text;
+  cmdExt4.textContent = result.ext4Command;
+  cmdXfs.textContent = result.xfsCommand;
+  renderTable(result);
+  notes.replaceChildren();
+  for (const line of result.notes) {
+    const item = document.createElement('li');
+    item.textContent = line;
+    notes.append(item);
+  }
+  note.textContent = summaryLine(result);
+  copyButton.disabled = false;
+  setStatus(summaryLine(result), result.warnings.length > 0 || result.verdict.key === 'narrow' ? 'warn' : 'ok');
+}
+
+function readForm() {
+  return {
+    level: levelSelect.value,
+    disks: disksInput.value,
+    chunk: chunkInput.value,
+    block: blockSelect.value
+  };
+}
+
+function render() {
+  try {
+    showResult(Ext4Stride.compute(readForm()));
+  } catch (error) {
+    clearOutputs();
+    setStatus(error.message || String(error), 'error');
+  }
+}
+
+function applyPreset(key) {
+  const preset = PRESETS[key];
+  if (!preset) return;
+  levelSelect.value = preset.level;
+  disksInput.value = preset.disks;
+  chunkInput.value = preset.chunk;
+  blockSelect.value = preset.block;
+  render();
+  levelSelect.focus();
+}
+
+form.addEventListener('submit', (event) => {
+  event.preventDefault();
+  render();
+});
+for (const input of [disksInput, chunkInput]) {
+  input.addEventListener('input', render);
+}
+for (const select of [levelSelect, blockSelect]) {
+  select.addEventListener('change', render);
+}
+document.querySelectorAll('.examples button').forEach((button) => {
+  button.addEventListener('click', () => applyPreset(button.getAttribute('data-example')));
+});
+$('reset').addEventListener('click', () => {
+  levelSelect.value = DEFAULTS.level;
+  disksInput.value = DEFAULTS.disks;
+  chunkInput.value = DEFAULTS.chunk;
+  blockSelect.value = DEFAULTS.block;
+  render();
+  levelSelect.focus();
+});
+copyButton.addEventListener('click', async () => {
+  if (!lastResult) return;
+  const result = lastResult;
+  const payload = summaryLine(result) + ' ' + result.ext4Command + ' / ' + result.xfsCommand;
+  try {
+    await navigator.clipboard.writeText(payload);
+    copyStatus.textContent = 'Summary copied.';
+  } catch (error) {
+    copyStatus.textContent = 'Copy failed; select the summary and copy it manually.';
+  }
+});
+
+render();
+})();
+</script>
+</body>
+</html>

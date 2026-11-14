@@ -290,6 +290,7 @@ node tests/two_ray_path_loss_calculator.test.cjs
 node tests/poe_voltage_drop_calculator.test.cjs
 node tests/choropleth_class_breaks.test.cjs
 node tests/voip_bandwidth_calculator.test.cjs
+node tests/ext4_stride_stripe_width_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
