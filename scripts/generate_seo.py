@@ -55,6 +55,41 @@ def jsonld(obj) -> str:
     return s.replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
 
 
+def load_manifest(root: Path) -> dict:
+    """Locale pages written by generate_i18n.py (empty for an English-only build)."""
+    path = root / "assets" / "i18n" / "manifest.json"
+    if not path.is_file():
+        return {}
+    try:
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+    return manifest if isinstance(manifest, dict) else {}
+
+
+def alternate_block(base: str, relative: str, manifest: dict) -> list[tuple[str, str]]:
+    """(hreflang, url) pairs for one page path across every published locale.
+
+    `relative` is "" for the homepage or "tools/<slug>/". English is always the
+    x-default because it is the only locale that covers the whole catalog.
+    """
+    pairs: list[tuple[str, str]] = [("x-default", base + "/" + relative), ("en", base + "/" + relative)]
+    for code, info in sorted(manifest.items()):
+        if relative not in info.get("pages", {}):
+            continue
+        pairs.append((code, base + "/" + info["path"] + "/" + relative))
+    return pairs
+
+
+def hreflang_tags(pairs: list[tuple[str, str]]) -> str:
+    if len({url for _, url in pairs}) < 2:
+        return ""
+    return "".join(
+        f'  <link rel="alternate" hreflang="{esc_attr(code)}" href="{esc_attr(url)}">\n'
+        for code, url in pairs
+    )
+
+
 def load_catalog(root: Path) -> list[dict]:
     """Load public entries and apply curation as a final publication guard."""
     document = json.loads((root / "assets" / "tool-catalog.json").read_text(encoding="utf-8"))
@@ -87,7 +122,7 @@ def load_catalog(root: Path) -> list[dict]:
     ]
 
 
-def meta_tags(*triples: tuple[str, str, str]) -> str:
+def meta_tags(*triples: tuple[str, str, str | None]) -> str:
     # Each triple is (attr_name, attr_value, content) e.g. ("name", "description", "...").
     return "\n".join(
         f'  <meta {a}="{esc_attr(k)}" content="{esc_attr(c)}">'
@@ -107,22 +142,24 @@ def inject(path: Path, block: str) -> None:
     path.write_text(html_text, encoding="utf-8")
 
 
-def homepage_block(base: str) -> str:
-    url = base + "/"
+def homepage_block(base: str, alternates: str = "", title: str = SITE_NAME, desc: str = HOME_DESC,
+                   lang: str = "en", url: str | None = None) -> str:
+    url = url or base + "/"
     tags = meta_tags(
-        ("name", "description", HOME_DESC),
-        ("property", "og:title", SITE_NAME),
-        ("property", "og:description", HOME_DESC),
+        ("name", "description", desc),
+        ("property", "og:title", title),
+        ("property", "og:description", desc),
         ("property", "og:type", "website"),
         ("property", "og:url", url),
         ("property", "og:site_name", SITE_NAME),
+        ("property", "og:locale", lang),
         ("property", "og:image", base + OG_IMAGE),
         ("property", "og:image:width", "1200"),
         ("property", "og:image:height", "630"),
         ("property", "og:image:alt", OG_IMAGE_ALT),
         ("name", "twitter:card", "summary_large_image"),
-        ("name", "twitter:title", SITE_NAME),
-        ("name", "twitter:description", HOME_DESC),
+        ("name", "twitter:title", title),
+        ("name", "twitter:description", desc),
         ("name", "twitter:image", base + OG_IMAGE),
     )
     ld = jsonld({
@@ -130,6 +167,7 @@ def homepage_block(base: str) -> str:
         "@type": "WebSite",
         "name": SITE_NAME,
         "url": url,
+        "inLanguage": lang,
         "potentialAction": {
             "@type": "SearchAction",
             "target": {
@@ -142,17 +180,20 @@ def homepage_block(base: str) -> str:
     return (
         BEGIN
         + "\n  <link rel=\"canonical\" href=\"" + esc_attr(url) + "\">\n"
+        + alternates
         + tags + "\n"
         + f'  <script type="application/ld+json">{ld}</script>\n'
         + END
     )
 
 
-def tool_block(base: str, t: dict) -> str:
+def tool_block(base: str, t: dict, alternates: str = "", name: str | None = None,
+               desc: str | None = None, url: str | None = None, lang: str = "en",
+               guidance: str | None = None) -> str:
     slug = t["slug"]
-    url = base + "/tools/" + slug + "/"
-    name = t.get("name", slug)
-    desc = t.get("description", name)
+    url = url or base + "/tools/" + slug + "/"
+    name = name or t.get("name", slug)
+    desc = desc or t.get("description", name)
     tags = meta_tags(
         ("name", "description", desc),
         ("property", "og:title", name + " — " + SITE_NAME),
@@ -160,6 +201,7 @@ def tool_block(base: str, t: dict) -> str:
         ("property", "og:type", "website"),
         ("property", "og:url", url),
         ("property", "og:site_name", SITE_NAME),
+        ("property", "og:locale", lang),
         ("property", "og:image", base + OG_IMAGE),
         ("property", "og:image:width", "1200"),
         ("property", "og:image:height", "630"),
@@ -169,7 +211,7 @@ def tool_block(base: str, t: dict) -> str:
         ("name", "twitter:description", desc),
         ("name", "twitter:image", base + OG_IMAGE),
         ("name", "vt:tool-slug", slug),
-        ("name", "vt:guidance", public_guidance(t)),
+        ("name", "vt:guidance", guidance if guidance else public_guidance(t)),
         ("name", "vt:maturity", t.get("maturity", "unreviewed")),
         ("name", "vt:reviewed-at", t.get("reviewedAt") or ""),
         ("name", "vt:method", t.get("method") or ""),
@@ -182,6 +224,7 @@ def tool_block(base: str, t: dict) -> str:
         "name": name,
         "url": url,
         "description": desc,
+        "inLanguage": lang,
         "applicationCategory": t.get("category", "Utility") + "Application",
         "operatingSystem": "Any (web browser)",
         "browserRequirements": "Requires JavaScript",
@@ -191,6 +234,7 @@ def tool_block(base: str, t: dict) -> str:
     return (
         BEGIN
         + "\n  <link rel=\"canonical\" href=\"" + esc_attr(url) + "\">\n"
+        + alternates
         + tags + "\n"
         + f'  <script type="application/ld+json">{ld}</script>\n'
         + END
@@ -333,16 +377,49 @@ def main() -> int:
     tools = load_catalog(root)
     if not tools:
         raise RuntimeError(f"no public tools loaded from {root / 'assets' / 'tool-catalog.json'}")
+    manifest = load_manifest(root)
+    by_slug = {t["slug"]: t for t in tools}
 
     home = root / "index.html"
-    inject(home, homepage_block(base))
+    inject(home, homepage_block(base, hreflang_tags(alternate_block(base, "", manifest))))
 
     n = 0
     for t in tools:
         page = root / "tools" / t["slug"] / "index.html"
         if page.exists():
-            inject(page, tool_block(base, t))
+            alternates = hreflang_tags(alternate_block(base, "tools/" + t["slug"] + "/", manifest))
+            inject(page, tool_block(base, t, alternates))
             n += 1
+
+    # Localized copies were rendered by generate_i18n.py before this pass, so
+    # their inline scripts are hashed below exactly like the English pages.
+    localized = 0
+    for code, info in sorted(manifest.items()):
+        locale_path = info.get("path") or ""
+        for relative, meta in sorted(info.get("pages", {}).items()):
+            page = root / locale_path / relative / "index.html"
+            if not page.is_file():
+                continue
+            alternates = hreflang_tags(alternate_block(base, relative, manifest))
+            url = base + "/" + locale_path + "/" + relative
+            if relative == "":
+                if meta.get("name"):
+                    source = page.read_text(encoding="utf-8")
+                    source = re.sub(r"<title>.*?</title>", "<title>" + html.escape(meta["name"]) + "</title>",
+                                    source, count=1, flags=re.S)
+                    page.write_text(source, encoding="utf-8")
+                inject(page, homepage_block(base, alternates, meta.get("name") or SITE_NAME,
+                                            meta.get("description") or HOME_DESC,
+                                            info.get("htmlLang", code), url))
+            else:
+                slug = relative.strip("/").split("/")[-1]
+                record = by_slug.get(slug)
+                if not record:
+                    continue
+                inject(page, tool_block(base, record, alternates, meta.get("name"),
+                                        meta.get("description"), url, info.get("htmlLang", code),
+                                        meta.get("guidance")))
+            localized += 1
 
     pages = 0
     dynamic = 0
@@ -351,6 +428,8 @@ def main() -> int:
         pages += 1
 
     print(f"Injected SEO into homepage + {n} tool pages (base={base})")
+    if localized:
+        print(f"Injected localized SEO into {localized} pages across {len(manifest)} locales")
     print(
         f"Injected per-page CSP hashes into {pages} pages "
         f"({dynamic} keep unsafe-inline for runtime-built handlers)"

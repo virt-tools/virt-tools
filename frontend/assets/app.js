@@ -20,6 +20,110 @@
   ];
   var deferredInstallPrompt = null;
 
+  // English source strings. data/i18n/messages/en.json mirrors this table and
+  // scripts/generate_i18n.py --check fails when the two drift, so a new key is
+  // added in both places or not at all.
+  var VT_EN = {
+    "nav.primary": "Primary",
+    "nav.allTools": "All tools",
+    "nav.privacy": "Privacy",
+    "nav.feedback": "Feedback",
+    "nav.skip": "Skip to main content",
+    "nav.breadcrumb": "Breadcrumb",
+    "nav.backAll": "← All tools",
+    "theme.toggle": "Toggle color theme",
+    "theme.toLight": "Switch to light theme",
+    "theme.toDark": "Switch to dark theme",
+    "github.title": "Virtual Tools on GitHub",
+    "lang.label": "Language",
+    "home.eyebrow": "Browser tools",
+    "home.title": "All tools",
+    "home.metaTitle": "Virtual Tools — free, private, browser-based utilities",
+    "home.lede": "Private utilities that run on your device. No accounts, no uploads, no tracking.",
+    "home.searchLabel": "Search tools",
+    "home.searchPlaceholder": "Search tools",
+    "home.chipsLabel": "Filter by category",
+    "home.saved": "Saved",
+    "home.sortLabel": "Sort",
+    "home.sortGroup": "Sort order",
+    "home.sortAz": "A–Z",
+    "home.sortRecent": "Recent",
+    "home.emptyDefault": "No tools match your search.",
+    "home.loadMore": "Show more tools",
+    "home.noscript": "JavaScript is required to search and browse the catalog.",
+    "home.catalogLabel": "All tools",
+    "home.catalogLabelSaved": "Saved tools",
+    "catalog.searchPlaceholder": "Search {count} tools",
+    "catalog.chipAll": "All",
+    "catalog.count": "{shown} of {total} tools",
+    "catalog.countShowing": "Showing {shown} of {total} tools",
+    "catalog.loadMore": "Show more tools ({count})",
+    "catalog.emptyQuery": "No tools match \"{query}\".",
+    "catalog.emptyNoSaved": "No saved tools yet. Select the star on any tool to keep it here.",
+    "catalog.emptyNoCategory": "No tools match the selected category.",
+    "catalog.searchAll": "Search all categories",
+    "catalog.showAll": "Show all tools",
+    "catalog.suggest": "Suggest this tool",
+    "catalog.suggestMessage": "I searched for \"{query}\" but could not find a matching tool. Could you add one for this?",
+    "catalog.save": "Save {name}",
+    "catalog.remove": "Remove {name}",
+    "catalog.saveTitle": "Save tool",
+    "catalog.removeTitle": "Remove from saved",
+    "catalog.addedRecently": "Added recently",
+    "catalog.addedHours": "Added {count}h ago",
+    "catalog.addedDays": "Added {count}d ago",
+    "catalog.addedOn": "Added {date}",
+    "catalog.related": "Related tools",
+    "catalog.guidance": "Verification guidance",
+    "tool.favoriteAdd": "Add to favorites",
+    "tool.favoriteRemove": "Remove from favorites",
+    "tool.favoriteAddAria": "Add {title} to favorites",
+    "tool.favoriteRemoveAria": "Remove {title} from favorites",
+    "tool.report": "Report an issue",
+    "tool.privacy": "Privacy & local data",
+    "tool.feedbackMessage": "Feedback about {title} ({slug}): ",
+    "tool.boardRegion": "{title} board; scroll horizontally on small screens",
+    "privacy.noStorage": "No Virtual Tools preferences are stored in this browser.",
+    "privacy.clearKey": "Clear this key",
+    "privacy.truncated": "… preview truncated",
+    "privacy.online": "Online",
+    "privacy.offline": "Offline",
+    "privacy.offlineUnsupported": "{state} · Offline cache is not supported by this browser.",
+    "privacy.offlineUnavailable": "{state} · Offline cache details are unavailable.",
+    "privacy.cachedPage": "cached page",
+    "privacy.cachedPages": "cached pages",
+    "privacy.cache": "cache",
+    "privacy.caches": "caches",
+    "home.metaDescription": "A collection of free browser-based tools that run locally and preserve your privacy."
+  };
+
+  // Locale directory. Mirrors data/i18n/locales.json; the same --check gate
+  // compares this list with the registry so a locale cannot be half-added.
+  var LOCALES = [
+    { "code": "en", "name": "English", "path": "" },
+    { "code": "de", "name": "Deutsch", "path": "de" },
+    { "code": "es", "name": "Español", "path": "es" }
+  ];
+
+  var I18N = window.VT_I18N || null;
+  var LOCALE = I18N && I18N.code ? I18N.code : "en";
+  var LOCALE_PATH = I18N && I18N.path ? I18N.path : "";
+  var CATALOG = (I18N && I18N.catalog) || {};
+  var translatedTools = (CATALOG[LOCALE] || []).slice();
+
+  function t(key, vars) {
+    var text = (I18N && I18N.messages && I18N.messages[key]) || VT_EN[key] || key;
+    if (!vars) return text;
+    return String(text).replace(/\{([a-z]+)\}/gi, function (match, name) {
+      return vars[name] === undefined || vars[name] === null ? match : String(vars[name]);
+    });
+  }
+
+  function localizedTool(localeCode, slug) {
+    return (CATALOG[localeCode] || []).indexOf(slug) !== -1;
+  }
+
+
   function el(tag, attrs, children) {
     var node = document.createElement(tag);
     Object.keys(attrs || {}).forEach(function (key) {
@@ -98,8 +202,36 @@
     if (!button) return;
     var theme = currentTheme();
     button.replaceChildren(themeIcon(theme));
-    button.setAttribute("aria-label", theme === "dark" ? "Switch to light theme" : "Switch to dark theme");
+    button.setAttribute("aria-label", theme === "dark" ? t("theme.toLight") : t("theme.toDark"));
     button.title = button.getAttribute("aria-label");
+  }
+
+  function localeRoot() {
+    return LOCALE_PATH ? ROOT + LOCALE_PATH + "/" : ROOT;
+  }
+
+  function localeTarget(code) {
+    var entry = null;
+    LOCALES.forEach(function (item) { if (item.code === code) entry = item; });
+    if (!entry) return ROOT;
+    var prefix = entry.path ? ROOT + entry.path + "/" : ROOT;
+    var slug = slugFromPath();
+    if (slug && entry.path && localizedTool(code, slug)) return prefix + "tools/" + slug + "/";
+    return prefix;
+  }
+
+  function languageSwitcher() {
+    if (!LOCALES || LOCALES.length < 2) return null;
+    var select = el("select", {
+      id: "lang-select", class: "lang-select",
+      "aria-label": t("lang.label"), title: t("lang.label")
+    });
+    LOCALES.forEach(function (entry) {
+      select.appendChild(el("option", { value: entry.code }, [entry.name]));
+    });
+    select.value = LOCALE;
+    select.addEventListener("change", function () { location.href = localeTarget(select.value); });
+    return el("div", { class: "lang-switch" }, [select]);
   }
 
   function githubIcon() {
@@ -130,17 +262,17 @@
     var main = document.querySelector("main");
     if (main && !main.id) main.id = "main-content";
     if (main && !document.querySelector(".skip-link")) {
-      document.body.insertBefore(el("a", { class: "skip-link", href: "#" + main.id }, ["Skip to main content"]), document.body.firstChild);
+      document.body.insertBefore(el("a", { class: "skip-link", href: "#" + main.id }, [t("nav.skip")]), document.body.firstChild);
     }
 
-    var brand = el("a", { class: "brand", href: ROOT }, ["virt", el("span", {}, [".tools"])]);
-    var nav = el("nav", { "aria-label": "Primary" }, [
-      el("a", { href: ROOT }, ["All tools"]),
-      el("a", { href: ROOT + "privacy/" }, ["Privacy"]),
-      el("a", { href: ROOT + "feedback/" }, ["Feedback"])
+    var brand = el("a", { class: "brand", href: localeRoot() }, ["virt", el("span", {}, [".tools"])]);
+    var nav = el("nav", { "aria-label": t("nav.primary") }, [
+      el("a", { href: localeRoot() }, [t("nav.allTools")]),
+      el("a", { href: ROOT + "privacy/" }, [t("nav.privacy")]),
+      el("a", { href: ROOT + "feedback/" }, [t("nav.feedback")])
     ]);
     var themeButton = el("button", {
-      class: "theme-toggle", type: "button", "aria-label": "Toggle color theme"
+      class: "theme-toggle", type: "button", "aria-label": t("theme.toggle")
     });
     syncThemeButton(themeButton);
     themeButton.addEventListener("click", function () {
@@ -153,12 +285,13 @@
       href: "https://github.com/virt-tools/virt-tools",
       target: "_blank",
       rel: "noopener noreferrer",
-      title: "Virtual Tools on GitHub",
-      "aria-label": "Virtual Tools on GitHub"
+      title: t("github.title"),
+      "aria-label": t("github.title")
     });
     githubLink.appendChild(githubIcon());
 
-    var actions = el("div", { class: "header-actions" }, [githubLink, themeButton]);
+    var switcher = languageSwitcher();
+    var actions = el("div", { class: "header-actions" }, switcher ? [githubLink, themeButton, switcher] : [githubLink, themeButton]);
     mount.appendChild(brand);
     mount.appendChild(nav);
     mount.appendChild(actions);
@@ -232,6 +365,9 @@
       tool.maturity = tool.maturity || "unreviewed";
       tool.tags = Array.isArray(tool.tags) ? tool.tags : [];
       tool.aliases = Array.isArray(tool.aliases) ? tool.aliases : [];
+      var localized = I18N && I18N.tools ? I18N.tools[tool.slug] : null;
+      if (localized && localized.name) tool.name = localized.name;
+      if (localized && localized.description) tool.description = localized.description;
       toolIndex[tool.slug] = tool;
       var fields = {
         name: normalizeSearch(tool.name),
@@ -284,14 +420,20 @@
     var date = new Date(iso);
     if (!iso || isNaN(date.getTime())) return "";
     var seconds = (Date.now() - date.getTime()) / 1000;
-    if (seconds < 3600) return "Added recently";
-    if (seconds < 86400) return "Added " + Math.floor(seconds / 3600) + "h ago";
-    if (seconds < 2592000) return "Added " + Math.floor(seconds / 86400) + "d ago";
-    return "Added " + date.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+    var locale = I18N && I18N.htmlLang ? I18N.htmlLang : undefined;
+    if (seconds < 3600) return t("catalog.addedRecently");
+    if (seconds < 86400) return t("catalog.addedHours", { count: Math.floor(seconds / 3600) });
+    if (seconds < 2592000) return t("catalog.addedDays", { count: Math.floor(seconds / 86400) });
+    return t("catalog.addedOn", { date: date.toLocaleDateString(locale, { year: "numeric", month: "short", day: "numeric" }) });
+  }
+
+  function toolHref(slug) {
+    var prefix = LOCALE_PATH && localizedTool(LOCALE, slug) ? ROOT + LOCALE_PATH + "/" : ROOT;
+    return prefix + "tools/" + slug + "/";
   }
 
   function formulaHref(tool, query) {
-    var base = ROOT + "tools/" + tool.slug + "/";
+    var base = toolHref(tool.slug);
     var normalized = normalizeSearch(query);
     if (!normalized || tool.tags.indexOf("formula-workbench") === -1) return base;
     var candidate = normalized.replace(/ /g, "-");
@@ -311,6 +453,8 @@
   }
 
   function categoryName(category) {
+    var table = (I18N && I18N.categories) || null;
+    if (table && table[category]) return table[category];
     return category === "IT & Networking" ? "Networking" : category;
   }
 
@@ -329,8 +473,8 @@
       type: "button",
       "data-favorite": tool.slug,
       "aria-pressed": favorite ? "true" : "false",
-      "aria-label": (favorite ? "Remove " : "Save ") + tool.name,
-      title: favorite ? "Remove from saved" : "Save tool"
+      "aria-label": favorite ? t("catalog.remove", { name: tool.name }) : t("catalog.save", { name: tool.name }),
+      title: favorite ? t("catalog.removeTitle") : t("catalog.saveTitle")
     }, [favorite ? "★" : "☆"]));
     return article;
   }
@@ -385,28 +529,36 @@
     renderCatalog();
   }
 
+  function fmtCount(value) {
+    try {
+      return Number(value).toLocaleString(I18N && I18N.htmlLang ? I18N.htmlLang : undefined);
+    } catch (_) {
+      return String(value);
+    }
+  }
+
   function renderEmpty(query) {
     if (!emptyNote) return;
     replace(emptyNote, []);
     if (query) {
-      emptyNote.appendChild(document.createTextNode('No tools match "' + query + '". '));
+      emptyNote.appendChild(document.createTextNode(t("catalog.emptyQuery", { query: query }) + " "));
       if (activeCategory) {
-        var clear = el("button", { class: "link-btn", type: "button" }, ["Search all categories"]);
+        var clear = el("button", { class: "link-btn", type: "button" }, [t("catalog.searchAll")]);
         clear.addEventListener("click", clearFilters);
         emptyNote.appendChild(clear);
         emptyNote.appendChild(document.createTextNode("."));
       } else {
-        var message = 'I searched for "' + query + '" but could not find a matching tool. Could you add one for this?';
+        var message = t("catalog.suggestMessage", { query: query });
         emptyNote.appendChild(el("a", {
           href: ROOT + "feedback/?kind=suggestion&message=" + encodeURIComponent(message)
-        }, ["Suggest this tool"]));
+        }, [t("catalog.suggest")]));
         emptyNote.appendChild(document.createTextNode("."));
       }
     } else if (savedOnly) {
-      emptyNote.appendChild(document.createTextNode("No saved tools yet. Select the star on any tool to keep it here."));
+      emptyNote.appendChild(document.createTextNode(t("catalog.emptyNoSaved")));
     } else {
-      emptyNote.appendChild(document.createTextNode("No tools match the selected category."));
-      var reset = el("button", { class: "link-btn", type: "button" }, ["Show all tools"]);
+      emptyNote.appendChild(document.createTextNode(t("catalog.emptyNoCategory")));
+      var reset = el("button", { class: "link-btn", type: "button" }, [t("catalog.showAll")]);
       reset.addEventListener("click", clearFilters);
       emptyNote.appendChild(document.createTextNode(" "));
       emptyNote.appendChild(reset);
@@ -431,15 +583,15 @@
     }
     if (loadMoreButton) {
       loadMoreButton.hidden = shown.length >= results.length;
-      loadMoreButton.textContent = "Show more tools (" + Math.min(PAGE_SIZE, results.length - shown.length) + ")";
+      loadMoreButton.textContent = t("catalog.loadMore", { count: fmtCount(Math.min(PAGE_SIZE, results.length - shown.length)) });
     }
     if (countElement) {
       var total = (window.VIRTUAL_TOOLS || []).length;
       countElement.textContent = results.length === shown.length
-        ? results.length.toLocaleString() + " of " + total.toLocaleString() + " tools"
-        : "Showing " + shown.length.toLocaleString() + " of " + results.length.toLocaleString() + " tools";
+        ? t("catalog.count", { shown: fmtCount(results.length), total: fmtCount(total) })
+        : t("catalog.countShowing", { shown: fmtCount(shown.length), total: fmtCount(results.length) });
     }
-    catalogMount.setAttribute("aria-label", savedOnly ? "Saved tools" : "All tools");
+    catalogMount.setAttribute("aria-label", savedOnly ? t("home.catalogLabelSaved") : t("home.catalogLabel"));
   }
 
   function syncChips() {
@@ -461,13 +613,14 @@
     (window.VIRTUAL_TOOLS || []).forEach(function (tool) { counts[tool.category] = (counts[tool.category] || 0) + 1; });
     chipsMount.appendChild(el("button", {
       class: "catalog-chip", type: "button", "data-category": "", "aria-pressed": "true"
-    }, ["All"]));
+    }, [t("catalog.chipAll")]));
     CATEGORY_GROUPS.forEach(function (group) {
       var total = group.categories.reduce(function (sum, category) { return sum + (counts[category] || 0); }, 0);
       if (!total) return;
+      var label = (I18N && I18N.groups && I18N.groups[group.id]) || group.name;
       chipsMount.appendChild(el("button", {
         class: "catalog-chip", type: "button", "data-category": "group:" + group.id, "aria-pressed": "false"
-      }, [group.name]));
+      }, [label]));
     });
     chipsMount.addEventListener("click", function (event) {
       var chip = event.target.closest ? event.target.closest(".catalog-chip") : null;
@@ -485,7 +638,7 @@
     buildToolIndex();
     searchInput = document.getElementById("tool-search");
     if (searchInput) {
-      searchInput.placeholder = "Search " + (window.VIRTUAL_TOOLS || []).length.toLocaleString() + " tools";
+      searchInput.placeholder = t("catalog.searchPlaceholder", { count: fmtCount((window.VIRTUAL_TOOLS || []).length) });
     }
     emptyNote = document.getElementById("search-empty");
     countElement = document.getElementById("tool-count");
@@ -597,7 +750,7 @@
       return;
     }
     if (!guidanceNote) {
-      guidanceNote = el("p", { class: "tool-decision-guidance", role: "note", "aria-label": "Verification guidance" });
+      guidanceNote = el("p", { class: "tool-decision-guidance", role: "note", "aria-label": t("catalog.guidance") });
       var main = document.querySelector("main");
       var firstInteractive = main.querySelector(".input-section, .panel, form");
       if (firstInteractive) firstInteractive.insertAdjacentElement("beforebegin", guidanceNote);
@@ -615,10 +768,12 @@
     if (old) old.remove();
     if (!Array.isArray(metadata.related) || !metadata.related.length) return;
     var section = el("section", { class: "related-tools", "aria-labelledby": "related-tools-title" });
-    section.appendChild(el("h2", { id: "related-tools-title" }, ["Related tools"]));
+    section.appendChild(el("h2", { id: "related-tools-title" }, [t("catalog.related")]));
     var list = el("ul");
     metadata.related.forEach(function (tool) {
-      list.appendChild(el("li", {}, [el("a", { href: ROOT + "tools/" + tool.slug + "/" }, [tool.name])]));
+      var localized = I18N && I18N.tools ? I18N.tools[tool.slug] : null;
+      var label = localized && localized.name ? localized.name : tool.name;
+      list.appendChild(el("li", {}, [el("a", { href: toolHref(tool.slug) }, [label])]));
     });
     section.appendChild(list);
     main.appendChild(section);
@@ -646,24 +801,29 @@
     };
     var board = boardSelectors[slug] && main.querySelector(boardSelectors[slug]);
     if (board) {
-      var region = el("div", { class: "tool-scroll-region", tabindex: "0", role: "region", "aria-label": title + " board; scroll horizontally on small screens" });
+      var region = el("div", { class: "tool-scroll-region", tabindex: "0", role: "region", "aria-label": t("tool.boardRegion", { title: title }) });
       board.parentNode.insertBefore(region, board);
       region.appendChild(board);
     }
     main.querySelectorAll(".tool-header .back").forEach(function (back) { back.remove(); });
 
-    var breadcrumbs = el("nav", { class: "tool-breadcrumbs", "aria-label": "Breadcrumb" }, [
-      el("a", { href: ROOT }, ["← All tools"])
+    var breadcrumbs = el("nav", { class: "tool-breadcrumbs", "aria-label": t("nav.breadcrumb") }, [
+      el("a", { href: localeRoot() }, [t("nav.backAll")])
     ]);
     main.insertBefore(breadcrumbs, main.firstChild);
 
     var actions = el("div", { class: "tool-shell-actions" });
     var favorite = isFavorite(slug);
+    var favoriteLabel = function (active) {
+      return active
+        ? t("tool.favoriteRemoveAria", { title: title })
+        : t("tool.favoriteAddAria", { title: title });
+    };
     var favoriteButton = el("button", {
       class: "tool-favorite tool-page-favorite" + (favorite ? " is-favorite" : ""), type: "button",
       "aria-pressed": favorite ? "true" : "false",
-      "aria-label": (favorite ? "Remove " : "Add ") + title + (favorite ? " from favorites" : " to favorites"),
-      title: favorite ? "Remove from favorites" : "Add to favorites"
+      "aria-label": favoriteLabel(favorite),
+      title: favorite ? t("tool.favoriteRemove") : t("tool.favoriteAdd")
     }, [favorite ? "★" : "☆"]);
     favoriteButton.addEventListener("click", function () {
       favorite = !favorite;
@@ -671,8 +831,8 @@
       favoriteButton.setAttribute("aria-pressed", favorite ? "true" : "false");
       favoriteButton.classList.toggle("is-favorite", favorite);
       favoriteButton.textContent = favorite ? "★" : "☆";
-      favoriteButton.setAttribute("aria-label", (favorite ? "Remove " : "Add ") + title + (favorite ? " from favorites" : " to favorites"));
-      favoriteButton.title = favorite ? "Remove from favorites" : "Add to favorites";
+      favoriteButton.setAttribute("aria-label", favoriteLabel(favorite));
+      favoriteButton.title = favorite ? t("tool.favoriteRemove") : t("tool.favoriteAdd");
     });
     if (heading) {
       var headingRow = el("div", { class: "tool-heading-row" });
@@ -680,11 +840,11 @@
       headingRow.appendChild(heading);
       headingRow.appendChild(favoriteButton);
     }
-    var message = "Feedback about " + title + " (" + slug + "): ";
+    var message = t("tool.feedbackMessage", { title: title, slug: slug });
     actions.appendChild(el("a", {
       href: ROOT + "feedback/?kind=bug&tool=" + encodeURIComponent(slug) + "&message=" + encodeURIComponent(message)
-    }, ["Report an issue"]));
-    actions.appendChild(el("a", { class: "tool-privacy-link", href: ROOT + "privacy/" }, ["Privacy & local data"]));
+    }, [t("tool.report")]));
+    actions.appendChild(el("a", { class: "tool-privacy-link", href: ROOT + "privacy/" }, [t("tool.privacy")]));
 
     var metadata = defaultToolMetadata(slug);
     main.appendChild(actions);
@@ -727,7 +887,7 @@
     replace(mount, []);
     var keys = virtualToolsStorageKeys();
     if (!keys.length) {
-      mount.appendChild(el("p", { class: "note" }, ["No Virtual Tools preferences are stored in this browser."]));
+      mount.appendChild(el("p", { class: "note" }, [t("privacy.noStorage")]));
       return;
     }
     keys.forEach(function (key) {
@@ -735,8 +895,8 @@
       try { value = localStorage.getItem(key) || ""; } catch (_) {}
       var details = el("details", { class: "storage-entry" });
       details.appendChild(el("summary", {}, [key + " · " + formatBytes(new Blob([value]).size)]));
-      details.appendChild(el("pre", { class: "storage-preview" }, [value.slice(0, 20000) + (value.length > 20000 ? "\n… preview truncated" : "")]));
-      var remove = el("button", { class: "secondary", type: "button" }, ["Clear this key"]);
+      details.appendChild(el("pre", { class: "storage-preview" }, [value.slice(0, 20000) + (value.length > 20000 ? "\n" + t("privacy.truncated") : "")]));
+      var remove = el("button", { class: "secondary", type: "button" }, [t("privacy.clearKey")]);
       remove.addEventListener("click", function () {
         try { localStorage.removeItem(key); } catch (_) {}
         renderPrivacyStorage();
@@ -749,9 +909,9 @@
   function renderOfflineState() {
     var status = document.getElementById("offline-status");
     if (!status) return;
-    var online = navigator.onLine ? "Online" : "Offline";
+    var online = navigator.onLine ? t("privacy.online") : t("privacy.offline");
     if (!("caches" in window)) {
-      status.textContent = online + " · Offline cache is not supported by this browser.";
+      status.textContent = t("privacy.offlineUnsupported", { state: online });
       return;
     }
     caches.keys().then(function (names) {
@@ -760,9 +920,11 @@
         return caches.open(name).then(function (cache) { return cache.keys(); });
       })).then(function (entries) {
         var count = entries.reduce(function (sum, list) { return sum + list.length; }, 0);
-        status.textContent = online + " · " + count + (count === 1 ? " cached page · " : " cached pages · ") + ours.length + (ours.length === 1 ? " cache." : " caches.");
+        var pageWord = count === 1 ? t("privacy.cachedPage") : t("privacy.cachedPages");
+        var cacheWord = ours.length === 1 ? t("privacy.cache") : t("privacy.caches");
+        status.textContent = online + " · " + count + " " + pageWord + " · " + ours.length + " " + cacheWord + ".";
       });
-    }).catch(function () { status.textContent = online + " · Offline cache details are unavailable."; });
+    }).catch(function () { status.textContent = t("privacy.offlineUnavailable", { state: online }); });
   }
 
   function clearOfflineData() {
