@@ -161,7 +161,7 @@ assert.ok(html.includes('<select id="solve-for">'), 'the solve target is a selec
 
 // ---- Catalog record and every case in it must agree with the core.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2263, 'catalog total');
+assert.equal(catalog.tools.length, 2264, 'catalog total');
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record missing');
 assert.equal(record.name, 'Triathlon Split Planner');
@@ -184,7 +184,7 @@ for (const phrase of ['target', 'transitions', 'average speed', 'no network']) {
 }
 assert.equal(record.sources.length, 3, 'sources are cited');
 assert.ok(record.sources.every((source) => typeof source.title === 'string' && source.title.length > 20));
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Sports & Outdoors').length, 43, 'Sports & Outdoors count');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Sports & Outdoors').length, 44, 'Sports & Outdoors count');
 assert.equal(catalog.tools.filter((tool) => tool.slug === slug).length, 1, 'one record');
 assert.equal(catalog.tools.filter((tool) => tool.name === record.name).length, 1, 'one name');
 assert.equal(catalog.tools.filter((tool) => (tool.tags || []).includes('triathlon')).length, 1, 'one triathlon tool');
