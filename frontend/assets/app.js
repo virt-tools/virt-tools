@@ -849,6 +849,10 @@
     var metadata = defaultToolMetadata(slug);
     main.appendChild(actions);
     renderGuidance(metadata);
+    // The page's own vt:guidance meta is per-page and already localized when the
+    // page is a translated copy; the shared catalog record is English, so the
+    // fetched JSON must not overwrite it.
+    var pageGuidance = metadata.guidance;
 
     fetch(ROOT + "assets/tool-meta/" + encodeURIComponent(slug) + ".json", {
       credentials: "same-origin", cache: "no-cache", headers: { Accept: "application/json" }
@@ -857,6 +861,7 @@
       return response.json();
     }).then(function (loaded) {
       metadata = Object.assign(metadata, loaded || {});
+      if (pageGuidance) metadata.guidance = pageGuidance;
       renderGuidance(metadata);
       renderRelated(main, metadata);
     }).catch(function () {
