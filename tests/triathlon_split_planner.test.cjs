@@ -161,7 +161,7 @@ assert.ok(html.includes('<select id="solve-for">'), 'the solve target is a selec
 
 // ---- Catalog record and every case in it must agree with the core.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2276, 'catalog total');
+assert.equal(catalog.tools.length, 2277, 'catalog total');
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record missing');
 assert.equal(record.name, 'Triathlon Split Planner');
