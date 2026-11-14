@@ -101,7 +101,7 @@ refuse({ unit: 'ire', value: '-21' }, 'IRE must be from -20 to 120.');
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record present');
-assert.equal(catalog.tools.length, 2275, 'catalog total');
+assert.equal(catalog.tools.length, 2276, 'catalog total');
 assert.equal(record.category, 'Video');
 assert.equal(record.subcategory, 'Conversion');
 assert.equal(record.risk, 'low');

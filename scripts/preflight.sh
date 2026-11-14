@@ -284,6 +284,7 @@ node tests/priming_sugar_calculator.test.cjs
 node tests/bead_stringing_calculator.test.cjs
 node tests/two_ray_path_loss_calculator.test.cjs
 node tests/poe_voltage_drop_calculator.test.cjs
+node tests/choropleth_class_breaks.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
