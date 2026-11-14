@@ -271,6 +271,7 @@ node tests/sla_uptime_budget_calculator.test.cjs
 node tests/map_tile_download_estimator.test.cjs
 node tests/call_sheet_builder.test.cjs
 node tests/bend_allowance_calculator.test.cjs
+node tests/four_part_writing_checker.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
