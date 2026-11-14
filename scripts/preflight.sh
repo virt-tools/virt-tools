@@ -295,6 +295,7 @@ node tests/nginx_location_matcher.test.cjs
 node tests/hata_path_loss_calculator.test.cjs
 node tests/tolerance_stack_up_calculator.test.cjs
 node tests/luminance_unit_converter.test.cjs
+node tests/daylight_saving_transitions.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
