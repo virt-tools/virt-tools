@@ -151,7 +151,7 @@ for (const width of widths) {
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
 const entry = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(entry, 'catalog entry missing');
-assert.equal(catalog.tools.length, 2258, 'catalog total');
+assert.equal(catalog.tools.length, 2259, 'catalog total');
 assert.equal(entry.category, 'Crafts & Hobbies');
 assert.equal(entry.subcategory, 'Planning');
 assert.equal(entry.risk, 'low');
