@@ -254,6 +254,19 @@ def is_prose(value: str) -> bool:
     return bool(re.search(r"[A-Za-z\u00c0-\u024f\u0400-\u04ff]", value))
 
 
+LETTER_RE = re.compile(r"[^\W\d_]", re.UNICODE)
+# Literal fragments of an expression are not copy: ``", ]/.test(s)?'"`` is the
+# tail of a template the page concatenates, and translating it would edit code.
+CODE_SHAPE = re.compile(r"[\]\[`$\\]|=>|\|\||&&|\.test\(|\.replace\(|\.join\(|\.split\(|\$\{|^\s*[)\]},;:]|\s\?\s")
+
+
+def is_code_shaped(text: str) -> bool:
+    """True for operator soup that leaked out of a string literal."""
+    compact = re.sub(r"\s+", "", text)
+    letters = len(LETTER_RE.findall(compact))
+    return letters / max(1, len(compact)) < 0.5 or bool(CODE_SHAPE.search(text))
+
+
 def looks_prose_literal(value: str) -> bool:
     """True when a JS string literal is user-facing copy rather than a value.
 
@@ -269,7 +282,7 @@ def looks_prose_literal(value: str) -> bool:
         return False
     if not re.search(r"[A-Za-z\u00c0-\u024f]{3,}", text):
         return False
-    return not CODE_SMELL.search(text)
+    return not CODE_SMELL.search(text) and not is_code_shaped(text)
 
 
 def scan_js_literals(body: str) -> list[tuple[int, int, str, str]]:
@@ -351,7 +364,7 @@ def fragment_units(value: str) -> list[str]:
     root, _ = parse(value)
     found: list[str] = []
     _collect_text_nodes(root, found)
-    return [unit for unit in found if is_prose(unit)]
+    return [unit for unit in found if is_prose(unit) and not is_code_shaped(unit)]
 
 
 def extract_units(root: Node) -> dict:
@@ -360,6 +373,22 @@ def extract_units(root: Node) -> dict:
     text_units: dict[str, None] = {}
     attr_units: dict[str, None] = {}
     js_units: dict[str, None] = {}
+
+    def collect_attrs(node: Node) -> None:
+        """Attributes of a subtree whose text is already covered by a block unit.
+
+        A ``<label>Custom names <textarea placeholder="...">`` label is taken as
+        one text unit, so the walker used to stop at the label and never see the
+        control's placeholder or aria-label. Those are visible copy too.
+        """
+        for key, value in node.attrs:
+            if key.lower() in TRANSLATABLE_ATTRS and value:
+                unit = norm_ws(html_module.unescape(value))
+                if is_prose(unit):
+                    attr_units.setdefault(unit, None)
+        for child in node.children:
+            if isinstance(child, Node):
+                collect_attrs(child)
 
     def visit(node: Node) -> None:
         if node.tag in RAW_TAGS:
@@ -386,10 +415,12 @@ def extract_units(root: Node) -> dict:
                 for unit in found:
                     if is_prose(unit):
                         text_units.setdefault(unit, None)
+                collect_attrs(node)
                 return
             inner = norm_ws("".join(serialize(child) for child in node.children))
             if inner and is_prose(re.sub(r"<[^>]*>", " ", inner)):
                 html_units.setdefault(inner, None)
+                collect_attrs(node)
                 return
         # Text that no block unit covers: a stray label in a wrapper element, or
         # text beside nested blocks such as the "Sort" label next to its buttons.
