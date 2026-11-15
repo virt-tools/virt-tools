@@ -310,6 +310,7 @@ node tests/ipv4_route_summarizer.test.cjs
 node tests/posix_acl_rights.test.cjs
 node tests/editorconfig_resolver.test.cjs
 node tests/spectrum_analyzer_sweep.test.cjs
+node tests/four_bar_linkage.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
