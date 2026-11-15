@@ -326,6 +326,7 @@ node tests/core_dump_pattern_builder.test.cjs
 node tests/shell_quote_builder.test.cjs
 node tests/playing_time_rotation_planner.test.cjs
 node tests/ip3_intercept_calculator.test.cjs
+node tests/bearing_l10_life_calculator.test.cjs
 node tests/universal_integer_codes.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 

@@ -296,8 +296,8 @@ for (const tool of catalog.tools) {
   }
 }
 
-assert.equal(catalog.tools.length, 2318, 'catalog total');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2058, 'public tools');
+assert.equal(catalog.tools.length, 2319, 'catalog total');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2059, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Developer').length, 47, 'Developer count');
 
 // Every recorded case replays exactly.
@@ -359,5 +359,5 @@ assert.ok(html.includes('navigator.clipboard'), 'copy button');
 console.log(
   'shell-quote-builder: ' + matrix.length + ' texts, ' + formChecks + ' form round trips, '
   + shellChecks + ' shell executions, ' + decodeCases.length + ' decodes, ' + refusals.length
-  + ' refusals, ' + record.testCases.length + ' catalog cases, totals 2318/2058/47'
+  + ' refusals, ' + record.testCases.length + ' catalog cases, totals 2319/2059/47'
 );
