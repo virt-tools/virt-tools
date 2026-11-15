@@ -120,7 +120,7 @@ assert.ok(html.includes('role="alert"'), 'errors are announced');
 
 // ---- Catalog record and every case in it must agree with the core.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2299, 'catalog total');
+assert.equal(catalog.tools.length, 2300, 'catalog total');
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record missing');
 assert.equal(record.name, 'JUnit XML Report Summarizer');
@@ -143,7 +143,7 @@ for (const phrase of ['testcase', 'precedence', 'DOCTYPE', 'no network']) {
 }
 assert.equal(record.sources.length, 3, 'sources are cited');
 assert.ok(record.sources.every((source) => typeof source.title === 'string' && source.title.length > 20));
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Developer').length, 45, 'Developer count');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Developer').length, 46, 'Developer count');
 assert.equal(catalog.tools.filter((tool) => tool.slug === slug).length, 1, 'one record');
 assert.equal(catalog.tools.filter((tool) => tool.name === record.name).length, 1, 'one name');
 assert.equal(catalog.tools.filter((tool) => (tool.tags || []).includes('junit')).length, 1, 'one junit tool');
