@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>TCP Retransmission Timer Calculator - Virtual Tools</title>
+<meta name="description" content="Turn measured round-trip times into the smoothed RTT, round-trip variation and retransmission timeout a TCP sender keeps, following the RFC 6298 algorithm.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+[hidden]{display:none !important}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:10px 0}
+label.f{font-size:13px;opacity:.85;display:block;margin-bottom:4px}
+.field{background:var(--bg,#14181f);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px}
+.field:focus-within{border-color:var(--accent,#6ea8fe);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#6ea8fe) 18%,transparent)}
+.field input,.field select{box-sizing:border-box;min-width:0;width:100%;max-width:none;min-height:44px;background:transparent;color:var(--text,#e6e6e6);border:none;font-family:ui-monospace,monospace;font-size:17px;padding:2px 0;outline:none}
+.field textarea{box-sizing:border-box;width:100%;min-height:44px;background:transparent;color:var(--text,#e6e6e6);border:none;font-family:ui-monospace,monospace;font-size:17px;line-height:1.35;padding:6px 0;outline:none;resize:vertical}
+.field select{font:inherit;font-size:15px;font-family:inherit}
+.field input:focus,.field select:focus,.field textarea:focus{box-shadow:none}
+.hint{color:var(--text-dim,#9aa3b2);font-size:.82rem;line-height:1.4;margin:2px 0 0}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 20px;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);color:var(--text,#e6e6e6);cursor:pointer;min-height:44px}
+.actions button.primary{background:var(--accent,#6ea8fe);border-color:var(--accent,#6ea8fe);color:#0b1017;padding:10px 24px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:14px 0}
+.out .big{font-size:clamp(1.5rem,6.5vw,2.2rem);font-weight:800;text-align:center;padding:4px 0 2px;overflow-wrap:anywhere;color:var(--accent,#6ea8fe)}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45;overflow-wrap:anywhere}
+.out .verdict{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:10px 0 0;line-height:1.45;overflow-wrap:anywhere}
+.out .head{font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--text-dim,#9aa3b2);margin:16px 0 4px;border-top:1px solid var(--border,#2a2f3a);padding-top:12px}
+.out .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:7px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:14px}
+.out .row .k{color:var(--text-dim,#9aa3b2)}
+.out .row .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right;overflow-wrap:anywhere;white-space:nowrap}
+.out .row.step .v{font-weight:600;font-size:13px}
+.err{color:var(--bad,#f87171);font-size:13px;margin:6px 0;min-height:1.2em;line-height:1.4}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;line-height:1.5;margin:14px 0 0}
+@media (max-width:520px){
+.grid2{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:420px){
+.out .row{flex-direction:column;align-items:flex-start;gap:2px}
+.out .row .v{text-align:left;white-space:normal}
+}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<h1>TCP Retransmission Timer Calculator</h1>
+<p>See the retransmission timeout a TCP sender derives from measured round trips.</p>
+</div>
+<div class="panel">
+<form id="rto-form" novalidate>
+<label class="f" for="samples">Round-trip samples</label>
+<div class="field">
+<textarea id="samples" rows="2" inputmode="decimal" autocomplete="off" spellcheck="false" aria-describedby="samples-hint">540 620 580 660</textarea>
+</div>
+<p class="hint" id="samples-hint">One to 24 measured round trips in milliseconds, separated by spaces, commas or line breaks: 540 620 580 660 is a satellite path at about 600 ms, 24 31 28 45 a local network.</p>
+<div class="grid2">
+<div class="field">
+<label class="f" for="granularity">Clock granularity G (ms)</label>
+<input type="text" id="granularity" inputmode="numeric" autocomplete="off" value="1" aria-describedby="granularity-hint">
+</div>
+<div class="field">
+<label class="f" for="cap">Maximum RTO</label>
+<select id="cap">
+<option value="none" selected>No cap</option>
+<option value="sixty">Cap at 60 s</option>
+</select>
+</div>
+</div>
+<p class="hint" id="granularity-hint">G is the clock tick the sender can measure with, one millisecond on most systems. RFC 6298 allows a maximum timeout of 60 seconds but does not require one.</p>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions">
+<button type="submit" class="primary">Calculate the timer</button>
+<button type="button" id="reset">Reset</button>
+</div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"></div>
+<p class="note">Each round-trip sample folds into two running values: the smoothed round trip SRTT and the variation RTTVAR. The first sample sets SRTT to itself and RTTVAR to half of it; every later sample moves the variation four parts towards the gap between the old smoothed value and the new sample and one part towards the sample itself, then moves the smoothed value seven parts towards itself and one part towards the sample. The timeout is SRTT plus four times RTTVAR, or SRTT plus G if the variation is smaller than the clock tick, and RFC 6298 rounds anything under one second up to one second. The page models the measurement-driven timer only: a real sender doubles the timer on each retransmission until the next good sample, and implementations differ on the cap they keep. On a short terrestrial path the four-times-variation term is a few tens of milliseconds, so the one-second floor decides the timer and the samples make no difference - which is why a sender still waits a second before its first retransmission on a 20 ms link. Everything runs in your browser with no storage, uploads or network access.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* tcp-rto-core:start */
+var TcpRtoCore = (function(){
+  "use strict";
+  var K = 4;
+  var ALPHA = 0.125;
+  var BETA = 0.25;
+  var MIN_RTO = 1000;
+  var MAX_RTO = 60000;
+  var CASES = { none: 0, sixty: 60000 };
+  var LIMITS = {
+    samples: [1, 24],
+    rtt: [0, 60000],
+    granularity: [0, 1000]
+  };
+  var MESSAGES = {
+    single: "A single sample is not a history: RFC 6298 sets the variation to half of it, so the timer rests on that one measurement.",
+    floored: "The computed timeout is under one second, so RFC 6298 rounds it up to 1000 ms and the samples make no difference to the timer.",
+    capped: "The computed timeout is above the 60-second cap, so it is reported as 60000 ms.",
+    spread: "The samples vary widely relative to their average, so the timer sits far above the typical round trip.",
+    zero: "A zero-millisecond sample only makes sense on a loopback path or with a clock too coarse to measure the trip.",
+    rounded: "Times are shown to 0.001 ms."
+  };
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function parseSamples(raw){
+    var text = String(raw == null ? "" : raw).trim();
+    if (text === "") fail("Enter at least one RTT sample in milliseconds.");
+    var tokens = text.split(/[\s,;]+/).filter(function(token){ return token !== ""; });
+    if (tokens.length > LIMITS.samples[1]){
+      fail("Enter at most " + LIMITS.samples[1] + " RTT samples.");
+    }
+    var samples = [];
+    for (var i = 0; i < tokens.length; i += 1){
+      if (!/^-?\d+(\.\d+)?$/.test(tokens[i])) fail("RTT samples must be numbers in milliseconds.");
+      var value = Number(tokens[i]);
+      if (!isFinite(value)) fail("RTT samples must be numbers in milliseconds.");
+      if (value < LIMITS.rtt[0] || value > LIMITS.rtt[1]){
+        fail("Each RTT sample must be between " + LIMITS.rtt[0] + " and " + LIMITS.rtt[1] + " ms.");
+      }
+      samples.push(value);
+    }
+    return samples;
+  }
+
+  function number(raw, name, low, high, unit){
+    var text = String(raw == null ? "" : raw).trim().replace(/,/g, ".");
+    if (text === "") fail("Enter " + name + ".");
+    if (!/^-?\d+(\.\d+)?$/.test(text)){
+      fail(name.charAt(0).toUpperCase() + name.slice(1) + " must be a number.");
+    }
+    var value = Number(text);
+    if (!isFinite(value)) fail(name.charAt(0).toUpperCase() + name.slice(1) + " must be a number.");
+    if (value < low || value > high){
+      fail(name.charAt(0).toUpperCase() + name.slice(1) + " must be between " + low + " and " + high
+        + (unit ? " " + unit : "") + ".");
+    }
+    return value;
+  }
+
+  function capKey(raw){
+    var key = String(raw == null ? "none" : raw).trim().toLowerCase();
+    if (!Object.prototype.hasOwnProperty.call(CASES, key)){
+      fail("Choose the maximum timeout from the list.");
+    }
+    return key;
+  }
+
+  function analyze(input){
+    input = input || {};
+    var samples = parseSamples(input.samples);
+    var granularity = number(input.granularity, "the clock granularity", LIMITS.granularity[0], LIMITS.granularity[1], "ms");
+    var cap = CASES[capKey(input.cap)];
+    var srtt = 0;
+    var rttvar = 0;
+    var steps = [];
+    var total = 0;
+
+    for (var i = 0; i < samples.length; i += 1){
+      var rtt = samples[i];
+      total += rtt;
+      if (i === 0){
+        srtt = rtt;
+        rttvar = rtt / 2;
+      } else {
+        rttvar = (1 - BETA) * rttvar + BETA * Math.abs(srtt - rtt);
+        srtt = (1 - ALPHA) * srtt + ALPHA * rtt;
+      }
+      var rawRto = srtt + Math.max(granularity, K * rttvar);
+      var floored = rawRto < MIN_RTO;
+      var rto = floored ? MIN_RTO : rawRto;
+      var capped = cap > 0 && rto > cap;
+      if (capped) rto = cap;
+      steps.push({
+        index: i + 1,
+        rtt: rtt,
+        srtt: srtt,
+        rttvar: rttvar,
+        rawRto: rawRto,
+        rto: rto,
+        floored: floored,
+        capped: capped
+      });
+    }
+
+    var last = steps[steps.length - 1];
+    var warnings = [];
+    if (samples.length === 1) warnings.push(MESSAGES.single);
+    if (last.floored) warnings.push(MESSAGES.floored);
+    if (last.capped) warnings.push(MESSAGES.capped);
+    if (last.rttvar > last.srtt * 0.5) warnings.push(MESSAGES.spread);
+    for (var j = 0; j < samples.length; j += 1){
+      if (samples[j] === 0){
+        warnings.push(MESSAGES.zero);
+        break;
+      }
+    }
+    warnings.push(MESSAGES.rounded);
+
+    return {
+      samples: samples,
+      count: samples.length,
+      granularity: granularity,
+      cap: cap,
+      initialRto: MIN_RTO,
+      minRto: MIN_RTO,
+      maxRto: MAX_RTO,
+      mean: total / samples.length,
+      srtt: srtt,
+      rttvar: rttvar,
+      rawRto: last.rawRto,
+      rto: last.rto,
+      floored: last.floored,
+      capped: last.capped,
+      steps: steps,
+      warnings: warnings
+    };
+  }
+
+  return {
+    K: K,
+    ALPHA: ALPHA,
+    BETA: BETA,
+    MIN_RTO: MIN_RTO,
+    MAX_RTO: MAX_RTO,
+    LIMITS: LIMITS,
+    CASES: CASES,
+    MESSAGES: MESSAGES,
+    parseSamples: parseSamples,
+    analyze: analyze
+  };
+})();
+/* tcp-rto-core:end */
+(function(){
+"use strict";
+
+var defaults = { samples: "540 620 580 660", granularity: "1", cap: "none" };
+var els = {
+  form: document.getElementById("rto-form"),
+  samples: document.getElementById("samples"),
+  granularity: document.getElementById("granularity"),
+  cap: document.getElementById("cap"),
+  err: document.getElementById("err"),
+  out: document.getElementById("out"),
+  reset: document.getElementById("reset")
+};
+var timer = null;
+
+function clear(node){
+  while (node.firstChild) node.removeChild(node.firstChild);
+}
+
+function ms(value){
+  var rounded = Math.round(value * 1000) / 1000;
+  if (Object.is(rounded, -0)) rounded = 0;
+  var text = String(rounded);
+  var parts = text.split(".");
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return parts.join(".") + " ms";
+}
+
+function addRow(parent, key, value, extraClass){
+  var row = document.createElement("div");
+  row.className = extraClass ? "row " + extraClass : "row";
+  var name = document.createElement("span");
+  name.className = "k";
+  name.textContent = key;
+  var val = document.createElement("span");
+  val.className = "v";
+  val.textContent = value;
+  row.appendChild(name);
+  row.appendChild(val);
+  parent.appendChild(row);
+}
+
+function addHead(parent, text){
+  var head = document.createElement("div");
+  head.className = "head";
+  head.textContent = text;
+  parent.appendChild(head);
+}
+
+function showError(message){
+  els.err.textContent = message;
+  clear(els.out);
+  var placeholder = document.createElement("div");
+  placeholder.className = "sub";
+  placeholder.textContent = "Fix the samples to see the retransmission timer.";
+  els.out.appendChild(placeholder);
+}
+
+function render(result){
+  els.err.textContent = "";
+  clear(els.out);
+
+  var big = document.createElement("div");
+  big.className = "big";
+  big.textContent = ms(result.rto);
+  var sub = document.createElement("div");
+  sub.className = "sub";
+  sub.textContent = "retransmission timeout after " + result.count
+    + (result.count === 1 ? " sample" : " samples")
+    + ": SRTT " + ms(result.srtt) + " and RTTVAR " + ms(result.rttvar)
+    + " on a clock with a " + ms(result.granularity) + " tick";
+  els.out.appendChild(big);
+  els.out.appendChild(sub);
+
+  addRow(els.out, "Samples", String(result.count));
+  addRow(els.out, "Plain average", ms(result.mean));
+  addRow(els.out, "Smoothed round trip, SRTT", ms(result.srtt));
+  addRow(els.out, "Round-trip variation, RTTVAR", ms(result.rttvar));
+  addRow(els.out, "SRTT plus 4 x RTTVAR", ms(result.rawRto));
+  addRow(els.out, "One-second floor applied", result.floored ? "Yes" : "No");
+  addRow(els.out, "60-second cap applied", result.capped ? "Yes" : "No");
+  addRow(els.out, "RTO before any sample", ms(result.initialRto));
+
+  addHead(els.out, "RTO after each sample");
+  for (var i = 0; i < result.steps.length; i += 1){
+    var step = result.steps[i];
+    var note = step.floored ? " (1 s floor)" : (step.capped ? " (60 s cap)" : "");
+    addRow(
+      els.out,
+      "#" + step.index + " RTT " + ms(step.rtt),
+      "SRTT " + ms(step.srtt) + " / RTTVAR " + ms(step.rttvar) + " / RTO " + ms(step.rto) + note,
+      "step"
+    );
+  }
+
+  var verdict = document.createElement("div");
+  verdict.className = "verdict";
+  verdict.textContent = result.warnings.join(" ");
+  els.out.appendChild(verdict);
+}
+
+function run(){
+  try {
+    render(TcpRtoCore.analyze({
+      samples: els.samples.value,
+      granularity: els.granularity.value,
+      cap: els.cap.value
+    }));
+  } catch (error){
+    showError(error.message);
+  }
+}
+
+function later(){
+  if (timer) window.clearTimeout(timer);
+  timer = window.setTimeout(run, 220);
+}
+
+[els.samples, els.granularity].forEach(function(field){
+  field.addEventListener("input", later);
+  field.addEventListener("change", function(){
+    if (timer) window.clearTimeout(timer);
+    run();
+  });
+});
+
+els.samples.addEventListener("keydown", function(event){
+  if (event.key === "Enter" && !event.shiftKey){
+    event.preventDefault();
+    if (timer) window.clearTimeout(timer);
+    run();
+  }
+});
+
+els.cap.addEventListener("change", function(){
+  if (timer) window.clearTimeout(timer);
+  run();
+});
+
+els.form.addEventListener("submit", function(event){
+  event.preventDefault();
+  if (timer) window.clearTimeout(timer);
+  run();
+  if (els.err.textContent) els.samples.focus();
+});
+
+els.reset.addEventListener("click", function(){
+  if (timer) window.clearTimeout(timer);
+  els.samples.value = defaults.samples;
+  els.granularity.value = defaults.granularity;
+  els.cap.value = defaults.cap;
+  run();
+  els.samples.focus();
+});
+
+run();
+})();
+</script>
+</body>
+</html>
