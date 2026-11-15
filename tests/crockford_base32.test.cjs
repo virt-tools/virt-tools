@@ -166,7 +166,7 @@ assert.equal(C.bits(2n ** 64n - 1n), 64);
 
 // ---- Catalog record.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2305, 'catalog total');
+assert.equal(catalog.tools.length, 2306, 'catalog total');
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record exists');
 assert.equal(record.name, 'Crockford Base32 Encoder / Decoder');
