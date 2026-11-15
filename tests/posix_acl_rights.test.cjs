@@ -370,8 +370,8 @@ assert.ok(!/http:\/\/|https:\/\/[^"]*\.(?:js|css)/.test(html), 'no off-origin sc
 
 // ---- Catalog record.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2314, 'catalog total');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'System').length, 46, 'System count');
+assert.equal(catalog.tools.length, 2315, 'catalog total');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'System').length, 47, 'System count');
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'record missing');
 assert.equal(record.name, 'POSIX ACL Effective Rights');

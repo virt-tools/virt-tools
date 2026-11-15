@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Build a Linux core_pattern template and see the core file name or pipe command it produces, with every % specifier expanded, unknown ones dropped and the 128-byte limit checked.">
+<script src="/assets/theme-init.js"></script>
+<title>Core Dump Pattern Builder &mdash; virt.tools</title><link rel="stylesheet" href="/assets/style.css">
+<style>
+.cpd-shell{max-width:1000px;margin:0 auto}.lead,.hint{color:var(--text-secondary,#8b949e)}
+.panel,.result{background:var(--surface,#161b22);border:1px solid var(--border,#30363d);border-radius:10px;padding:1rem;margin:1rem 0}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.9rem 1.1rem}
+.field{display:flex;flex-direction:column;gap:.35rem}.field label{font-weight:600}
+.field input,.field select{box-sizing:border-box;width:100%;max-width:none;background:var(--background,#0d1117);color:var(--text,#c9d1d9);border:1px solid var(--border,#30363d);border-radius:6px;padding:.62rem;font:inherit;font-size:1rem;min-height:44px}
+.field input[type="text"]{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+.hint{font-size:.85rem;margin:0}
+.check{display:flex;gap:.6rem;align-items:center;margin:1rem 0 0;min-height:44px;padding:.4rem .2rem;font-size:.95rem;line-height:1.45;cursor:pointer}
+.check input{width:1.3rem;height:1.3rem;margin:0;flex:0 0 auto}
+.check span{flex:1 1 auto}
+details{border:1px solid var(--border,#30363d);border-radius:8px;padding:.75rem .85rem;margin:1rem 0 0}
+summary{cursor:pointer;font-weight:600;min-height:44px;display:flex;align-items:center}
+details .grid{margin-top:.8rem}
+.actions{display:flex;flex-wrap:wrap;gap:.6rem;margin-top:1rem}
+button{border:1px solid var(--border,#30363d);border-radius:6px;background:var(--surface-raised,#21262d);color:var(--text,#c9d1d9);padding:.58rem .85rem;min-height:44px;font:inherit;font-size:1rem;cursor:pointer}
+.primary{border-color:var(--accent,#58a6ff);background:var(--accent-soft,#1e3a5f)}
+button:focus-visible,button:focus{outline:2px solid var(--accent,#58a6ff);outline-offset:2px}
+input:focus-visible,select:focus-visible,pre:focus-visible,summary:focus-visible{outline:2px solid var(--accent,#58a6ff);outline-offset:2px}
+.status{min-height:1.4rem;margin:.6rem 0}.error{color:#f85149}.ok{color:#3fb950}.warning{color:#d29922}
+#error[hidden]{display:none}
+.value-box{border:1px solid var(--border,#30363d);border-radius:8px;padding:.6rem .7rem;margin:.5rem 0 .8rem;background:var(--background,#0d1117)}
+.value-head{display:flex;flex-wrap:wrap;gap:.5rem .8rem;align-items:center;margin-bottom:.4rem}
+.value-head .label{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-secondary,#8b949e);font-weight:600}
+.value-head button{font-size:.85rem;padding:.35rem .7rem;min-height:34px}
+pre#out-value{margin:0;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.95rem;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text,#c9d1d9)}
+.rows{margin:.8rem 0 0;display:grid;gap:.45rem}
+.row{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:.8rem;align-items:baseline;border-bottom:1px solid var(--border,#30363d);padding:.35rem 0}
+.row dt{font-weight:600;min-width:11rem}.row dd{margin:0;display:flex;flex-wrap:wrap;gap:.2rem .8rem;align-items:baseline}
+.row .value{font:600 .98rem ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:anywhere}
+.row .meaning{font-size:.85rem;color:var(--text-secondary,#8b949e)}
+.table-wrap{overflow-x:auto;margin:.6rem 0 0}
+table{border-collapse:collapse;display:table;width:100%;font-size:.92rem}
+caption{text-align:left;font-size:.85rem;color:var(--text-secondary,#8b949e);padding-bottom:.35rem}
+th,td{text-align:left;padding:.42rem .55rem;border-bottom:1px solid var(--border,#30363d);vertical-align:top}
+th:nth-child(3),td:nth-child(3){overflow-wrap:anywhere}
+td.mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+thead th{font-weight:600;color:var(--text-secondary,#8b949e)}
+tbody tr td.dropped{color:#d29922}tbody tr td.legacy{color:#58a6ff}
+td .spec-name{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-weight:600}
+td .spec-meaning{display:block;font-size:.8rem;line-height:1.35;color:var(--text-secondary,#8b949e);margin-top:.12rem}
+.spec-table td:nth-child(3),.ref-table td:nth-child(3){width:4.6rem;white-space:nowrap}
+.spec-table th:nth-child(3),.ref-table th:nth-child(3){white-space:nowrap}
+.spec-table th:nth-child(1),.spec-table td:nth-child(1){width:44%}
+ol.argv{margin:.5rem 0 0;padding-left:1.4rem;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.92rem}
+ol.argv li{overflow-wrap:anywhere;padding:.15rem 0}
+ul{margin:.5rem 0 0;padding-left:1.2rem}#warnings:empty{display:none}
+li.warning{color:#d29922}
+.explain li,.limits li{margin:.2rem 0}
+h3{margin:1.1rem 0 .2rem;font-size:1.02rem}
+@media(max-width:720px){.grid{grid-template-columns:1fr}.actions>*{flex:1 1 10rem}.panel,.result{padding:.85rem}.row{grid-template-columns:1fr}.row dt{min-width:0}.table-wrap{margin-left:-.35rem;margin-right:-.35rem;padding:0 .35rem}table{font-size:.78rem}th,td{padding:.32rem .2rem}th{white-space:normal;font-size:.72rem;letter-spacing:0}}
+@media(max-width:520px){
+.spec-table,.ref-table{display:block}
+.spec-table thead,.ref-table thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+.spec-table tbody,.ref-table tbody{display:block}
+.spec-table caption,.ref-table caption{display:block;width:100%}
+.spec-table tr,.ref-table tr{display:grid;column-gap:.6rem;border-bottom:1px solid var(--border,#30363d);padding:.45rem 0}
+.spec-table td,.ref-table td{border:0;padding:0}
+.spec-table tr{grid-template-columns:minmax(0,1fr) auto}
+.spec-table td:nth-child(1){grid-column:1/-1;width:auto}
+.spec-table td:nth-child(2){grid-column:1;font-weight:600;overflow-wrap:anywhere}
+.spec-table td:nth-child(3){grid-column:2;text-align:right;white-space:nowrap;width:auto;font-size:.76rem;color:var(--text-secondary,#8b949e)}
+.ref-table tr{grid-template-columns:4rem minmax(0,1fr)}
+.ref-table td:nth-child(1){grid-column:1;grid-row:1}
+.ref-table td:nth-child(3){grid-column:2;grid-row:1;text-align:right;white-space:nowrap;font-size:.76rem;color:var(--text-secondary,#8b949e);width:auto}
+.ref-table td:nth-child(2){grid-column:1/-1;grid-row:2;font-size:.82rem}
+}
+</style></head>
+<body><div id="site-header"></div><main class="tool-container"><div class="cpd-shell">
+<h1>Core Dump Pattern Builder</h1>
+<p class="lead">Enter the value of <code>/proc/sys/kernel/core_pattern</code> and a sample crash, and the page expands the template the way the kernel does &mdash; every <code>%</code> specifier replaced, a specifier the kernel does not know dropped with its <code>%</code>, a trailing <code>%</code> removed, and the legacy <code>.PID</code> suffix applied. You get the resulting core file name or the handler command line, each specifier's contribution and the 128-byte limit. Everything runs in your browser; nothing is uploaded, stored or sent anywhere.</p>
+
+<form id="pattern-form" novalidate>
+<section class="panel" aria-labelledby="template-title">
+<h2 id="template-title">Template</h2>
+<div class="grid">
+<div class="field" style="grid-column:1/-1">
+<label for="in-pattern">core_pattern value</label>
+<input id="in-pattern" name="pattern" type="text" value="/var/crash/core.%e.%p" spellcheck="false" autocomplete="off" autocapitalize="off" aria-describedby="pattern-hint">
+<p id="pattern-hint" class="hint">A file name template, or a command line when the first character is <code>|</code>. Relative names are resolved against the crashing process's working directory.</p>
+</div>
+</div>
+<label class="check" for="in-uses-pid">
+<input id="in-uses-pid" name="usesPid" type="checkbox">
+<span><strong>core_uses_pid is nonzero</strong><br><span class="hint">The legacy switch: with no <code>%p</code> in the template it appends <code>.PID</code> to the name.</span></span>
+</label>
+</section>
+
+<section class="panel" aria-labelledby="context-title">
+<h2 id="context-title">Sample crash</h2>
+<div class="grid">
+<div class="field">
+<label for="in-pid">Process ID (%p)</label>
+<input id="in-pid" name="pid" type="number" inputmode="numeric" min="1" max="2147483647" step="1" value="4711" aria-describedby="pid-hint">
+<p id="pid-hint" class="hint">PID as seen in the crashing process's PID namespace.</p>
+</div>
+<div class="field">
+<label for="in-comm">comm (%e)</label>
+<input id="in-comm" name="comm" type="text" value="nginx" spellcheck="false" autocomplete="off" aria-describedby="comm-hint">
+<p id="comm-hint" class="hint">Up to 15 bytes; longer values are cut by the kernel.</p>
+</div>
+<div class="field">
+<label for="in-exe">Executable path (%E, %f)</label>
+<input id="in-exe" name="exe" type="text" value="/usr/sbin/nginx" spellcheck="false" autocomplete="off" aria-describedby="exe-hint">
+<p id="exe-hint" class="hint">%E replaces each slash with <code>!</code>; %f uses the last segment.</p>
+</div>
+<div class="field">
+<label for="in-signal">Signal (%s)</label>
+<input id="in-signal" name="signal" type="number" inputmode="numeric" min="1" max="64" step="1" value="11" aria-describedby="signal-hint">
+<p id="signal-hint" class="hint">11 is SIGSEGV, 6 is SIGABRT, 4 is SIGILL.</p>
+</div>
+<div class="field">
+<label for="in-uid">Real UID (%u)</label>
+<input id="in-uid" name="uid" type="number" inputmode="numeric" min="0" max="4294967294" step="1" value="1000">
+</div>
+<div class="field">
+<label for="in-gid">Real GID (%g)</label>
+<input id="in-gid" name="gid" type="number" inputmode="numeric" min="0" max="4294967294" step="1" value="1000">
+</div>
+<div class="field">
+<label for="in-host">Hostname (%h)</label>
+<input id="in-host" name="host" type="text" value="web-01" spellcheck="false" autocomplete="off">
+</div>
+<div class="field">
+<label for="in-epoch">Dump time (%t)</label>
+<input id="in-epoch" name="epoch" type="number" inputmode="numeric" min="0" max="253402300799" step="1" value="1794751200" aria-describedby="epoch-hint">
+<p id="epoch-hint" class="hint">Seconds since the epoch; 1794751200 is 2026-11-15T14:00:00Z.</p>
+</div>
+</div>
+
+<details>
+<summary>Advanced context</summary>
+<div class="grid">
+<div class="field">
+<label for="in-pid-init">Initial-namespace PID (%P)</label>
+<input id="in-pid-init" name="pidInit" type="number" inputmode="numeric" min="1" max="2147483647" step="1" placeholder="same as %p" aria-describedby="pid-init-hint">
+<p id="pid-init-hint" class="hint">Blank means the same number as %p.</p>
+</div>
+<div class="field">
+<label for="in-tid">Thread ID (%i)</label>
+<input id="in-tid" name="tid" type="number" inputmode="numeric" min="1" max="2147483647" step="1" placeholder="same as %p">
+</div>
+<div class="field">
+<label for="in-tid-init">Initial-namespace thread ID (%I)</label>
+<input id="in-tid-init" name="tidInit" type="number" inputmode="numeric" min="1" max="2147483647" step="1" placeholder="same as %P">
+</div>
+<div class="field">
+<label for="in-cpu">CPU (%C)</label>
+<input id="in-cpu" name="cpu" type="number" inputmode="numeric" min="0" max="8191" step="1" value="3">
+</div>
+<div class="field">
+<label for="in-pidfd">pidfd (%F)</label>
+<input id="in-pidfd" name="pidfd" type="number" inputmode="numeric" min="1" max="2147483647" step="1" value="512">
+</div>
+<div class="field">
+<label for="in-mode">Dump mode (%d)</label>
+<select id="in-mode" name="mode" aria-describedby="mode-hint">
+<option value="1" selected>1 &mdash; dumpable</option>
+<option value="0">0 &mdash; not dumpable</option>
+<option value="2">2 &mdash; suidsafe</option>
+</select>
+<p id="mode-hint" class="hint">The value PR_GET_DUMPABLE returns.</p>
+</div>
+<div class="field">
+<label for="in-core-limit">Core size limit (%c, bytes)</label>
+<input id="in-core-limit" name="coreLimit" type="text" inputmode="numeric" value="1073741824" spellcheck="false" autocomplete="off" aria-describedby="core-limit-hint">
+<p id="core-limit-hint" class="hint">The soft RLIMIT_CORE; 0 means no core file is written unless the dump is piped.</p>
+</div>
+</div>
+</details>
+
+<div class="actions">
+<button id="build" class="primary" type="submit">Expand the pattern</button>
+<button id="example" type="button">Load pipe example</button>
+<button id="reset" type="button">Reset</button>
+</div>
+</section>
+</form>
+
+<section class="result" aria-labelledby="result-title">
+<h2 id="result-title">Result</h2>
+<p id="status" class="status" role="status" aria-live="polite"></p>
+<p id="error" class="status error" role="alert" hidden></p>
+<p id="summary"></p>
+<div class="value-box">
+<div class="value-head"><span class="label">Expanded value</span><button id="copy" type="button">Copy</button><span id="copy-note" class="hint" role="status"></span></div>
+<pre id="out-value" tabindex="0">not computed</pre>
+</div>
+<dl class="rows">
+<div class="row"><dt>Kind</dt><dd><span id="out-kind" class="value">not computed</span><span id="out-kind-note" class="meaning">file name or pipe handler</span></dd></div>
+<div class="row"><dt>Length</dt><dd><span id="out-length" class="value">not computed</span><span id="out-length-note" class="meaning">of the 128-byte limit</span></dd></div>
+<div class="row"><dt>Written as</dt><dd><span id="out-target" class="value">not computed</span><span id="out-target-note" class="meaning"></span></dd></div>
+</dl>
+<div id="argv-wrap" hidden>
+<h3>Handler arguments</h3>
+<ol id="argv" class="argv"></ol>
+</div>
+<h3>Specifiers in this pattern</h3>
+<div class="table-wrap" role="region" aria-label="Each specifier in the pattern, its meaning and what it expands to" tabindex="0">
+<table class="spec-table">
+<caption id="table-caption">Each specifier in the template, what it means and what it produced for this crash.</caption>
+<thead><tr><th scope="col">Specifier</th><th scope="col">Expands to</th><th scope="col">Kernel</th></tr></thead>
+<tbody id="rows-body"></tbody>
+</table>
+</div>
+<ul id="warnings"></ul>
+<h3>How this is worked out</h3>
+<ul id="explanation" class="explain"><li>Expand the pattern to see the steps.</li></ul>
+<details>
+<summary>Every core_pattern specifier</summary>
+<div class="table-wrap" role="region" aria-label="Reference list of every core_pattern specifier" tabindex="0">
+<table class="ref-table">
+<caption>'base' means the specifier is part of the original template; the other entries give the kernel version named in core(5).</caption>
+<thead><tr><th scope="col">Specifier</th><th scope="col">Meaning</th><th scope="col">Kernel</th></tr></thead>
+<tbody id="all-body"></tbody>
+</table>
+</div>
+</details>
+<h3>What this does not do</h3>
+<ul class="limits">
+<li>This expands a template for the sample values above; it does not read or write <code>/proc/sys/kernel/core_pattern</code>, and it cannot tell which value your kernel actually holds.</li>
+<li>Whether a file appears also depends on the core size limit, a writable directory, a filesystem with space and inodes, a readable executable, and <code>fs.suid_dumpable</code> for set-user-ID or file-capability programs.</li>
+<li>A path is interpreted in the crashing process's root directory, working directory and mount namespace, so an absolute name here may land elsewhere for a containerised process.</li>
+<li>Many systems hand dumps to <code>systemd-coredump</code>, which installs its own pipe template; this page explains a template, it does not replace <code>coredumpctl</code>.</li>
+<li>The pattern field is capped at 512 characters here, and names over 128 bytes are flagged rather than silently shortened. core(5) gives 128 bytes as the maximum resulting name; the kernel sysctl documentation gives the pattern file itself a maximum length of 127 characters.</li>
+</ul>
+</section>
+</div></main><script src="/assets/tools.js"></script><script src="/assets/app.js"></script>
+<script>
+/* core-pattern-core:start */
+const CorePatternCore=(()=>{'use strict';
+const MAX_PATTERN=512,MAX_NAME_BYTES=128,MAX_COMM_BYTES=15,MAX_CORE_LIMIT='18446744073709551615';
+const SPECS=[
+['%','a single % character','base'],
+['c','core size soft limit (RLIMIT_CORE) in bytes','2.6.24'],
+['C','CPU the task was running on','6.2'],
+['d','dump mode, as returned by PR_GET_DUMPABLE','3.7'],
+['e','comm of the crashing process, up to 15 bytes','base'],
+['E','executable path, with each / replaced by !','3.0'],
+['f','filename of the executable, may differ from %e','5.9'],
+['F','pidfd of the dumped process','6.16'],
+['g','numeric real GID of the dumped process','base'],
+['h','hostname, as uname reports the nodename','base'],
+['i','TID of the triggering thread in its PID namespace','3.18'],
+['I','TID of the triggering thread in the initial PID namespace','3.18'],
+['p','PID of the dumped process in its PID namespace','base'],
+['P','PID of the dumped process in the initial PID namespace','3.12'],
+['s','number of the signal that caused the dump','base'],
+['t','time of the dump, in seconds since the epoch','base'],
+['u','numeric real UID of the dumped process','base']
+];
+const SPEC_MAP={};
+for(const row of SPECS)SPEC_MAP[row[0]]={meaning:row[1],since:row[2]};
+const DEFAULTS={
+pattern:'/var/crash/core.%e.%p',pid:'4711',pidInit:'',tid:'',tidInit:'',uid:'1000',gid:'1000',
+signal:'11',comm:'nginx',exe:'/usr/sbin/nginx',host:'web-01',cpu:'3',pidfd:'512',mode:'1',
+coreLimit:'1073741824',epoch:'1794751200',usesPid:false
+};
+function utf8Bytes(text){
+  let total=0;
+  for(const ch of String(text)){
+    const cp=ch.codePointAt(0);
+    total+=cp<0x80?1:cp<0x800?2:cp<0x10000?3:4;
+  }
+  return total;
+}
+function clipBytes(text,max){
+  let out='',used=0;
+  for(const ch of String(text)){
+    const cp=ch.codePointAt(0);
+    const size=cp<0x80?1:cp<0x800?2:cp<0x10000?3:4;
+    if(used+size>max)break;
+    out+=ch;used+=size;
+  }
+  return out;
+}
+function parseWhole(raw,label,min,max){
+  const text=String(raw==null?'':raw).trim();
+  if(!/^[0-9]+$/.test(text))throw new Error('The '+label+' must be a whole number from '+min+' to '+max+'.');
+  const digits=text.replace(/^0+(?=\d)/,'');
+  if(digits.length>String(max).length)throw new Error('The '+label+' must be a whole number from '+min+' to '+max+'.');
+  const value=Number(digits);
+  if(!Number.isSafeInteger(value)||value<min||value>max)throw new Error('The '+label+' must be a whole number from '+min+' to '+max+'.');
+  return digits;
+}
+function parseLimit(raw){
+  const text=String(raw==null?'':raw).trim();
+  const message='The core size limit must be digits only, up to '+MAX_CORE_LIMIT+'.';
+  if(!/^[0-9]{1,20}$/.test(text))throw new Error(message);
+  const digits=text.replace(/^0+(?=\d)/,'');
+  if(digits.length>MAX_CORE_LIMIT.length)throw new Error(message);
+  if(digits.length===MAX_CORE_LIMIT.length&&digits>MAX_CORE_LIMIT)throw new Error(message);
+  return digits;
+}
+function basename(path){
+  const text=String(path==null?'':path);
+  const trimmed=text.replace(/\/+$/,'');
+  const cut=trimmed.lastIndexOf('/');
+  return cut<0?trimmed:trimmed.slice(cut+1);
+}
+function context(state){
+  const pattern=String(state.pattern==null?'':state.pattern);
+  if(pattern.length>MAX_PATTERN)throw new Error('The pattern is limited to '+MAX_PATTERN+' characters on this page.');
+  const pid=parseWhole(state.pid,'PID',1,2147483647);
+  const pidInit=String(state.pidInit==null?'':state.pidInit).trim()===''?pid:parseWhole(state.pidInit,'initial-namespace PID',1,2147483647);
+  const tid=String(state.tid==null?'':state.tid).trim()===''?pid:parseWhole(state.tid,'thread ID',1,2147483647);
+  const tidInit=String(state.tidInit==null?'':state.tidInit).trim()===''?pidInit:parseWhole(state.tidInit,'initial-namespace thread ID',1,2147483647);
+  const uid=parseWhole(state.uid,'UID',0,4294967294);
+  const gid=parseWhole(state.gid,'GID',0,4294967294);
+  const signal=parseWhole(state.signal,'signal number',1,64);
+  const cpu=parseWhole(state.cpu,'CPU number',0,8191);
+  const pidfd=parseWhole(state.pidfd,'pidfd number',1,2147483647);
+  const epoch=parseWhole(state.epoch,'dump time',0,253402300799);
+  const coreLimit=parseLimit(state.coreLimit);
+  const mode=String(state.mode==null?'':state.mode).trim();
+  if(mode!=='0'&&mode!=='1'&&mode!=='2')throw new Error('The dump mode must be 0, 1 or 2.');
+  const comm=String(state.comm==null?'':state.comm);
+  const exe=String(state.exe==null?'':state.exe);
+  const host=String(state.host==null?'':state.host);
+  return {pattern,pid,pidInit,tid,tidInit,uid,gid,signal,cpu,pidfd,epoch,coreLimit,mode,comm,exe,host,
+    usesPid:state.usesPid===true||state.usesPid==='true'||state.usesPid==='on',
+    commShort:clipBytes(comm,MAX_COMM_BYTES)};
+}
+function valueFor(code,ctx){
+  switch(code){
+    case '%':return '%';
+    case 'c':return ctx.coreLimit;
+    case 'C':return ctx.cpu;
+    case 'd':return ctx.mode;
+    case 'e':return ctx.commShort;
+    case 'E':return ctx.exe.replace(/\//g,'!');
+    case 'f':return basename(ctx.exe);
+    case 'F':return ctx.pidfd;
+    case 'g':return ctx.gid;
+    case 'h':return ctx.host;
+    case 'i':return ctx.tid;
+    case 'I':return ctx.tidInit;
+    case 'p':return ctx.pid;
+    case 'P':return ctx.pidInit;
+    case 's':return ctx.signal;
+    case 't':return ctx.epoch;
+    case 'u':return ctx.uid;
+    default:return '';
+  }
+}
+function splitArgs(line){
+  return line.split(/[ \t]+/).filter(function(part){return part!=='';});
+}
+function build(state){
+  const ctx=context(state);
+  const pattern=ctx.pattern;
+  const isPipe=pattern.charAt(0)==='|';
+  const body=isPipe?pattern.slice(1):pattern;
+  const rows=[],dropped=[],explanation=[],warnings=[];
+  let out='',sawPid=false,sawTime=false;
+  for(let index=0;index<body.length;index++){
+    const ch=body.charAt(index);
+    if(ch!=='%'){out+=ch;continue;}
+    if(index+1>=body.length){
+      rows.push({spec:'%',meaning:'a trailing % is dropped with the name',value:'(dropped)',since:'base',kind:'dropped'});
+      warnings.push('The pattern ends with a single %, which the kernel drops.');
+      continue;
+    }
+    const code=body.charAt(index+1);
+    index++;
+    const meta=SPEC_MAP[code];
+    if(!meta){
+      rows.push({spec:'%'+code,meaning:'not a core_pattern specifier, so the % and the character are both dropped',value:'(dropped)',since:'—',kind:'dropped'});
+      if(dropped.indexOf(code)<0)dropped.push(code);
+      continue;
+    }
+    if(code==='p')sawPid=true;
+    if(code==='t')sawTime=true;
+    const value=valueFor(code,ctx);
+    out+=value;
+    rows.push({spec:'%'+code,meaning:meta.meaning,value:value===''?'(empty)':value,since:meta.since,kind:value===''?'empty':'ok'});
+  }
+  if(dropped.length){
+    const list=dropped.map(function(code){return '%'+code;}).join(', ');
+    warnings.push(dropped.length===1
+      ?'The pattern contains '+list+', which core_pattern does not define, so both characters are removed.'
+      :'The pattern contains '+list+', which core_pattern does not define, so both characters of each are removed.');
+  }
+  let legacy=null;
+  if(!isPipe&&ctx.usesPid&&!sawPid){
+    legacy='.'+ctx.pid;
+    out+=legacy;
+    rows.push({spec:'.PID',meaning:'core_uses_pid appends the PID because the template has no %p',value:legacy,since:'base',kind:'legacy'});
+  }
+  const kind=out===''?'none':(isPipe?'pipe':'file');
+  const byteLength=utf8Bytes(out);
+  const limitLabel=isPipe?'a pipe command line is limited to 128 bytes':'the maximum size of a resulting core file name is 128 bytes';
+  if(byteLength>MAX_NAME_BYTES)warnings.push('The expanded value is '+byteLength+' bytes, and core(5) states that '+limitLabel+'.');
+  if(pattern===''){
+    warnings.push('An empty core_pattern produces no core file at all; with core_uses_pid nonzero the file is named .PID.');
+  }else if(/^\s+\|/.test(pattern)){
+    warnings.push('A space before | makes the kernel treat the value as a file name, not a pipe command line.');
+  }
+  const args=isPipe?splitArgs(out):[];
+  if(isPipe){
+    if(args.length===0)warnings.push('The | is not followed by a program, so there is no handler to run.');
+    else if(args[0].charAt(0)!=='/')warnings.push('A pipe handler must be an absolute pathname that immediately follows the |.');
+    if(args.length>0&&/\s/.test(ctx.comm)&&(body.indexOf('%e')>=0||body.indexOf('%E')>=0))warnings.push('The comm value contains a space; it is one argument here, but a kernel before 5.3 splits the expanded line, so put the executable name last.');
+  }else if(kind==='file'&&out.charAt(0)!=='/'){
+    warnings.push('A relative name is resolved against the crashing process working directory; fs.suid_dumpable=2 requires an absolute pathname or a pipe.');
+  }
+  if(!isPipe&&ctx.coreLimit==='0'&&kind!=='none')warnings.push('The core size limit is 0, so no core file is written; piping the dump to a handler ignores RLIMIT_CORE.');
+  if(!isPipe&&ctx.usesPid&&sawPid)warnings.push('core_uses_pid only applies when the template has no %p, so it changes nothing here.');
+  if(utf8Bytes(ctx.comm)>MAX_COMM_BYTES){
+    explanation.push('comm is cut to its first '+MAX_COMM_BYTES+' bytes, so %e expands to "'+ctx.commShort+'".');
+  }
+  if(body.indexOf('%E')>=0&&ctx.exe.indexOf('/')>=0&&ctx.exe!==''){
+    explanation.push('Every / in the executable path becomes !, so %E expands to "'+ctx.exe.replace(/\//g,'!')+'".');
+  }
+  if(body.indexOf('%f')>=0&&ctx.exe!==''){
+    explanation.push('%f takes the last segment of the executable path, "'+basename(ctx.exe)+'", which may differ from %e.');
+  }
+  if(legacy)explanation.push('The template has no %p and core_uses_pid is nonzero, so '+legacy+' is appended to the name.');
+  if(isPipe)explanation.push('The line is split on white space before the specifiers are expanded, as Linux 5.3 and later do; earlier kernels expanded first, so a comm with spaces could break into several arguments.');
+  if(sawTime){
+    const iso=new Date(Number(ctx.epoch)*1000).toISOString();
+    explanation.push('%t is '+ctx.epoch+' seconds after the epoch, which is '+iso+'.');
+  }
+  const hasSpecRow=rows.some(function(row){return row.kind!=='legacy';});
+  explanation.unshift(rows.length===0
+    ?'The template has no % specifier, so the value is exactly the template text.'
+    :(hasSpecRow
+      ?'The template is walked from left to right; the table shows how each entry resolved.'
+      :'The template has no % specifier, so only the legacy suffix changes the value.'));
+  if(isPipe)explanation.push('The | marks a pipe and is not part of the command line.');
+  if(kind==='file'){
+    explanation.push('The expanded name is '+byteLength+(byteLength===1?' byte':' bytes')+(byteLength>MAX_NAME_BYTES?', past the 128-byte maximum core(5) gives.':', within the 128-byte limit core(5) gives.'));
+  }else if(kind==='pipe'){
+    const argsAfter=Math.max(0,args.length-1);
+    explanation.push('The expanded command line is '+byteLength+(byteLength===1?' byte':' bytes')+(byteLength>MAX_NAME_BYTES?'':', within the 128-byte limit')+', and the handler would be started with '+argsAfter+(argsAfter===1?' argument':' arguments')+'.');
+  }
+  let statusLine,statusKind,summary,program='',target='',targetNote='';
+  if(kind==='none'){
+    statusLine='The pattern expands to nothing, so no core file is named.';
+    statusKind='warning';
+    summary='An empty core_pattern stops the kernel from writing a dump file; only the legacy .PID form can name one.';
+    target='no file';
+    targetNote='the kernel writes nothing';
+  }else if(kind==='pipe'){
+    program=args[0]||'';
+    statusLine='Pipes the dump to '+(program||'no program')+(args.length>1?' with '+(args.length-1)+(args.length===2?' argument':' arguments'):'')+'.';
+    statusKind=warnings.length?'warning':'ok';
+    summary='The kernel runs this command as root in the initial namespaces and passes the dump on standard input.';
+    target=program||'no program';
+    targetNote='runs in the initial namespaces';
+  }else{
+    const cut=out.lastIndexOf('/');
+    const directory=cut<0?'':(cut===0?'/':out.slice(0,cut));
+    const name=cut<0?out:out.slice(cut+1);
+    statusLine='Writes '+name+' in '+(directory||'the working directory')+'.';
+    statusKind=warnings.length?'warning':'ok';
+    summary='The kernel creates this file for the sample crash, inside the crashing process root, working directory and mount namespace.';
+    target=name;
+    targetNote=directory||'relative to the working directory';
+  }
+  return {
+    kind,value:out,byteLength,overLimit:byteLength>MAX_NAME_BYTES,
+    rows,warnings,explanation,argv:args,program,target,targetNote,
+    statusLine,statusKind,summary,isPipe,
+    timeIso:sawTime?new Date(Number(ctx.epoch)*1000).toISOString():'',
+    limitText:MAX_NAME_BYTES
+  };
+}
+return {MAX_PATTERN,MAX_NAME_BYTES,MAX_COMM_BYTES,MAX_CORE_LIMIT,SPECS,DEFAULTS,utf8Bytes,clipBytes,parseWhole,parseLimit,basename,splitArgs,build};
+})();
+/* core-pattern-core:end */
+(()=>{'use strict';
+const $=id=>document.getElementById(id);
+const FIELDS=['pattern','pid','pidInit','tid','tidInit','uid','gid','signal','comm','exe','host','cpu','pidfd','mode','coreLimit','epoch'];
+function setStatus(message,kind){const node=$('status');node.textContent=message;node.className='status '+(kind||'');}
+function setError(message){
+  const node=$('error');
+  if(message){node.textContent=message;node.hidden=false;return;}
+  node.textContent='';node.hidden=true;
+}
+function readForm(){
+  const state={usesPid:$('in-uses-pid').checked};
+  for(const key of FIELDS)state[key]=$('in-'+key.replace(/[A-Z]/g,ch=>'-'+ch.toLowerCase())).value;
+  return state;
+}
+function writeForm(state){
+  for(const key of FIELDS)$('in-'+key.replace(/[A-Z]/g,ch=>'-'+ch.toLowerCase())).value=state[key];
+  $('in-uses-pid').checked=state.usesPid===true;
+  $('copy-note').textContent='';
+}
+function clearResult(){
+  $('out-value').textContent='not computed';
+  for(const id of ['out-kind','out-length','out-target'])$(id).textContent='not computed';
+  $('out-kind-note').textContent='file name or pipe handler';
+  $('out-target-note').textContent='';
+  $('summary').textContent='';
+  $('rows-body').replaceChildren();
+  $('warnings').replaceChildren();
+  $('explanation').replaceChildren();
+  $('argv').replaceChildren();
+  $('argv-wrap').hidden=true;
+  $('table-caption').textContent='Each specifier in the template, what it means and what it produced for this crash.';
+}
+function renderRow(row){
+  const tr=document.createElement('tr');
+  const spec=document.createElement('td');
+  const name=document.createElement('span');
+  name.className='spec-name'+(row.kind==='ok'||row.kind==='empty'?'':' '+row.kind);
+  name.textContent=row.spec;
+  const meaning=document.createElement('span');
+  meaning.className='spec-meaning';
+  meaning.textContent=row.meaning;
+  spec.appendChild(name);spec.appendChild(meaning);
+  const value=document.createElement('td');
+  value.className='mono'+(row.kind==='ok'||row.kind==='empty'?'':' '+row.kind);
+  value.textContent=row.value;
+  const since=document.createElement('td');
+  since.textContent=row.since;
+  tr.appendChild(spec);tr.appendChild(value);tr.appendChild(since);
+  return tr;
+}
+function render(state){
+  let result;
+  try{result=CorePatternCore.build(state);}catch(error){
+    setStatus('','');setError(error.message);clearResult();
+    return false;
+  }
+  setError('');
+  setStatus(result.statusLine,result.statusKind);
+  $('summary').textContent=result.summary;
+  $('out-value').textContent=result.value===''?'(empty)':result.value;
+  $('out-kind').textContent=result.kind==='pipe'?'pipe handler':(result.kind==='file'?'file name':'nothing');
+  $('out-kind-note').textContent=result.kind==='pipe'?'runs a program instead of writing a file':(result.kind==='file'?'written by the kernel':'an empty template writes no file');
+  $('out-length').textContent=result.byteLength+' / '+result.limitText+' bytes';
+  $('out-target').textContent=result.target;
+  $('out-target-note').textContent=result.targetNote;
+  const body=$('rows-body');
+  body.replaceChildren();
+  for(const row of result.rows)body.appendChild(renderRow(row));
+  $('table-caption').textContent=result.rows.length===0
+    ?'The template holds no % specifier, so nothing was expanded.'
+    :'Each specifier in the template, what it means and what it produced for this crash.';
+  const notes=$('warnings');
+  notes.replaceChildren();
+  for(const line of result.warnings){
+    const item=document.createElement('li');
+    item.className='warning';
+    item.textContent=line;
+    notes.appendChild(item);
+  }
+  const explain=$('explanation');
+  explain.replaceChildren();
+  for(const line of result.explanation){
+    const item=document.createElement('li');
+    item.textContent=line;
+    explain.appendChild(item);
+  }
+  const argvWrap=$('argv-wrap'),argv=$('argv');
+  argv.replaceChildren();
+  argvWrap.hidden=result.kind!=='pipe';
+  if(!argvWrap.hidden){
+    for(const arg of result.argv){
+      const item=document.createElement('li');
+      item.textContent=arg;
+      argv.appendChild(item);
+    }
+  }
+  $('copy-note').textContent='';
+  return true;
+}
+const allBody=$('all-body');
+for(const row of CorePatternCore.SPECS){
+  const tr=document.createElement('tr');
+  const spec=document.createElement('td');
+  spec.className='mono';
+  spec.textContent='%'+row[0];
+  const meaning=document.createElement('td');
+  meaning.textContent=row[1];
+  const since=document.createElement('td');
+  since.textContent=row[2];
+  tr.appendChild(spec);tr.appendChild(meaning);tr.appendChild(since);
+  allBody.appendChild(tr);
+}
+$('pattern-form').addEventListener('submit',event=>{event.preventDefault();render(readForm());});
+$('reset').addEventListener('click',()=>{writeForm(CorePatternCore.DEFAULTS);setError('');render(readForm());$('in-pattern').focus();});
+$('example').addEventListener('click',()=>{
+  writeForm(Object.assign({},CorePatternCore.DEFAULTS,{pattern:'|/usr/lib/systemd/systemd-coredump %P %u %g %s %t %c %h'}));
+  setError('');render(readForm());$('in-pattern').focus();
+});
+$('copy').addEventListener('click',async()=>{
+  const text=$('out-value').textContent;
+  try{
+    if(navigator.clipboard&&navigator.clipboard.writeText)await navigator.clipboard.writeText(text);
+    else throw new Error('unavailable');
+    $('copy-note').textContent='Copied.';
+  }catch(error){
+    $('copy-note').textContent='Select the value and copy it manually.';
+  }
+});
+let lastRendered=false;
+const ids=['in-pattern','in-uses-pid'].concat(FIELDS.map(key=>'in-'+key.replace(/[A-Z]/g,ch=>'-'+ch.toLowerCase())));
+for(const id of ids){
+  $(id).addEventListener('input',()=>{if(lastRendered)render(readForm());});
+  $(id).addEventListener('change',()=>{if(lastRendered)render(readForm());});
+}
+lastRendered=render(readForm());
+})();
+</script></body></html>
