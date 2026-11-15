@@ -307,6 +307,7 @@ node tests/emergency_water_supply_planner.test.cjs
 node tests/magic_number_calculator.test.cjs
 node tests/recording_card_capacity_planner.test.cjs
 node tests/ipv4_route_summarizer.test.cjs
+node tests/posix_acl_rights.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"

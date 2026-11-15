@@ -19,7 +19,7 @@ vm.runInContext(coreText + '\nmodule.exports = MemoryOvercommitCore;', sandbox);
 const C = sandbox.module.exports;
 
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2298, 'catalog total');
+assert.equal(catalog.tools.length, 2299, 'catalog total');
 const matches = catalog.tools.filter((tool) => tool.slug === slug);
 assert.equal(matches.length, 1, 'slug must exist exactly once');
 const entry = matches[0];
@@ -41,7 +41,7 @@ assert.equal(entry.testCases.filter((test) => test.kind === 'golden').length, 6)
 assert.equal(entry.testCases.filter((test) => test.kind === 'boundary').length, 6);
 assert.equal(entry.testCases.filter((test) => test.kind === 'validation').length, 8);
 assert.ok(!catalog.tools.some((tool) => tool.slug !== slug && tool.name.toLowerCase() === entry.name.toLowerCase()), 'name collision');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'System').length, 45, 'System count');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'System').length, 46, 'System count');
 
 function failure(input) {
   try {

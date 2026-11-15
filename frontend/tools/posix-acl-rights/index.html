@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Paste POSIX ACL entries from getfacl and see what the mask actually allows: effective rights for every named user and group, the mode ls -l prints, and the entries the mask is silently cutting down.">
+<script src="/assets/theme-init.js"></script>
+<title>POSIX ACL Effective Rights &mdash; virt.tools</title><link rel="stylesheet" href="/assets/style.css">
+<style>
+.acl-shell{max-width:1000px;margin:0 auto}.lead,.hint{color:var(--text-secondary,#8b949e)}
+.panel,.result{background:var(--surface,#161b22);border:1px solid var(--border,#30363d);border-radius:10px;padding:1rem;margin:1rem 0}
+.field{display:flex;flex-direction:column;gap:.3rem;min-width:0}.field label{font-weight:600;font-size:.95rem}
+textarea{box-sizing:border-box;width:100%;background:var(--background,#0d1117);color:var(--text,#c9d1d9);border:1px solid var(--border,#30363d);border-radius:6px;padding:.6rem;font:1rem ui-monospace,SFMono-Regular,Consolas,monospace;line-height:1.45;resize:vertical}
+.hint{font-size:.85rem;margin:.2rem 0 0}
+.check{display:flex;align-items:center;gap:.5rem;margin-top:.8rem;min-height:44px;font-size:.95rem}
+.check input{width:1.15rem;height:1.15rem}
+.actions{display:flex;flex-wrap:wrap;gap:.6rem;margin-top:1rem}
+button{border:1px solid var(--border,#30363d);border-radius:6px;background:var(--surface-raised,#21262d);color:var(--text,#c9d1d9);padding:.58rem .85rem;min-height:44px;font:inherit;font-size:1rem;cursor:pointer}
+.primary{border-color:var(--accent,#58a6ff);background:var(--accent-soft,#1e3a5f)}
+button:focus-visible,button:focus,textarea:focus-visible{outline:2px solid var(--accent,#58a6ff);outline-offset:2px}
+.status{min-height:1.4rem;margin:.6rem 0}.error{color:#f85149}.ok{color:#3fb950}.warning{color:#d29922}
+#error[hidden],.row[hidden],#default-block[hidden]{display:none}
+.rows{margin:.8rem 0 0;display:grid;gap:.45rem}
+.row{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:.8rem;align-items:baseline;border-bottom:1px solid var(--border,#30363d);padding:.35rem 0}
+.row dt{font-weight:600;min-width:18rem}.row dd{margin:0;display:flex;flex-wrap:wrap;gap:.2rem .8rem;align-items:baseline}
+.row .value{font:600 1rem ui-monospace,SFMono-Regular,Consolas,monospace}
+.row .meaning{font-size:.85rem;color:var(--text-secondary,#8b949e)}
+pre{margin:.5rem 0 0;padding:.8rem;background:var(--background,#0d1117);border:1px solid var(--border,#30363d);border-radius:6px;overflow-x:auto;font:1rem ui-monospace,SFMono-Regular,Consolas,monospace;line-height:1.6}
+.table-wrap{overflow-x:auto;margin:.6rem 0 0}
+table{border-collapse:collapse;width:100%;min-width:340px;font-size:.92rem;display:table}
+caption{text-align:left;font-size:.85rem;color:var(--text-secondary,#8b949e);padding-bottom:.35rem}
+th,td{text-align:left;padding:.42rem .55rem;border-bottom:1px solid var(--border,#30363d);white-space:nowrap}
+td.mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+td.perms{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+td:nth-child(4),th:nth-child(4){white-space:normal}
+tbody tr.masked td:nth-child(3){color:#d29922}
+tbody tr.default-row td{color:var(--text-secondary,#8b949e)}
+thead th{font-weight:600;color:var(--text-secondary,#8b949e)}
+ul{margin:.5rem 0 0;padding-left:1.2rem}#warnings:empty{display:none}
+@media(max-width:520px){
+table{min-width:0;font-size:.88rem}
+table,thead,tbody,tr,td{display:block}
+thead{display:none}
+caption{display:block;max-width:100%;white-space:normal}
+tr{border-bottom:1px solid var(--border,#30363d);padding:.45rem 0}
+td{border:0;padding:.12rem .1rem;white-space:normal}
+td:first-child{font-weight:700}
+td:not(:first-child)::before{content:attr(data-label) ": ";color:var(--text-secondary,#8b949e);font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+}
+@media(max-width:720px){.actions>*{flex:1 1 10rem}.panel,.result{padding:.85rem}.row{grid-template-columns:1fr}.row dt{min-width:0}.row .meaning{flex-basis:100%}}
+</style></head>
+<body><div id="site-header"></div><main class="tool-container"><div class="acl-shell">
+<h1>POSIX ACL Effective Rights</h1>
+<p class="lead">Paste ACL entries &mdash; the output of <code>getfacl</code>, or the short form you would hand to <code>setfacl</code> &mdash; and see what each entry really allows once the mask is applied, which mode <code>ls -l</code> will print, and where a grant is being quietly cut down. Everything is worked out in your browser; nothing is uploaded, stored or sent anywhere.</p>
+
+<form id="acl-form" novalidate>
+<section class="panel" aria-labelledby="input-title">
+<h2 id="input-title">ACL entries</h2>
+<div class="field">
+<label for="in-entries">Entries, one per line</label>
+<textarea id="in-entries" name="entries" rows="7" spellcheck="false" autocapitalize="off" autocomplete="off" aria-describedby="entries-hint">user::rw-
+user:alice:rwx
+group::r--
+group:devs:rwx
+mask::r-x
+other::---</textarea>
+<p id="entries-hint" class="hint">Three colon-separated fields: tag, qualifier, permissions. Tags are user/u, group/g, mask/m and other/o; <code>default:</code> prefixes a default entry. Up to 32 entries.</p>
+</div>
+<div class="check"><input id="in-directory" type="checkbox"><label for="in-directory">This object is a directory (allows <code>default:</code> entries)</label></div>
+<div class="actions">
+<button id="calculate" class="primary" type="submit">Explain</button>
+<button id="example" type="button">Load example</button>
+<button id="reset" type="button">Reset</button>
+</div>
+</section>
+</form>
+
+<section class="result" aria-labelledby="result-title">
+<h2 id="result-title">Effective rights</h2>
+<p id="status" class="status" role="status" aria-live="polite"></p>
+<p id="error" class="status error" role="alert" hidden></p>
+<p id="summary"></p>
+<dl class="rows">
+<div class="row"><dt>Entries</dt><dd><span id="out-entries" class="value">not computed</span><span id="out-entries-note" class="meaning">access and default lines</span></dd></div>
+<div class="row"><dt>Named users and groups</dt><dd><span id="out-named" class="value">not computed</span><span id="out-named-note" class="meaning">entries the mask applies to</span></dd></div>
+<div class="row"><dt>Access mask</dt><dd><span id="out-mask" class="value">not computed</span><span id="out-mask-note" class="meaning">the ceiling for the group class</span></dd></div>
+<div class="row" id="default-block" hidden><dt>Default mask</dt><dd><span id="out-default-mask" class="value">not computed</span><span id="out-default-note" class="meaning">inherited by new objects</span></dd></div>
+<div class="row"><dt>Mode <code>ls -l</code> shows</dt><dd><span id="out-mode" class="value">not computed</span><span id="out-mode-note" class="meaning">owner, mask, others</span></dd></div>
+<div class="row"><dt>Cut down by the mask</dt><dd><span id="out-limited" class="value">not computed</span><span id="out-limited-note" class="meaning">granted rights it removes</span></dd></div>
+</dl>
+<h3>Canonical short form</h3>
+<pre id="canonical" tabindex="0">not computed</pre>
+<h3>Every entry</h3>
+<div class="table-wrap">
+<table>
+<caption id="table-caption">Each entry as given, with the rights it grants and the rights that survive the mask.</caption>
+<thead><tr><th scope="col">Entry</th><th scope="col">Granted</th><th scope="col">Effective</th><th scope="col">Note</th></tr></thead>
+<tbody id="entry-body"></tbody>
+</table>
+</div>
+<ul id="warnings"></ul>
+<h3>How this is computed</h3>
+<ul id="explanation" class="explain"><li>Explain to see the arithmetic.</li></ul>
+<h3>What this does not do</h3>
+<ul id="limits" class="limits">
+<li>It explains the entries exactly as you paste them. It reads no file, checks no account, and cannot tell whether the filesystem or mount actually supports ACLs.</li>
+<li>It does not run <code>setfacl</code> or <code>chmod</code>: the command line it prints is for you to review and run yourself.</li>
+<li>When the mask is left out, <code>setfacl</code> recalculates it unless <code>-n</code> is given, so the mask stored on disk can differ from the one shown here. The canonical form above always writes the mask explicitly, which keeps <code>setfacl</code> from changing it.</li>
+<li>NFSv4 ACLs (deny entries, inheritance flags) and SELinux or AppArmor are different mechanisms and are not modelled.</li>
+<li>Default entries are validated and listed, but the ACL of a newly created file is not computed: inheritance also applies the creation mode and umask.</li>
+<li>Everything stays in this page: no upload, no account, no network request, no storage.</li>
+</ul>
+</section>
+</div></main><script src="/assets/tools.js"></script><script src="/assets/app.js"></script>
+<script>
+/* acl-core:start */
+const AclCore=(()=>{'use strict';
+const LIMITS={entries:[1,32]};
+const MAX_RAW=48;
+const DEFAULTS={
+  entries:'user::rw-\nuser:alice:rwx\ngroup::r--\ngroup:devs:rwx\nmask::r-x\nother::---',
+  directory:false
+};
+const TAGS={u:'user',user:'user',g:'group',group:'group',m:'mask',mask:'mask',o:'other',other:'other'};
+const PERMISSION_BITS={r:4,w:2,x:1};
+const NAME_RE=/^(?:[A-Za-z_][A-Za-z0-9_.-]{0,31}|\d{1,10})$/;
+function elide(text){return '"'+(text.length>MAX_RAW?text.slice(0,MAX_RAW)+'...':text)+'"';}
+function permsText(bits){return (bits&4?'r':'-')+(bits&2?'w':'-')+(bits&1?'x':'-');}
+function rightsText(bits){
+  const names=[];
+  if(bits&4)names.push('r');
+  if(bits&2)names.push('w');
+  if(bits&1)names.push('x');
+  return names.length?joinWords(names):'nothing';
+}
+function joinWords(items){
+  if(items.length===1)return items[0];
+  if(items.length===2)return items[0]+' and '+items[1];
+  return items.slice(0,-1).join(', ')+' and '+items[items.length-1];
+}
+function tokenize(text){
+  const lines=String(text===undefined||text===null?'':text).split(/\r?\n/);
+  const out=[];
+  for(let index=0;index<lines.length;index+=1){
+    const hash=lines[index].indexOf('#');
+    const body=(hash>-1?lines[index].slice(0,hash):lines[index]).trim();
+    if(body!=='')out.push({text:body,line:index+1});
+  }
+  return out;
+}
+function parsePerms(field,raw,line,label){
+  if(field==='')throw Error('The '+label+' entry '+elide(raw)+' on line '+line+' has no permissions; write them as rwx, r-x or ---.');
+  if(/^[0-7]$/.test(field))return Number(field);
+  if(field.length>3)throw Error('Entry '+elide(raw)+' on line '+line+' has more than three permission characters; r, w and x appear at most once each, so rwx is the widest.');
+  let bits=0;
+  for(const character of field){
+    if(character==='-')continue;
+    const value=PERMISSION_BITS[character];
+    if(value===undefined)throw Error('Entry '+elide(raw)+' on line '+line+' contains "'+character+'" in its permissions; use only r, w, x and -.');
+    if(bits&value)throw Error('Entry '+elide(raw)+' on line '+line+' repeats the permission "'+character+'".');
+    bits|=value;
+  }
+  return bits;
+}
+function parseEntry(entry,directory){
+  const raw=entry.text,line=entry.line;
+  let body=raw;
+  let scope='access';
+  if(/^default:/i.test(body)){scope='default';body=body.slice(8);}
+  else if(/^d:/i.test(body)){scope='default';body=body.slice(2);}
+  const fields=body.split(':');
+  if(fields.length!==3){
+    throw Error('Entry '+elide(raw)+' on line '+line+' has '+fields.length+(fields.length===1?' field':' fields')+' instead of three; write it as u:alice:rwx or m::r-x.');
+  }
+  const tagField=fields[0].trim();
+  const qualifier=fields[1].trim();
+  const permsField=fields[2].trim();
+  const tag=TAGS[tagField.toLowerCase()];
+  if(tag===undefined)throw Error('Entry '+elide(raw)+' on line '+line+' starts with "'+tagField+'"; an ACL tag is user (u), group (g), mask (m) or other (o).');
+  if((tag==='mask'||tag==='other')&&qualifier!==''){
+    throw Error('The '+tag+' entry '+elide(raw)+' on line '+line+' has a qualifier; '+tag+' entries name nothing, so write '+(tag==='mask'?'m::r-x':'o::---')+'.');
+  }
+  if((tag==='user'||tag==='group')&&qualifier!==''&&!NAME_RE.test(qualifier)){
+    throw Error('Entry '+elide(raw)+' on line '+line+' has the '+tag+' name "'+qualifier+'"; use an account name of up to 32 letters, digits, dots, dashes or underscores, or a decimal ID.');
+  }
+  if(scope==='default'&&!directory){
+    throw Error('Entry '+elide(raw)+' on line '+line+' is a default: entry, but a default ACL exists only on a directory; tick "This object is a directory" to allow it.');
+  }
+  const label=tag+(qualifier===''?'':' '+qualifier);
+  return {raw:raw,line:line,scope:scope,tag:tag,qualifier:qualifier,bits:parsePerms(permsField,raw,line,label)};
+}
+function buildAcl(entries,scope){
+  const label=scope==='default'?'default':'access';
+  const acl={scope:scope,owner:null,group:null,other:null,mask:null,namedUsers:[],namedGroups:[],named:0,maskBits:null,maskSource:null};
+  const seen=new Map();
+  for(const entry of entries){
+    if(entry.tag==='user'&&entry.qualifier===''){
+      if(acl.owner)throw Error('The '+label+' ACL has two u:: entries (lines '+acl.owner.line+' and '+entry.line+'); it needs exactly one.');
+      acl.owner=entry;
+    }else if(entry.tag==='group'&&entry.qualifier===''){
+      if(acl.group)throw Error('The '+label+' ACL has two g:: entries (lines '+acl.group.line+' and '+entry.line+'); it needs exactly one.');
+      acl.group=entry;
+    }else if(entry.tag==='other'){
+      if(acl.other)throw Error('The '+label+' ACL has two o:: entries (lines '+acl.other.line+' and '+entry.line+'); it needs exactly one.');
+      acl.other=entry;
+    }else if(entry.tag==='mask'){
+      if(acl.mask)throw Error('The '+label+' ACL has two m:: entries (lines '+acl.mask.line+' and '+entry.line+'); a mask may appear only once.');
+      acl.mask=entry;
+    }else if(entry.tag==='user'){
+      const key='user:'+entry.qualifier;
+      if(seen.has(key))throw Error('The '+label+' ACL names the user "'+entry.qualifier+'" twice (lines '+seen.get(key).line+' and '+entry.line+').');
+      seen.set(key,entry);
+      acl.namedUsers.push(entry);
+    }else{
+      const key='group:'+entry.qualifier;
+      if(seen.has(key))throw Error('The '+label+' ACL names the group "'+entry.qualifier+'" twice (lines '+seen.get(key).line+' and '+entry.line+').');
+      seen.set(key,entry);
+      acl.namedGroups.push(entry);
+    }
+  }
+  const missing=[];
+  if(!acl.owner)missing.push('u::');
+  if(!acl.group)missing.push('g::');
+  if(!acl.other)missing.push('o::');
+  if(missing.length)throw Error('The '+label+' ACL is missing '+joinWords(missing)+'; every ACL carries exactly one u::, g:: and o::.');
+  acl.named=acl.namedUsers.length+acl.namedGroups.length;
+  if(acl.mask){acl.maskBits=acl.mask.bits;acl.maskSource='given';}
+  else if(acl.named>0){
+    let bits=acl.group.bits;
+    for(const entry of acl.namedUsers)bits|=entry.bits;
+    for(const entry of acl.namedGroups)bits|=entry.bits;
+    acl.maskBits=bits;
+    acl.maskSource='added';
+  }
+  return acl;
+}
+function effectiveBits(acl,entry){
+  if(acl.maskBits===null)return entry.bits;
+  if(entry===acl.owner||entry===acl.other)return entry.bits;
+  return entry.bits&acl.maskBits;
+}
+function entryLabel(acl,entry){
+  if(entry===acl.owner)return 'u::';
+  if(entry===acl.group)return 'g::';
+  if(entry===acl.other)return 'o::';
+  if(entry===acl.mask)return 'm::';
+  return entry.tag.charAt(0)+':'+entry.qualifier;
+}
+function noteFor(acl,entry){
+  if(entry===acl.owner)return 'the owner is never masked';
+  if(entry===acl.other)return 'others are never masked';
+  if(entry===acl.mask)return 'the ceiling itself';
+  if(acl.maskBits===null)return 'no mask: granted in full';
+  const effective=entry.bits&acl.maskBits;
+  if(effective===entry.bits)return 'within the mask';
+  if(effective===0)return 'the mask leaves nothing';
+  return 'the mask removes '+rightsText(entry.bits&~acl.maskBits);
+}
+function shortOf(acl){
+  const parts=['u::'+permsText(acl.owner.bits)];
+  for(const entry of acl.namedUsers)parts.push('u:'+entry.qualifier+':'+permsText(entry.bits));
+  parts.push('g::'+permsText(acl.group.bits));
+  for(const entry of acl.namedGroups)parts.push('g:'+entry.qualifier+':'+permsText(entry.bits));
+  if(acl.maskBits!==null)parts.push('m::'+permsText(acl.maskBits));
+  parts.push('o::'+permsText(acl.other.bits));
+  return parts.join(',');
+}
+function octalText(bits){return (bits).toString(8);}
+function analyze(raw){
+  const state=Object.assign({},DEFAULTS,raw||{});
+  const directory=Boolean(state.directory);
+  const tokens=tokenize(state.entries);
+  if(tokens.length===0)throw Error('Enter at least one ACL entry, such as u::rw- or u:alice:r-x.');
+  if(tokens.length>LIMITS.entries[1])throw Error('Enter at most '+LIMITS.entries[1]+' ACL entries; '+tokens.length+' were given.');
+  const parsed=tokens.map(entry=>parseEntry(entry,directory));
+  const access=buildAcl(parsed.filter(entry=>entry.scope==='access'),'access');
+  const withDefault=parsed.some(entry=>entry.scope==='default');
+  const fallback=withDefault?buildAcl(parsed.filter(entry=>entry.scope==='default'),'default'):null;
+  const groupBitsForMode=access.maskBits===null?access.group.bits:access.maskBits;
+  const modeValue=(access.owner.bits<<6)|(groupBitsForMode<<3)|access.other.bits;
+  const mode=modeValue.toString(8).padStart(4,'0');
+  const modeText='-'+permsText(access.owner.bits)+permsText(groupBitsForMode)+permsText(access.other.bits);
+  const extended=access.named>0||access.mask!==null||fallback!==null;
+  const affected=[];
+  for(const entry of [access.group].concat(access.namedUsers,access.namedGroups))if(access.maskBits!==null)affected.push(entry);
+  const limited=affected.filter(entry=>effectiveBits(access,entry)!==entry.bits);
+  const limitedNames=limited.map(entry=>entry.qualifier||'g::');
+  const zero=limited.filter(entry=>effectiveBits(access,entry)===0);
+  const rows=parsed.map(entry=>{
+    const acl=entry.scope==='default'?fallback:access;
+    return {
+      entry:entry.scope==='default'?'default:'+entryLabel(acl,entry):entryLabel(acl,entry),
+      scope:entry.scope,
+      granted:permsText(entry.bits),
+      effective:permsText(effectiveBits(acl,entry)),
+      note:noteFor(acl,entry),
+      masked:effectiveBits(acl,entry)!==entry.bits
+    };
+  });
+  const canonical=[];
+  const shortAccess=shortOf(access);
+  canonical.push('setfacl -m '+shortAccess+(directory?' <dir>':' <file>'));
+  if(fallback)canonical.push('setfacl -d -m '+shortOf(fallback)+' <dir>');
+  const warnings=[];
+  if(access.maskSource==='added'){
+    const namedList=access.namedUsers.map(entry=>entry.qualifier).concat(access.namedGroups.map(entry=>entry.qualifier));
+    warnings.push('No mask was given, but the ACL names '+joinWords(namedList)+', so setfacl would add m::'+permsText(access.maskBits)+' - the union of g::, the named users and the named groups - and that mask would become the ceiling for all of them.');
+  }
+  if(limited.length){
+    const parts=limited.map(entry=>{
+      const effective=effectiveBits(access,entry);
+      return (entry.qualifier||'g::')+' keeps '+(effective===0?'nothing of ':'')+permsText(effective)+' of '+permsText(entry.bits);
+    });
+    warnings.push(limited.length+(limited.length===1?' entry is':' entries are')+' cut down by the mask: '+parts.join(', ')+'.');
+  }
+  if(access.maskSource==='given'&&(access.group.bits&~access.maskBits)!==0){
+    warnings.push('The mask '+permsText(access.maskBits)+' is narrower than g:: '+permsText(access.group.bits)+', so a process that matches the owning group also gets only '+permsText(access.maskBits)+'.');
+  }
+  if(access.maskSource==='given'&&access.named===0){
+    warnings.push('The mask caps g:: even though no named user or group is present: acl(5) makes the group bits the mask whenever a mask entry exists.');
+  }
+  if(fallback){
+    warnings.push('The '+((fallback.namedUsers.length+fallback.namedGroups.length)+3+(fallback.mask!==null?1:0))+' default: entries are the template for objects created inside this directory, not permissions on it.');
+  }
+  const explanation=[];
+  explanation.push('An entry is a tag, an optional qualifier and permissions: user:alice:rwx gives the account alice r, w and x. r is 4, w is 2 and x is 1, so rwx is 7 and r-x is 5; a dash means the right is absent.');
+  explanation.push('acl(5) makes m:: the ceiling for g::, every named user and every named group: what they really get is granted AND mask. u:: and o:: are never masked, and the other bits are unaffected.');
+  if(access.maskSource==='given'){
+    explanation.push('Here m::'+permsText(access.maskBits)+' is '+octalText(access.maskBits)+', so every group-class entry is ANDed with '+octalText(access.maskBits)+'.');
+  }else if(access.maskSource==='added'){
+    explanation.push('No mask was given, so setfacl would start from g:: '+permsText(access.group.bits)+' ('+octalText(access.group.bits)+'), OR in every named user and group, and store m::'+permsText(access.maskBits)+' ('+octalText(access.maskBits)+').');
+  }else{
+    explanation.push('No mask and no named entries: this is a minimal ACL, so u::, g:: and o:: are exactly the mode bits and nothing is masked.');
+  }
+  if(limited.length){
+    const first=limited[0];
+    explanation.push((first.qualifier||'g::')+' was granted '+permsText(first.bits)+' ('+octalText(first.bits)+') and '+octalText(first.bits)+' AND '+octalText(access.maskBits)+' = '+octalText(effectiveBits(access,first))+' = '+permsText(effectiveBits(access,first))+', so '+rightsText(first.bits&~access.maskBits)+' is dropped.');
+  }else if(access.maskSource==='added'){
+    explanation.push('Because setfacl derives the mask from these same entries, the mask it stores takes nothing away.');
+  }else if(access.maskBits!==null){
+    explanation.push('Nothing here asks for a right the mask forbids, so every entry keeps exactly what it grants.');
+  }
+  explanation.push('ls -l prints the group field from the mask when one exists (acl(5), CORRESPONDENCE BETWEEN ACL ENTRIES AND FILE PERMISSION BITS): u::, '+groupBitsForModeLabel(access)+' and o:: give '+octalText(access.owner.bits)+' '+octalText(groupBitsForMode)+' '+octalText(access.other.bits)+' = '+mode+' = '+modeText+(extended?', followed by a + because the ACL goes beyond the three base entries.':', with no + because the ACL is only the three base entries.'));
+  if(fallback){
+    explanation.push('The default ACL follows the same rules on its own entries: it needs its own u::, g:: and o::, and its own mask whenever it names a user or group. New objects inherit it, then have their bits trimmed to the creation mode and umask.');
+  }
+  const namedText=access.namedUsers.length+(access.namedUsers.length===1?' user':' users')+', '+access.namedGroups.length+(access.namedGroups.length===1?' group':' groups');
+  let statusKind='ok';
+  let statusText='mode '+mode+', mask '+permsText(access.maskBits)+': nothing is cut down';
+  if(access.maskBits===null)statusText='minimal ACL, mode '+mode+', no mask';
+  if(limited.length){
+    statusKind='warning';
+    statusText='mode '+mode+': the mask '+permsText(access.maskBits)+' cuts down '+joinWords(limitedNames);
+  }
+  const modeSource=access.maskBits===null?'g::':(access.maskBits===access.group.bits?'the mask '+permsText(access.maskBits)+', which equals g::':'the mask '+permsText(access.maskBits)+', not g:: '+permsText(access.group.bits));
+  const summary='ls -l shows '+mode+' ('+modeText+(extended?'+':'')+'): the group field comes from '+modeSource+', so '+(limited.length?limited.map(entry=>(entry.qualifier||'g::')+' gets '+permsText(effectiveBits(access,entry))+' where '+permsText(entry.bits)+' was granted').join(', '):'every entry receives what it grants')+'.';
+  return {
+    summary:summary,
+    entryCount:parsed.length,accessCount:access.named+3+(access.mask!==null?1:0),defaultCount:withDefault?fallback.namedUsers.length+fallback.namedGroups.length+3+(fallback.mask!==null?1:0):0,
+    namedUsers:access.namedUsers.length,namedGroups:access.namedGroups.length,namedText:namedText,
+    maskText:access.maskBits===null?null:permsText(access.maskBits),
+    maskSource:access.maskSource,
+    defaultMaskText:fallback&&fallback.maskBits!==null?permsText(fallback.maskBits):null,
+    defaultMaskSource:fallback?fallback.maskSource:null,
+    mode:mode,modeText:modeText,extended:extended,
+    limited:limitedNames,limitedText:limitedNames.length?joinWords(limitedNames):'none',
+    zero:zero.map(entry=>entry.qualifier||'g::'),
+    rows:rows,canonical:canonical,warnings:warnings,explanation:explanation,
+    statusText:statusText,statusKind:statusKind,
+    hasDefault:Boolean(fallback)
+  };
+}
+function groupBitsForModeLabel(acl){return acl.mask===null?'g::':'m::';}
+return{LIMITS,DEFAULTS,MAX_RAW,elide,permsText,joinWords,tokenize,parsePerms,parseEntry,buildAcl,effectiveBits,entryLabel,noteFor,shortOf,octalText,analyze};
+})();
+/* acl-core:end */
+(()=>{'use strict';
+const $=id=>document.getElementById(id);
+function setStatus(message,kind){const node=$('status');node.textContent=message;node.className='status '+(kind||'');}
+function setError(message){
+  const node=$('error');
+  if(message){node.textContent=message;node.hidden=false;return;}
+  node.textContent='';node.hidden=true;
+}
+function readForm(){return{entries:$('in-entries').value,directory:$('in-directory').checked};}
+function clearResult(){
+  for(const id of ['out-entries','out-named','out-mask','out-mode','out-limited','out-default-mask'])$(id).textContent='not computed';
+  $('out-entries-note').textContent='access and default lines';
+  $('out-named-note').textContent='entries the mask applies to';
+  $('out-mask-note').textContent='the ceiling for the group class';
+  $('out-mode-note').textContent='owner, mask, others';
+  $('out-limited-note').textContent='granted rights it removes';
+  $('out-default-note').textContent='inherited by new objects';
+  $('default-block').hidden=true;
+  $('summary').textContent='';
+  $('canonical').textContent='not computed';
+  $('entry-body').replaceChildren();
+  $('warnings').replaceChildren();
+  $('explanation').replaceChildren();
+}
+function renderTable(result){
+  const body=$('entry-body');
+  body.replaceChildren();
+  for(const row of result.rows){
+    const tr=document.createElement('tr');
+    if(row.masked)tr.className='masked';
+    if(row.scope==='default')tr.className=(tr.className+' default-row').trim();
+    const entry=document.createElement('td');
+    entry.className='mono';
+    entry.textContent=row.entry;
+    const granted=document.createElement('td');
+    granted.className='perms';
+    granted.dataset.label='Granted';
+    granted.textContent=row.granted;
+    const effective=document.createElement('td');
+    effective.className='perms';
+    effective.dataset.label='Effective';
+    effective.textContent=row.effective;
+    const note=document.createElement('td');
+    note.dataset.label='Note';
+    note.textContent=row.note;
+    tr.append(entry,granted,effective,note);
+    body.appendChild(tr);
+  }
+}
+function render(state){
+  let result;
+  try{result=AclCore.analyze(state);}catch(error){
+    setStatus('','');setError(error.message);clearResult();
+    return false;
+  }
+  setError('');
+  setStatus(result.statusText,result.statusKind);
+  $('summary').textContent=result.summary;
+  $('out-entries').textContent=String(result.entryCount);
+  $('out-entries-note').textContent=result.accessCount+' access, '+result.defaultCount+' default';
+  $('out-named').textContent=result.namedText;
+  $('out-mask').textContent=result.maskText===null?'none':'m::'+result.maskText;
+  $('out-mask-note').textContent=result.maskSource===null?'minimal ACL: no named entries':(result.maskSource==='added'?'no mask given; setfacl would add it':'given');
+  $('default-block').hidden=!result.hasDefault;
+  if(result.hasDefault){
+    $('out-default-mask').textContent=result.defaultMaskText===null?'none':'m::'+result.defaultMaskText;
+    $('out-default-note').textContent=result.defaultMaskSource==='added'?'no default mask given; setfacl would add it':'given';
+  }
+  $('out-mode').textContent=result.mode;
+  $('out-mode-note').textContent=result.modeText+(result.extended?'+':'');
+  $('out-limited').textContent=result.limited.length?String(result.limited.length):'none';
+  $('out-limited-note').textContent=result.limited.length?'also removed by the mask':'nothing is masked';
+  $('canonical').textContent=result.canonical.join('\n');
+  renderTable(result);
+  const notes=$('warnings');
+  notes.replaceChildren();
+  for(const line of result.warnings){
+    const item=document.createElement('li');
+    item.className='warning';
+    item.textContent=line;
+    notes.appendChild(item);
+  }
+  const explain=$('explanation');
+  explain.replaceChildren();
+  for(const line of result.explanation){
+    const item=document.createElement('li');
+    item.textContent=line;
+    explain.appendChild(item);
+  }
+  return true;
+}
+$('acl-form').addEventListener('submit',event=>{event.preventDefault();render(readForm());});
+$('reset').addEventListener('click',()=>{
+  $('in-entries').value=AclCore.DEFAULTS.entries;
+  $('in-directory').checked=AclCore.DEFAULTS.directory;
+  setError('');render(readForm());$('in-entries').focus();
+});
+$('example').addEventListener('click',()=>{
+  $('in-directory').checked=true;
+  $('in-entries').value='user::rwx\nuser:alice:rwx\ngroup::r-x\ngroup:devs:rwx\nmask::rwx\nother::---\ndefault:user::rwx\ndefault:user:alice:r-x\ndefault:group::r-x\ndefault:group:devs:r-x\ndefault:mask::r-x\ndefault:other::---';
+  setError('');render(readForm());$('in-entries').focus();
+});
+$('in-directory').addEventListener('change',()=>{if(lastRendered)render(readForm());});
+let lastRendered=false;
+$('in-entries').addEventListener('input',()=>{if(lastRendered)render(readForm());});
+lastRendered=render(readForm());
+})();
+</script></body></html>
