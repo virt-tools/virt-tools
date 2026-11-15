@@ -127,7 +127,7 @@ assert.equal(C.SYSTEMS.boulders.length, 2);
 
 // Catalog integrity and recorded cases.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2316, 'catalog total');
+assert.equal(catalog.tools.length, 2317, 'catalog total');
 const record = catalog.tools.find((tool) => tool.slug === 'climbing-grade-converter');
 assert.ok(record, 'catalog record');
 assert.equal(record.name, 'Climbing Grade Converter');
@@ -142,7 +142,7 @@ assert.ok(record.tags.includes('bouldering'));
 assert.ok(record.sources.some((source) => source.url === 'https://www.mountainproject.com/international-climbing-grades'));
 assert.ok(record.method.length > 900);
 assert.ok(record.testCases.length >= 14);
-assert.equal(catalog.tools.filter((tool) => tool.category === record.category).length, 46, 'Sports & Outdoors count');
+assert.equal(catalog.tools.filter((tool) => tool.category === record.category).length, 47, 'Sports & Outdoors count');
 
 const names = new Map();
 for (const tool of catalog.tools) {

@@ -205,8 +205,8 @@ refusal({ ...base, reference: '150' }, 'Reference loudness level must be 140 pho
 
 // ---- Catalog record, totals, and every case stored in the record.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2316, 'catalog total');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2056, 'public tools');
+assert.equal(catalog.tools.length, 2317, 'catalog total');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2057, 'public tools');
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record missing');
 assert.equal(record.name, 'Phon to Sone Loudness Converter');
