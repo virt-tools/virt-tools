@@ -274,8 +274,8 @@ for (const testCase of record.testCases) {
   assert.equal(actual.panels, want.panels, testCase.name + ' panels');
   assert.equal(actual.rows, want.rows, testCase.name + ' rows');
 }
-assert.equal(catalog.tools.length, 2308, 'catalog total');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2048, 'public tools');
+assert.equal(catalog.tools.length, 2309, 'catalog total');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2049, 'public tools');
 
 // ---- Page contract: shared shell, labelled controls, one hash-pinnable script.
 assert.match(html, /<html lang="en">/);

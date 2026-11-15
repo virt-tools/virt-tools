@@ -29,7 +29,7 @@ assert.ok(Array.isArray(entry.aliases) && entry.aliases.length >= 10, 'aliases p
 assert.ok(Array.isArray(entry.sources) && entry.sources.length >= 3, 'sources present');
 assert.ok(typeof entry.method === 'string' && entry.method.length > 800, 'method documented');
 assert.ok(entry.testCases.length >= 8, 'catalog cases present');
-assert.equal(catalog.tools.length, 2308, 'catalog total');
+assert.equal(catalog.tools.length, 2309, 'catalog total');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Developer').length, 46, 'Developer count');
 
 const slugs = new Set(catalog.tools.map((tool) => tool.slug));
