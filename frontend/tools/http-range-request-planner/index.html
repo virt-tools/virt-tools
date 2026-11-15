@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Plan an HTTP Range request locally: enter a representation size and a bytes range header to see the status, Content-Range, Content-Type, body bytes and per-part ranges a server should answer with.">
+<script src="/assets/theme-init.js"></script>
+<title>HTTP Range Request Planner &mdash; virt.tools</title><link rel="stylesheet" href="/assets/style.css">
+<style>
+.hrr-shell{max-width:1000px;margin:0 auto}.lead,.hint{color:var(--text-secondary,#8b949e)}
+.panel,.result{background:var(--surface,#161b22);border:1px solid var(--border,#30363d);border-radius:10px;padding:1rem;margin:1rem 0}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.9rem 1.1rem}
+.field{display:flex;flex-direction:column;gap:.35rem}.field label{font-weight:600}
+.field input,.field select{box-sizing:border-box;width:100%;max-width:none;background:var(--background,#0d1117);color:var(--text,#c9d1d9);border:1px solid var(--border,#30363d);border-radius:6px;padding:.62rem;font:inherit;font-size:1rem;min-height:44px}
+.field input[type="text"]{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+.hint{font-size:.85rem;margin:0}
+.actions{display:flex;flex-wrap:wrap;gap:.6rem;margin-top:1rem}
+button{border:1px solid var(--border,#30363d);border-radius:6px;background:var(--surface-raised,#21262d);color:var(--text,#c9d1d9);padding:.58rem .85rem;min-height:44px;font:inherit;font-size:1rem;cursor:pointer}
+.primary{border-color:var(--accent,#58a6ff);background:var(--accent-soft,#1e3a5f)}
+button:focus-visible,button:focus{outline:2px solid var(--accent,#58a6ff);outline-offset:2px}
+input:focus-visible,select:focus-visible{outline:2px solid var(--accent,#58a6ff);outline-offset:2px}
+.status{min-height:1.4rem;margin:.6rem 0}.error{color:#f85149}.ok{color:#3fb950}.warning{color:#d29922}
+#error[hidden]{display:none}
+.rows{margin:.8rem 0 0;display:grid;gap:.45rem}
+.row{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:.8rem;align-items:baseline;border-bottom:1px solid var(--border,#30363d);padding:.35rem 0}
+.row dt{font-weight:600;min-width:13rem}.row dd{margin:0;display:flex;flex-wrap:wrap;gap:.2rem .8rem;align-items:baseline}
+.row .value{font:600 1rem ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:anywhere}
+.row .meaning{font-size:.85rem;color:var(--text-secondary,#8b949e)}
+.table-wrap{overflow-x:auto;margin:.6rem 0 0}
+table{border-collapse:collapse;display:table;width:100%;font-size:.92rem}
+caption{text-align:left;font-size:.85rem;color:var(--text-secondary,#8b949e);padding-bottom:.35rem}
+th,td{text-align:right;padding:.42rem .55rem;border-bottom:1px solid var(--border,#30363d)}
+th:first-child,td:first-child{text-align:left}
+thead th{font-weight:600;color:var(--text-secondary,#8b949e)}
+tbody tr td.served{color:#3fb950}tbody tr td.dropped{color:#d29922}
+ul{margin:.5rem 0 0;padding-left:1.2rem}#warnings:empty{display:none}
+.explain li,.limits li{margin:.2rem 0}
+@media(max-width:720px){.grid{grid-template-columns:1fr}.actions>*{flex:1 1 10rem}.panel,.result{padding:.85rem}.row{grid-template-columns:1fr}.row dt{min-width:0}.row .meaning{flex-basis:100%}.table-wrap{margin-left:-.35rem;margin-right:-.35rem;padding:0 .35rem}table{font-size:.78rem}th,td{padding:.32rem .18rem}th{white-space:normal;font-size:.72rem;letter-spacing:0}}
+</style></head>
+<body><div id="site-header"></div><main class="tool-container"><div class="hrr-shell">
+<h1>HTTP Range Request Planner</h1>
+<p class="lead">Enter the size of a representation and the <code>Range</code> header a client would send. The page parses the header the way a server does — byte offsets from zero, open-ended and suffix ranges, clamping, satisfiability — and shows the status, the <code>Content-Range</code> and <code>Content-Type</code> that come back, the bytes actually sent, and each part of a multipart response. Everything runs in your browser; nothing is uploaded, stored or sent anywhere.</p>
+
+<form id="range-form" novalidate>
+<section class="panel" aria-labelledby="input-title">
+<h2 id="input-title">Request</h2>
+<div class="grid">
+<div class="field">
+<label for="in-size">Representation size (bytes)</label>
+<input id="in-size" name="size" type="number" inputmode="numeric" min="1" max="1099511627776" step="1" value="10485760" aria-describedby="size-hint">
+<p id="size-hint" class="hint">The length of the resource as sent, in whole bytes. 10 MiB is 10485760; the size is what makes a range satisfiable or not.</p>
+</div>
+<div class="field">
+<label for="in-if-range">If-Range validator</label>
+<select id="in-if-range" name="ifRange" aria-describedby="if-range-hint">
+<option value="none" selected>No If-Range header</option>
+<option value="match">If-Range matches the current representation</option>
+<option value="mismatch">If-Range does not match</option>
+</select>
+<p id="if-range-hint" class="hint">If-Range makes the Range conditional: when the validator no longer matches, the whole representation is sent instead.</p>
+</div>
+<div class="field" style="grid-column:1/-1">
+<label for="in-range">Range header value</label>
+<input id="in-range" name="range" type="text" value="bytes=0-1048575" spellcheck="false" autocomplete="off" autocapitalize="off" aria-describedby="range-hint">
+<p id="range-hint" class="hint">For example <code>bytes=0-1023</code>, <code>bytes=1024-</code>, <code>bytes=-500</code>, or several ranges separated by commas. Only the bytes unit is defined for HTTP.</p>
+</div>
+</div>
+<div class="actions">
+<button id="calculate" class="primary" type="submit">Plan the response</button>
+<button id="example" type="button">Load example</button>
+<button id="reset" type="button">Reset</button>
+</div>
+</section>
+</form>
+
+<section class="result" aria-labelledby="result-title">
+<h2 id="result-title">Response</h2>
+<p id="status" class="status" role="status" aria-live="polite"></p>
+<p id="error" class="status error" role="alert" hidden></p>
+<p id="summary"></p>
+<dl class="rows">
+<div class="row"><dt>Status</dt><dd><span id="out-status" class="value">not computed</span><span id="out-status-note" class="meaning">after the request preconditions</span></dd></div>
+<div class="row"><dt>Content-Range</dt><dd><span id="out-content-range" class="value">not computed</span><span id="out-content-range-note" class="meaning">the bytes this body covers</span></dd></div>
+<div class="row"><dt>Content-Type</dt><dd><span id="out-content-type" class="value">not computed</span><span id="out-content-type-note" class="meaning">the representation's own type for one part</span></dd></div>
+<div class="row"><dt>Body bytes</dt><dd><span id="out-body" class="value">not computed</span><span id="out-body-note" class="meaning">of the full representation</span></dd></div>
+<div class="row"><dt>Saved</dt><dd><span id="out-saved" class="value">not computed</span><span id="out-saved-note" class="meaning">against a full transfer</span></dd></div>
+<div class="row"><dt>Ranges served</dt><dd><span id="out-ranges" class="value">not computed</span><span id="out-ranges-note" class="meaning">satisfiable ranges out of those requested</span></dd></div>
+</dl>
+<h3>Requested ranges</h3>
+<div class="table-wrap" role="region" aria-label="Requested ranges and the bytes each one covers" tabindex="0">
+<table>
+<caption id="table-caption">Each range in the header, the bytes it covers and what the server does with it.</caption>
+<thead><tr><th scope="col">Range spec</th><th scope="col">First byte</th><th scope="col">Last byte</th><th scope="col">Bytes</th><th scope="col">Response</th></tr></thead>
+<tbody id="rows-body"></tbody>
+</table>
+</div>
+<ul id="warnings"></ul>
+<h3>How this is worked out</h3>
+<ul id="explanation" class="explain"><li>Plan a response to see the arithmetic.</li></ul>
+<h3>What this does not do</h3>
+<ul id="limits" class="limits">
+<li>This models what a well-behaved origin server should answer, not what yours will. A server may ignore a Range header it cannot use, refuse a header with many overlapping or unordered ranges, and a cache or proxy may recombine or ignore the request.</li>
+<li>Range is evaluated only when the request would otherwise be a 200. A conditional GET that comes back 304 Not Modified never carries a partial body, and preconditions such as If-Match that fail short-circuit before this point.</li>
+<li>Ranges are counted on the bytes as sent, so with a content coding applied the offsets refer to the encoded sequence, not to the decoded resource.</li>
+<li>Sizes are limited to 1 to 1,099,511,627,776 bytes (1 TiB) and to at most 32 ranges in one header. A zero-length representation only allows a non-zero suffix range, and is not modelled here.</li>
+</ul>
+</section>
+</div></main><script src="/assets/tools.js"></script><script src="/assets/app.js"></script>
+<script>
+/* range-core:start */
+const RangeCore=(()=>{'use strict';
+const MAX_SIZE=1099511627776,MAX_RANGES=32,BOUNDARY='virt-tools-range-boundary';
+const UNITS=['B','KiB','MiB','GiB','TiB'];
+const IF_RANGE={none:'none',match:'match',mismatch:'mismatch'};
+const DEFAULTS={size:'10485760',range:'bytes=0-1048575',ifRange:'none'};
+function roundTo(value,digits){
+  const scale=Math.pow(10,digits);
+  const rounded=Math.round(value*scale)/scale;
+  return Object.is(rounded,-0)?0:rounded;
+}
+function fmtNum(value,digits){
+  const text=roundTo(roundTo(value,6),digits).toFixed(digits);
+  return /^-0(?:\.0+)?$/.test(text)?text.slice(1):text;
+}
+function fmtInt(value){return String(Math.round(value));}
+function groupInt(value){
+  const text=fmtInt(value),sign=text.charAt(0)==='-'?'-':'',digits=sign?text.slice(1):text;
+  return sign+digits.replace(/\B(?=(\d{3})+(?!\d))/g,',');
+}
+function fmtBytes(value){
+  const bytes=Math.round(value);
+  if(bytes<1024)return groupInt(bytes)+' B';
+  let size=bytes,index=0;
+  while(size>=1024&&index<UNITS.length-1){size=size/1024;index++;}
+  return fmtNum(size,2)+' '+UNITS[index];
+}
+function clip(text){
+  const value=String(text);
+  return value.length>24?value.slice(0,24)+'...':value;
+}
+function plainInt(value){return String(Math.round(value));}
+function fmtShare(savedBytes,size){
+  const exact=savedBytes*100/size;
+  if(!(savedBytes>0))return '0%';
+  let digits=1;
+  while(digits<4&&(roundTo(exact,digits)===0||roundTo(exact,digits)===100))digits+=1;
+  return fmtNum(roundTo(exact,digits),digits)+'%';
+}
+function parseSize(raw){
+  const text=String(raw===undefined||raw===null?'':raw).trim();
+  const range='1 to '+groupInt(MAX_SIZE);
+  if(text==='')throw Error('Enter the representation size in whole bytes, from '+range+'.');
+  if(!/^\d+$/.test(text))throw Error('Enter the representation size as a whole number of bytes, from '+range+'; "'+clip(text)+'" is not a byte count.');
+  const value=Number(text);
+  if(value<1||value>MAX_SIZE)throw Error('The representation size must be from '+range+' bytes; '+groupInt(value)+' is outside that range.');
+  return value;
+}
+function buildPart(spec,fields,size){
+  const first=fields[1],last=fields[2];
+  if(first===''){
+    const suffix=Number(last);
+    if(suffix===0)return{spec:spec,kind:'suffix',satisfiable:false,zeroSuffix:true,first:null,last:null,length:0,clamped:false,whole:false};
+    const whole=suffix>=size;
+    const start=whole?0:size-suffix;
+    return{spec:spec,kind:'suffix',satisfiable:true,zeroSuffix:false,first:start,last:size-1,length:size-start,clamped:false,whole:whole};
+  }
+  const start=Number(first),openEnded=last==='';
+  const requestedLast=openEnded?size-1:Number(last);
+  const satisfiable=start<size;
+  const clamped=satisfiable&&!openEnded&&requestedLast>=size;
+  const end=Math.min(requestedLast,size-1);
+  return{spec:spec,kind:openEnded?'open':'int',satisfiable:satisfiable,zeroSuffix:false,first:start,
+    last:satisfiable?end:null,length:satisfiable?end-start+1:0,clamped:clamped,whole:false};
+}
+function parseRange(text,size){
+  const trimmed=String(text===undefined||text===null?'':text).trim();
+  if(trimmed==='')throw Error('Enter a Range header value such as bytes=0-1023.');
+  const match=/^([A-Za-z0-9!#$%&'*+.^_`|~-]+)\s*=([\s\S]*)$/.exec(trimmed);
+  if(!match)return{status:'ignored',reason:'malformed',unit:null,badSpec:null,parts:[]};
+  const unit=match[1];
+  if(unit.toLowerCase()!=='bytes')return{status:'ignored',reason:'unit',unit:unit,badSpec:null,parts:[]};
+  const pieces=match[2].split(',');
+  if(pieces.length>MAX_RANGES)throw Error('List at most '+MAX_RANGES+' ranges in one header; a server will not serve more than a handful.');
+  const parts=[];
+  for(const piece of pieces){
+    const spec=piece.trim();
+    const fields=/^(\d*)-(\d*)$/.exec(spec);
+    const bad={status:'ignored',reason:'invalid',unit:unit,badSpec:spec===''?'(empty)':clip(spec),parts:parts};
+    if(!fields||(fields[1]===''&&fields[2]===''))return bad;
+    if(fields[1].length>15||fields[2].length>15)return bad;
+    if(fields[1]!==''&&fields[2]!==''&&Number(fields[2])<Number(fields[1]))return bad;
+    parts.push(buildPart(spec,fields,size));
+  }
+  const satisfiable=parts.filter(function(part){return part.satisfiable;});
+  return{status:satisfiable.length?'partial':'unsatisfiable',reason:'',unit:unit,badSpec:null,parts:parts};
+}
+function bodyTotal(parts){
+  return parts.reduce(function(sum,part){return sum+(part.satisfiable?part.length:0);},0);
+}
+function overlaps(parts){
+  let count=0;
+  for(let i=0;i<parts.length;i+=1){
+    for(let j=i+1;j<parts.length;j+=1){
+      const a=parts[i],b=parts[j];
+      if(a.satisfiable&&b.satisfiable&&a.first<=b.last&&b.first<=a.last)count+=1;
+    }
+  }
+  return count;
+}
+function build(raw){
+  const state=Object.assign({},DEFAULTS,raw||{});
+  const ifRange=String(state.ifRange===undefined||state.ifRange===null?'':state.ifRange);
+  if(!Object.prototype.hasOwnProperty.call(IF_RANGE,ifRange))throw Error('Choose whether the If-Range validator matches: none, matches or does not match.');
+  const size=parseSize(state.size);
+  const parsed=parseRange(state.range,size);
+  const requested=parsed.parts.length+(parsed.badSpec?1:0);
+  let status=206,statusText='206 Partial Content',reason='',bodyBytes=0,outcomeNote='served';
+  if(ifRange==='mismatch'){
+    status=200;statusText='200 OK';
+    reason='The If-Range validator does not match, so the Range header is ignored and the whole representation is sent.';
+    bodyBytes=size;outcomeNote='not applied';
+  }else if(parsed.status==='ignored'){
+    status=200;statusText='200 OK';
+    if(parsed.reason==='unit'){
+      reason='The range unit "'+parsed.unit+'" is not one a server understands for HTTP, so the Range header is ignored and the whole representation is sent.';
+    }else if(parsed.reason==='malformed'){
+      reason='The value is not a range specifier of the form unit=range, so the Range header is ignored and the whole representation is sent.';
+    }else{
+      reason='The range specifier "'+parsed.badSpec+'" is invalid, so the Range header is ignored and the whole representation is sent.';
+    }
+    bodyBytes=size;outcomeNote='not applied';
+  }else if(parsed.status==='unsatisfiable'){
+    status=416;statusText='416 Range Not Satisfiable';
+    reason='No requested range can be satisfied, so there is nothing to send and the response states the current length instead.';
+    bodyBytes=0;outcomeNote='not satisfiable';
+  }else{
+    bodyBytes=bodyTotal(parsed.parts);
+    const satisfiableCount=parsed.parts.filter(function(part){return part.satisfiable;}).length;
+    reason=parsed.parts.length===1
+      ?'The one requested range is satisfiable, so the response carries just those bytes.'
+      :(satisfiableCount===parsed.parts.length
+        ?'Every requested range is satisfiable, so the response carries each of them as its own part.'
+        :'Only some requested ranges are satisfiable, so the response carries those parts and leaves the rest out.');
+  }
+  const parts=parsed.parts.map(function(part){
+    const served=status===206&&part.satisfiable;
+    const outcome=status===206?(part.satisfiable?'served':'not satisfiable'):(status===416?'not satisfiable':'not applied');
+    return{
+      spec:part.spec,kind:part.kind,satisfiable:part.satisfiable,zeroSuffix:part.zeroSuffix,
+      first:part.first,last:part.last,length:part.length,clamped:part.clamped,whole:part.whole,
+      firstText:part.first===null?'\u2014':groupInt(part.first),
+      lastText:part.last===null?'\u2014':groupInt(part.last),
+      lengthText:part.satisfiable?groupInt(part.length):'\u2014',
+      outcome:outcome,
+      outcomeKind:served?'served':'dropped'
+    };
+  });
+  const servedParts=parts.filter(function(part){return part.outcome==='served';});
+  const servedCount=servedParts.length;
+  const contentRange=status===206
+    ?(servedCount===1?'bytes '+plainInt(servedParts[0].first)+'-'+plainInt(servedParts[0].last)+'/'+plainInt(size)
+      :'one line per part, see the table')
+    :(status===416?'bytes */'+plainInt(size):'not sent');
+  const contentType=status===206&&servedCount>1
+    ?'multipart/byteranges; boundary='+BOUNDARY
+    :"the representation's own media type";
+  const savedBytes=size-bodyBytes;
+  const savedPct=roundTo(savedBytes*100/size,3);
+  const savedPctText=fmtShare(savedBytes,size);
+  let savedLabel=fmtBytes(savedBytes)+' ('+groupInt(savedBytes)+' bytes)';
+  let savedNote=savedPctText+' less than the full representation';
+  if(status===416){savedLabel='no body';savedNote='nothing is sent, so the client has to ask again from a valid offset';}
+  if(status===200){savedLabel='none';savedNote='the whole representation is sent, so nothing is saved';}
+  const warnings=[];
+  if(status===206){
+    const clamped=servedParts.filter(function(part){return part.clamped;});
+    if(clamped.length){
+      warnings.push((clamped.length===1?'One requested range ends':clamped.length+' requested ranges end')+' past the last byte and '+(clamped.length===1?'is':'are')+' cut short at byte '+groupInt(size-1)+'.');
+    }
+    const whole=servedParts.filter(function(part){return part.whole;});
+    if(whole.length){
+      warnings.push('A suffix range asks for more bytes than the representation holds, so the whole representation is returned for it.');
+    }
+    const dropped=parts.filter(function(part){return !part.satisfiable;});
+    if(dropped.length){
+      warnings.push(dropped.length+(dropped.length===1?' requested range cannot':' requested ranges cannot')+' be satisfied and '+(dropped.length===1?'is':'are')+' left out; a server may instead ignore the whole header.');
+    }
+    if(servedCount>2&&overlaps(servedParts)){
+      warnings.push('More than two ranges overlap here. A server may coalesce or refuse a header like that, so ask for one range where you can.');
+    }else if(servedCount>4){
+      warnings.push('Five or more parts in one response is unusual; many clients and servers prefer one range per request.');
+    }
+  }
+  if(status===416){
+    warnings.push('A client that knows the length can resume from it: the 416 response carries Content-Range with the current size, and the next attempt should start below the last byte.');
+  }
+  if(status===200&&ifRange!=='mismatch'){
+    warnings.push('A server may ignore a Range header it cannot use, and this is not an error. The client still gets a complete representation.');
+  }
+  if(ifRange==='mismatch'){
+    warnings.push('If-Range exists so a client with a stale partial copy does not need a second request: a changed validator turns the partial request back into a full one.');
+  }
+  const explanation=[];
+  explanation.push(requested===0
+    ?'The header carries no byte range to read, so there is nothing to serve partially.'
+    :'The header is read as byte offsets counted from zero: bytes=first-last, bytes=first- for everything from a first byte to the end, and bytes=-N for the last N bytes. This one asks for '+requested+(requested===1?' range':' ranges')+'.');
+  if(parsed.parts.length){
+    const satisfiable=parsed.parts.filter(function(part){return part.satisfiable;});
+    explanation.push('A byte range is satisfiable when it starts before the length of the representation ('+groupInt(size)+' bytes)'+(parsed.parts.some(function(part){return part.kind==='suffix';})?', or when it is a suffix range with a non-zero length':'')+'. Here '+satisfiable.length+' of '+parsed.parts.length+' requested '+(parsed.parts.length===1?'range can':'ranges can')+' be satisfied.');
+  }
+  const clampedParts=parts.filter(function(part){return part.clamped;});
+  if(clampedParts.length){
+    explanation.push('A last byte at or past the end is replaced by the last byte of the representation, byte '+groupInt(size-1)+', which is how '+clampedParts[0].spec+' becomes bytes '+groupInt(clampedParts[0].first)+'-'+groupInt(clampedParts[0].last)+'.');
+  }
+  const suffixParts=parts.filter(function(part){return part.kind==='suffix'&&part.satisfiable;});
+  if(suffixParts.length){
+    explanation.push('A suffix range counts back from the end: '+suffixParts[0].spec+' over '+groupInt(size)+' bytes starts at '+groupInt(size)+' minus the suffix length, byte '+groupInt(suffixParts[0].first)+'.');
+  }
+  explanation.push('One satisfiable range gets a 206 response whose Content-Range is bytes first-last/length. Several satisfiable ranges get a 206 whose body is multipart/byteranges, each part carrying its own Content-Range; an unsatisfiable set gets 416 with Content-Range: bytes */length.');
+  if(status===206&&bodyBytes>=size){
+    explanation.push('The parts total '+fmtBytes(bodyBytes)+', which is no smaller than the whole '+fmtBytes(size)+' representation, so this request saves nothing.');
+  }else if(status===206){
+    explanation.push('The body carries '+fmtBytes(bodyBytes)+' of '+fmtBytes(size)+', so '+fmtBytes(savedBytes)+', or '+savedPctText+', of a full transfer is saved.');
+  }else if(status===416){
+    explanation.push('No body is sent, and the client has to start again from an offset inside the representation.');
+  }else{
+    explanation.push('No partial transfer happens, so nothing is saved against a full response.');
+  }
+  explanation.push('If-Range is checked before Range is applied: a validator that no longer matches means the header is dropped and the whole representation is sent, with no 412 response.');
+  let summaryText='';
+  if(status===206&&bodyBytes>=size){
+    summaryText='A '+(requested===1?'single range':'set of '+requested+' ranges')+' against a '+fmtBytes(size)+' representation gets a 206 Partial Content answer in '+servedCount+(servedCount===1?' part':' parts')+' carrying '+fmtBytes(bodyBytes)+', which is no smaller than the whole representation — several parts cost more than one full response.';
+  }else if(status===206){
+    summaryText='A '+(requested===1?'single range':'set of '+requested+' ranges')+' against a '+fmtBytes(size)+' representation gets a 206 Partial Content answer in '+servedCount+(servedCount===1?' part':' parts')+', carrying '+fmtBytes(bodyBytes)+' — '+savedPctText+' less than the full representation.';
+  }else if(status===416){
+    summaryText='None of the requested ranges can be satisfied against the '+fmtBytes(size)+' representation, so the answer is 416 Range Not Satisfiable with Content-Range: bytes */'+plainInt(size)+' and no body.';
+  }else if(ifRange==='mismatch'){
+    summaryText='The If-Range validator no longer matches, so the Range header is ignored and the whole '+fmtBytes(size)+' representation is sent as a 200 OK — the safe outcome for a resume that would otherwise splice stale bytes.';
+  }else{
+    summaryText='The Range header is ignored, so the client receives the whole '+fmtBytes(size)+' representation as a 200 OK instead of a partial response.';
+  }
+  return{
+    status:status,statusText:statusText,statusLine:statusText+' — '+reason,reason:reason,
+    size:size,sizeText:groupInt(size)+' bytes ('+fmtBytes(size)+')',
+    ifRange:ifRange,header:trimmedHeader(state.range),
+    parts:parts,partCount:parts.length,requestedCount:requested,servedCount:servedCount,
+    contentRange:contentRange,contentType:contentType,boundary:BOUNDARY,
+    bodyBytes:bodyBytes,bodyText:fmtBytes(bodyBytes)+' ('+groupInt(bodyBytes)+' bytes)',
+    savedBytes:savedBytes,savedText:savedLabel,savedNote:savedNote,
+    savedPct:savedPct,savedPctText:savedPctText,
+    rangesText:requested===0?'none requested':servedCount+' of '+requested,
+    warnings:warnings,explanation:explanation,summary:summaryText,
+    statusKind:(status===206&&warnings.length===0)?'ok':'warning'
+  };
+}
+function trimmedHeader(raw){return String(raw===undefined||raw===null?'':raw).trim();}
+return{MAX_SIZE,MAX_RANGES,BOUNDARY,UNITS,IF_RANGE,DEFAULTS,roundTo,fmtNum,fmtInt,groupInt,fmtBytes,clip,plainInt,fmtShare,parseSize,parseRange,buildPart,bodyTotal,overlaps,build};
+})();
+/* range-core:end */
+(()=>{'use strict';
+const $=id=>document.getElementById(id);
+function setStatus(message,kind){const node=$('status');node.textContent=message;node.className='status '+(kind||'');}
+function setError(message){
+  const node=$('error');
+  if(message){node.textContent=message;node.hidden=false;return;}
+  node.textContent='';node.hidden=true;
+}
+function readForm(){return{
+  size:$('in-size').value,
+  range:$('in-range').value,
+  ifRange:$('in-if-range').value
+};}
+function writeForm(state){
+  $('in-size').value=state.size;
+  $('in-range').value=state.range;
+  $('in-if-range').value=state.ifRange;
+}
+function clearResult(){
+  for(const id of ['out-status','out-content-range','out-content-type','out-body','out-saved','out-ranges'])$(id).textContent='not computed';
+  $('summary').textContent='';
+  $('rows-body').replaceChildren();
+  $('warnings').replaceChildren();
+  $('explanation').replaceChildren();
+  $('table-caption').textContent='Each range in the header, the bytes it covers and what the server does with it.';
+}
+function renderRow(row){
+  const tr=document.createElement('tr');
+  const spec=document.createElement('td');
+  spec.textContent=row.spec;
+  const first=document.createElement('td');
+  first.textContent=row.firstText;
+  const last=document.createElement('td');
+  last.textContent=row.lastText;
+  const length=document.createElement('td');
+  length.textContent=row.lengthText;
+  const outcome=document.createElement('td');
+  outcome.textContent=row.outcome;
+  outcome.className=row.outcomeKind;
+  tr.appendChild(spec);tr.appendChild(first);tr.appendChild(last);tr.appendChild(length);tr.appendChild(outcome);
+  return tr;
+}
+function render(state){
+  let result;
+  try{result=RangeCore.build(state);}catch(error){
+    setStatus('','');setError(error.message);clearResult();
+    return false;
+  }
+  setError('');
+  setStatus(result.statusLine,result.statusKind);
+  $('summary').textContent=result.summary;
+  $('out-status').textContent=result.statusText;
+  $('out-status-note').textContent=result.ifRange==='none'?'no If-Range header on the request':'If-Range checked before Range';
+  $('out-content-range').textContent=result.contentRange;
+  $('out-content-range-note').textContent=result.status===206&&result.servedCount>1?'multipart parts are numbered from the table below':'the bytes this body covers';
+  $('out-content-type').textContent=result.contentType;
+  $('out-content-type-note').textContent=result.status===206&&result.servedCount>1?'boundary separates the parts':"the representation's own type";
+  $('out-body').textContent=result.bodyText;
+  $('out-body-note').textContent='of '+RangeCore.groupInt(result.size)+' bytes';
+  $('out-saved').textContent=result.savedText;
+  $('out-saved-note').textContent=result.savedNote;
+  $('out-ranges').textContent=result.rangesText;
+  $('out-ranges-note').textContent=result.parts.some(function(part){return !part.satisfiable;})?'some ranges cannot be satisfied':'every requested range is satisfiable';
+  const body=$('rows-body');
+  body.replaceChildren();
+  for(const row of result.parts)body.appendChild(renderRow(row));
+  $('table-caption').textContent=result.parts.length===0
+    ?'The header held no byte range to show.'
+    :'Each range in the header, the bytes it covers and what the server does with it.';
+  const notes=$('warnings');
+  notes.replaceChildren();
+  for(const line of result.warnings){
+    const item=document.createElement('li');
+    item.className='warning';
+    item.textContent=line;
+    notes.appendChild(item);
+  }
+  const explain=$('explanation');
+  explain.replaceChildren();
+  for(const line of result.explanation){
+    const item=document.createElement('li');
+    item.textContent=line;
+    explain.appendChild(item);
+  }
+  return true;
+}
+$('range-form').addEventListener('submit',event=>{event.preventDefault();render(readForm());});
+$('reset').addEventListener('click',()=>{writeForm(RangeCore.DEFAULTS);setError('');render(readForm());$('in-size').focus();});
+$('example').addEventListener('click',()=>{writeForm({size:'10485760',range:'bytes=0-99, 5000-5099, -100',ifRange:'none'});setError('');render(readForm());$('in-range').focus();});
+let lastRendered=false;
+for(const id of ['in-size','in-range','in-if-range']){
+  $(id).addEventListener('input',()=>{if(lastRendered)render(readForm());});
+  $(id).addEventListener('change',()=>{if(lastRendered)render(readForm());});
+}
+lastRendered=render(readForm());
+})();
+</script></body></html>

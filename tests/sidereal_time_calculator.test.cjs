@@ -228,7 +228,7 @@ assert.ok(worstPolynomial < 0.1, 'the core agrees with the IAU-1982 polynomial w
 
 // ---- Catalog record and its cases must agree with the core.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2313, 'catalog total');
+assert.equal(catalog.tools.length, 2314, 'catalog total');
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record missing');
 assert.equal(record.name, 'Sidereal Time Calculator');

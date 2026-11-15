@@ -318,7 +318,7 @@ assert.ok(html.includes('tabindex="0"') || html.includes("tabindex='0'"), 'the a
 
 // ---- Catalog record and every case in it must agree with the core.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2313, 'catalog total');
+assert.equal(catalog.tools.length, 2314, 'catalog total');
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record missing');
 assert.equal(record.name, 'IPv4 Route Summarizer');
@@ -344,7 +344,7 @@ assert.equal(new Set(record.tags).size, record.tags.length, 'tags are unique');
 assert.equal(new Set(record.aliases).size, record.aliases.length, 'aliases are unique');
 assert.ok(record.tags.includes('supernet'));
 assert.ok(record.aliases.includes('Route Summarization Calculator'));
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Networking').length, 46, 'Networking count');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Networking').length, 47, 'Networking count');
 assert.equal(catalog.tools.filter((tool) => tool.slug === slug).length, 1, 'no rival record');
 for (const tool of catalog.tools) {
   if (tool.slug === slug) continue;

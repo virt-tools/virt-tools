@@ -195,8 +195,8 @@ refusal({ ...base, key: '' }, "Choose the song's key from the list.");
 
 // ---- Catalog record, totals, and every case stored in the record.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2313, 'catalog total');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2053, 'public tools');
+assert.equal(catalog.tools.length, 2314, 'catalog total');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2054, 'public tools');
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record missing');
 assert.equal(record.name, 'Song Key Fit Planner');
