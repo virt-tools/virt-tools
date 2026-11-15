@@ -594,6 +594,11 @@ def apply_translation(root: Node, mapping: dict) -> set[str]:
                     key = norm_ws(js_unescape(value))
                     if key in mapping:
                         applied.add(key)
+                        # The literal is replaced whole, so the text fragments the
+                        # extractor also took from inside it are covered.
+                        for nested in fragment_units(js_unescape(value)):
+                            if nested in mapping:
+                                applied.add(nested)
                         pieces.append(body[cursor:start])
                         pieces.append(js_escape(mapping[key], quote))
                         cursor = end
