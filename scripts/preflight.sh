@@ -314,6 +314,7 @@ node tests/four_bar_linkage.test.cjs
 node tests/heat_transfer_coefficient_converter.test.cjs
 node tests/sidereal_time_calculator.test.cjs
 node tests/hop_bitterness_calculator.test.cjs
+node tests/beer_color_calculator.test.cjs
 node tests/lampshade_fabric_calculator.test.cjs
 node tests/rj45_pinout_checker.test.cjs
 node tests/os_grid_reference_converter.test.cjs
