@@ -214,7 +214,7 @@ for (let iteration = 0; iteration < 260; iteration += 1) {
 
 // ---- Catalog record and its cases must agree with the core.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2319, 'catalog total');
+assert.equal(catalog.tools.length, 2320, 'catalog total');
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record missing');
 assert.equal(record.name, 'Heat Transfer Coefficient Converter');
@@ -271,7 +271,7 @@ for (const tag of ['heat-transfer', 'u-value', 'r-value', 'unit-conversion']) {
 }
 assert.ok(!catalog.tools.some((tool) => tool.slug !== slug && /(?:^|-)(?:heat-transfer|u-value)(?:-|$)/.test(tool.slug)),
   'no other heat transfer slug');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Converters').length, 46, 'Converters count');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Converters').length, 47, 'Converters count');
 
 // ---- Page contract: shared assets, labelled controls, no storage or network.
 const markupIds = new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1]));

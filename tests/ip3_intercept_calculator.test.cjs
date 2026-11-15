@@ -111,8 +111,8 @@ for (const tool of catalog.tools) {
   }
 }
 
-assert.equal(catalog.tools.length, 2319, 'catalog total');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2059, 'public tools');
+assert.equal(catalog.tools.length, 2320, 'catalog total');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2060, 'public tools');
 assert.equal(
   catalog.tools.filter((tool) => tool.category === 'Communications Engineering').length,
   47,
@@ -175,5 +175,5 @@ assert.ok(html.includes('var(--on-accent'), 'accent text colour token');
 
 console.log(
   'ip3-intercept-calculator: ' + combos + ' measurements, ' + refusals.length + ' refusals, '
-  + record.testCases.length + ' catalog cases, totals 2319/2059/47'
+  + record.testCases.length + ' catalog cases, totals 2320/2060/47'
 );
