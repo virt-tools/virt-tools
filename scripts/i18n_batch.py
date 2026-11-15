@@ -215,6 +215,9 @@ def check_page(payload: dict, locale: str, written: dict) -> tuple[list[str], li
             problems.append(f"{slug}: {field} must be a string")
 
     bad = []
+    identical: list[str] = []
+    whitespace: list[str] = []
+    prose = 0
     for unit, translation in strings.items():
         if unit not in expected:
             continue
@@ -234,15 +237,35 @@ def check_page(payload: dict, locale: str, written: dict) -> tuple[list[str], li
             bad.append((unit, "entity differs"))
             continue
         plain = html_module.unescape(re.sub(r"</?[a-zA-Z][^>]*>", "", unit)).strip()
-        if translation.strip() == unit.strip() and len(plain) > 12:
+        prose_unit = len(plain) > 12 and not i18n_lib.is_code_shaped(plain)
+        if prose_unit:
+            prose += 1
+        # An edit that only moves whitespace is not a translation: it is a way to
+        # dodge the identical-text rule (doubling a space in a CSS selector, or
+        # rewriting a CSV sample). Keep the source string instead.
+        if translation != unit and " ".join(translation.split()) == " ".join(unit.split()):
+            whitespace.append(unit)
+            continue
+        if translation.strip() == unit.strip() and prose_unit:
             words = {word.upper().strip(".,:;!?()") for word in plain.split() if len(word) > 1}
             if not words or not words <= KEEP_WORDS:
-                bad.append((unit, "identical to the English source"))
+                identical.append(unit)
                 continue
         if locale != "en" and left_in_english(translation):
             english.append((unit, left_in_english(translation)))
     if bad:
         problems.append(f"{slug}: {len(bad)} invalid strings, first: {bad[0][0][:50]!r} ({bad[0][1]})")
+    # One untranslated unit can be a font stack or a format name; most of them
+    # means the page was skipped. Only the second case fails the batch.
+    if identical and len(identical) >= 3 and len(identical) * 2 >= max(3, prose):
+        problems.append(
+            f"{slug}: {len(identical)} of {prose} prose units are identical to the English, "
+            f"first: {identical[0][:50]!r}"
+        )
+    elif identical:
+        warnings.append(f"{slug}: {len(identical)} prose unit(s) left in English, first: {identical[0][:40]!r}")
+    if whitespace:
+        warnings.append(f"{slug}: {len(whitespace)} whitespace-only edit(s) reverted, first: {whitespace[0][:40]!r}")
     for unit, word in english[:3]:
         warnings.append(f"{slug}: possible English left in {unit[:40]!r} ({word!r})")
     return problems, warnings
@@ -301,6 +324,10 @@ def import_batch(locale: str, path: Path, write: bool, prune: bool = False) -> i
             for problem in problems:
                 print("error: " + problem, file=sys.stderr)
             continue
+        for unit in list(page["strings"]):
+            value = page["strings"][unit]
+            if value != unit and " ".join(value.split()) == " ".join(unit.split()):
+                page["strings"][unit] = unit
         common = load_common(locale)
         canonical = 0
         for unit, value in common.items():
@@ -346,6 +373,12 @@ def prune_memories(locale: str, write: bool) -> int:
             print(f"error: {slug}: page is missing", file=sys.stderr)
             continue
         current = i18n_lib.units(document)
+        whitespace = [
+            unit for unit, value in memory.get("strings", {}).items()
+            if value != unit and " ".join(value.split()) == " ".join(unit.split())
+        ]
+        for unit in whitespace:
+            memory["strings"][unit] = unit
         common = load_common(locale)
         canonical = [
             unit for unit, value in common.items()
@@ -355,14 +388,17 @@ def prune_memories(locale: str, write: bool) -> int:
             memory["strings"][unit] = common[unit]
         orphans = [unit for unit in memory.get("strings", {}) if unit not in current]
         missing = [unit for unit in current if unit not in memory.get("strings", {})]
-        if orphans or canonical:
+        if orphans or canonical or whitespace:
             pruned += 1
             for unit in orphans:
                 memory["strings"].pop(unit, None)
             memory["sourceHash"] = digest
             if write:
                 path.write_text(json.dumps(memory, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-            print(f"{'pruned' if write else 'would prune'} {slug}: -{len(orphans)} orphan(s), {len(canonical)} canonical")
+            print(
+                f"{'pruned' if write else 'would prune'} {slug}: "
+                f"-{len(orphans)} orphan(s), {len(canonical)} canonical, {len(whitespace)} whitespace"
+            )
         if missing:
             stale += 1
             print(f"error: {slug}: {len(missing)} new unit(s), first: {missing[0][:50]!r}", file=sys.stderr)
