@@ -254,7 +254,7 @@ assert.ok(html.includes('/assets/tools.js') && html.includes('/assets/app.js'), 
 
 // ---- Catalog record and every case in it must agree with the core.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2310, 'catalog total');
+assert.equal(catalog.tools.length, 2311, 'catalog total');
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record missing');
 assert.equal(record.name, 'Recording Card Capacity & Offload Planner');
@@ -280,7 +280,7 @@ assert.equal(new Set(record.tags).size, record.tags.length, 'tags are unique');
 assert.equal(new Set(record.aliases).size, record.aliases.length, 'aliases are unique');
 assert.ok(record.tags.includes('offload'));
 assert.ok(record.aliases.includes('Card Capacity Calculator'));
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Video').length, 45, 'Video count');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Video').length, 46, 'Video count');
 assert.equal(catalog.tools.filter((tool) => tool.slug === slug).length, 1, 'no rival record');
 for (const tool of catalog.tools) {
   if (tool.slug === slug) continue;

@@ -226,7 +226,7 @@ assert.ok(swept >= 30, 'swept peaks: ' + swept);
 
 // Catalog cases replay, both directions.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2310, 'catalog total');
+assert.equal(catalog.tools.length, 2311, 'catalog total');
 const entry = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(entry, 'catalog record missing');
 assert.equal(entry.category, 'Audio');

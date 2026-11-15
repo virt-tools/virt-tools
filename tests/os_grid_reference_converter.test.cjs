@@ -200,8 +200,8 @@ for (const [lat, lon, digits] of FORWARD) {
 
 // ---- Catalog record and every case in it must agree with the core.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2310, 'catalog total');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2050, 'public tools');
+assert.equal(catalog.tools.length, 2311, 'catalog total');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2051, 'public tools');
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record missing');
 assert.equal(record.name, 'OS National Grid Reference Converter');
