@@ -314,6 +314,7 @@ node tests/four_bar_linkage.test.cjs
 node tests/heat_transfer_coefficient_converter.test.cjs
 node tests/sidereal_time_calculator.test.cjs
 node tests/hop_bitterness_calculator.test.cjs
+node tests/lampshade_fabric_calculator.test.cjs
 node tests/universal_integer_codes.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
