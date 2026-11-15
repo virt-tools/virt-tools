@@ -299,3 +299,32 @@ docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
 The edge-header test runs against isolated test containers; it verifies that
 feedback responses retain no-store, privacy, framing, and MIME headers without
 leaking Gunicorn's upstream `Server` value.
+
+## Translation memories
+
+A localized tool page is published from `data/i18n/tools/<locale>/<slug>.json`,
+not from a translated copy of the HTML. The memory must contain every unit the
+English page exposes plus the source hash it was written against, or
+`generate_i18n.py` skips the page and `i18n_status.py --check` fails in
+preflight. Adding a page or editing its copy therefore means updating the
+memory in the same commit.
+
+`scripts/i18n_batch.py` is the queue interface:
+
+```sh
+python3 scripts/i18n_batch.py status                      # pages with a memory per locale
+python3 scripts/i18n_batch.py export --locale de --count 40 --out batch.json
+python3 scripts/i18n_batch.py import --locale de --in filled.json            # dry run
+python3 scripts/i18n_batch.py import --locale de --in filled.json --write
+python3 scripts/i18n_batch.py prune --locale de [--write] # after an extraction change
+```
+
+`import` re-extracts the page rather than trusting the payload and rejects
+missing units, a stale hash, changed markup, placeholders, numbers or entities,
+and prose identical to the English. `data/i18n/common/<locale>.json` holds the
+canonical wording for copy that repeats on hundreds of pages; import rewrites
+any memory that disagrees, so "Reset" reads the same everywhere.
+
+`reviewed` in a memory records whether a native speaker checked it. A batch
+written by a model is `false` and stays `false` until someone reviews the page;
+that flag is informational today and does not gate publishing.
