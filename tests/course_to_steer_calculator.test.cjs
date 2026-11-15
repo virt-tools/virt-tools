@@ -197,7 +197,7 @@ assert.equal(run({ set: '225', drift: '2' }).warnings.length, 0);
 
 // Catalog cases replay.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2297, 'catalog total');
+assert.equal(catalog.tools.length, 2298, 'catalog total');
 const entry = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(entry, 'catalog record missing');
 assert.equal(entry.category, 'Geography');

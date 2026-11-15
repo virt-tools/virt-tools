@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Summarize a list of IPv4 prefixes into the smallest set of CIDR routes that covers exactly the same addresses, with the covering supernet, the dropped duplicates and any gaps.">
+<script src="/assets/theme-init.js"></script>
+<title>IPv4 Route Summarizer &mdash; virt.tools</title><link rel="stylesheet" href="/assets/style.css">
+<style>
+.rs-shell{max-width:1000px;margin:0 auto}.lead,.hint{color:var(--text-secondary,#8b949e)}
+.panel,.result{background:var(--surface,#161b22);border:1px solid var(--border,#30363d);border-radius:10px;padding:1rem;margin:1rem 0}
+.field{display:flex;flex-direction:column;gap:.3rem;min-width:0}.field label{font-weight:600;font-size:.95rem}
+textarea{box-sizing:border-box;width:100%;background:var(--background,#0d1117);color:var(--text,#c9d1d9);border:1px solid var(--border,#30363d);border-radius:6px;padding:.6rem;font:1rem ui-monospace,SFMono-Regular,Consolas,monospace;line-height:1.45;resize:vertical}
+.hint{font-size:.85rem;margin:.2rem 0 0}
+.actions{display:flex;flex-wrap:wrap;gap:.6rem;margin-top:1rem}
+button{border:1px solid var(--border,#30363d);border-radius:6px;background:var(--surface-raised,#21262d);color:var(--text,#c9d1d9);padding:.58rem .85rem;min-height:44px;font:inherit;font-size:1rem;cursor:pointer}
+.primary{border-color:var(--accent,#58a6ff);background:var(--accent-soft,#1e3a5f)}
+button:focus-visible,button:focus,textarea:focus-visible{outline:2px solid var(--accent,#58a6ff);outline-offset:2px}
+.status{min-height:1.4rem;margin:.6rem 0}.error{color:#f85149}.ok{color:#3fb950}.warning{color:#d29922}
+#error[hidden]{display:none}
+.rows{margin:.8rem 0 0;display:grid;gap:.45rem}
+.row{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:.8rem;align-items:baseline;border-bottom:1px solid var(--border,#30363d);padding:.35rem 0}
+.row dt{font-weight:600;min-width:18rem}.row dd{margin:0;display:flex;flex-wrap:wrap;gap:.2rem .8rem;align-items:baseline}
+.row .value{font:600 1rem ui-monospace,SFMono-Regular,Consolas,monospace}
+.row .meaning{font-size:.85rem;color:var(--text-secondary,#8b949e)}
+pre#aggregates{margin:.5rem 0 0;padding:.8rem;background:var(--background,#0d1117);border:1px solid var(--border,#30363d);border-radius:6px;overflow-x:auto;font:1rem ui-monospace,SFMono-Regular,Consolas,monospace;line-height:1.6}
+.table-wrap{overflow-x:auto;margin:.6rem 0 0}
+table{border-collapse:collapse;width:100%;min-width:300px;font-size:.92rem}
+caption{text-align:left;font-size:.85rem;color:var(--text-secondary,#8b949e);padding-bottom:.35rem}
+th,td{text-align:right;padding:.42rem .55rem;border-bottom:1px solid var(--border,#30363d);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th:nth-child(3),td:nth-child(3){text-align:left;white-space:normal}
+thead th{font-weight:600;color:var(--text-secondary,#8b949e)}
+td.mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+tbody tr.dropped td{color:var(--text-secondary,#8b949e)}
+ul{margin:.5rem 0 0;padding-left:1.2rem}#warnings:empty{display:none}
+@media(max-width:720px){.actions>*{flex:1 1 10rem}.panel,.result{padding:.85rem}.row{grid-template-columns:1fr}.row dt{min-width:0}.row .meaning{flex-basis:100%}}
+</style></head>
+<body><div id="site-header"></div><main class="tool-container"><div class="rs-shell">
+<h1>IPv4 Route Summarizer</h1>
+<p class="lead">Paste a list of IPv4 prefixes and get the smallest set of CIDR routes that covers exactly the same addresses, the single supernet that holds them all, and every entry that added nothing. Everything is worked out in your browser; nothing is uploaded, stored or sent anywhere.</p>
+
+<form id="route-form" novalidate>
+<section class="panel" aria-labelledby="input-title">
+<h2 id="input-title">Prefixes to summarize</h2>
+<div class="field">
+<label for="in-prefixes">IPv4 prefixes</label>
+<textarea id="in-prefixes" name="prefixes" rows="7" spellcheck="false" autocapitalize="off" autocomplete="off" aria-describedby="prefixes-hint">10.0.0.0/25
+10.0.0.128/25
+10.0.1.0/24
+10.0.4.0/24</textarea>
+<p id="prefixes-hint" class="hint">One prefix per line; spaces and commas work too. CIDR only, up to 64 prefixes, host bits must be clear.</p>
+</div>
+<div class="actions">
+<button id="calculate" class="primary" type="submit">Summarize</button>
+<button id="example" type="button">Load example</button>
+<button id="reset" type="button">Reset</button>
+</div>
+</section>
+</form>
+
+<section class="result" aria-labelledby="result-title">
+<h2 id="result-title">Summary</h2>
+<p id="status" class="status" role="status" aria-live="polite"></p>
+<p id="error" class="status error" role="alert" hidden></p>
+<p id="summary"></p>
+<dl class="rows">
+<div class="row"><dt>Entries</dt><dd><span id="out-entered" class="value">not computed</span><span id="out-entered-note" class="meaning">non-blank prefixes given</span></dd></div>
+<div class="row"><dt>Distinct prefixes</dt><dd><span id="out-unique" class="value">not computed</span><span id="out-unique-note" class="meaning">after duplicates</span></dd></div>
+<div class="row"><dt>Aggregate prefixes</dt><dd><span id="out-aggregates" class="value">not computed</span><span class="meaning">the route list to announce</span></dd></div>
+<div class="row"><dt>Addresses covered</dt><dd><span id="out-covered" class="value">not computed</span><span class="meaning">the sum of the aggregate blocks</span></dd></div>
+<div class="row"><dt>Smallest covering supernet</dt><dd><span id="out-supernet" class="value">not computed</span><span id="out-supernet-note" class="meaning">one prefix over everything</span></dd></div>
+<div class="row"><dt>Addresses it adds</dt><dd><span id="out-extra" class="value">not computed</span><span class="meaning">inside the supernet, outside every prefix</span></dd></div>
+<div class="row"><dt>Layout</dt><dd><span id="out-layout" class="value">not computed</span><span id="out-layout-note" class="meaning">contiguous or gapped</span></dd></div>
+</dl>
+<h3>Aggregated prefixes</h3>
+<pre id="aggregates" tabindex="0">not computed</pre>
+<h3>What happened to each entry</h3>
+<div class="table-wrap">
+<table>
+<caption id="table-caption">Each entry in the order you gave it, with the reason it did or did not reach the aggregate list.</caption>
+<thead><tr><th scope="col">Prefix</th><th scope="col">Addresses</th><th scope="col">What happened</th></tr></thead>
+<tbody id="input-body"></tbody>
+</table>
+</div>
+<ul id="warnings"></ul>
+<h3>How this is computed</h3>
+<ul id="explanation" class="explain"><li>Summarize to see the arithmetic.</li></ul>
+<h3>What this does not do</h3>
+<ul id="limits" class="limits">
+<li>It summarizes IPv4 prefixes only. IPv6 aggregation works on different boundaries and is not attempted here.</li>
+<li>It keeps the address set exactly: it merges only prefixes that touch and are aligned, so nothing is announced that was not given. That is why the result can still be several prefixes.</li>
+<li>The covering supernet is arithmetic, not a routing recommendation: announcing it also announces the gaps between your blocks, and it may cross a network you do not control.</li>
+<li>It ignores everything a real router would weigh: AS paths, policy, longest-prefix behaviour, metrics and how the prefixes arrived. It reads no routing table and keeps no record; reloading the page clears your entries.</li>
+</ul>
+</section>
+</div></main><script src="/assets/tools.js"></script><script src="/assets/app.js"></script>
+<script>
+/* route-summarizer-core:start */
+const RouteSummarizerCore=(()=>{'use strict';
+const LIMITS={prefixes:[1,64]};
+const MAX_TOKEN=64;
+const MAX_LISTED=64;
+const DEFAULTS={prefixes:'10.0.0.0/25\n10.0.0.128/25\n10.0.1.0/24\n10.0.4.0/24'};
+function elide(text){return '"'+(text.length>24?text.slice(0,24)+'...':text)+'"';}
+function fmtCount(value){
+  return String(Math.round(value)).replace(/\B(?=(\d{3})+(?!\d))/g,',');
+}
+function ipToInt(octets){return ((octets[0]*256+octets[1])*256+octets[2])*256+octets[3];}
+function intToIp(value){
+  const a=Math.floor(value/16777216)%256;
+  const b=Math.floor(value/65536)%256;
+  const c=Math.floor(value/256)%256;
+  return a+'.'+b+'.'+c+'.'+(value%256);
+}
+function sizeFor(len){return Math.pow(2,32-len);}
+function textOf(network,len){return intToIp(network)+'/'+len;}
+function parsePrefix(token,line){
+  const where=' on line '+line;
+  if(token.length>MAX_TOKEN)throw Error('Prefix '+elide(token)+where+' is too long to be an IPv4 prefix.');
+  if(token.indexOf(':')>-1)throw Error('Prefix '+elide(token)+where+' is an IPv6 prefix; this tool summarizes IPv4 only.');
+  const slash=token.indexOf('/');
+  if(slash<0)throw Error('Prefix '+elide(token)+where+' has no /length; write it as 10.0.0.0/24.');
+  const addressText=token.slice(0,slash);
+  const lengthText=token.slice(slash+1);
+  if(!/^(?:0|[1-9]\d?)$/.test(lengthText)){
+    throw Error('Prefix '+elide(token)+where+' has a prefix length that is not a whole number from 0 to 32.');
+  }
+  const len=Number(lengthText);
+  if(len>32)throw Error('Prefix '+elide(token)+where+' has a prefix length of '+len+'; it must be 0 to 32.');
+  const octets=addressText.split('.');
+  if(octets.length!==4)throw Error('Prefix '+elide(token)+where+' does not have four octets; write it as 10.0.0.0/24.');
+  const values=[];
+  for(const octet of octets){
+    if(!/^\d{1,3}$/.test(octet))throw Error('Prefix '+elide(token)+where+' has an octet that is not a number.');
+    if(/^0\d/.test(octet))throw Error('Prefix '+elide(token)+where+' has an octet with a leading zero.');
+    const value=Number(octet);
+    if(value>255)throw Error('Prefix '+elide(token)+where+' has an octet above 255.');
+    values.push(value);
+  }
+  const address=ipToInt(values);
+  const size=sizeFor(len);
+  const network=Math.floor(address/size)*size;
+  if(network!==address){
+    throw Error('Prefix '+elide(token)+where+' has host bits set; the network for that length is '+textOf(network,len)+'.');
+  }
+  return {token:token,line:line,network:network,len:len,size:size,broadcast:network+size-1};
+}
+function tokenize(text){
+  const tokens=[];
+  const lines=String(text===undefined||text===null?'':text).split(/\r?\n/);
+  for(let index=0;index<lines.length;index+=1){
+    for(const part of lines[index].split(/[\s,;]+/)){
+      if(part!=='')tokens.push({text:part,line:index+1});
+    }
+  }
+  return tokens;
+}
+function commonPrefixLength(a,b){
+  let len=32;
+  while(len>0&&Math.floor(a/sizeFor(len))!==Math.floor(b/sizeFor(len)))len-=1;
+  return len;
+}
+function collapse(list){
+  let current=list.map(block=>({network:block.network,len:block.len,size:block.size,broadcast:block.broadcast}));
+  for(;;){
+    current.sort((left,right)=>left.network-right.network||left.len-right.len);
+    const next=[];
+    let merged=false;
+    for(let index=0;index<current.length;index+=1){
+      const first=current[index];
+      const second=index+1<current.length?current[index+1]:null;
+      if(second&&first.len>0&&first.len===second.len&&first.network%(first.size*2)===0&&second.network===first.network+first.size){
+        next.push({network:first.network,len:first.len-1,size:first.size*2,broadcast:first.network+first.size*2-1});
+        merged=true;
+        index+=1;
+        continue;
+      }
+      next.push(first);
+    }
+    current=next;
+    if(!merged)break;
+  }
+  current.sort((left,right)=>left.network-right.network||left.len-right.len);
+  return current;
+}
+function summarize(raw){
+  const state=Object.assign({},DEFAULTS,raw||{});
+  const tokens=tokenize(state.prefixes);
+  if(tokens.length===0)throw Error('Enter at least one IPv4 prefix, such as 10.0.0.0/24.');
+  if(tokens.length>LIMITS.prefixes[1]){
+    throw Error('Enter at most '+LIMITS.prefixes[1]+' prefixes; '+tokens.length+' were given.');
+  }
+  const parsed=tokens.map(token=>parsePrefix(token.text,token.line));
+  const distinct=[];
+  const seen=new Map();
+  const entries=parsed.map(block=>{
+    const key=block.network+'/'+block.len;
+    const duplicate=seen.has(key);
+    if(!duplicate)seen.set(key,block);
+    return {block:block,key:key,duplicate:duplicate,cover:null};
+  });
+  for(const entry of entries)if(!entry.duplicate)distinct.push(entry);
+  for(const entry of distinct){
+    for(const other of distinct){
+      if(other.key===entry.key)continue;
+      if(other.block.len<entry.block.len&&other.block.network<=entry.block.network&&other.block.broadcast>=entry.block.broadcast){
+        entry.cover=other.block;
+        break;
+      }
+    }
+  }
+  const kept=distinct.filter(entry=>!entry.cover).map(entry=>entry.block);
+  const aggregates=collapse(kept);
+  const duplicates=entries.filter(entry=>entry.duplicate).length;
+  const coveredEntries=distinct.filter(entry=>entry.cover).length;
+  let covered=0;
+  for(const block of aggregates)covered+=block.size;
+  const first=aggregates[0].network;
+  const last=aggregates[aggregates.length-1].broadcast;
+  const supernetLen=commonPrefixLength(first,last);
+  const supernetSize=sizeFor(supernetLen);
+  const supernetNetwork=Math.floor(first/supernetSize)*supernetSize;
+  const supernet=textOf(supernetNetwork,supernetLen);
+  const extra=supernetSize-covered;
+  const runs=[];
+  for(const block of aggregates){
+    const open=runs[runs.length-1];
+    if(open&&block.network===open.broadcast+1)open.broadcast=block.broadcast;
+    else runs.push({network:block.network,broadcast:block.broadcast});
+  }
+  const contiguous=runs.length===1;
+  const rows=[];
+  for(const block of aggregates){
+    rows.push({
+      prefix:textOf(block.network,block.len),
+      first:intToIp(block.network),
+      last:intToIp(block.broadcast),
+      addresses:block.size,
+      addressesText:fmtCount(block.size)
+    });
+  }
+  const inputRows=entries.map(entry=>{
+    const result={
+      prefix:textOf(entry.block.network,entry.block.len),
+      addressesText:fmtCount(entry.block.size),
+      dropped:entry.duplicate||Boolean(entry.cover)
+    };
+    if(entry.duplicate)result.note='duplicate of '+textOf(entry.block.network,entry.block.len);
+    else if(entry.cover)result.note='inside '+textOf(entry.cover.network,entry.cover.len)+', which is broader';
+    else if(aggregates.length===1)result.note='kept, then merged into '+textOf(aggregates[0].network,aggregates[0].len);
+    else result.note='kept';
+    return result;
+  });
+  const warnings=[];
+  if(duplicates||coveredEntries){
+    const parts=[];
+    if(duplicates)parts.push(duplicates+(duplicates===1?' duplicate':' duplicates'));
+    if(coveredEntries)parts.push(coveredEntries+(coveredEntries===1?' prefix already inside a broader one':' prefixes already inside broader ones'));
+    warnings.push(entries.length+' entries reduced to '+kept.length+': '+parts.join(' and ')+'. Those are listed in the table but not in the aggregates.');
+  }
+  if(!contiguous){
+    warnings.push('The blocks are not contiguous: they form '+runs.length+' separate ranges, so the supernet '+supernet+' would announce '+(extra===1?'1 extra address':fmtCount(extra)+' extra addresses')+' that no entry covers.');
+  }
+  if(covered===4294967296){
+    warnings.push('Together these prefixes cover the whole IPv4 address space, so the aggregate list can be written as 0.0.0.0/0.');
+  }
+  if(aggregates.length===1&&covered<4294967296){
+    warnings.push('Every entry collapses into the single prefix '+textOf(aggregates[0].network,aggregates[0].len)+', which can be announced as one route.');
+  }
+  const explanation=[];
+  explanation.push('Each prefix is an integer range: '+inputRows[0].prefix+' starts at '+intToIp(parsed[0].network)+' and holds '+fmtCount(parsed[0].size)+' addresses. The first address of a prefix is its value rounded down to a multiple of its size, which is why a prefix with host bits set is refused rather than guessed.');
+  explanation.push('Duplicates and covered prefixes are removed first: '+entries.length+' entries, '+distinct.length+' distinct, '+duplicates+' duplicate and '+coveredEntries+' already inside a broader prefix.');
+  explanation.push('Two prefixes of the same length that sit side by side merge into their parent: 10.0.0.0/25 and 10.0.0.128/25 become 10.0.0.0/24. The merge repeats until no pair is left, which leaves '+aggregates.length+(aggregates.length===1?' prefix':' prefixes')+' covering exactly the same addresses and merging no further.');
+  explanation.push('Addresses covered = the sizes of the aggregate blocks added up = '+fmtCount(covered)+' addresses, from '+intToIp(first)+' to '+intToIp(last)+'.');
+  explanation.push('The smallest single prefix that holds them all is the longest common prefix of the lowest and highest address: '+supernet+', which is '+fmtCount(supernetSize)+' addresses and therefore '+fmtCount(extra)+' more than the blocks cover.');
+  if(contiguous){
+    explanation.push('The blocks form one contiguous range from '+intToIp(first)+' to '+intToIp(last)+', so this set could equally be described as that range rather than as '+aggregates.length+(aggregates.length===1?' prefix':' prefixes')+'.');
+  }else{
+    explanation.push('The blocks form '+runs.length+' separate ranges, and the first gap runs from '+intToIp(runs[0].broadcast+1)+' to '+intToIp(runs[1].network-1)+', which no entry covers.');
+  }
+  const aggregateText=aggregates.map(block=>textOf(block.network,block.len));
+  let statusKind='ok';
+  let statusText=aggregates.length+(aggregates.length===1?' aggregate prefix':' aggregate prefixes')+' cover '+fmtCount(covered)+' addresses from '+entries.length+(entries.length===1?' entry':' entries');
+  if(!contiguous){
+    statusKind='warning';
+    statusText+=', in '+runs.length+' separate ranges';
+  }else{
+    statusText+=', in one contiguous range';
+  }
+  const listed=aggregateText.slice(0,MAX_LISTED).join(', ');
+  const summary='The '+entries.length+' entries summarize to '+aggregates.length+(aggregates.length===1?' route':' routes')+': '+listed+'. They cover '+fmtCount(covered)+' of the '+fmtCount(supernetSize)+' addresses in '+supernet+'.';
+  return {
+    entered:entries.length,unique:distinct.length,duplicates:duplicates,coveredEntries:coveredEntries,
+    aggregateCount:aggregates.length,aggregates:aggregateText,
+    covered:covered,coveredText:fmtCount(covered),
+    first:intToIp(first),last:intToIp(last),
+    supernet:supernet,supernetSize:supernetSize,supernetText:fmtCount(supernetSize),
+    extra:extra,extraText:fmtCount(extra),
+    runs:runs.length,contiguous:contiguous,
+    firstGap:contiguous?null:intToIp(runs[0].broadcast+1)+' to '+intToIp(runs[1].network-1),
+    statusKind:statusKind,statusText:statusText,summary:summary,
+    warnings:warnings,explanation:explanation,rows:rows,inputRows:inputRows,
+    dropped:duplicates+coveredEntries,hiddenRows:Math.max(0,inputRows.length-MAX_LISTED)
+  };
+}
+return{LIMITS,DEFAULTS,MAX_TOKEN,MAX_LISTED,elide,fmtCount,ipToInt,intToIp,sizeFor,textOf,parsePrefix,tokenize,commonPrefixLength,collapse,summarize};
+})();
+/* route-summarizer-core:end */
+(()=>{'use strict';
+const $=id=>document.getElementById(id);
+function setStatus(message,kind){const node=$('status');node.textContent=message;node.className='status '+(kind||'');}
+function setError(message){
+  const node=$('error');
+  if(message){node.textContent=message;node.hidden=false;return;}
+  node.textContent='';node.hidden=true;
+}
+function readForm(){return{prefixes:$('in-prefixes').value};}
+function clearResult(){
+  for(const id of ['out-entered','out-unique','out-aggregates','out-covered','out-supernet','out-extra','out-layout'])$(id).textContent='not computed';
+  $('out-entered-note').textContent='non-blank prefixes given';
+  $('out-unique-note').textContent='after duplicates';
+  $('out-supernet-note').textContent='one prefix over everything';
+  $('out-layout-note').textContent='contiguous or gapped';
+  $('summary').textContent='';
+  $('aggregates').textContent='not computed';
+  $('input-body').replaceChildren();
+  $('warnings').replaceChildren();
+  $('explanation').replaceChildren();
+  $('table-caption').textContent='Each entry in the order you gave it, with the reason it did or did not reach the aggregate list.';
+}
+function renderTable(result){
+  const body=$('input-body');
+  body.replaceChildren();
+  for(const row of result.inputRows.slice(0,RouteSummarizerCore.MAX_LISTED)){
+    const tr=document.createElement('tr');
+    if(row.dropped)tr.className='dropped';
+    const prefix=document.createElement('td');
+    prefix.className='mono';
+    prefix.textContent=row.prefix;
+    const addresses=document.createElement('td');
+    addresses.textContent=row.addressesText;
+    const note=document.createElement('td');
+    note.textContent=row.note;
+    tr.append(prefix,addresses,note);
+    body.appendChild(tr);
+  }
+  if(result.hiddenRows>0){
+    $('table-caption').textContent='Each entry in the order you gave it; the first '+RouteSummarizerCore.MAX_LISTED+' are listed and '+result.hiddenRows+' more follow the same rules.';
+  }
+}
+function render(state){
+  let result;
+  try{result=RouteSummarizerCore.summarize(state);}catch(error){
+    setStatus('','');setError(error.message);clearResult();
+    return false;
+  }
+  setError('');
+  setStatus(result.statusText,result.statusKind);
+  $('summary').textContent=result.summary;
+  $('out-entered').textContent=String(result.entered);
+  $('out-unique').textContent=String(result.unique);
+  $('out-unique-note').textContent=result.duplicates+(result.duplicates===1?' duplicate':' duplicates')+', '+result.coveredEntries+' already covered';
+  $('out-aggregates').textContent=String(result.aggregateCount);
+  $('out-covered').textContent=result.coveredText;
+  $('out-supernet').textContent=result.supernet;
+  $('out-supernet-note').textContent=result.supernetText+' addresses in one prefix';
+  $('out-extra').textContent=result.extraText;
+  $('out-layout').textContent=result.contiguous?'one contiguous range':String(result.runs)+' separate ranges';
+  $('out-layout-note').textContent=result.contiguous?result.first+' to '+result.last:'first gap '+result.firstGap;
+  $('aggregates').textContent=result.aggregates.join('\n');
+  renderTable(result);
+  const notes=$('warnings');
+  notes.replaceChildren();
+  for(const line of result.warnings){
+    const item=document.createElement('li');
+    item.className='warning';
+    item.textContent=line;
+    notes.appendChild(item);
+  }
+  const explain=$('explanation');
+  explain.replaceChildren();
+  for(const line of result.explanation){
+    const item=document.createElement('li');
+    item.textContent=line;
+    explain.appendChild(item);
+  }
+  return true;
+}
+$('route-form').addEventListener('submit',event=>{event.preventDefault();render(readForm());});
+$('reset').addEventListener('click',()=>{$('in-prefixes').value=RouteSummarizerCore.DEFAULTS.prefixes;setError('');render(readForm());$('in-prefixes').focus();});
+$('example').addEventListener('click',()=>{
+  $('in-prefixes').value='192.168.0.0/25\n192.168.0.128/25\n192.168.1.0/24\n192.168.2.0/25\n192.168.2.128/25\n172.16.8.0/24\n172.16.9.0/24\n172.16.8.0/22';
+  setError('');render(readForm());$('in-prefixes').focus();
+});
+let lastRendered=false;
+$('in-prefixes').addEventListener('input',()=>{if(lastRendered)render(readForm());});
+lastRendered=render(readForm());
+})();
+</script></body></html>
