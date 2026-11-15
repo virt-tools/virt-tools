@@ -50,6 +50,29 @@ class NestedAttributeRenderTests(unittest.TestCase):
         self.assertFalse(unused)
 
 
+class EscapingTests(unittest.TestCase):
+    def test_escaped_markup_in_text_survives_a_round_trip(self):
+        """`&lt;table&gt;` shown as code must not become a real element."""
+        source = '<html><body><p>adds <code>&lt;table class="data-table"&gt;</code>.</p></body></html>'
+        root, _ = i18n_lib.parse(source)
+        rendered = "".join(i18n_lib.serialize(child) for child in root.children)
+        self.assertIn("&lt;table", rendered)
+        self.assertNotIn("<table", rendered)
+        unit = next(iter(i18n_lib.extract_units(root)["html"]))
+        self.assertIn("&lt;table", unit)
+
+    def test_a_js_literal_that_holds_half_a_tag_is_not_repaired(self):
+        """Translation must not close tags the page splits across literals."""
+        source = (
+            '<html><body><main><div id="x"></div></main>'
+            '<script>el.innerHTML = "<span class=\'k\'>values</span> <span class=\'v\'>" + n + "</span>";</script>'
+            '</body></html>'
+        )
+        rendered, applied, unused = i18n_lib.render(source, {"values": "valores"})
+        self.assertIn('"<span class=\'k\'>valores</span> <span class=\'v\'>" + n + "</span>"', rendered)
+        self.assertFalse(unused)
+
+
 class CodeFragmentTests(unittest.TestCase):
     def test_literal_fragments_of_a_string_expression_are_not_units(self):
         """Translating these would rewrite the page's arithmetic."""

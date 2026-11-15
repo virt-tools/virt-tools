@@ -186,7 +186,9 @@ def escape_attr(value: str, quote: str) -> str:
 
 def serialize(node: Node | str, normalize: bool = True) -> str:
     if isinstance(node, str):
-        return norm_inner(node) if normalize else node
+        # Text is stored decoded; writing it back without escaping turns
+        # ``&lt;table&gt;`` shown as code into a real element.
+        return escape_text(norm_inner(node) if normalize else node)
     if node.tag == "#comment":
         return node.raw or ""
     attrs = ""
@@ -503,6 +505,49 @@ def apply_attrs(node: Node, mapping: dict, applied: set[str]) -> None:
             apply_attrs(child, mapping, applied)
 
 
+TAG_SPLIT_RE = re.compile(r"(<[^>]*>)")
+ATTR_IN_TAG_RE = re.compile(r"""([^\s=<>"']+)(\s*=\s*)(?:"([^"]*)"|'([^']*)')""")
+
+
+def translate_markup_literal(value: str, mapping: dict, applied: set[str]) -> str | None:
+    """Translate text and attributes inside a JS string that builds markup.
+
+    Byte-preserving by design: only text between tags and translatable attribute
+    values are rewritten, so a literal that holds half a tag survives intact.
+    """
+    changed = False
+    out: list[str] = []
+    for part in TAG_SPLIT_RE.split(value):
+        if not part:
+            continue
+        if part.startswith("<") and part.endswith(">"):
+            def rewrite_attr(match: re.Match) -> str:
+                nonlocal changed
+                name, separator, double, single = match.group(1), match.group(2), match.group(3), match.group(4)
+                if name.lower() not in TRANSLATABLE_ATTRS:
+                    return match.group(0)
+                raw = double if double is not None else single
+                unit = norm_ws(html_module.unescape(raw))
+                if not unit or unit not in mapping:
+                    return match.group(0)
+                applied.add(unit)
+                changed = True
+                quote = '"' if double is not None else "'"
+                return f"{name}{separator}{quote}{escape_attr(mapping[unit], quote)}{quote}"
+            out.append(ATTR_IN_TAG_RE.sub(rewrite_attr, part))
+            continue
+        lead = part[: len(part) - len(part.lstrip())]
+        trail = part[len(part.rstrip()):]
+        unit = html_module.unescape(norm_ws(part))
+        if unit and unit in mapping:
+            applied.add(unit)
+            changed = True
+            out.append(lead + escape_text(mapping[unit]) + trail)
+        else:
+            out.append(part)
+    return "".join(out) if changed else None
+
+
 def apply_translation(root: Node, mapping: dict) -> set[str]:
     """Rewrite a parsed page in place; return the set of keys actually used."""
     applied: set[str] = set()
@@ -522,12 +567,12 @@ def apply_translation(root: Node, mapping: dict) -> set[str]:
                         cursor = end
                         continue
                     if MARKUP_RE.search(value):
-                        fragment = js_unescape(value)
-                        fragment_root, _ = parse(fragment)
-                        nested_applied = apply_translation(fragment_root, mapping)
-                        if nested_applied:
-                            applied.update(nested_applied)
-                            rendered = "".join(serialize(child, normalize=False) for child in fragment_root.children)
+                        # Replace text and attributes in place. Parsing the literal
+                        # and re-serialising it repairs tags that the page splits
+                        # across concatenation (``"<span class='v'>" + n + "</span>"``)
+                        # and turns a template into broken markup.
+                        rendered = translate_markup_literal(js_unescape(value), mapping, applied)
+                        if rendered is not None:
                             pieces.append(body[cursor:start])
                             pieces.append(js_escape(rendered, quote))
                             cursor = end
