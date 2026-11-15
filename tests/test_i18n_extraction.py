@@ -50,6 +50,17 @@ class NestedAttributeRenderTests(unittest.TestCase):
         self.assertFalse(unused)
 
 
+class JsEscapeTests(unittest.TestCase):
+    def test_unicode_escapes_decode_to_the_character(self):
+        """`\u00b2` is a superscript two, not the text "u00b2"."""
+        body = "W/(m" + chr(92) + "u00b2" + chr(92) + "u00b7K) " + chr(92) + "x41"
+        self.assertEqual(i18n_lib.js_unescape(body), "W/(m\u00b2\u00b7K) A".replace("\\u00b2", "\u00b2").replace("\\u00b7", "\u00b7"))
+        self.assertEqual(i18n_lib.js_unescape(chr(92) + "u2014"), "\u2014")
+
+    def test_a_broken_escape_is_left_alone(self):
+        self.assertEqual(i18n_lib.js_unescape(chr(92) + "u12"), "u12")
+
+
 class EscapingTests(unittest.TestCase):
     def test_escaped_markup_in_text_survives_a_round_trip(self):
         """`&lt;table&gt;` shown as code must not become a real element."""
