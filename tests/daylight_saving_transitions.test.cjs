@@ -169,7 +169,7 @@ assert.equal(failure(() => C.status('Mars/Base', midNovember)),
 
 // ---- Catalog record.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2317, 'catalog total');
+assert.equal(catalog.tools.length, 2318, 'catalog total');
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record exists');
 assert.equal(record.name, 'Daylight Saving Transition Finder');

@@ -28,7 +28,7 @@ assert.equal(entry.icon, '\u{1F4DE}');
 assert.ok(Array.isArray(entry.aliases) && entry.aliases.length >= 10, 'aliases present');
 assert.ok(Array.isArray(entry.sources) && entry.sources.length >= 3, 'sources present');
 assert.ok(typeof entry.method === 'string' && entry.method.length > 800, 'method documented');
-assert.equal(catalog.tools.length, 2317, 'catalog total');
+assert.equal(catalog.tools.length, 2318, 'catalog total');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Networking').length, 47, 'Networking count');
 
 const slugs = new Set(catalog.tools.map((tool) => tool.slug));

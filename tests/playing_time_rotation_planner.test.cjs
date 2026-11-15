@@ -156,8 +156,8 @@ for (const tool of catalog.tools) {
   }
 }
 
-assert.equal(catalog.tools.length, 2317, 'catalog total');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2057, 'public tools');
+assert.equal(catalog.tools.length, 2318, 'catalog total');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2058, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Sports & Outdoors').length, 47, 'Sports count');
 
 // Every recorded case replays exactly.
@@ -217,5 +217,5 @@ assert.ok(html.includes('navigator.clipboard'), 'copy button');
 
 console.log(
   'playing-time-rotation-planner: ' + plans + ' plans, ' + refusals.length + ' refusals, '
-  + record.testCases.length + ' catalog cases, totals 2317/2057/47'
+  + record.testCases.length + ' catalog cases, totals 2318/2058/47'
 );
