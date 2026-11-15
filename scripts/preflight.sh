@@ -320,6 +320,7 @@ node tests/os_grid_reference_converter.test.cjs
 node tests/song_key_fit_planner.test.cjs
 node tests/film_footage_running_time_calculator.test.cjs
 node tests/phon_sone_loudness_converter.test.cjs
+node tests/sandbag_barrier_calculator.test.cjs
 node tests/universal_integer_codes.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 

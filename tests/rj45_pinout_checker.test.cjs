@@ -157,7 +157,7 @@ for (const left of ['T568A', 'T568B']) {
 
 // ---- Catalog record and every case in it must agree with the core.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2312, 'catalog total');
+assert.equal(catalog.tools.length, 2313, 'catalog total');
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record missing');
 assert.equal(record.name, 'RJ45 Pinout Checker');
@@ -177,7 +177,7 @@ assert.equal(new Set(record.tags).size, record.tags.length, 'tags unique');
 assert.ok(record.description.length > 80, 'description present');
 assert.ok(record.testCases.length >= 8, `expected at least 8 cases, found ${record.testCases.length}`);
 assert.equal(catalog.tools.filter((tool) => tool.slug === slug).length, 1, 'slug unique');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2052, 'public tools');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2053, 'public tools');
 
 for (const testCase of record.testCases) {
   const label = testCase.name;

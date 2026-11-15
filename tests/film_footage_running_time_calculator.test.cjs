@@ -192,8 +192,8 @@ refusal({ ...base, fps: '24.5' }, 'Choose the frame rate from the list.');
 
 // ---- Catalog record, totals, and every case stored in the record.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2312, 'catalog total');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2052, 'public tools');
+assert.equal(catalog.tools.length, 2313, 'catalog total');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2053, 'public tools');
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record missing');
 assert.equal(record.name, 'Film Footage Running Time Calculator');
