@@ -14,7 +14,21 @@ const hasFindings = result => result.status !== 200 || result.errors.length || r
 const filter = new Set(process.env.AUDIT_FROM
   ? JSON.parse(fs.readFileSync(process.env.AUDIT_FROM,'utf8')).results.filter(hasFindings).map(tool => tool.slug)
   : (process.env.AUDIT_SLUGS || '').split(',').filter(Boolean));
-const tools = registry.window.VIRTUAL_TOOLS.filter(tool => !filter.size || filter.has(tool.slug));
+let tools = registry.window.VIRTUAL_TOOLS.filter(tool => !filter.size || filter.has(tool.slug));
+// AUDIT_SAMPLE=N checks a deterministic stride across the whole catalog, and AUDIT_OFFSET
+// rotates that stride so successive runs cover different pages. The release gate passes
+// today's day number, which walks the window through the catalog over a month; a full run
+// (no AUDIT_SAMPLE) still audits every page. Aim: the ~1,700 tools with no unit suite each
+// get exercised by the gate regularly instead of never.
+const sample = Number(process.env.AUDIT_SAMPLE || 0);
+if (sample > 0 && tools.length > sample) {
+  const offset = ((Number(process.env.AUDIT_OFFSET || 0) * 53) % tools.length + tools.length) % tools.length;
+  const rotated = tools.slice(offset).concat(tools.slice(0, offset));
+  const stride = rotated.length / sample;
+  const picked = Array.from({ length: sample }, (_, index) => rotated[Math.floor(index * stride)]);
+  console.log(`Sampled ${picked.length} of ${tools.length} public tools (AUDIT_SAMPLE=${sample}, offset=${offset})`);
+  tools = picked;
+}
 const browser = await chromium.launch({ headless: true });
 const results = [];
 let next = 0;

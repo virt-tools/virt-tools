@@ -43,5 +43,7 @@ fi
 
 node tests/browser_smoke.mjs
 node tests/ui_smoke.mjs
+AUDIT_SAMPLE="${AUDIT_SAMPLE:-60}" AUDIT_OFFSET="${AUDIT_OFFSET:-$(date +%j)}" \
+  node tests/catalog_audit.mjs
 node tests/unit_converter.test.cjs
 node tests/tool_correctness.mjs

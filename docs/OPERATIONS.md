@@ -258,6 +258,19 @@ python3 scripts/generate_seo.py frontend https://virt.tools
 bash scripts/run_browser_smoke.sh
 ```
 
+The smoke runner also audits a rotating sample of the public catalog: 60 pages by
+default (`AUDIT_SAMPLE`), chosen by a stride that `AUDIT_OFFSET` (today's day number)
+walks through the catalog, so every release exercises a different slice of the
+~1,700 tools that have no unit suite. Override `AUDIT_SAMPLE=0` and set `AUDIT_REPORT`
+for the full sweep of all 2,060 pages (about 70 minutes at four workers).
+
+Behavioural coverage is 328 tools (15.9%) and that is the data ceiling, not an
+effort ceiling: 317 of the 331 tools with catalog `testCases` already have a
+hand-written suite, and the remaining 14 publish expectations that are display
+projections of a nested core result, so a generated replay cannot check them
+without guessing. Raising the number means writing cases for tools that have
+none, not writing more harness.
+
 For shared UI or catalog-wide changes, also start a local static server on port
 4173 and run `node tests/catalog_audit.mjs`. This visits all public tool pages;
 it does not certify every algorithm. `node tests/formula_workbench_ui.mjs`

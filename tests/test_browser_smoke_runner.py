@@ -69,13 +69,14 @@ if [ "$STUB_MODE" = ui_failure ] && [ "$1" = tests/ui_smoke.mjs ]; then exit 23;
             os.kill(pid, 0)
         return result
 
-    def test_waits_for_readiness_then_runs_both_suites(self):
+    def test_waits_for_readiness_then_runs_suites(self):
         result = self.run_smoke()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual((self.root / "attempts").read_text().strip(), "4")
         self.assertEqual(
             (self.root / "suites").read_text().splitlines(),
-            ["tests/browser_smoke.mjs", "tests/ui_smoke.mjs", "tests/unit_converter.test.cjs", "tests/tool_correctness.mjs"],
+            ["tests/browser_smoke.mjs", "tests/ui_smoke.mjs", "tests/catalog_audit.mjs",
+             "tests/unit_converter.test.cjs", "tests/tool_correctness.mjs"],
         )
 
     def test_startup_failure_prints_log_without_running_tests(self):
