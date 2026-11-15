@@ -125,6 +125,15 @@ KEEP_WORDS = {
 }
 
 
+def load_common(locale: str) -> dict[str, str]:
+    """Canonical translations for copy that repeats across many pages."""
+    path = DATA / "i18n" / "common" / f"{locale}.json"
+    if not path.is_file():
+        return {}
+    table = json.loads(path.read_text(encoding="utf-8"))
+    return {key: value for key, value in table.items() if not key.startswith("$")}
+
+
 def load_catalog() -> dict[str, dict]:
     tools = json.loads(CATALOG.read_text(encoding="utf-8"))["tools"]
     return {tool["slug"]: tool for tool in tools}
@@ -164,7 +173,12 @@ def export(locale: str, slugs: list[str]) -> dict:
                 "units": i18n_lib.units(document),
             }
         )
-    return {"locale": locale, "glossary": GLOSSARY.get(locale, {}), "pages": pages}
+    return {
+        "locale": locale,
+        "glossary": GLOSSARY.get(locale, {}),
+        "common": load_common(locale),
+        "pages": pages,
+    }
 
 
 def numeric_tokens(text: str) -> list[str]:
@@ -287,6 +301,14 @@ def import_batch(locale: str, path: Path, write: bool, prune: bool = False) -> i
             for problem in problems:
                 print("error: " + problem, file=sys.stderr)
             continue
+        common = load_common(locale)
+        canonical = 0
+        for unit, value in common.items():
+            if unit in page["strings"] and page["strings"][unit] != value:
+                page["strings"][unit] = value
+                canonical += 1
+        if canonical:
+            print(f"note {slug}: {canonical} shared string(s) set to the canonical wording", file=sys.stderr)
         accepted += 1
         if not write:
             print(f"ok {slug}: {len(page['strings'])} strings")
@@ -324,16 +346,23 @@ def prune_memories(locale: str, write: bool) -> int:
             print(f"error: {slug}: page is missing", file=sys.stderr)
             continue
         current = i18n_lib.units(document)
+        common = load_common(locale)
+        canonical = [
+            unit for unit, value in common.items()
+            if unit in memory.get("strings", {}) and memory["strings"][unit] != value
+        ]
+        for unit in canonical:
+            memory["strings"][unit] = common[unit]
         orphans = [unit for unit in memory.get("strings", {}) if unit not in current]
         missing = [unit for unit in current if unit not in memory.get("strings", {})]
-        if orphans:
+        if orphans or canonical:
             pruned += 1
             for unit in orphans:
                 memory["strings"].pop(unit, None)
             memory["sourceHash"] = digest
             if write:
                 path.write_text(json.dumps(memory, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-            print(f"{'pruned' if write else 'would prune'} {slug}: -{len(orphans)}")
+            print(f"{'pruned' if write else 'would prune'} {slug}: -{len(orphans)} orphan(s), {len(canonical)} canonical")
         if missing:
             stale += 1
             print(f"error: {slug}: {len(missing)} new unit(s), first: {missing[0][:50]!r}", file=sys.stderr)
