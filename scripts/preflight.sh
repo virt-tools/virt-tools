@@ -328,6 +328,7 @@ node tests/playing_time_rotation_planner.test.cjs
 node tests/ip3_intercept_calculator.test.cjs
 node tests/bearing_l10_life_calculator.test.cjs
 node tests/specific_heat_capacity_converter.test.cjs
+node tests/nth_weekday_of_month.test.cjs
 node tests/universal_integer_codes.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 

@@ -228,7 +228,7 @@ assert.ok(worstPolynomial < 0.1, 'the core agrees with the IAU-1982 polynomial w
 
 // ---- Catalog record and its cases must agree with the core.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2320, 'catalog total');
+assert.equal(catalog.tools.length, 2321, 'catalog total');
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record missing');
 assert.equal(record.name, 'Sidereal Time Calculator');
@@ -285,7 +285,7 @@ for (const tag of ['astronomy', 'sidereal', 'time']) {
   assert.ok(record.tags.includes(tag), 'new tag present: ' + tag);
 }
 assert.ok(!catalog.tools.some((tool) => tool.slug !== slug && /sidereal/.test(tool.slug)), 'no other sidereal slug');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Time').length, 46, 'Time count');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Time').length, 47, 'Time count');
 
 // ---- Page contract: shared assets, labelled controls, no storage or network.
 const markupIds = new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1]));
