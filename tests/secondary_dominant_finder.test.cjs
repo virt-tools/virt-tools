@@ -293,7 +293,7 @@ assert.equal(failure('C', null), C.MESSAGES.mode);
 
 // Catalog replay, both directions.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2309, 'catalog total');
+assert.equal(catalog.tools.length, 2310, 'catalog total');
 const entry = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(entry, 'catalog record missing');
 assert.equal(entry.name, 'Secondary Dominant & Borrowed Chord Finder');
@@ -310,7 +310,7 @@ for (const source of entry.sources) {
 assert.match(entry.guidance, /natural minor/, 'guidance names the stated scale');
 assert.match(entry.method, /double sharps/, 'method names the spelling limit');
 assert.ok(entry.testCases.length >= 26, 'at least twenty-six catalog cases');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Music').length, 45, 'Music count');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Music').length, 46, 'Music count');
 let goldenCases = 0;
 let validationCases = 0;
 for (const testCase of entry.testCases) {

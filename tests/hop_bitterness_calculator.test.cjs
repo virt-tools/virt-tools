@@ -234,8 +234,8 @@ for (const testCase of record.testCases) {
     close(row.alphaMgL, want.alphaMgL, 0.002, testCase.name + ' row ' + index + ' mg/L');
   });
 }
-assert.equal(catalog.tools.length, 2309, 'catalog total');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2049, 'public tools');
+assert.equal(catalog.tools.length, 2310, 'catalog total');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2050, 'public tools');
 
 // ---- Page contract: shared shell, labelled controls, one hash-pinnable script.
 assert.match(html, /<html lang="en">/);

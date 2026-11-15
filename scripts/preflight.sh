@@ -317,6 +317,7 @@ node tests/hop_bitterness_calculator.test.cjs
 node tests/lampshade_fabric_calculator.test.cjs
 node tests/rj45_pinout_checker.test.cjs
 node tests/os_grid_reference_converter.test.cjs
+node tests/song_key_fit_planner.test.cjs
 node tests/universal_integer_codes.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
