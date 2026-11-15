@@ -224,8 +224,8 @@ for (const testCase of record.testCases) {
 }
 
 // ---- Catalog totals and uniqueness against every other record.
-assert.equal(catalog.tools.length, 2315, 'catalog total');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2055, 'public tools');
+assert.equal(catalog.tools.length, 2316, 'catalog total');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2056, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Safety & Emergency').length, 47, 'Safety & Emergency count');
 assert.equal(catalog.tools.filter((tool) => tool.slug === slug).length, 1, 'slug is unique');
 const names = new Set();

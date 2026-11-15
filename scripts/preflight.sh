@@ -323,6 +323,7 @@ node tests/phon_sone_loudness_converter.test.cjs
 node tests/sandbag_barrier_calculator.test.cjs
 node tests/http_range_request_planner.test.cjs
 node tests/core_dump_pattern_builder.test.cjs
+node tests/shell_quote_builder.test.cjs
 node tests/universal_integer_codes.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 

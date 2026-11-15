@@ -273,8 +273,8 @@ assert.match(record.sources[0].title, /core\(5\)/);
 assert.equal(record.sources[1].url, 'https://docs.kernel.org/admin-guide/sysctl/kernel.html');
 assert.equal(record.sources[2].url, 'https://man7.org/linux/man-pages/man1/coredumpctl.1.html');
 assert.ok(typeof record.method === 'string' && record.method.length > 800, 'method documented');
-assert.equal(catalog.tools.length, 2315, 'catalog total');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2055, 'public tools');
+assert.equal(catalog.tools.length, 2316, 'catalog total');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2056, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'System').length, 47, 'System count');
 
 const slugs = new Set(catalog.tools.map((tool) => tool.slug));

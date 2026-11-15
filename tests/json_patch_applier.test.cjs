@@ -19,7 +19,7 @@ vm.runInContext(coreText + '\nmodule.exports = JsonPatchCore;', sandbox);
 const C = sandbox.module.exports;
 
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2315, 'catalog total');
+assert.equal(catalog.tools.length, 2316, 'catalog total');
 const matches = catalog.tools.filter((tool) => tool.slug === slug);
 assert.equal(matches.length, 1, 'slug must exist exactly once');
 const entry = matches[0];
@@ -44,7 +44,7 @@ const lowerName = entry.name.toLowerCase();
 assert.ok(!catalog.tools.some((tool) => tool.slug !== slug && tool.name.toLowerCase() === lowerName), 'name collision');
 assert.ok(!catalog.tools.some((tool) => tool.slug !== slug
   && tool.aliases.some((alias) => alias.toLowerCase() === lowerName)), 'alias collision');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Developer').length, 46, 'Developer count');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Developer').length, 47, 'Developer count');
 
 function failure(documentText, patchText) {
   try {

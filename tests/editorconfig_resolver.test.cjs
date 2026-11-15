@@ -265,8 +265,8 @@ assert.equal(config, before);
 
 // 22. The catalog record matches the page and the resolver.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2315, 'catalog total');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Developer').length, 46, 'Developer count');
+assert.equal(catalog.tools.length, 2316, 'catalog total');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Developer').length, 47, 'Developer count');
 const record = catalog.tools.find((tool) => tool.slug === 'editorconfig-resolver');
 assert.ok(record, 'catalog record present');
 assert.equal(record.name, 'EditorConfig Settings Resolver');
