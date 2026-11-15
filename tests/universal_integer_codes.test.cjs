@@ -281,8 +281,8 @@ for (const testCase of record.testCases) {
   }
   assert.deepEqual(codes(testCase.input), testCase.expected, testCase.name);
 }
-assert.equal(catalog.tools.length, 2307, 'catalog total');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2047, 'public tools');
+assert.equal(catalog.tools.length, 2308, 'catalog total');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2048, 'public tools');
 
 // ---- Page contract: shared shell, labelled controls, one hash-pinnable script.
 assert.match(html, /<html lang="en">/);
