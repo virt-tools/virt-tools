@@ -68,8 +68,64 @@ def sandboxed(source: str, variable: str) -> bool:
     return bool(dynamic or static)
 
 
+def generated_locale_prefixes() -> tuple[str, ...]:
+    """Directory prefixes of the translated page trees.
+
+    ``generate_i18n.py`` writes them from an English page that this gate already
+    audited; a translation replaces text units only, so auditing the copy would
+    report the source page's accepted sinks again for every locale.
+    """
+    registry = json.loads((ROOT / "data" / "i18n" / "locales.json").read_text(encoding="utf-8"))
+    return tuple(
+        f"frontend/{entry['path']}/"
+        for entry in registry.get("locales", [])
+        if entry.get("path")
+    )
+
+
+TAG_RE = re.compile(r"<\s*([a-zA-Z][a-zA-Z0-9-]*)")
+
+
+def tag_counts(path: Path) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for name in TAG_RE.findall(path.read_text(encoding="utf-8")):
+        key = name.lower()
+        counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
+def english_source_for(rel: str, generated: tuple[str, ...]) -> Path | None:
+    for prefix in generated:
+        if not rel.startswith(prefix):
+            continue
+        rest = rel[len(prefix):]
+        if rest == "index.html":
+            return ROOT / "frontend" / "index.html"
+        candidate = ROOT / "frontend" / rest
+        return candidate if candidate.is_file() else None
+    return None
+
+
+def markup_parity(localized: Path, english: Path) -> str | None:
+    """The translated page may add exactly one <script> (the locale bundle)."""
+    target = tag_counts(localized)
+    source = tag_counts(english)
+    difference = {
+        name: (source.get(name, 0), target.get(name, 0))
+        for name in set(source) | set(target)
+        if source.get(name, 0) != target.get(name, 0)
+    }
+    if not difference:
+        return "translated page is missing the locale script tag"
+    if difference == {"script": (source.get("script", 0), source.get("script", 0) + 1)}:
+        return None
+    detail = ", ".join(f"{name}: {pair[0]} -> {pair[1]}" for name, pair in sorted(difference.items()))
+    return f"markup differs from {english.relative_to(ROOT).as_posix()} ({detail})"
+
+
 def main() -> int:
     policy = json.loads(POLICY_PATH.read_text(encoding="utf-8"))
+    generated = generated_locale_prefixes()
     fixtures = json.loads(FIXTURES_PATH.read_text(encoding="utf-8"))
     errors: list[str] = []
     findings: list[tuple[str, str, int, str]] = []
@@ -78,6 +134,16 @@ def main() -> int:
 
     for path in sorted((ROOT / "frontend").rglob("*.html")):
         rel = path.relative_to(ROOT).as_posix()
+        if rel.startswith(generated):
+            # Inherited sinks are the English page's business (already audited),
+            # but the translated copy must not gain markup: a memory that adds a
+            # tag would ship an unaudited script into a hash-pinned page.
+            english = english_source_for(rel, generated)
+            if english is not None:
+                problem = markup_parity(path, english)
+                if problem:
+                    errors.append(f"{rel}: {problem}")
+            continue
         source = path.read_text(encoding="utf-8")
         sources[rel] = source
         if "\x00" in source:
@@ -134,6 +200,8 @@ def main() -> int:
     dynamic_code = LINE_RULES["dynamic-code-execution"]
     for path in sorted((ROOT / "frontend").rglob("*.js")):
         rel = path.relative_to(ROOT).as_posix()
+        if rel.startswith(generated):
+            continue
         if "vendor" in path.relative_to(ROOT / "frontend").parts:
             continue
         nonvendor_scripts += 1
