@@ -158,7 +158,9 @@ assert.equal(entry.sources.length, 0);
 assert.ok(entry.method.includes('recorded footage divided by the finished runtime') && entry.method.includes('10,000 hours'));
 assert.equal(new Set(entry.tags).size, entry.tags.length, 'duplicate tags');
 assert.equal(new Set(entry.aliases).size, entry.aliases.length, 'duplicate aliases');
-assert.equal(catalog.tools.length, 2321);
+const pageDirs = fs.readdirSync(path.join(root, 'frontend', 'tools'), { withFileTypes: true })
+  .filter((entry) => entry.isDirectory()).length;
+assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageDirs);
 const kinds = Object.fromEntries(['golden', 'boundary', 'validation'].map((kind) =>
   [kind, entry.testCases.filter((testCase) => testCase.kind === kind).length]));
 assert.deepEqual(kinds, { golden: 7, boundary: 6, validation: 15 });

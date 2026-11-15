@@ -274,7 +274,10 @@ for (const testCase of record.testCases) {
   assert.equal(actual.panels, want.panels, testCase.name + ' panels');
   assert.equal(actual.rows, want.rows, testCase.name + ' rows');
 }
-assert.equal(catalog.tools.length, 2321, 'catalog total');
+const pageDirs = fs.readdirSync(path.join(root, 'frontend', 'tools'), { withFileTypes: true })
+  .filter((entry) => entry.isDirectory()).length;
+assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageDirs,
+  'every listed tool record has a page');
 assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2061, 'public tools');
 
 // ---- Page contract: shared shell, labelled controls, one hash-pinnable script.

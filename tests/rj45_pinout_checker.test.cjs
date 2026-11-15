@@ -157,7 +157,10 @@ for (const left of ['T568A', 'T568B']) {
 
 // ---- Catalog record and every case in it must agree with the core.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2321, 'catalog total');
+const pageDirs = fs.readdirSync(path.join(root, 'frontend', 'tools'), { withFileTypes: true })
+  .filter((entry) => entry.isDirectory()).length;
+assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageDirs,
+  'every listed tool record has a page');
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record missing');
 assert.equal(record.name, 'RJ45 Pinout Checker');

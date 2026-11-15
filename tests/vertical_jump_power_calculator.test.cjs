@@ -162,7 +162,10 @@ const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool
 const matches = catalog.tools.filter((tool) => tool.slug === slug);
 assert.equal(matches.length, 1, 'slug appears exactly once');
 const record = matches[0];
-assert.equal(catalog.tools.length, 2321, 'catalog total');
+const pageDirs = fs.readdirSync(path.join(root, 'frontend', 'tools'), { withFileTypes: true })
+  .filter((entry) => entry.isDirectory()).length;
+assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageDirs,
+  'every listed tool record has a page');
 assert.equal(record.name, 'Vertical Jump Power Calculator');
 assert.equal(record.category, 'Health');
 assert.equal(record.subcategory, 'Estimation & calculation');

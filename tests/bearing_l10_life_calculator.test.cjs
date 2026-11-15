@@ -129,7 +129,10 @@ for (const tool of catalog.tools) {
   }
 }
 
-assert.equal(catalog.tools.length, 2321, 'catalog total');
+const pageDirs = fs.readdirSync(path.join(root, 'frontend', 'tools'), { withFileTypes: true })
+  .filter((entry) => entry.isDirectory()).length;
+assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageDirs,
+  'every listed tool record has a page');
 assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2061, 'public tools');
 assert.equal(
   catalog.tools.filter((tool) => tool.category === 'Mechanical & Structural Engineering').length,
@@ -193,5 +196,5 @@ assert.ok(html.includes('var(--on-accent'), 'accent text colour token');
 
 console.log(
   'bearing-l10-life-calculator: ' + combos + ' measurements, ' + refusals.length + ' refusals, '
-  + record.testCases.length + ' catalog cases, totals 2321/2061/47'
+  + record.testCases.length + ' catalog cases'
 );

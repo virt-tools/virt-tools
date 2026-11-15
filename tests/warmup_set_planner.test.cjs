@@ -121,7 +121,10 @@ for (const testCase of record.testCases) {
 }
 
 // The catalog record replays through this core.
-assert.equal(catalog.tools.length, 2321, 'catalog total');
+const pageDirs = fs.readdirSync(path.join(root, 'frontend', 'tools'), { withFileTypes: true })
+  .filter((entry) => entry.isDirectory()).length;
+assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageDirs,
+  'every listed tool record has a page');
 assert.equal(record.name, 'Warm-Up Set Planner');
 assert.equal(record.category, 'Health');
 assert.equal(record.subcategory, 'Planning');

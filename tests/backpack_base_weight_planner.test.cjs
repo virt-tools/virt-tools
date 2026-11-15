@@ -26,7 +26,10 @@ assert.equal(entry.maturity, 'draft');
 assert.equal(entry.listed, true);
 assert.equal(entry.icon, '🎒');
 assert.ok(Array.isArray(entry.aliases) && entry.aliases.length >= 5, 'aliases present');
-assert.equal(catalog.tools.length, 2321, 'catalog total');
+const pageDirs = fs.readdirSync(path.join(root, 'frontend', 'tools'), { withFileTypes: true })
+  .filter((entry) => entry.isDirectory()).length;
+assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageDirs,
+  'every listed tool record has a page');
 
 const failure = (fn) => {
   try {

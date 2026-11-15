@@ -28,7 +28,10 @@ assert.equal(entry.icon, '\u{1F3CC}\uFE0F');
 assert.ok(Array.isArray(entry.aliases) && entry.aliases.length >= 8, 'aliases present');
 assert.ok(Array.isArray(entry.sources) && entry.sources.length >= 3, 'sources present');
 assert.ok(typeof entry.method === 'string' && entry.method.length > 800, 'method documented');
-assert.equal(catalog.tools.length, 2321, 'catalog total');
+const pageDirs = fs.readdirSync(path.join(root, 'frontend', 'tools'), { withFileTypes: true })
+  .filter((entry) => entry.isDirectory()).length;
+assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageDirs,
+  'every listed tool record has a page');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Sports & Outdoors').length, 47, 'Sports & Outdoors count');
 
 const slugs = new Set(catalog.tools.map((tool) => tool.slug));

@@ -224,7 +224,10 @@ assert.ok(simulated > 300, 'enough random plans were compared');
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
 const record = catalog.tools.find((tool) => tool.slug === 'call-sheet-builder');
 assert.ok(record, 'catalog entry present');
-assert.equal(catalog.tools.length, 2321, 'catalog total');
+const pageDirs = fs.readdirSync(path.join(root, 'frontend', 'tools'), { withFileTypes: true })
+  .filter((entry) => entry.isDirectory()).length;
+assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageDirs,
+  'every listed tool record has a page');
 assert.equal(record.category, 'Video');
 assert.equal(record.subcategory, 'Planning');
 assert.equal(record.risk, 'moderate');

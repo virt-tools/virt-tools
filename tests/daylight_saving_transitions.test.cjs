@@ -169,7 +169,10 @@ assert.equal(failure(() => C.status('Mars/Base', midNovember)),
 
 // ---- Catalog record.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2321, 'catalog total');
+const pageDirs = fs.readdirSync(path.join(root, 'frontend', 'tools'), { withFileTypes: true })
+  .filter((entry) => entry.isDirectory()).length;
+assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageDirs,
+  'every listed tool record has a page');
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record exists');
 assert.equal(record.name, 'Daylight Saving Transition Finder');

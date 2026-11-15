@@ -208,7 +208,10 @@ for (let iteration = 0; iteration < 240; iteration += 1) {
 
 // ---- Catalog record and its cases must agree with the core.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2321, 'catalog total');
+const pageDirs = fs.readdirSync(path.join(root, 'frontend', 'tools'), { withFileTypes: true })
+  .filter((entry) => entry.isDirectory()).length;
+assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageDirs,
+  'every listed tool record has a page');
 assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2061, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Converters').length, 47, 'Converters count');
 const record = catalog.tools.find((tool) => tool.slug === slug);
@@ -294,4 +297,4 @@ assert.ok(!/<img\b|<iframe\b|@import/.test(html), 'no foreign assets');
 assert.ok(!/[^\x00-\x7F]/.test(html), 'the page source stays ASCII');
 
 console.log('specific heat capacity converter: 8 units, 8 reference conversions, 240 random '
-  + 'round trips, ' + record.testCases.length + ' catalog cases, totals 2321/2061/47');
+  + 'round trips, ' + record.testCases.length + ' catalog cases');

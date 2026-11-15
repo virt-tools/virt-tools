@@ -226,7 +226,10 @@ assert.ok(swept >= 30, 'swept peaks: ' + swept);
 
 // Catalog cases replay, both directions.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2321, 'catalog total');
+const pageDirs = fs.readdirSync(path.join(root, 'frontend', 'tools'), { withFileTypes: true })
+  .filter((entry) => entry.isDirectory()).length;
+assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageDirs,
+  'every listed tool record has a page');
 const entry = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(entry, 'catalog record missing');
 assert.equal(entry.category, 'Audio');

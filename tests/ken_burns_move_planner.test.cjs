@@ -457,7 +457,10 @@ near(wide.startCentreX, tight.startCentreX, 'centred crop keeps its centre', 1e-
 const catalog = JSON.parse(
   fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8')
 );
-assert.equal(catalog.tools.length, 2321, 'catalog total');
+const pageDirs = fs.readdirSync(path.join(root, 'frontend', 'tools'), { withFileTypes: true })
+  .filter((entry) => entry.isDirectory()).length;
+assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageDirs,
+  'every listed tool record has a page');
 const records = catalog.tools.filter((tool) => tool.slug === 'ken-burns-move-planner');
 assert.equal(records.length, 1, 'catalog must contain exactly one Ken Burns record');
 const record = records[0];

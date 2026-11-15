@@ -260,7 +260,9 @@ assert.ok(entry.method.includes('dBFS') && entry.method.includes('6.02') && entr
   'method must state the units, the per-bit factor and local execution');
 assert.equal(new Set(entry.tags).size, entry.tags.length, 'duplicate tags');
 assert.equal(new Set(entry.aliases).size, entry.aliases.length, 'duplicate aliases');
-assert.equal(catalog.tools.length, 2321);
+const pageDirs = fs.readdirSync(path.join(root, 'frontend', 'tools'), { withFileTypes: true })
+  .filter((entry) => entry.isDirectory()).length;
+assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageDirs);
 const allAliases = new Map();
 for (const tool of catalog.tools) {
   for (const alias of tool.aliases || []) {

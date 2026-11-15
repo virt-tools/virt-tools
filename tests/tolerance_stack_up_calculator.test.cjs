@@ -30,7 +30,10 @@ assert.ok(Array.isArray(entry.aliases) && entry.aliases.length >= 10, 'aliases p
 assert.ok(Array.isArray(entry.sources), 'sources array present');
 assert.ok(typeof entry.method === 'string' && entry.method.length > 600, 'method documented');
 assert.ok(entry.testCases.length >= 10, 'catalog cases present');
-assert.equal(catalog.tools.length, 2321, 'catalog total');
+const pageDirs = fs.readdirSync(path.join(root, 'frontend', 'tools'), { withFileTypes: true })
+  .filter((entry) => entry.isDirectory()).length;
+assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageDirs,
+  'every listed tool record has a page');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Mechanical & Structural Engineering').length, 47,
   'Mechanical & Structural Engineering count');
 

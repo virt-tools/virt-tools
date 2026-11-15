@@ -186,7 +186,10 @@ assert.equal(C.analyze(eight).chords.length, 8);
 
 // Catalog integrity and recorded cases.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2321, 'catalog total');
+const pageDirs = fs.readdirSync(path.join(root, 'frontend', 'tools'), { withFileTypes: true })
+  .filter((entry) => entry.isDirectory()).length;
+assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageDirs,
+  'every listed tool record has a page');
 const record = catalog.tools.find((tool) => tool.slug === 'four-part-writing-checker');
 assert.ok(record, 'catalog record');
 assert.equal(record.name, 'Four-Part Writing Checker');
