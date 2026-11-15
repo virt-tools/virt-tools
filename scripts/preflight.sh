@@ -303,6 +303,7 @@ node tests/segmented_ring_calculator.test.cjs
 node tests/course_to_steer_calculator.test.cjs
 node tests/pickup_cable_resonance_calculator.test.cjs
 node tests/secondary_dominant_finder.test.cjs
+node tests/emergency_water_supply_planner.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
