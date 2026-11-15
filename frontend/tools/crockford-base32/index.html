@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Crockford Base32 Encoder / Decoder &mdash; Virtual Tools</title>
+<meta name="description" content="Encode whole numbers in Douglas Crockford's Base32 alphabet and decode them back, with an optional modulo-37 check symbol and hyphen grouping.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+.field{display:flex;flex-direction:column;gap:6px;margin:0}
+.field label{font-size:13px;color:var(--text-dim,#9aa3b2)}
+select,input,textarea{box-sizing:border-box;width:100%;min-height:46px;padding:10px 12px;border-radius:8px;
+  border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);color:var(--text,#e6e6e6);
+  font:inherit;font-size:16px;line-height:1.35;outline:none}
+textarea{min-height:96px;resize:vertical;font-family:ui-monospace,monospace}
+select:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent,#6ea8fe);outline-offset:1px}
+.hint{font-size:12.5px;color:var(--text-dim,#9aa3b2);margin:6px 0 0}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:12px 0 0}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);
+  background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.err{color:var(--bad,#f87171);font-size:13px;margin:10px 0 0;min-height:1.2em}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:16px 0 0}
+.out .label{text-align:center;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-dim,#9aa3b2)}
+.out .big{font-size:clamp(1.3rem,5.8vw,1.9rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;
+  padding:2px 0 4px;overflow-wrap:anywhere;line-height:1.3}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:6px 0 0;line-height:1.45;overflow-wrap:anywhere}
+.facts{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 14px;margin:16px 0 0;font-size:13px}
+.facts dt{color:var(--text-dim,#9aa3b2)}
+.facts dd{margin:0;font-family:ui-monospace,monospace;overflow-wrap:anywhere}
+.facts:empty{display:none}
+@media (max-width:560px){
+  .actions button{flex:1 1 auto}
+  .facts{grid-template-columns:minmax(0,1fr);gap:2px}
+  .facts dd{margin:0 0 8px}
+}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<h1>Crockford Base32 Encoder / Decoder</h1>
+<p>Convert whole numbers to and from Douglas Crockford&#39;s Base32 &mdash; a 32-symbol alphabet that leaves out I, L, O and U so a code survives being read aloud, typed or copied by hand. An optional check symbol (the value modulo 37) catches mistyped and transposed symbols. Everything is computed locally.</p>
+</div>
+<div class="panel">
+<form id="convert-form" novalidate>
+<div class="grid">
+<div class="field">
+<label for="mode">Mode</label>
+<select id="mode">
+<option value="encode" selected>Encode a number</option>
+<option value="decode">Decode a code</option>
+</select>
+</div>
+<div class="field">
+<label for="check">Check symbol</label>
+<select id="check">
+<option value="none" selected>None</option>
+<option value="mod37">Modulo 37</option>
+</select>
+</div>
+<div class="field">
+<label for="group">Hyphen grouping</label>
+<select id="group">
+<option value="none" selected>None</option>
+<option value="5">Every 5 symbols</option>
+</select>
+</div>
+</div>
+<div class="field" style="margin-top:12px;">
+<label for="input" id="input-label">Number</label>
+<textarea id="input" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Type a whole number, decimal or with a 0x prefix">1000</textarea>
+<p class="hint" id="input-hint">Decimal digits, or prefix 0x for hexadecimal. Whitespace and underscores are ignored. Enter converts; Shift+Enter starts a new line.</p>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions">
+<button type="submit">Convert</button>
+</div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"></div>
+<dl class="facts" id="facts"></dl>
+<p class="note">Base32 writes a number in base 32, five bits per symbol, using the 32 characters 0-9 and A-Z without I, L, O and U. Encoding uses upper-case letters only and the shortest form: leading zeros are dropped, so a code has no fixed width and is not a byte encoding. Decoding accepts upper or lower case, reads I, i, L and l as 1 and O and o as 0, and ignores hyphens and whitespace. With the check symbol enabled, the last symbol encodes the number modulo 37, using the five extra symbols * ~ $ = U, and a mismatch is reported instead of a value. Nothing is uploaded, stored or sent anywhere.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* crockford-core:start */
+var CrockfordCore = (function(){
+  "use strict";
+  var SYMBOLS = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+  var CHECK_SYMBOLS = SYMBOLS + "*~$=U";
+  var CHECK_MODULUS = 37;
+  var MAX_INPUT = 4096;
+  var GROUP_SIZE = 5;
+  var DECODE_MAP = { I: "1", L: "1", O: "0" };
+  var DIGITS_ONLY = /^[0-9]+$/;
+  var HEX_ONLY = /^[0-9A-Fa-f]+$/;
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function asValue(value){
+    var n = typeof value === "bigint" ? value : BigInt(value);
+    if (n < 0n) fail("Enter a non-negative whole number.");
+    return n;
+  }
+
+  function normalizeSymbol(ch){
+    var upper = String(ch).toUpperCase();
+    return DECODE_MAP[upper] || upper;
+  }
+
+  function encode(value){
+    var n = asValue(value);
+    if (n === 0n) return "0";
+    var out = "";
+    while (n > 0n){
+      var rest = Number(n % 32n);
+      n = n / 32n;
+      out = SYMBOLS.charAt(rest) + out;
+    }
+    return out;
+  }
+
+  function checkFor(value){
+    var n = asValue(value);
+    return CHECK_SYMBOLS.charAt(Number(n % 37n));
+  }
+
+  function group(text, size){
+    var chars = String(text);
+    var step = Number(size);
+    if (!step || step < 1 || Math.floor(step) !== step) return chars;
+    var parts = [];
+    for (var index = 0; index < chars.length; index += step) parts.push(chars.slice(index, index + step));
+    return parts.join("-");
+  }
+
+  function clean(text){
+    return String(text == null ? "" : text).replace(/[\s-]/g, "");
+  }
+
+  function parseNumber(text){
+    var raw = String(text == null ? "" : text).trim().replace(/[\s_]/g, "");
+    if (!raw) fail("Enter a number to convert.");
+    if (raw.length > MAX_INPUT) fail("Enter at most " + MAX_INPUT + " characters.");
+    var negative = raw.charAt(0) === "-";
+    if (negative) raw = raw.slice(1);
+    var hex = /^0[xX]/.test(raw);
+    if (hex) raw = raw.slice(2);
+    if (!raw) fail(hex ? "Enter hexadecimal digits after 0x." : "Enter a number to convert.");
+    if (hex ? !HEX_ONLY.test(raw) : !DIGITS_ONLY.test(raw)){
+      fail(hex ? "Use only hexadecimal digits 0-9 and A-F after 0x." : "Use only the digits 0-9.");
+    }
+    if (negative) fail("Enter a non-negative whole number.");
+    return BigInt(hex ? "0x" + raw : raw);
+  }
+
+  function decode(text, options){
+    var withCheck = !!(options && options.check);
+    var raw = String(text == null ? "" : text);
+    if (!raw.trim()) fail("Enter a Base32 code to decode.");
+    if (raw.length > MAX_INPUT) fail("Enter at most " + MAX_INPUT + " characters.");
+    var symbols = clean(raw);
+    if (!symbols) fail("Enter a Base32 code to decode.");
+    var checkChar = null;
+    if (withCheck){
+      if (symbols.length < 2) fail("A checked code needs at least one data symbol and a check symbol.");
+      checkChar = symbols.charAt(symbols.length - 1);
+      symbols = symbols.slice(0, -1);
+    }
+    var value = 0n;
+    var normalized = "";
+    for (var index = 0; index < symbols.length; index += 1){
+      var original = symbols.charAt(index);
+      var symbol = normalizeSymbol(original);
+      var digit = SYMBOLS.indexOf(symbol);
+      if (digit < 0){
+        fail("Invalid symbol \u201c" + original + "\u201d at position " + (index + 1) + ": it is not in the Base32 alphabet.");
+      }
+      normalized += symbol;
+      value = value * 32n + BigInt(digit);
+    }
+    var result = { value: value, symbols: normalized, count: normalized.length, check: null, expected: null };
+    if (withCheck){
+      var provided = normalizeSymbol(checkChar);
+      var providedValue = CHECK_SYMBOLS.indexOf(provided);
+      if (providedValue < 0){
+        fail("Invalid check symbol \u201c" + checkChar + "\u201d: use 0-9, A-Z without I, L, O or U, or one of * ~ $ = U.");
+      }
+      var expected = checkFor(value);
+      if (providedValue !== Number(value % 37n)){
+        fail("Check symbol \u201c" + checkChar + "\u201d does not match this number: expected \u201c" + expected + "\u201d.");
+      }
+      result.check = provided;
+      result.expected = expected;
+    }
+    return result;
+  }
+
+  function bits(value){
+    var n = asValue(value);
+    return n === 0n ? 1 : n.toString(2).length;
+  }
+
+  function hex(value){
+    return "0x" + asValue(value).toString(16);
+  }
+
+  return {
+    SYMBOLS: SYMBOLS,
+    CHECK_SYMBOLS: CHECK_SYMBOLS,
+    CHECK_MODULUS: CHECK_MODULUS,
+    MAX_INPUT: MAX_INPUT,
+    GROUP_SIZE: GROUP_SIZE,
+    encode: encode,
+    checkFor: checkFor,
+    group: group,
+    parseNumber: parseNumber,
+    decode: decode,
+    bits: bits,
+    hex: hex
+  };
+})();
+/* crockford-core:end */
+(function(){
+  "use strict";
+  var C = CrockfordCore;
+  var els = {
+    form: document.getElementById("convert-form"),
+    mode: document.getElementById("mode"),
+    check: document.getElementById("check"),
+    group: document.getElementById("group"),
+    input: document.getElementById("input"),
+    label: document.getElementById("input-label"),
+    hint: document.getElementById("input-hint"),
+    err: document.getElementById("err"),
+    out: document.getElementById("out"),
+    facts: document.getElementById("facts")
+  };
+  var LABELS = { encode: "Number", decode: "Base32 code" };
+  var HINTS = {
+    encode: "Decimal digits, or prefix 0x for hexadecimal. Whitespace and underscores are ignored. Enter converts; Shift+Enter starts a new line.",
+    decode: "Upper or lower case, hyphens and whitespace are fine; I, l and L read as 1, O as 0. Enter converts; Shift+Enter starts a new line."
+  };
+  var PLACEHOLDERS = { encode: "Type a whole number, decimal or with a 0x prefix", decode: "Type a Base32 code, with or without hyphens" };
+
+  function block(className, text){
+    var node = document.createElement("div");
+    node.className = className;
+    node.textContent = text;
+    return node;
+  }
+
+  function clearFacts(){
+    els.facts.textContent = "";
+  }
+
+  function addFact(term, value){
+    var dt = document.createElement("dt");
+    dt.textContent = term;
+    var dd = document.createElement("dd");
+    dd.textContent = value;
+    els.facts.appendChild(dt);
+    els.facts.appendChild(dd);
+  }
+
+  function showPlaceholder(message){
+    els.out.textContent = "";
+    var node = block("sub", message);
+    node.style.padding = "18px 0 6px";
+    els.out.appendChild(node);
+    clearFacts();
+  }
+
+  function renderEncode(value){
+    var withCheck = els.check.value === "mod37";
+    var grouped = els.group.value !== "none";
+    var code = C.encode(value);
+    var check = withCheck ? C.checkFor(value) : null;
+    var full = withCheck ? code + check : code;
+    var shown = grouped ? C.group(full, C.GROUP_SIZE) : full;
+    els.out.textContent = "";
+    els.out.appendChild(block("label", check ? "Base32 code with check symbol" : "Base32 code"));
+    els.out.appendChild(block("big", shown));
+    var sub = value.toString() + " decimal is " + C.hex(value) + " (" + C.bits(value) + (C.bits(value) === 1 ? " bit" : " bits")
+      + ") and takes " + code.length + (code.length === 1 ? " symbol" : " symbols");
+    sub += check ? " plus the check symbol \u201c" + check + "\u201d (" + value.toString() + " mod 37 = " + Number(value % 37n) + ")." : ".";
+    els.out.appendChild(block("sub", sub));
+    clearFacts();
+    addFact("Decimal", value.toString());
+    addFact("Hexadecimal", C.hex(value));
+    addFact("Symbols", String(code.length));
+    if (check) addFact("Check symbol", check + " (value mod 37 = " + Number(value % 37n) + ")");
+  }
+
+  function renderDecode(result){
+    els.out.textContent = "";
+    els.out.appendChild(block("label", "Value"));
+    els.out.appendChild(block("big", result.value.toString()));
+    var sub = result.count + (result.count === 1 ? " symbol decodes" : " symbols decode") + " to "
+      + C.bits(result.value) + (C.bits(result.value) === 1 ? " bit" : " bits") + " (" + C.hex(result.value) + ")";
+    sub += result.check
+      ? "; the check symbol \u201c" + result.check + "\u201d matches, since the value modulo 37 is " + Number(result.value % 37n) + "."
+      : "; no check symbol was verified.";
+    els.out.appendChild(block("sub", sub));
+    clearFacts();
+    addFact("Decimal", result.value.toString());
+    addFact("Hexadecimal", C.hex(result.value));
+    addFact("Symbols", String(result.count));
+    addFact("Bits", String(C.bits(result.value)));
+    if (result.check) addFact("Check symbol", result.check + " (matches)");
+  }
+
+  function syncLabels(){
+    var mode = els.mode.value;
+    els.label.textContent = LABELS[mode];
+    els.hint.textContent = HINTS[mode];
+    els.input.placeholder = PLACEHOLDERS[mode];
+    els.input.rows = mode === "decode" ? 3 : 2;
+  }
+
+  function show(announce){
+    var mode = els.mode.value;
+    var withCheck = els.check.value === "mod37";
+    els.err.textContent = "";
+    try {
+      if (mode === "encode"){
+        renderEncode(C.parseNumber(els.input.value));
+      } else {
+        renderDecode(C.decode(els.input.value, { check: withCheck }));
+      }
+    } catch (error){
+      if (announce) els.err.textContent = error && error.message ? error.message : String(error);
+      showPlaceholder(mode === "encode"
+        ? "Enter a whole number to see its Base32 code."
+        : "Enter a Base32 code to see the number it carries.");
+    }
+  }
+
+  els.form.addEventListener("submit", function(event){
+    event.preventDefault();
+    show(true);
+  });
+  els.mode.addEventListener("change", function(){
+    syncLabels();
+    show(false);
+  });
+  els.check.addEventListener("change", function(){ show(false); });
+  els.group.addEventListener("change", function(){ show(false); });
+  els.input.addEventListener("input", function(){ show(false); });
+  els.input.addEventListener("keydown", function(event){
+    if (event.key === "Enter" && !event.shiftKey){
+      event.preventDefault();
+      show(true);
+    }
+  });
+
+  syncLabels();
+  show(false);
+})();
+</script>
+</body>
+</html>
