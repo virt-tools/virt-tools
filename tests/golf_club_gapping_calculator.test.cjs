@@ -28,8 +28,8 @@ assert.equal(entry.icon, '\u{1F3CC}\uFE0F');
 assert.ok(Array.isArray(entry.aliases) && entry.aliases.length >= 8, 'aliases present');
 assert.ok(Array.isArray(entry.sources) && entry.sources.length >= 3, 'sources present');
 assert.ok(typeof entry.method === 'string' && entry.method.length > 800, 'method documented');
-assert.equal(catalog.tools.length, 2295, 'catalog total');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Sports & Outdoors').length, 45, 'Sports & Outdoors count');
+assert.equal(catalog.tools.length, 2296, 'catalog total');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Sports & Outdoors').length, 46, 'Sports & Outdoors count');
 
 const slugs = new Set(catalog.tools.map((tool) => tool.slug));
 assert.equal(slugs.size, catalog.tools.length, 'slugs unique');
