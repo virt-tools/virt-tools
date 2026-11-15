@@ -233,7 +233,9 @@ def check_page(payload: dict, locale: str, written: dict) -> tuple[list[str], li
         if numeric_tokens(unit) != numeric_tokens(translation):
             bad.append((unit, "numbers differ"))
             continue
-        if sorted(re.findall(r"&[a-zA-Z]+;|&#\d+;", unit)) != sorted(re.findall(r"&[a-zA-Z]+;|&#\d+;", translation)):
+        if sorted(re.findall(r"&[a-zA-Z]+;|&#\d+;", html_module.unescape(unit))) != sorted(
+            re.findall(r"&[a-zA-Z]+;|&#\d+;", html_module.unescape(translation))
+        ):
             bad.append((unit, "entity differs"))
             continue
         plain = html_module.unescape(re.sub(r"</?[a-zA-Z][^>]*>", "", unit)).strip()
@@ -290,7 +292,7 @@ def left_in_english(text: str) -> str:
 
 
 
-def import_batch(locale: str, path: Path, write: bool, prune: bool = False) -> int:
+def import_batch(locale: str, path: Path, write: bool, prune: bool = False, migrate: bool = False) -> int:
     payload = json.loads(path.read_text(encoding="utf-8"))
     if payload.get("locale") != locale:
         print(f"error: payload is for {payload.get('locale')!r}, not {locale!r}", file=sys.stderr)
@@ -306,6 +308,26 @@ def import_batch(locale: str, path: Path, write: bool, prune: bool = False) -> i
             print(f"error: {slug}: page is missing", file=sys.stderr)
             problems_total += 1
             continue
+        if migrate:
+            # The page's unit keys changed shape (an extraction or escaping fix),
+            # not the copy: move a translation to the equivalent new key.
+            current = i18n_lib.units(written[slug][0])
+            strings = page.get("strings", {})
+            for unit in current:
+                if unit in strings:
+                    continue
+                for candidate in {html_module.unescape(unit), i18n_lib.norm_ws(html_module.unescape(unit))}:
+                    if candidate != unit and candidate in strings:
+                        strings[unit] = strings.pop(candidate)
+                        break
+            for key in list(strings):
+                if key in current:
+                    continue
+                candidate = html_module.unescape(key)
+                if candidate != key and candidate in current and candidate not in strings:
+                    strings[candidate] = strings.pop(key)
+            page["strings"] = strings
+            page["sourceHash"] = written[slug][1]
         if prune:
             # The page's units moved under this payload (an extraction change, not
             # a translation error). Drop keys the page no longer exposes and
@@ -358,6 +380,60 @@ def import_batch(locale: str, path: Path, write: bool, prune: bool = False) -> i
         print(f"wrote {target.relative_to(ROOT)}: {len(document['strings'])} strings")
     print(f"{accepted}/{len(payload.get('pages', []))} pages valid, {problems_total} problems")
     return 1 if problems_total else 0
+
+
+def migrate_memories(locale: str, write: bool) -> int:
+    """Re-key memories after a unit-extraction change that altered escaping.
+
+    The unit for a block is markup with its text escaped (``&lt;table&gt;``);
+    before that was fixed the key carried the decoded text. The translation is
+    still valid, so move it to the new key instead of asking for it again.
+    """
+    directory = TM_DIR / locale
+    migrated = stale = 0
+    for path in sorted(directory.glob("*.json")):
+        memory = json.loads(path.read_text(encoding="utf-8"))
+        slug = path.stem
+        try:
+            document, digest = page_units(slug)
+        except FileNotFoundError:
+            continue
+        current = i18n_lib.units(document)
+        strings = memory.get("strings", {})
+        moved = 0
+        for unit in current:
+            if unit in strings:
+                continue
+            for candidate in {html_module.unescape(unit), i18n_lib.norm_ws(html_module.unescape(unit))}:
+                if candidate != unit and candidate in strings:
+                    strings[unit] = strings.pop(candidate)
+                    moved += 1
+                    break
+        # The other direction: a key stored escaped ("A &amp; B") for a unit that
+        # is now plain text ("A & B").
+        for key in list(strings):
+            if key in current:
+                continue
+            candidate = html_module.unescape(key)
+            if candidate != key and candidate in current and candidate not in strings:
+                strings[candidate] = strings.pop(key)
+                moved += 1
+        missing = [unit for unit in current if unit not in strings]
+        orphans = [unit for unit in strings if unit not in current]
+        if moved or orphans:
+            migrated += 1
+            for unit in orphans:
+                strings.pop(unit, None)
+            memory["strings"] = {unit: strings[unit] for unit in current if unit in strings}
+            memory["sourceHash"] = digest
+            if write:
+                path.write_text(json.dumps(memory, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            print(f"{'migrated' if write else 'would migrate'} {slug}: {moved} re-keyed, {len(orphans)} dropped")
+        if missing:
+            stale += 1
+            print(f"error: {slug}: {len(missing)} unit(s) still untranslated, first: {missing[0][:60]!r}", file=sys.stderr)
+    print(f"{migrated} memory file(s) migrated, {stale} still need translation")
+    return 1 if stale else 0
 
 
 def prune_memories(locale: str, write: bool) -> int:
@@ -431,14 +507,21 @@ def main(argv: list[str]) -> int:
     import_cmd.add_argument("--locale", required=True)
     import_cmd.add_argument("--in", dest="source", required=True)
     import_cmd.add_argument("--write", action="store_true")
+    import_cmd.add_argument("--migrate", action="store_true",
+                            help="re-key translations whose unit changed shape (escaping fixes)")
     import_cmd.add_argument("--prune", action="store_true",
                             help="drop strings the page no longer exposes and rebase the hash")
+    migrate_cmd = sub.add_parser("migrate")
+    migrate_cmd.add_argument("--locale", required=True)
+    migrate_cmd.add_argument("--write", action="store_true")
     prune_cmd = sub.add_parser("prune")
     prune_cmd.add_argument("--locale", required=True)
     prune_cmd.add_argument("--write", action="store_true")
     sub.add_parser("status")
     args = parser.parse_args(argv[1:])
 
+    if args.command == "migrate":
+        return migrate_memories(args.locale, args.write)
     if args.command == "prune":
         return prune_memories(args.locale, args.write)
     if args.command == "status":
@@ -451,7 +534,7 @@ def main(argv: list[str]) -> int:
         chars = sum(len(unit) for page in payload["pages"] for unit in page["units"])
         print(f"exported {len(slugs)} pages, {chars} source chars -> {args.out}")
         return 0
-    return import_batch(args.locale, Path(args.source), args.write, args.prune)
+    return import_batch(args.locale, Path(args.source), args.write, args.prune, args.migrate)
 
 
 if __name__ == "__main__":

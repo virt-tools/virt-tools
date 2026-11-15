@@ -421,7 +421,11 @@ def extract_units(root: Node) -> dict:
                 return
             inner = norm_ws("".join(serialize(child) for child in node.children))
             if inner and is_prose(re.sub(r"<[^>]*>", " ", inner)):
-                html_units.setdefault(inner, None)
+                # A block with no inline markup is plain text: key it as the text a
+                # user reads (``A & B``), not as escaped HTML (``A &amp; B``), so a
+                # translator never has to produce entities.
+                key = html_module.unescape(inner) if "<" not in inner else inner
+                html_units.setdefault(key, None)
                 collect_attrs(node)
                 return
         # Text that no block unit covers: a stray label in a wrapper element, or
