@@ -471,6 +471,38 @@ def _replace_direct_text(node: Node, mapping: dict, applied: set[str]) -> None:
         node.children[index] = lead + escape_text(mapping[key]) + trail
 
 
+def attr_units(node: Node) -> set[str]:
+    """Translatable attribute units inside a subtree."""
+    found: set[str] = set()
+    for key, value in node.attrs:
+        if value and key.lower() in TRANSLATABLE_ATTRS:
+            unit = norm_ws(html_module.unescape(value))
+            if unit:
+                found.add(unit)
+    for child in node.children:
+        if isinstance(child, Node):
+            found |= attr_units(child)
+    return found
+
+
+def apply_attrs(node: Node, mapping: dict, applied: set[str]) -> None:
+    """Translate translatable attributes across a subtree."""
+    if node.attrs:
+        rewritten = []
+        for key, value in node.attrs:
+            if value and key.lower() in TRANSLATABLE_ATTRS:
+                unit = norm_ws(html_module.unescape(value))
+                if unit in mapping:
+                    applied.add(unit)
+                    rewritten.append((key, mapping[unit]))
+                    continue
+            rewritten.append((key, value))
+        node.attrs = rewritten
+    for child in node.children:
+        if isinstance(child, Node):
+            apply_attrs(child, mapping, applied)
+
+
 def apply_translation(root: Node, mapping: dict) -> set[str]:
     """Rewrite a parsed page in place; return the set of keys actually used."""
     applied: set[str] = set()
@@ -520,8 +552,19 @@ def apply_translation(root: Node, mapping: dict) -> set[str]:
             )
             inner = norm_ws("".join(serialize(child) for child in node.children))
             if not has_control and inner in mapping:
+                # The block is replaced as a whole, so any attribute unit it
+                # contains is covered by that replacement even when the
+                # translator already rendered the attribute itself.
+                applied.update(attr_units(node) & set(mapping))
                 applied.add(inner)
                 node.children = _fragment(mapping[inner])
+                # The translated block carries its own markup, so the walker never
+                # reaches the attributes inside it (``<span aria-label="Actions">``).
+                # Apply attribute units there too, or that copy stays English and
+                # the attribute unit is reported unused.
+                for child in node.children:
+                    if isinstance(child, Node):
+                        apply_attrs(child, mapping, applied)
                 return
         _replace_direct_text(node, mapping, applied)
         for child in node.children:

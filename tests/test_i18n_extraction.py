@@ -34,6 +34,22 @@ class AttributeExtractionTests(unittest.TestCase):
         self.assertIn("this link", units)
 
 
+class NestedAttributeRenderTests(unittest.TestCase):
+    def test_attribute_inside_a_translated_block_is_applied(self):
+        """A block unit carries its markup, so its attributes must still render."""
+        markup = (
+            '<html><body><main><table><thead><tr>'
+            '<th scope="col"><span aria-label="Actions">Actions</span></th>'
+            '</tr></thead></table></main></body></html>'
+        )
+        block = '<span aria-label="Actions">Actions</span>'
+        mapping = {block: '<span aria-label="Actions">Aktionen</span>', "Actions": "Aktionen"}
+        rendered, applied, unused = i18n_lib.render(markup, mapping)
+        self.assertIn('aria-label="Aktionen"', rendered)
+        self.assertIn(">Aktionen<", rendered)
+        self.assertFalse(unused)
+
+
 class CodeFragmentTests(unittest.TestCase):
     def test_literal_fragments_of_a_string_expression_are_not_units(self):
         """Translating these would rewrite the page's arithmetic."""
