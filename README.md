@@ -1,4 +1,14 @@
-# Virtual Tools
+<p align="center">
+  <img src="docs/assets/readme-banner.svg" alt="virt.tools — calculators, converters and planners that run entirely in your browser" width="100%">
+</p>
+
+<h1 align="center">Virtual Tools</h1>
+
+<p align="center">
+  <a href="https://virt.tools"><img src="https://img.shields.io/badge/virt.tools-live-0d6a5c?style=flat-square" alt="virt.tools is live"></a>
+  <img src="https://img.shields.io/github/stars/virt-tools/virt-tools?style=flat-square&amp;label=stars&amp;color=0d6a5c" alt="GitHub stars">
+  <img src="https://komarev.com/ghpvc/?username=virt-tools&amp;repo=virt-tools&amp;label=views&amp;style=flat-square&amp;color=0d6a5c" alt="Repository views">
+</p>
 
 A free, privacy-first collection of browser-based utilities at **https://virt.tools**.
 
