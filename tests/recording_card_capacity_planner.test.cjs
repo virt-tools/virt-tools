@@ -254,7 +254,7 @@ assert.ok(html.includes('/assets/tools.js') && html.includes('/assets/app.js'), 
 
 // ---- Catalog record and every case in it must agree with the core.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2304, 'catalog total');
+assert.equal(catalog.tools.length, 2305, 'catalog total');
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record missing');
 assert.equal(record.name, 'Recording Card Capacity & Offload Planner');

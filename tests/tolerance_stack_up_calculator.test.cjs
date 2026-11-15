@@ -30,7 +30,7 @@ assert.ok(Array.isArray(entry.aliases) && entry.aliases.length >= 10, 'aliases p
 assert.ok(Array.isArray(entry.sources), 'sources array present');
 assert.ok(typeof entry.method === 'string' && entry.method.length > 600, 'method documented');
 assert.ok(entry.testCases.length >= 10, 'catalog cases present');
-assert.equal(catalog.tools.length, 2304, 'catalog total');
+assert.equal(catalog.tools.length, 2305, 'catalog total');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Mechanical & Structural Engineering').length, 46,
   'Mechanical & Structural Engineering count');
 
