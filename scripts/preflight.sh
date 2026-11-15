@@ -312,6 +312,7 @@ node tests/editorconfig_resolver.test.cjs
 node tests/spectrum_analyzer_sweep.test.cjs
 node tests/four_bar_linkage.test.cjs
 node tests/heat_transfer_coefficient_converter.test.cjs
+node tests/sidereal_time_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
