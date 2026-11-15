@@ -329,17 +329,45 @@ def scan_js_literals(body: str) -> list[tuple[int, int, str, str]]:
     return found
 
 
+SIMPLE_ESCAPES = {"n": "\n", "t": "\t", "r": "\r", "b": "\b", "f": "\f", "v": "\v", "0": "\0"}
+
+
 def js_unescape(body: str) -> str:
+    r"""Decode a JS string literal body.
+
+    ``\uXXXX`` and ``\xNN`` are real characters: leaving the backslash out turned
+    ``W/(m\u00b2\u00b7K)`` into ``W/(mu00b2u00b7K)``, which a translated page then
+    printed verbatim.
+    """
     out, index = [], 0
     while index < len(body):
         char = body[index]
-        if char == "\\" and index + 1 < len(body):
-            nxt = body[index + 1]
-            out.append({"n": "\n", "t": "\t", "r": "\r"}.get(nxt, nxt))
-            index += 2
+        if char != "\\" or index + 1 >= len(body):
+            out.append(char)
+            index += 1
             continue
-        out.append(char)
-        index += 1
+        nxt = body[index + 1]
+        if nxt == "u" and index + 5 < len(body) + 1:
+            chunk = body[index + 2 : index + 6]
+            if re.fullmatch(r"[0-9a-fA-F]{4}", chunk):
+                out.append(chr(int(chunk, 16)))
+                index += 6
+                continue
+        if nxt == "u" and body[index + 2 : index + 3] == "{":
+            end = body.find("}", index + 3)
+            chunk = body[index + 3 : end] if end != -1 else ""
+            if chunk and re.fullmatch(r"[0-9a-fA-F]{1,6}", chunk):
+                out.append(chr(int(chunk, 16)))
+                index = end + 1
+                continue
+        if nxt == "x":
+            chunk = body[index + 2 : index + 4]
+            if re.fullmatch(r"[0-9a-fA-F]{2}", chunk):
+                out.append(chr(int(chunk, 16)))
+                index += 4
+                continue
+        out.append(SIMPLE_ESCAPES.get(nxt, nxt))
+        index += 2
     return "".join(out)
 
 
