@@ -300,6 +300,7 @@ node tests/crockford_base32.test.cjs
 node tests/cream_to_butter_yield.test.cjs
 node tests/tcp_retransmission_timer.test.cjs
 node tests/segmented_ring_calculator.test.cjs
+node tests/course_to_steer_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
