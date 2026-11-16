@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>NTP Offset Calculator &mdash; Virtual Tools</title>
+<meta name="description" content="Turn the four NTP exchange timestamps into the clock offset and round-trip delay with the RFC 5905 formulas, and see how far the true offset can sit from the estimate.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.field{display:flex;flex-direction:column;gap:6px;margin:0}
+.field label{font-size:13px;color:var(--text-dim,#9aa3b2)}
+.field .tag{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:999px;font-size:11px;
+  letter-spacing:.04em;text-transform:uppercase;background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);
+  color:var(--text-dim,#9aa3b2)}
+input{box-sizing:border-box;width:100%;min-height:46px;padding:10px 12px;border-radius:8px;
+  border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);color:var(--text,#e6e6e6);
+  font:inherit;font-size:16px;line-height:1.35;outline:none;font-family:ui-monospace,monospace}
+input:focus-visible{outline:2px solid var(--accent,#6ea8fe);outline-offset:1px}
+[hidden]{display:none !important}
+.hint{font-size:12.5px;color:var(--text-dim,#9aa3b2);margin:10px 0 0;line-height:1.45}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:12px 0 0}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);
+  background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.err{color:var(--bad,#f87171);font-size:13px;margin:10px 0 0;min-height:1.2em;line-height:1.4}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:16px 0 0}
+.out .label{text-align:center;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-dim,#9aa3b2)}
+.out .big{font-size:clamp(1.3rem,5.4vw,2rem);font-weight:800;text-align:center;padding:4px 0 2px;line-height:1.3;overflow-wrap:anywhere}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:6px 0 0;line-height:1.45;overflow-wrap:anywhere}
+.facts{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 14px;margin:16px 0 0;font-size:13px}
+.facts dt{color:var(--text-dim,#9aa3b2)}
+.facts dd{margin:0;font-family:ui-monospace,monospace;overflow-wrap:anywhere}
+.facts:empty{display:none}
+@media (max-width:560px){
+  .grid{grid-template-columns:minmax(0,1fr)}
+  .actions button{flex:1 1 auto}
+  .facts{grid-template-columns:minmax(0,1fr);gap:2px}
+  .facts dd{margin:0 0 8px}
+}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<h1>NTP Offset Calculator</h1>
+<p>Work out how far a server's clock sits from yours from one NTP exchange. The page applies the RFC 5905 offset and delay formulas to the four timestamps, reports the round-trip delay and the range the true offset can occupy. Everything is computed locally.</p>
+</div>
+<div class="panel">
+<form id="ntp-form" novalidate>
+<div class="grid">
+<div class="field">
+<label for="t1">T1 &mdash; client sent <span class="tag">client clock</span></label>
+<input id="t1" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="1700000000.000000000">
+</div>
+<div class="field">
+<label for="t2">T2 &mdash; server received <span class="tag">server clock</span></label>
+<input id="t2" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="1700000000.012500000">
+</div>
+<div class="field">
+<label for="t3">T3 &mdash; server sent <span class="tag">server clock</span></label>
+<input id="t3" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="1700000000.012600000">
+</div>
+<div class="field">
+<label for="t4">T4 &mdash; client received <span class="tag">client clock</span></label>
+<input id="t4" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="1700000000.025500000">
+</div>
+</div>
+<p class="hint">Enter each timestamp in seconds with up to 12 decimals. T1 and T4 come from your clock and T2 and T3 from the server's, so any fixed origin works on each side &mdash; Unix time, seconds since 1900, or elapsed seconds &mdash; provided both sides count from the same epoch, since the offset is simply the difference between the two readings.</p>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions">
+<button type="submit">Calculate offset</button>
+</div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"></div>
+<dl class="facts" id="facts"></dl>
+<p class="note">One exchange gives four timestamps: T1 when the client sent the request, T2 when the server received it, T3 when the server sent the reply and T4 when the client received it. RFC 5905 reads them as the offset of the server clock relative to the client clock, theta = &frac12;[(T2 &minus; T1) + (T3 &minus; T4)], and the round-trip delay delta = (T4 &minus; T1) &minus; (T3 &minus; T2). A positive offset means the server clock reads ahead of yours, so adding it to a local reading gives the server's time and the local clock is that far slow. The request and the reply are assumed to take the same time on the wire, so the true offset can sit anywhere within plus or minus half the delay of the estimate; a wider delay means a looser answer. A negative delay is arithmetically possible, as RFC 5905 notes when the two clocks run at different frequencies, but it cannot come from a sound exchange, so the page refuses the figures instead of reporting one. Real NTP daemons take many such samples and filter them rather than trusting a single exchange. Nothing is uploaded, stored or sent anywhere.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* ntp-core:start */
+var NtpCore = (function(){
+  "use strict";
+  var SCALE = BigInt(1000000000000);
+  var ZERO = BigInt(0);
+  var ONE = BigInt(1);
+  var TEN = BigInt(10);
+  var DECIMAL_LIMIT = 12;
+  var MAX_SECONDS = BigInt(1000000000000);
+  var MAX_PS = MAX_SECONDS * SCALE;
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function pow10(count){
+    var value = ONE;
+    for (var index = 0; index < count; index += 1) value = value * TEN;
+    return value;
+  }
+
+  function toPs(text){
+    var negative = false;
+    if (text.charAt(0) === "+") text = text.slice(1);
+    else if (text.charAt(0) === "-"){ negative = true; text = text.slice(1); }
+    var parts = text.split(".");
+    var whole = parts[0] === "" ? "0" : parts[0];
+    var fraction = parts.length > 1 ? parts[1] : "";
+    var value = BigInt(whole) * SCALE + BigInt((fraction + "000000000000").slice(0, DECIMAL_LIMIT));
+    if (fraction.length > DECIMAL_LIMIT && fraction.charAt(DECIMAL_LIMIT) >= "5") value = value + ONE;
+    return negative ? -value : value;
+  }
+
+  function parse(raw, code, what){
+    var text = String(raw == null ? "" : raw).trim().replace(/,/g, ".");
+    if (text === "") fail("Enter " + code + ", " + what + ".");
+    if (!/^[+-]?\d+(\.\d+)?$/.test(text)) fail(code + " must be a number of seconds.");
+    var value = toPs(text);
+    if (value < ZERO || value > MAX_PS){
+      fail(code + " must be between 0 and 1,000,000,000,000 seconds.");
+    }
+    return value;
+  }
+
+  function formatPs(value, decimals){
+    var places = decimals === undefined ? 9 : decimals;
+    if (places > DECIMAL_LIMIT) places = DECIMAL_LIMIT;
+    if (places < 0) places = 0;
+    var negative = value < ZERO;
+    var magnitude = negative ? -value : value;
+    var divisor = pow10(DECIMAL_LIMIT - places);
+    var units = magnitude / divisor;
+    var remainder = magnitude % divisor;
+    if (remainder * BigInt(2) >= divisor) units = units + ONE;
+    var unitScale = pow10(places);
+    var whole = units / unitScale;
+    var fraction = units % unitScale;
+    var tail = fraction.toString();
+    while (tail.length < places) tail = "0" + tail;
+    var sign = negative && (units !== ZERO) ? "-" : "";
+    return sign + whole.toString() + (places > 0 ? "." + tail : "");
+  }
+
+  function compute(input){
+    input = input || {};
+    var t1 = parse(input.t1, "T1", "the time the request was sent");
+    var t2 = parse(input.t2, "T2", "the time the server received it");
+    var t3 = parse(input.t3, "T3", "the time the server sent the reply");
+    var t4 = parse(input.t4, "T4", "the time the reply arrived");
+    if (t4 < t1) fail("T4 cannot be earlier than T1: the reply cannot arrive before the request was sent.");
+    if (t3 < t2) fail("T3 cannot be earlier than T2: the server cannot send the reply before it received the request.");
+    var roundTrip = t4 - t1;
+    var dwell = t3 - t2;
+    var delay = roundTrip - dwell;
+    if (delay < ZERO){
+      fail("The round-trip delay works out negative, so these four timestamps cannot come from one exchange. Check that T1 and T4 are from your clock and T2 and T3 from the server's.");
+    }
+    var doubled = (t2 - t1) + (t3 - t4);
+    var offset = doubled / BigInt(2);
+    var oneWay = delay / BigInt(2);
+    return {
+      t1Ps: t1,
+      t2Ps: t2,
+      t3Ps: t3,
+      t4Ps: t4,
+      roundTripPs: roundTrip,
+      dwellPs: dwell,
+      offsetPs: offset,
+      delayPs: delay,
+      oneWayPs: oneWay,
+      serverAtT4Ps: t4 + offset,
+      offset: Number(offset) / 1e12,
+      delay: Number(delay) / 1e12,
+      oneWay: Number(oneWay) / 1e12,
+      dwell: Number(dwell) / 1e12,
+      ahead: offset > ZERO
+    };
+  }
+
+  return {
+    SCALE: SCALE,
+    DECIMAL_LIMIT: DECIMAL_LIMIT,
+    MAX_SECONDS: MAX_SECONDS,
+    parse: parse,
+    formatPs: formatPs,
+    compute: compute
+  };
+})();
+/* ntp-core:end */
+(function(){
+  "use strict";
+  var C = NtpCore;
+  var els = {
+    form: document.getElementById("ntp-form"),
+    t1: document.getElementById("t1"),
+    t2: document.getElementById("t2"),
+    t3: document.getElementById("t3"),
+    t4: document.getElementById("t4"),
+    err: document.getElementById("err"),
+    out: document.getElementById("out"),
+    facts: document.getElementById("facts")
+  };
+
+  function block(className, text){
+    var node = document.createElement("div");
+    node.className = className;
+    node.textContent = text;
+    return node;
+  }
+
+  function trim(value, places){
+    return String(Number(value.toFixed(places)));
+  }
+
+  function unitText(seconds){
+    var magnitude = Math.abs(seconds);
+    if (magnitude >= 1) return trim(magnitude, 6) + " s";
+    if (magnitude >= 0.001) return trim(magnitude * 1000, 4) + " ms";
+    if (magnitude >= 0.000001) return trim(magnitude * 1000000, 3) + " \u00b5s";
+    return trim(magnitude * 1000000000, 1) + " ns";
+  }
+
+  function offsetText(seconds){
+    if (seconds === 0) return "0 s";
+    return (seconds > 0 ? "+" : "\u2212") + unitText(seconds);
+  }
+
+  function clearFacts(){
+    els.facts.textContent = "";
+  }
+
+  function addFact(term, value){
+    var dt = document.createElement("dt");
+    dt.textContent = term;
+    var dd = document.createElement("dd");
+    dd.textContent = value;
+    els.facts.appendChild(dt);
+    els.facts.appendChild(dd);
+  }
+
+  function showPlaceholder(message){
+    els.out.textContent = "";
+    var node = block("sub", message);
+    node.style.padding = "18px 0 6px";
+    els.out.appendChild(node);
+    clearFacts();
+  }
+
+  function render(result){
+    els.out.textContent = "";
+    var ahead = result.offsetPs > BigInt(0);
+    var behind = result.offsetPs < BigInt(0);
+    els.out.appendChild(block("label", "Clock offset (server \u2212 client)"));
+    els.out.appendChild(block("big", offsetText(result.offset)));
+    var direction = ahead
+      ? "The server clock reads " + unitText(result.offset) + " ahead of yours, so the local clock is that far slow: add the offset to a local reading to get the server's time."
+      : behind
+        ? "The server clock reads " + unitText(result.offset) + " behind yours, so the local clock is that far fast: add the offset, which is negative, to a local reading to get the server's time."
+        : "The two clocks read the same time to the precision of this exchange.";
+    els.out.appendChild(block("sub", direction));
+    clearFacts();
+    addFact("Round-trip delay", unitText(result.delay));
+    addFact("One-way estimate (delay \u00f7 2)", unitText(result.oneWay));
+    addFact("True offset lies within", "\u00b1" + unitText(result.oneWay));
+    addFact("Server clock at T4", C.formatPs(result.serverAtT4Ps, 6));
+    addFact("Server held the request (T3 \u2212 T2)", unitText(result.dwell));
+    addFact("Offset (seconds, 9 decimals)", C.formatPs(result.offsetPs, 9));
+  }
+
+  function show(announce){
+    els.err.textContent = "";
+    try {
+      render(C.compute({
+        t1: els.t1.value,
+        t2: els.t2.value,
+        t3: els.t3.value,
+        t4: els.t4.value
+      }));
+    } catch (error){
+      if (announce) els.err.textContent = error && error.message ? error.message : String(error);
+      showPlaceholder("Enter the four exchange timestamps to see the clock offset.");
+    }
+  }
+
+  els.form.addEventListener("submit", function(event){
+    event.preventDefault();
+    show(true);
+  });
+  [els.t1, els.t2, els.t3, els.t4].forEach(function(node){
+    node.addEventListener("input", function(){ show(false); });
+  });
+
+  show(false);
+})();
+</script>
+</body>
+</html>
