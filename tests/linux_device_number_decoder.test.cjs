@@ -196,7 +196,7 @@ assert.equal(record.sources.length, 4, 'sources are cited');
 for (const source of record.sources) assert.match(source.url, /^https:\/\//);
 assert.ok(record.sources.some((source) => source.title.includes('devices.txt')));
 assert.ok(record.sources.some((source) => source.title.includes('makedev')));
-assert.equal(catalog.tools.filter((tool) => tool.category === 'System').length, 47, 'System count');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'System').length, 48, 'System count');
 assert.equal(catalog.tools.filter((tool) => tool.slug === slug).length, 1, 'one record');
 assert.equal(catalog.tools.filter((tool) => tool.name === record.name).length, 1, 'one name');
 assert.equal(catalog.tools.filter((tool) => (tool.tags || []).includes('makedev')).length, 1, 'one makedev tag');

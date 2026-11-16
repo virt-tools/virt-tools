@@ -207332,6 +207332,325 @@
         }
       ],
       "listed": true
+    },
+    {
+      "slug": "systemd-mount-unit-builder",
+      "name": "systemd Mount Unit Builder",
+      "description": "Build a systemd .mount unit and an optional matching .automount unit from a mount point, source and options, with unit-name escaping, validation, previews and downloads. Runs locally.",
+      "category": "System",
+      "legacyCategory": null,
+      "subcategory": "Generation",
+      "tags": [
+        "systemd",
+        "mount unit",
+        "automount",
+        "mount point",
+        "linux",
+        "storage"
+      ],
+      "aliases": [
+        "systemd Automount Unit Builder",
+        "systemd Mount Generator",
+        "systemd .mount File Builder"
+      ],
+      "icon": "💾",
+      "added": "2026-11-16T06:30:00Z",
+      "risk": "low",
+      "maturity": "draft",
+      "reviewedAt": null,
+      "method": "Builds a .mount unit from a mount point, a What= source, an optional file system type and a comma-separated option list, and can add the matching .automount unit for on-demand mounting. The unit file name is escaped from the mount point exactly as systemd escapes it: A-Z, a-z, 0-9, ':', '_' and '.' are kept (a leading dot is written \\x2e), every slash becomes '-', and every other character becomes one \\xHH escape per UTF-8 byte, so /mnt/My Backup becomes mnt-My\\x20Backup.mount. Duplicate and trailing slashes and '.' components are normalized away, '..' is refused instead of simplified, the root path is refused because the root filesystem is mounted before systemd starts, and a name longer than the 255 characters systemd allows is refused. What= accepts an absolute device or image path, UUID=/LABEL=/PARTUUID=/PARTLABEL=/ID= identifiers, a host:/export specification for network file systems, or tmpfs, and refuses spaces, backslashes and percent signs. Options= tokens accept letters, digits and _ . : = + @ / - only; empty tokens, embedded spaces, duplicates and x-systemd. options are refused, the last because systemd-fstab-generator reads those only from /etc/fstab and silently ignores them in a unit file. Type= may be left empty to rely on detection. The builder emits [Unit], [Mount] and - unless an automount unit is requested - [Install] WantedBy= on the chosen target; the automount unit carries [Automount] Where=, an optional TimeoutIdleSec= and the [Install] section, while the .mount it activates deliberately has none, and the install command enables whichever unit was generated. Warnings name the automatic ordering of network mounts (after network-online.target, before remote-fs.target), of tmpfs mounts (after swap.target) and the effect of nofail, which stops the mount from being ordered before local-fs.target. The tool does not verify that the source device exists, that the mount point is empty, or that the file system type is right, and it never runs mount, umount or systemctl.",
+      "sources": [
+        {
+          "title": "systemd manual: systemd.mount - mount unit naming, [Mount] directives, implicit and default dependencies, and the x-systemd. options that only /etc/fstab honours",
+          "url": "https://www.freedesktop.org/software/systemd/man/latest/systemd.mount.html"
+        },
+        {
+          "title": "systemd manual: systemd.automount - [Automount] directives, the matching mount unit, TimeoutIdleSec and the limits on nesting",
+          "url": "https://www.freedesktop.org/software/systemd/man/latest/systemd.automount.html"
+        },
+        {
+          "title": "systemd manual: systemd.unit - valid unit name characters, the 255-character limit and the escaping rules for paths",
+          "url": "https://www.freedesktop.org/software/systemd/man/latest/systemd.unit.html"
+        }
+      ],
+      "testCases": [
+        {
+          "name": "default ext4 mount with install section",
+          "kind": "golden",
+          "input": {},
+          "expected": {
+            "mountFilename": "mnt-backup.mount",
+            "automountFilename": null,
+            "where": "/mnt/backup",
+            "installTarget": "multi-user.target",
+            "mountUnit": "[Unit]\nDescription=Backup disk\n\n[Mount]\nWhat=/dev/disk/by-label/backup\nWhere=/mnt/backup\nType=ext4\nOptions=noatime,nodev,nosuid\n\n[Install]\nWantedBy=multi-user.target\n"
+          }
+        },
+        {
+          "name": "automount pair with an idle timeout",
+          "kind": "golden",
+          "input": {
+            "where": "/srv/files",
+            "description": "Shared files",
+            "what": "/dev/sdb1",
+            "type": "xfs",
+            "options": "rw,relatime",
+            "automount": true,
+            "idle": "5min"
+          },
+          "expected": {
+            "mountFilename": "srv-files.mount",
+            "automountFilename": "srv-files.automount",
+            "mountUnit": "[Unit]\nDescription=Shared files\n\n[Mount]\nWhat=/dev/sdb1\nWhere=/srv/files\nType=xfs\nOptions=rw,relatime\n",
+            "automountUnit": "[Unit]\nDescription=Shared files (automount)\n\n[Automount]\nWhere=/srv/files\nTimeoutIdleSec=5min\n\n[Install]\nWantedBy=multi-user.target\n",
+            "installCommand": "sudo systemctl daemon-reload && sudo systemctl enable --now srv-files.automount"
+          }
+        },
+        {
+          "name": "network nfs mount with nofail",
+          "kind": "golden",
+          "input": {
+            "what": "nas.local:/export/media",
+            "where": "/mnt/media",
+            "type": "nfs",
+            "options": "ro,soft,nofail",
+            "installTarget": "local-fs.target"
+          },
+          "expected": {
+            "mountFilename": "mnt-media.mount",
+            "network": true,
+            "mountUnit": "[Unit]\nDescription=Backup disk\n\n[Mount]\nWhat=nas.local:/export/media\nWhere=/mnt/media\nType=nfs\nOptions=ro,soft,nofail\n\n[Install]\nWantedBy=local-fs.target\n",
+            "warningsContain": [
+              "network mount",
+              "nofail"
+            ]
+          }
+        },
+        {
+          "name": "uuid source with automatic type detection",
+          "kind": "golden",
+          "input": {
+            "what": "UUID=0f3c9a6e-1b2d-4e5f-8a9b-0c1d2e3f4a5b",
+            "type": "",
+            "options": ""
+          },
+          "expected": {
+            "mountUnit": "[Unit]\nDescription=Backup disk\n\n[Mount]\nWhat=UUID=0f3c9a6e-1b2d-4e5f-8a9b-0c1d2e3f4a5b\nWhere=/mnt/backup\n\n[Install]\nWantedBy=multi-user.target\n",
+            "warningsContain": [
+              "auto-detected"
+            ]
+          }
+        },
+        {
+          "name": "tmpfs with size and mode options",
+          "kind": "golden",
+          "input": {
+            "where": "/run/build",
+            "what": "tmpfs",
+            "type": "tmpfs",
+            "options": "size=2G,mode=1777"
+          },
+          "expected": {
+            "mountFilename": "run-build.mount",
+            "mountUnit": "[Unit]\nDescription=Backup disk\n\n[Mount]\nWhat=tmpfs\nWhere=/run/build\nType=tmpfs\nOptions=size=2G,mode=1777\n\n[Install]\nWantedBy=multi-user.target\n",
+            "warningsContain": [
+              "swap.target"
+            ]
+          }
+        },
+        {
+          "name": "space in the mount point is escaped in the file name",
+          "kind": "golden",
+          "input": {
+            "where": "/mnt/My Backup",
+            "description": "Work drive",
+            "what": "/dev/disk/by-label/work",
+            "type": "exfat",
+            "options": "noatime",
+            "installTarget": "local-fs.target"
+          },
+          "expected": {
+            "mountFilename": "mnt-My\\x20Backup.mount",
+            "where": "/mnt/My Backup",
+            "mountUnit": "[Unit]\nDescription=Work drive\n\n[Mount]\nWhat=/dev/disk/by-label/work\nWhere=/mnt/My Backup\nType=exfat\nOptions=noatime\n\n[Install]\nWantedBy=local-fs.target\n"
+          }
+        },
+        {
+          "name": "non-ascii mount point escapes one byte per UTF-8 octet",
+          "kind": "golden",
+          "input": {
+            "where": "/mnt/café",
+            "description": "Archive",
+            "what": "/dev/disk/by-label/archive",
+            "type": "btrfs",
+            "options": ""
+          },
+          "expected": {
+            "mountFilename": "mnt-caf\\xc3\\xa9.mount",
+            "unitBase": "mnt-caf\\xc3\\xa9",
+            "mountUnit": "[Unit]\nDescription=Archive\n\n[Mount]\nWhat=/dev/disk/by-label/archive\nWhere=/mnt/café\nType=btrfs\n\n[Install]\nWantedBy=multi-user.target\n"
+          }
+        },
+        {
+          "name": "idle timeout of zero is emitted instead of the default",
+          "kind": "boundary",
+          "input": {
+            "automount": true,
+            "idle": "0"
+          },
+          "expected": {
+            "automountFilename": "mnt-backup.automount",
+            "automountUnitContains": [
+              "TimeoutIdleSec=0\n"
+            ]
+          }
+        },
+        {
+          "name": "unit name may be exactly 255 characters",
+          "kind": "boundary",
+          "input": {
+            "where": "/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "expected": {
+            "mountFilename": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.mount",
+            "nameLength": 255
+          }
+        },
+        {
+          "name": "duplicate and trailing slashes normalize to one path",
+          "kind": "boundary",
+          "input": {
+            "where": "//mnt//backup///"
+          },
+          "expected": {
+            "where": "/mnt/backup",
+            "mountFilename": "mnt-backup.mount",
+            "mountUnit": "[Unit]\nDescription=Backup disk\n\n[Mount]\nWhat=/dev/disk/by-label/backup\nWhere=/mnt/backup\nType=ext4\nOptions=noatime,nodev,nosuid\n\n[Install]\nWantedBy=multi-user.target\n"
+          }
+        },
+        {
+          "name": "empty mount point",
+          "kind": "validation",
+          "input": {
+            "where": "   "
+          },
+          "error": "Enter the mount point, for example /mnt/backup."
+        },
+        {
+          "name": "relative mount point",
+          "kind": "validation",
+          "input": {
+            "where": "mnt/backup"
+          },
+          "error": "The mount point must be an absolute path starting with /."
+        },
+        {
+          "name": "parent component in the mount point",
+          "kind": "validation",
+          "input": {
+            "where": "/mnt/../etc"
+          },
+          "error": "The mount point cannot contain .. components: use the already-normalized path."
+        },
+        {
+          "name": "root mount point",
+          "kind": "validation",
+          "input": {
+            "where": "/"
+          },
+          "error": "The root filesystem is mounted before systemd starts; choose a mount point below /."
+        },
+        {
+          "name": "backslash in the mount point",
+          "kind": "validation",
+          "input": {
+            "where": "C:\\data"
+          },
+          "error": "The mount point cannot contain backslashes."
+        },
+        {
+          "name": "percent in the mount point",
+          "kind": "validation",
+          "input": {
+            "where": "/mnt/100%"
+          },
+          "error": "The mount point cannot contain %: systemd expands percent specifiers in unit files."
+        },
+        {
+          "name": "source that is not mountable",
+          "kind": "validation",
+          "input": {
+            "what": "backup"
+          },
+          "error": "That does not look mountable: use an absolute device path, UUID=, LABEL=, PARTUUID=, a host:/export spec, or tmpfs."
+        },
+        {
+          "name": "space in the source",
+          "kind": "validation",
+          "input": {
+            "what": "/dev/sdb1 extra"
+          },
+          "error": "What to mount cannot contain spaces: mount options belong in the options field."
+        },
+        {
+          "name": "fstab-only option in a unit file",
+          "kind": "validation",
+          "input": {
+            "options": "noatime,x-systemd.automount"
+          },
+          "error": "x-systemd. options are read only from /etc/fstab; systemd ignores them in a unit file."
+        },
+        {
+          "name": "repeated mount option",
+          "kind": "validation",
+          "input": {
+            "options": "ro,ro"
+          },
+          "error": "Mount option “ro” is repeated."
+        },
+        {
+          "name": "empty mount option",
+          "kind": "validation",
+          "input": {
+            "options": "ro,,noatime"
+          },
+          "error": "Remove the empty mount option: use single commas between options."
+        },
+        {
+          "name": "malformed file system type",
+          "kind": "validation",
+          "input": {
+            "type": "Ext 4"
+          },
+          "error": "Use a file system type such as ext4, xfs, vfat or nfs, or leave it empty for automatic detection."
+        },
+        {
+          "name": "malformed idle timeout",
+          "kind": "validation",
+          "input": {
+            "automount": true,
+            "idle": "5fortnights"
+          },
+          "error": "Idle timeout must be empty, 0, or a duration such as 90s or 5min."
+        },
+        {
+          "name": "unsupported install target",
+          "kind": "validation",
+          "input": {
+            "installTarget": "basic.target"
+          },
+          "error": "Choose multi-user.target or local-fs.target for the install target."
+        },
+        {
+          "name": "unit name longer than 255 characters",
+          "kind": "validation",
+          "input": {
+            "where": "/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "error": "The mount point is too long: its unit name would exceed the 255-character limit."
+        }
+      ],
+      "listed": true
     }
   ]
 }
