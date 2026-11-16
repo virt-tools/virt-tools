@@ -366,6 +366,7 @@ node tests/leather_belt_sizing_calculator.test.cjs
 node tests/sms_7_bit_packing.test.cjs
 node tests/cheese_yield_calculator.test.cjs
 node tests/ntp_offset_calculator.test.cjs
+node tests/fiber_trunk_sizing_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
