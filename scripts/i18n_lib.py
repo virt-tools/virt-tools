@@ -570,7 +570,7 @@ def translate_markup_literal(value: str, mapping: dict, applied: set[str]) -> st
             continue
         lead = part[: len(part) - len(part.lstrip())]
         trail = part[len(part.rstrip()):]
-        unit = html_module.unescape(norm_ws(part))
+        unit = norm_ws(html_module.unescape(part))
         if unit and unit in mapping:
             applied.add(unit)
             changed = True
