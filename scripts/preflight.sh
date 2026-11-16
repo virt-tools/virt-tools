@@ -319,6 +319,7 @@ node tests/wood_movement_calculator.test.cjs
 node tests/data_center_pue_calculator.test.cjs
 node tests/azimuthal_equidistant_projection.test.cjs
 node tests/drumhead_tuning_calculator.test.cjs
+node tests/dcp_delivery_planner.test.cjs
 node tests/lampshade_fabric_calculator.test.cjs
 node tests/rj45_pinout_checker.test.cjs
 node tests/os_grid_reference_converter.test.cjs
