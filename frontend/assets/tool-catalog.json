@@ -209967,6 +209967,382 @@
         }
       ],
       "listed": true
+    },
+    {
+      "slug": "intel-hex-inspector",
+      "name": "Intel HEX Inspector",
+      "description": "Check an Intel HEX file record by record: verify every checksum, resolve linear and segment addresses, and report the byte count, address range, gaps, overlaps and entry point.",
+      "category": "Encoding",
+      "legacyCategory": null,
+      "subcategory": "Analysis & validation",
+      "tags": [
+        "encoding",
+        "firmware",
+        "file-format",
+        "analysis-validation"
+      ],
+      "aliases": [
+        "Intel HEX Validator",
+        "IHEX Checker",
+        "Intel HEX Parser",
+        "Intel HEX Checksum Checker",
+        "HEX File Inspector"
+      ],
+      "icon": "🧾",
+      "added": "2026-11-16T10:52:00Z",
+      "risk": "low",
+      "maturity": "draft",
+      "reviewedAt": null,
+      "method": "Intel HEX is a text encoding of a memory image: one record per line, each a colon followed by the byte count, a 16-bit load offset, a record type, the data bytes and a checksum, with every field written as pairs of hexadecimal digits. The checksum is the two's complement of the bytes from the byte count to the last data byte, so a correct record sums to zero over its whole binary form. This page splits the text on line breaks, ignores blank lines, and checks each line in turn: the colon, hexadecimal digits only, an even digit count, at least a 10-digit header and checksum, a record length that matches the byte count, and a checksum that makes the record sum to zero. A record that fails a structural check is reported with its line number and left out of the image rather than guessed at. Type 00 records carry data, 01 ends the file and must be the empty :00000001FF, 02 sets the upper bits of a segment base by shifting its two big-endian bytes left four places, 03 sets a start address as a CS:IP pair, 04 sets the upper 16 bits of a 32-bit base and 05 a 32-bit start address; a type 2, 3, 4 or 5 record must carry exactly 2, 4, 2 or 4 data bytes, and any other type is reported as undefined. Each data byte lands at the current base plus the load offset plus its index, wrapped modulo 4 GiB in linear addressing and modulo 64 KiB inside the segment from a type 02 base, which is the difference the specification draws between the two modes. The page counts distinct addresses, so a byte written twice is reported as an overlapping byte rather than counted twice, sorts the addresses to count contiguous blocks, the bytes in the gaps between them and the largest gap, and reports the lowest and highest address, the record and data-byte counts, the end-of-file records and the entry point with the record type that supplied it. A missing end-of-file record, more than one, data after it, an empty data record and a file with no data records are reported too. Input beyond 1,000,000 characters or 50,000 records is refused with the limit named. Everything is parsed in the browser; nothing is uploaded, stored or sent anywhere.",
+      "sources": [
+        {
+          "title": "Intel Hexadecimal Object File Format Specification, Revision A (1/6/88): record layout, checksum, the six record types and the linear/segmented address rules, as reproduced in the srec_intel(5) manual page",
+          "url": "https://manpages.debian.org/bookworm/srecord/srec_intel.5.en.html"
+        },
+        {
+          "title": "Wikipedia: Intel HEX (record structure, the I8HEX/I16HEX/I32HEX naming and the published example record used as a test vector)",
+          "url": "https://en.wikipedia.org/wiki/Intel_HEX"
+        }
+      ],
+      "testCases": [
+        {
+          "name": "A 32-bit image behind an extended linear address",
+          "kind": "golden",
+          "input": {
+            "text": ":020000040800F2\n:10000000000102030405060708090A0B0C0D0E0F78\n:10001000101112131415161718191A1B1C1D1E1F68\n:0400000508000000EF\n:00000001FF\n"
+          },
+          "expected": {
+            "records": 5,
+            "dataRecords": 2,
+            "dataBytes": 32,
+            "uniqueBytes": 32,
+            "overlapBytes": 0,
+            "segments": 1,
+            "holes": 0,
+            "largestGap": 0,
+            "addressStart": "0x08000000",
+            "addressEnd": "0x0800001F",
+            "entryPoint": "0x08000000",
+            "eofRecords": 1,
+            "valid": true
+          }
+        },
+        {
+          "name": "Two adjacent records form one contiguous block",
+          "kind": "golden",
+          "input": {
+            "text": ":0400000000010203F6\n:0400040004050607E2\n:00000001FF\n"
+          },
+          "expected": {
+            "records": 3,
+            "dataRecords": 2,
+            "dataBytes": 8,
+            "uniqueBytes": 8,
+            "overlapBytes": 0,
+            "segments": 1,
+            "holes": 0,
+            "largestGap": 0,
+            "addressStart": "0x0000",
+            "addressEnd": "0x0007",
+            "entryPoint": null,
+            "eofRecords": 1,
+            "valid": true
+          }
+        },
+        {
+          "name": "A gap between two blocks is reported",
+          "kind": "golden",
+          "input": {
+            "text": ":04000000AABBCCDDEE\n:040010001122334442\n:00000001FF\n"
+          },
+          "expected": {
+            "records": 3,
+            "dataRecords": 2,
+            "dataBytes": 8,
+            "uniqueBytes": 8,
+            "overlapBytes": 0,
+            "segments": 2,
+            "holes": 12,
+            "largestGap": 12,
+            "addressStart": "0x0000",
+            "addressEnd": "0x0013",
+            "entryPoint": null,
+            "eofRecords": 1,
+            "valid": true
+          }
+        },
+        {
+          "name": "Segmented addressing wraps inside the 64 KiB segment",
+          "kind": "golden",
+          "input": {
+            "text": ":020000021000EC\n:10FFF800000102030405060708090A0B0C0D0E0F81\n:00000001FF\n"
+          },
+          "expected": {
+            "records": 3,
+            "dataRecords": 1,
+            "dataBytes": 16,
+            "uniqueBytes": 16,
+            "overlapBytes": 0,
+            "segments": 2,
+            "holes": 65520,
+            "largestGap": 65520,
+            "addressStart": "0x00010000",
+            "addressEnd": "0x0001FFFF",
+            "entryPoint": null,
+            "eofRecords": 1,
+            "valid": true
+          }
+        },
+        {
+          "name": "An overlapping write is counted once",
+          "kind": "golden",
+          "input": {
+            "text": ":0400000001020304F2\n:0400020009090909D6\n:00000001FF\n"
+          },
+          "expected": {
+            "records": 3,
+            "dataRecords": 2,
+            "dataBytes": 8,
+            "uniqueBytes": 6,
+            "overlapBytes": 2,
+            "segments": 1,
+            "holes": 0,
+            "largestGap": 0,
+            "addressStart": "0x0000",
+            "addressEnd": "0x0005",
+            "entryPoint": null,
+            "eofRecords": 1,
+            "valid": true
+          }
+        },
+        {
+          "name": "A start segment address record gives the entry point",
+          "kind": "golden",
+          "input": {
+            "text": ":020000001122CB\n:0400000312345678E5\n:00000001FF\n"
+          },
+          "expected": {
+            "records": 3,
+            "dataRecords": 1,
+            "dataBytes": 2,
+            "uniqueBytes": 2,
+            "overlapBytes": 0,
+            "segments": 1,
+            "holes": 0,
+            "largestGap": 0,
+            "addressStart": "0x0000",
+            "addressEnd": "0x0001",
+            "entryPoint": "0x000179B8",
+            "eofRecords": 1,
+            "valid": true
+          }
+        },
+        {
+          "name": "The published Wikipedia data record",
+          "kind": "golden",
+          "input": {
+            "text": ":0B0010006164647265737320676170A7\n:00000001FF\n"
+          },
+          "expected": {
+            "records": 2,
+            "dataRecords": 1,
+            "dataBytes": 11,
+            "uniqueBytes": 11,
+            "overlapBytes": 0,
+            "segments": 1,
+            "holes": 0,
+            "largestGap": 0,
+            "addressStart": "0x0010",
+            "addressEnd": "0x001A",
+            "entryPoint": null,
+            "eofRecords": 1,
+            "valid": true
+          }
+        },
+        {
+          "name": "Blank lines are ignored",
+          "kind": "golden",
+          "input": {
+            "text": "\n\n:020000001122CB\n:00000001FF\n\n"
+          },
+          "expected": {
+            "records": 2,
+            "dataRecords": 1,
+            "dataBytes": 2,
+            "uniqueBytes": 2,
+            "overlapBytes": 0,
+            "segments": 1,
+            "holes": 0,
+            "largestGap": 0,
+            "addressStart": "0x0000",
+            "addressEnd": "0x0001",
+            "entryPoint": null,
+            "eofRecords": 1,
+            "valid": true
+          }
+        },
+        {
+          "name": "A base at the top of the 32-bit space wraps to zero",
+          "kind": "boundary",
+          "input": {
+            "text": ":02000004FFFFFC\n:10FFF800000102030405060708090A0B0C0D0E0F81\n:00000001FF\n"
+          },
+          "expected": {
+            "records": 3,
+            "dataRecords": 1,
+            "dataBytes": 16,
+            "uniqueBytes": 16,
+            "overlapBytes": 0,
+            "segments": 2,
+            "holes": 4294967280,
+            "largestGap": 4294967280,
+            "addressStart": "0x0000",
+            "addressEnd": "0xFFFFFFFF",
+            "entryPoint": null,
+            "eofRecords": 1,
+            "valid": true
+          }
+        },
+        {
+          "name": "The smallest possible data record",
+          "kind": "boundary",
+          "input": {
+            "text": ":010000007F80\n:00000001FF\n"
+          },
+          "expected": {
+            "records": 2,
+            "dataRecords": 1,
+            "dataBytes": 1,
+            "uniqueBytes": 1,
+            "overlapBytes": 0,
+            "segments": 1,
+            "holes": 0,
+            "largestGap": 0,
+            "addressStart": "0x0000",
+            "addressEnd": "0x0000",
+            "entryPoint": null,
+            "eofRecords": 1,
+            "valid": true
+          }
+        },
+        {
+          "name": "A full 255-byte data record",
+          "kind": "boundary",
+          "input": {
+            "text": ":FF000000000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F202122232425262728292A2B2C2D2E2F303132333435363738393A3B3C3D3E3F404142434445464748494A4B4C4D4E4F505152535455565758595A5B5C5D5E5F606162636465666768696A6B6C6D6E6F707172737475767778797A7B7C7D7E7F808182838485868788898A8B8C8D8E8F909192939495969798999A9B9C9D9E9FA0A1A2A3A4A5A6A7A8A9AAABACADAEAFB0B1B2B3B4B5B6B7B8B9BABBBCBDBEBFC0C1C2C3C4C5C6C7C8C9CACBCCCDCECFD0D1D2D3D4D5D6D7D8D9DADBDCDDDEDFE0E1E2E3E4E5E6E7E8E9EAEBECEDEEEFF0F1F2F3F4F5F6F7F8F9FAFBFCFDFE80\n:00000001FF\n"
+          },
+          "expected": {
+            "records": 2,
+            "dataRecords": 1,
+            "dataBytes": 255,
+            "uniqueBytes": 255,
+            "overlapBytes": 0,
+            "segments": 1,
+            "holes": 0,
+            "largestGap": 0,
+            "addressStart": "0x0000",
+            "addressEnd": "0x00FE",
+            "entryPoint": null,
+            "eofRecords": 1,
+            "valid": true
+          }
+        },
+        {
+          "name": "A checksum that does not add up",
+          "kind": "validation",
+          "input": {
+            "text": ":040000001122334400\n:00000001FF\n"
+          },
+          "expected": {
+            "valid": false,
+            "errorCount": 2,
+            "errorLines": [
+              1,
+              null
+            ],
+            "dataBytes": 0
+          }
+        },
+        {
+          "name": "A file without an end-of-file record",
+          "kind": "validation",
+          "input": {
+            "text": ":040000001122334452\n"
+          },
+          "expected": {
+            "valid": false,
+            "errorCount": 1,
+            "errorLines": [
+              null
+            ],
+            "dataBytes": 4
+          }
+        },
+        {
+          "name": "Data after the end-of-file record",
+          "kind": "validation",
+          "input": {
+            "text": ":020000001122CB\n:00000001FF\n:0100100033BC\n"
+          },
+          "expected": {
+            "valid": false,
+            "errorCount": 1,
+            "errorLines": [
+              3
+            ],
+            "dataBytes": 3
+          }
+        },
+        {
+          "name": "A record type the format does not define",
+          "kind": "validation",
+          "input": {
+            "text": ":020000060102F5\n:0100000011EE\n:00000001FF\n"
+          },
+          "expected": {
+            "valid": false,
+            "errorCount": 1,
+            "errorLines": [
+              1
+            ],
+            "dataBytes": 1
+          }
+        },
+        {
+          "name": "A line that does not start with a colon",
+          "kind": "validation",
+          "input": {
+            "text": "10000011223344BB\n:00000001FF\n"
+          },
+          "expected": {
+            "valid": false,
+            "errorCount": 2,
+            "errorLines": [
+              1,
+              null
+            ],
+            "dataBytes": 0
+          }
+        },
+        {
+          "name": "An end-of-file record carrying a payload",
+          "kind": "validation",
+          "input": {
+            "text": ":01000001AA54\n"
+          },
+          "expected": {
+            "valid": false,
+            "errorCount": 3,
+            "errorLines": [
+              1,
+              null,
+              null
+            ],
+            "dataBytes": 0
+          }
+        }
+      ],
+      "listed": true
     }
   ]
 }

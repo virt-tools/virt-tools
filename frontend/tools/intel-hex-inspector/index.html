@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Intel HEX Inspector &mdash; Virtual Tools</title>
+<meta name="description" content="Check an Intel HEX file record by record: every checksum is verified, linear and segment addresses are resolved, and the result reports the byte count, address range, gaps and entry point.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.field{display:flex;flex-direction:column;gap:6px;margin:0;min-width:0}
+.field label{font-size:13px;color:var(--text-dim,#9aa3b2)}
+.field textarea{box-sizing:border-box;width:100%;min-height:170px;padding:10px 12px;border-radius:8px;
+  border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);color:var(--text,#e6e6e6);
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;line-height:1.45;resize:vertical;
+  outline:none;overflow-wrap:anywhere;white-space:pre-wrap;tab-size:4}
+.field textarea:focus,.field textarea:focus-visible{outline:2px solid var(--accent,#6ea8fe);outline-offset:1px}
+.field textarea::placeholder{color:var(--text-dim,#9aa3b2)}
+.hint{font-size:.82rem;line-height:1.4;margin:10px 0 0;color:var(--text-dim,#9aa3b2)}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0 0}
+.actions button{font:inherit;font-size:13.5px;font-weight:600;padding:10px 22px;border-radius:8px;
+  border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:var(--on-accent,#0b1017);
+  cursor:pointer;min-height:44px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus,.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.actions button.ghost{background:transparent;color:var(--accent,#6ea8fe)}
+.err{color:var(--bad,#f87171);font-size:13px;margin:10px 0 0;min-height:1.2em}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:16px 0 0}
+.out .label{text-align:center;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-dim,#9aa3b2)}
+.out .big{font-size:clamp(1.3rem,6vw,1.9rem);font-weight:800;text-align:center;padding:2px 0 4px;line-height:1.3;overflow-wrap:anywhere}
+.out .big.bad{color:var(--bad,#f87171)}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:4px 0 0;line-height:1.45;overflow-wrap:anywhere}
+.rows{margin:16px 0 0;display:flex;flex-direction:column;gap:8px}
+.rows .row{display:flex;justify-content:space-between;align-items:baseline;gap:14px;border-top:1px solid var(--border,#2a2f3a);padding:8px 0 0}
+.rows .k{font-size:13px;color:var(--text-dim,#9aa3b2)}
+.rows .v{font-family:ui-monospace,monospace;font-size:14px;text-align:right;overflow-wrap:anywhere}
+.problems{margin:18px 0 0}
+.problems h2{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim,#9aa3b2);margin:0 0 8px}
+.problems ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.problems li{font-size:13.5px;line-height:1.45;border-left:2px solid var(--bad,#f87171);padding:2px 0 2px 10px;overflow-wrap:anywhere}
+.problems li .where{font-family:ui-monospace,monospace;color:var(--text-dim,#9aa3b2);margin-right:6px}
+.note{font-size:.88rem;line-height:1.55;color:var(--text-dim,#9aa3b2);margin:16px 0 0}
+.note code{font-family:ui-monospace,monospace;font-size:.92em}
+[hidden]{display:none !important}
+@media (max-width:560px){
+  .actions button{flex:1 1 auto}
+  .rows .row{flex-direction:column;align-items:flex-start;gap:2px}
+  .rows .v{text-align:left}
+}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<h1>Intel HEX Inspector</h1>
+<p>Paste an Intel HEX file and check it record by record: checksums, addresses, gaps, overlaps and the entry point.</p>
+</div>
+<div class="panel">
+<form id="hex-form" novalidate>
+<div class="field">
+<label for="hex-text">Intel HEX records</label>
+<textarea id="hex-text" name="hex" rows="8" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder=":10010000214601360121470136007EFE09D2190140&#10;:00000001FF"></textarea>
+</div>
+<p class="hint">One record per line, starting with a colon. Blank lines are ignored; comments are not part of the format.</p>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions">
+<button type="submit">Inspect</button>
+<button type="button" class="ghost" id="example">Load example</button>
+<button type="button" class="ghost" id="clear">Clear</button>
+</div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"></div>
+<p class="note">Each line is a record: <code>:LLAAAATT</code> data <code>CC</code>, where <code>LL</code> is the number of data bytes, <code>AAAA</code> the load offset, <code>TT</code> the record type and <code>CC</code> the checksum &mdash; the two's complement of the bytes from the length field to the last data byte, so a correct record sums to zero. Type <code>00</code> carries data, <code>01</code> ends the file, <code>02</code> sets a 64 KiB segment base, <code>03</code> a start address as CS:IP, <code>04</code> the upper 16 bits of a 32-bit base and <code>05</code> a 32-bit start address. A data record's byte address is the current base plus the load offset, wrapped at 4 GiB in linear addressing and at 64 KiB within the segment in segmented addressing. Everything is checked in your browser; nothing is uploaded or stored.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* intel-hex-core:start */
+var IntelHexCore = (function(){
+  "use strict";
+  var MAX_CHARACTERS = 1000000;
+  var MAX_RECORDS = 50000;
+  var MAX_ERRORS = 200;
+  var LINEAR_LIMIT = 4294967296;
+  var SEGMENT_LIMIT = 65536;
+  var TYPE_NAMES = {
+    0: "data",
+    1: "end of file",
+    2: "extended segment address",
+    3: "start segment address",
+    4: "extended linear address",
+    5: "start linear address"
+  };
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function pad(value, width){
+    var text = value.toString(16).toUpperCase();
+    while (text.length < width) text = "0" + text;
+    return text;
+  }
+
+  function hexValue(value){
+    return "0x" + pad(value, value > 0xFFFF ? 8 : 4);
+  }
+
+  function inspect(input){
+    var source = input === null || input === undefined ? "" : String(input);
+    if (source.length > MAX_CHARACTERS){
+      fail("The text is longer than 1,000,000 characters; inspect a smaller file.");
+    }
+    var lines = source.replace(/\r\n?/g, "\n").split("\n");
+    var errors = [];
+    var errorCount = 0;
+    var errorLines = [];
+    var addresses = new Set();
+    var base = 0;
+    var segmented = false;
+    var records = 0;
+    var dataRecords = 0;
+    var dataBytes = 0;
+    var overlapBytes = 0;
+    var eofRecords = 0;
+    var entryPoint = null;
+    var entryKind = null;
+
+    function problem(line, message){
+      errorCount += 1;
+      errorLines.push(line);
+      if (errors.length < MAX_ERRORS) errors.push({line: line, message: message});
+    }
+
+    for (var index = 0; index < lines.length; index += 1){
+      var lineNumber = index + 1;
+      var raw = lines[index].trim();
+      if (!raw) continue;
+      records += 1;
+      if (records > MAX_RECORDS){
+        fail("The file has more than 50,000 records; inspect a smaller file.");
+      }
+      if (raw.charAt(0) !== ":"){
+        problem(lineNumber, "A record must start with a colon.");
+        continue;
+      }
+      var body = raw.slice(1);
+      if (/[^0-9A-Fa-f]/.test(body)){
+        problem(lineNumber, "The record contains a character that is not a hexadecimal digit.");
+        continue;
+      }
+      if (body.length % 2 !== 0){
+        problem(lineNumber, "The record has an odd number of hexadecimal digits.");
+        continue;
+      }
+      if (body.length < 10){
+        problem(lineNumber, "The record is shorter than the 10 digits a header and checksum need.");
+        continue;
+      }
+      var bytes = [];
+      for (var offset = 0; offset < body.length; offset += 2){
+        bytes.push(parseInt(body.slice(offset, offset + 2), 16));
+      }
+      var count = bytes[0];
+      var needed = count + 5;
+      if (bytes.length !== needed){
+        problem(lineNumber, "The byte count says " + count + " data bytes, so the record needs " +
+          needed + " bytes and it carries " + bytes.length + ".");
+        continue;
+      }
+      var sum = 0;
+      for (var cursor = 0; cursor < bytes.length; cursor += 1) sum = (sum + bytes[cursor]) & 0xFF;
+      if (sum !== 0){
+        var given = bytes[bytes.length - 1];
+        var wanted = (0x100 - ((sum - given) & 0xFF)) & 0xFF;
+        problem(lineNumber, "The checksum is 0x" + pad(given, 2) + " but the record's bytes need 0x" +
+          pad(wanted, 2) + ".");
+        continue;
+      }
+      var loadOffset = (bytes[1] << 8) | bytes[2];
+      var type = bytes[3];
+      var payload = bytes.slice(4, bytes.length - 1);
+      if (type === 0){
+        if (count === 0){
+          problem(lineNumber, "A data record with a byte count of zero carries nothing.");
+          continue;
+        }
+        if (eofRecords > 0) problem(lineNumber, "A data record follows the end-of-file record.");
+        dataRecords += 1;
+        dataBytes += count;
+        for (var step = 0; step < count; step += 1){
+          var address = segmented
+            ? base + ((loadOffset + step) % SEGMENT_LIMIT)
+            : (base + loadOffset + step) % LINEAR_LIMIT;
+          if (addresses.has(address)) overlapBytes += 1;
+          else addresses.add(address);
+        }
+        continue;
+      }
+      if (type === 1){
+        if (count !== 0 || loadOffset !== 0){
+          problem(lineNumber, "An end-of-file record must be :00000001FF.");
+          continue;
+        }
+        if (eofRecords > 0) problem(lineNumber, "The file already ended on an earlier record.");
+        eofRecords += 1;
+        continue;
+      }
+      if (type === 2){
+        if (count !== 2){
+          problem(lineNumber, "An extended segment address record needs exactly 2 data bytes.");
+          continue;
+        }
+        base = ((payload[0] << 8) | payload[1]) << 4;
+        segmented = true;
+        continue;
+      }
+      if (type === 3){
+        if (count !== 4){
+          problem(lineNumber, "A start segment address record needs exactly 4 data bytes.");
+          continue;
+        }
+        entryPoint = (((payload[0] << 8) | payload[1]) * 16) + ((payload[2] << 8) | payload[3]);
+        entryKind = "start segment address (CS:IP)";
+        continue;
+      }
+      if (type === 4){
+        if (count !== 2){
+          problem(lineNumber, "An extended linear address record needs exactly 2 data bytes.");
+          continue;
+        }
+        base = ((payload[0] << 8) | payload[1]) * SEGMENT_LIMIT;
+        segmented = false;
+        continue;
+      }
+      if (type === 5){
+        if (count !== 4){
+          problem(lineNumber, "A start linear address record needs exactly 4 data bytes.");
+          continue;
+        }
+        entryPoint = ((payload[0] * 16777216) + (payload[1] << 16) + (payload[2] << 8) + payload[3]) % LINEAR_LIMIT;
+        entryKind = "start linear address (EIP)";
+        continue;
+      }
+      problem(lineNumber, "Record type " + hexValue(type) + " is not one of the six types the format defines.");
+    }
+
+    if (eofRecords === 0) problem(null, "The file has no end-of-file record (:00000001FF).");
+    if (dataRecords === 0) problem(null, "The file carries no data records.");
+
+    var sorted = Array.from(addresses).sort(function(a, b){ return a - b; });
+    var segments = 0;
+    var holes = 0;
+    var largestGap = 0;
+    for (var at = 0; at < sorted.length; at += 1){
+      if (at === 0 || sorted[at] !== sorted[at - 1] + 1){
+        segments += 1;
+        if (at > 0){
+          var gap = sorted[at] - sorted[at - 1] - 1;
+          holes += gap;
+          if (gap > largestGap) largestGap = gap;
+        }
+      }
+    }
+    var first = sorted.length ? sorted[0] : null;
+    var last = sorted.length ? sorted[sorted.length - 1] : null;
+
+    return {
+      records: records,
+      dataRecords: dataRecords,
+      dataBytes: dataBytes,
+      uniqueBytes: sorted.length,
+      overlapBytes: overlapBytes,
+      segments: segments,
+      holes: holes,
+      largestGap: largestGap,
+      spanBytes: sorted.length ? last - first + 1 : 0,
+      addressStart: first === null ? null : hexValue(first),
+      addressEnd: last === null ? null : hexValue(last),
+      entryPoint: entryPoint === null ? null : hexValue(entryPoint),
+      entryKind: entryKind,
+      eofRecords: eofRecords,
+      errors: errors,
+      errorLines: errorLines,
+      errorCount: errorCount,
+      valid: errorCount === 0
+    };
+  }
+
+  function compute(options){
+    var settings = options || {};
+    var text = settings.text;
+    if (text === null || text === undefined || String(text).trim() === ""){
+      fail("Paste Intel HEX records to inspect.");
+    }
+    return inspect(text);
+  }
+
+  return {
+    MAX_CHARACTERS: MAX_CHARACTERS,
+    MAX_RECORDS: MAX_RECORDS,
+    TYPE_NAMES: TYPE_NAMES,
+    hexValue: hexValue,
+    inspect: inspect,
+    compute: compute
+  };
+})();
+/* intel-hex-core:end */
+(function(){
+  "use strict";
+  var C = IntelHexCore;
+  var EXAMPLE = [
+    ":020000040800F2",
+    ":10000000000102030405060708090A0B0C0D0E0F78",
+    ":10001000101112131415161718191A1B1C1D1E1F68",
+    ":0400000508000000EF",
+    ":00000001FF"
+  ].join("\n");
+  var els = {
+    form: document.getElementById("hex-form"),
+    text: document.getElementById("hex-text"),
+    example: document.getElementById("example"),
+    clear: document.getElementById("clear"),
+    err: document.getElementById("err"),
+    out: document.getElementById("out")
+  };
+
+  function row(key, value){
+    var line = document.createElement("div");
+    line.className = "row";
+    var name = document.createElement("span");
+    name.className = "k";
+    name.textContent = key;
+    var figure = document.createElement("span");
+    figure.className = "v";
+    figure.textContent = value;
+    line.appendChild(name);
+    line.appendChild(figure);
+    return line;
+  }
+
+  function plural(count, one, many){
+    return count + " " + (count === 1 ? one : many);
+  }
+
+  function placeholder(message){
+    els.out.textContent = "";
+    var span = document.createElement("div");
+    span.className = "sub";
+    span.style.padding = "18px 0 6px";
+    span.textContent = message;
+    els.out.appendChild(span);
+  }
+
+  function render(result){
+    els.out.textContent = "";
+    var label = document.createElement("div");
+    label.className = "label";
+    label.textContent = "Result";
+    var big = document.createElement("div");
+    big.className = "big" + (result.valid ? "" : " bad");
+    big.textContent = result.valid ? "Valid image" : plural(result.errorCount, "problem", "problems");
+    var sub = document.createElement("div");
+    sub.className = "sub";
+    if (!result.valid){
+      sub.textContent = "Fix the records listed below and inspect again.";
+    } else if (result.uniqueBytes === 0){
+      sub.textContent = "The records are well formed but carry no data bytes.";
+    } else if (result.segments === 1){
+      sub.textContent = plural(result.uniqueBytes, "byte", "bytes") + " in one block from " +
+        result.addressStart + " to " + result.addressEnd;
+    } else {
+      sub.textContent = plural(result.uniqueBytes, "byte", "bytes") + " in " +
+        plural(result.segments, "block", "blocks") + " from " + result.addressStart + " to " + result.addressEnd;
+    }
+    els.out.appendChild(label);
+    els.out.appendChild(big);
+    els.out.appendChild(sub);
+
+    var rows = document.createElement("div");
+    rows.className = "rows";
+    rows.appendChild(row("Records", String(result.records)));
+    rows.appendChild(row("Data records", String(result.dataRecords)));
+    rows.appendChild(row("Data bytes", String(result.dataBytes)));
+    rows.appendChild(row("Distinct addresses", String(result.uniqueBytes)));
+    rows.appendChild(row("Overlapping bytes", result.overlapBytes ? String(result.overlapBytes) : "none"));
+    rows.appendChild(row("Address range", result.addressStart === null
+      ? "none"
+      : result.addressStart + " to " + result.addressEnd));
+    rows.appendChild(row("Contiguous blocks", String(result.segments)));
+    rows.appendChild(row("Gaps inside the range", result.holes
+      ? plural(result.holes, "byte", "bytes") + " (largest " + result.largestGap + ")"
+      : "none"));
+    rows.appendChild(row("Entry point", result.entryPoint === null
+      ? "none"
+      : result.entryPoint + " (" + result.entryKind + ")"));
+    rows.appendChild(row("End-of-file record", result.eofRecords
+      ? plural(result.eofRecords, "record", "records")
+      : "missing"));
+    els.out.appendChild(rows);
+
+    if (!result.valid){
+      var block = document.createElement("div");
+      block.className = "problems";
+      var heading = document.createElement("h2");
+      heading.textContent = "Problems";
+      block.appendChild(heading);
+      var list = document.createElement("ul");
+      var shown = Math.min(result.errors.length, 20);
+      for (var i = 0; i < shown; i += 1){
+        var item = document.createElement("li");
+        var where = document.createElement("span");
+        where.className = "where";
+        where.textContent = result.errors[i].line === null ? "File" : "Line " + result.errors[i].line;
+        item.appendChild(where);
+        item.appendChild(document.createTextNode(result.errors[i].message));
+        list.appendChild(item);
+      }
+      if (result.errorCount > shown){
+        var more = document.createElement("li");
+        more.textContent = "and " + plural(result.errorCount - shown, "more problem", "more problems") + ".";
+        list.appendChild(more);
+      }
+      block.appendChild(list);
+      els.out.appendChild(block);
+    }
+  }
+
+  function run(){
+    var result;
+    try {
+      result = C.compute({text: els.text.value});
+    } catch (error){
+      els.err.textContent = error.message;
+      placeholder("Paste Intel HEX records to inspect.");
+      return;
+    }
+    els.err.textContent = "";
+    render(result);
+  }
+
+  els.form.addEventListener("submit", function(event){
+    event.preventDefault();
+    run();
+  });
+  els.example.addEventListener("click", function(){
+    els.text.value = EXAMPLE;
+    els.err.textContent = "";
+    run();
+    els.text.focus();
+  });
+  els.clear.addEventListener("click", function(){
+    els.text.value = "";
+    els.err.textContent = "";
+    placeholder("Paste Intel HEX records to inspect.");
+    els.text.focus();
+  });
+  placeholder("Paste Intel HEX records to inspect.");
+})();
+</script>
+</body>
+</html>
