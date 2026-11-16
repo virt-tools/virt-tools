@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>SMS 7-Bit Packing &mdash; Virtual Tools</title>
+<meta name="description" content="Pack a text message into the GSM 7-bit septets an SMS carries and read packed user data back, with the septet and octet counts, extension characters and message parts.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+.field{display:flex;flex-direction:column;gap:6px;margin:0}
+.field label{font-size:13px;color:var(--text-dim,#9aa3b2)}
+select,input,textarea{box-sizing:border-box;width:100%;min-height:46px;padding:10px 12px;border-radius:8px;
+  border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);color:var(--text,#e6e6e6);
+  font:inherit;font-size:16px;line-height:1.35;outline:none}
+textarea{min-height:110px;resize:vertical}
+textarea.hex{font-family:ui-monospace,monospace}
+select:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent,#6ea8fe);outline-offset:1px}
+[hidden]{display:none !important}
+.hint{font-size:12.5px;color:var(--text-dim,#9aa3b2);margin:6px 0 0}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:12px 0 0}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);
+  background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.err{color:var(--bad,#f87171);font-size:13px;margin:10px 0 0;min-height:1.2em}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:16px 0 0}
+.out .label{text-align:center;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-dim,#9aa3b2)}
+.out .big{font-size:clamp(1.15rem,4.6vw,1.7rem);font-weight:800;text-align:center;padding:2px 0 4px;line-height:1.35;overflow-wrap:anywhere}
+.out .big.code{font-family:ui-monospace,monospace;font-size:clamp(.85rem,3.3vw,1.05rem);letter-spacing:.02em;word-break:break-all}
+.out .big.text{font-weight:600;text-align:left;white-space:pre-wrap;font-size:clamp(.95rem,3.8vw,1.15rem)}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:6px 0 0;line-height:1.45;overflow-wrap:anywhere}
+.facts{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 14px;margin:16px 0 0;font-size:13px}
+.facts dt{color:var(--text-dim,#9aa3b2)}
+.facts dd{margin:0;font-family:ui-monospace,monospace;overflow-wrap:anywhere}
+.facts:empty{display:none}
+@media (max-width:560px){
+  .actions button{flex:1 1 auto}
+  .facts{grid-template-columns:minmax(0,1fr);gap:2px}
+  .facts dd{margin:0 0 8px}
+}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<h1>SMS 7-Bit Packing</h1>
+<p>Pack a text message into the seven-bit septets an SMS carries, and read packed user data back. The page reports the septet count, the packed octets, the extension characters that cost two septets each and how many message parts the text needs. Everything is computed locally.</p>
+</div>
+<div class="panel">
+<form id="pack-form" novalidate>
+<div class="grid">
+<div class="field">
+<label for="mode">Mode</label>
+<select id="mode">
+<option value="encode" selected>Pack text into septets</option>
+<option value="decode">Read packed hex</option>
+</select>
+</div>
+<div class="field" id="count-field" hidden>
+<label for="count">Septets (optional)</label>
+<input id="count" type="text" inputmode="numeric" autocomplete="off" placeholder="From the octet length">
+</div>
+</div>
+<div class="field" style="margin-top:12px;">
+<label for="input" id="input-label">Message</label>
+<textarea id="input" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Type the message to pack">Hello, world!</textarea>
+<p class="hint" id="input-hint">Characters outside the default alphabet are refused, not replaced. Enter packs; Shift+Enter starts a new line.</p>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions">
+<button type="submit">Pack</button>
+</div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"></div>
+<dl class="facts" id="facts"></dl>
+<p class="note">SMS text travels in the GSM 7-bit default alphabet of 3GPP TS 23.038: 128 septet values, plus an extension table reached through the escape septet for the square brackets, braces, vertical bar, caret, tilde, backslash, form feed and the euro sign, each of which costs two septets. The septets are packed seven bits at a time into octets, the first septet in the low bits of the first octet. When exactly seven bits are left spare in the last octet, they carry the code of carriage return instead of zeros, because seven zero bits would read as an @. One message holds 160 septets in 140 octets; longer text is split into parts of 153 septets once a six-octet concatenation header is counted. Reading hex back uses the octet length for the septet count, which cannot tell a filler carriage return from a typed one, so enter the count when the message ends with a carriage return. Nothing is uploaded, stored or sent anywhere.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* sms-core:start */
+var SmsCore = (function(){
+  "use strict";
+  var MAX_CHARS = 1000;
+  var MAX_OCTETS = 280;
+  var SINGLE_SEPTETS = 160;
+  var PART_SEPTETS = 153;
+  var SINGLE_OCTETS = 140;
+  var ESCAPE = 27;
+  var FILLER = 13;
+  var ALPHABET = [];
+  var ENCODE = {};
+  var EXTENSION = { "\u000c": 10, "^": 20, "{": 40, "}": 41, "\\": 47, "[": 60, "~": 61, "]": 62, "|": 64, "\u20ac": 101 };
+  var EXTENSION_CHAR = {};
+  var HEX_ONLY = /^[0-9A-Fa-f]+$/;
+  var DIGITS_ONLY = /^[0-9]+$/;
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function push(list){
+    for (var index = 0; index < list.length; index += 1) ALPHABET.push(list[index]);
+  }
+
+  function buildAlphabet(){
+    push(["@", "\u00a3", "$", "\u00a5", "\u00e8", "\u00e9", "\u00f9", "\u00ec", "\u00f2", "\u00c7", "\n", "\u00d8", "\u00f8", "\r", "\u00c5", "\u00e5"]);
+    push(["\u0394", "_", "\u03a6", "\u0393", "\u039b", "\u03a9", "\u03a0", "\u03a8", "\u03a3", "\u0398", "\u039e", "\u001b", "\u00c6", "\u00e6", "\u00df", "\u00c9"]);
+    push([" ", "!", "\"", "#", "\u00a4", "%", "&", "'", "(", ")", "*", "+", ",", "-", ".", "/"]);
+    push(["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", ":", ";", "<", "=", ">", "?"]);
+    push(["\u00a1"]);
+    for (var upper = 0; upper < 26; upper += 1) push([String.fromCharCode(65 + upper)]);
+    push(["\u00c4", "\u00d6", "\u00d1", "\u00dc", "\u00a7"]);
+    push(["\u00bf"]);
+    for (var lower = 0; lower < 26; lower += 1) push([String.fromCharCode(97 + lower)]);
+    push(["\u00e4", "\u00f6", "\u00f1", "\u00fc", "\u00e0"]);
+    if (ALPHABET.length !== 128) fail("the default alphabet must hold 128 septets");
+    for (var code = 0; code < ALPHABET.length; code += 1){
+      if (code === ESCAPE) continue;
+      if (ENCODE[ALPHABET[code]] === undefined) ENCODE[ALPHABET[code]] = [code];
+    }
+    for (var character in EXTENSION){
+      if (Object.prototype.hasOwnProperty.call(EXTENSION, character)){
+        ENCODE[character] = [ESCAPE, EXTENSION[character]];
+        EXTENSION_CHAR[EXTENSION[character]] = character;
+      }
+    }
+  }
+
+  buildAlphabet();
+
+  function characters(text){
+    return Array.from(String(text == null ? "" : text));
+  }
+
+  function septetsOf(text){
+    var list = characters(text);
+    var out = [];
+    var extension = 0;
+    for (var index = 0; index < list.length; index += 1){
+      var character = list[index];
+      var entry = ENCODE[character];
+      if (entry === undefined){
+        fail("\u201c" + character + "\u201d is not in the GSM 7-bit alphabet (character " + (index + 1)
+          + "). Remove it, or send the message as UCS-2.");
+      }
+      if (entry.length === 2) extension += 1;
+      for (var part = 0; part < entry.length; part += 1) out.push(entry[part]);
+    }
+    return { septets: out, characters: list.length, extension: extension };
+  }
+
+  function spareBits(count){
+    var bits = count * 7;
+    var octets = Math.ceil(bits / 8);
+    return octets * 8 - bits;
+  }
+
+  function pack(list){
+    var out = [];
+    var bits = 0;
+    var buffer = 0;
+    for (var index = 0; index < list.length; index += 1){
+      buffer |= list[index] << bits;
+      bits += 7;
+      while (bits >= 8){
+        out.push(buffer & 0xFF);
+        buffer >>= 8;
+        bits -= 8;
+      }
+    }
+    if (bits > 0) out.push(buffer & 0xFF);
+    return out;
+  }
+
+  function unpack(octets, count){
+    if (count * 7 > octets.length * 8){
+      var capacity = Math.floor(octets.length * 8 / 7);
+      fail("The packed data holds " + capacity + (capacity === 1 ? " septet" : " septets") + "; lower the septet count.");
+    }
+    var out = [];
+    var bits = 0;
+    var buffer = 0;
+    var index = 0;
+    for (var position = 0; position < count; position += 1){
+      while (bits < 7){
+        buffer |= octets[index] << bits;
+        index += 1;
+        bits += 8;
+      }
+      out.push(buffer & 0x7F);
+      buffer >>= 7;
+      bits -= 7;
+    }
+    return out;
+  }
+
+  function partsFor(count){
+    if (count <= SINGLE_SEPTETS) return { parts: 1, capacity: SINGLE_SEPTETS };
+    var parts = Math.ceil(count / PART_SEPTETS);
+    return { parts: parts, capacity: parts * PART_SEPTETS };
+  }
+
+  function hex(octets){
+    var out = "";
+    for (var index = 0; index < octets.length; index += 1){
+      var byte = octets[index].toString(16).toUpperCase();
+      out += (byte.length < 2 ? "0" + byte : byte);
+      if (index < octets.length - 1) out += " ";
+    }
+    return out;
+  }
+
+  function parseHex(text){
+    var raw = String(text == null ? "" : text).replace(/\s+/g, "");
+    if (!raw) fail("Enter the packed user data as hex.");
+    if (!HEX_ONLY.test(raw)) fail("Use only the hex digits 0-9 and A-F.");
+    if (raw.length % 2 !== 0) fail("A packed message needs an even number of hex digits.");
+    var octets = [];
+    for (var index = 0; index < raw.length; index += 2) octets.push(parseInt(raw.slice(index, index + 2), 16));
+    if (octets.length > MAX_OCTETS) fail("Enter at most " + MAX_OCTETS + " octets.");
+    return octets;
+  }
+
+  function parseCount(text, octets){
+    var raw = String(text == null ? "" : text).trim();
+    var capacity = Math.floor(octets.length * 8 / 7);
+    if (!raw) return autoCount(octets, capacity);
+    if (!DIGITS_ONLY.test(raw)) fail("Enter a septet count from 1 to 320, or leave it blank.");
+    var count = parseInt(raw, 10);
+    if (count < 1 || count > 320) fail("Enter a septet count from 1 to 320, or leave it blank.");
+    return { count: count, filler: false };
+  }
+
+  function autoCount(octets, capacity){
+    if (capacity > 0){
+      var last = unpack(octets, capacity)[capacity - 1];
+      if (capacity * 7 === octets.length * 8 && last === FILLER) return { count: capacity - 1, filler: true };
+    }
+    return { count: capacity, filler: false };
+  }
+
+  function encode(text){
+    var raw = String(text == null ? "" : text);
+    if (!raw) fail("Type a message to encode.");
+    if (characters(raw).length > MAX_CHARS) fail("Enter at most " + MAX_CHARS + " characters.");
+    var mapped = septetsOf(raw);
+    var list = mapped.septets;
+    var padded = spareBits(list.length) === 7 ? list.concat([FILLER]) : list;
+    var octets = pack(padded);
+    var span = partsFor(list.length);
+    return {
+      characters: mapped.characters,
+      septets: list.length,
+      octets: octets,
+      hex: hex(octets),
+      extension: mapped.extension,
+      parts: span.parts,
+      capacity: span.capacity,
+      remaining: span.capacity - list.length,
+      single: span.parts === 1
+    };
+  }
+
+  function decode(text, countText){
+    var octets = parseHex(text);
+    var counted = parseCount(countText, octets);
+    var list = unpack(octets, counted.count);
+    var out = [];
+    var extension = 0;
+    var index = 0;
+    while (index < list.length){
+      var code = list[index];
+      if (code === ESCAPE){
+        index += 1;
+        if (index >= list.length) fail("The data ends with an escape septet and no extension code.");
+        var next = list[index];
+        if (EXTENSION_CHAR[next] === undefined){
+          var shown = next.toString(16).toUpperCase();
+          fail("Extension code 0x" + (shown.length < 2 ? "0" + shown : shown) + " is not assigned in the default alphabet.");
+        }
+        out.push(EXTENSION_CHAR[next]);
+        extension += 1;
+      } else {
+        out.push(ALPHABET[code]);
+      }
+      index += 1;
+    }
+    var span = partsFor(list.length);
+    return {
+      text: out.join(""),
+      characters: out.length,
+      septets: list.length,
+      octets: octets.length,
+      extension: extension,
+      parts: span.parts,
+      remaining: span.capacity - list.length,
+      single: span.parts === 1,
+      filler: counted.filler,
+      capacity: span.capacity
+    };
+  }
+
+  return {
+    MAX_CHARS: MAX_CHARS,
+    MAX_OCTETS: MAX_OCTETS,
+    SINGLE_SEPTETS: SINGLE_SEPTETS,
+    PART_SEPTETS: PART_SEPTETS,
+    SINGLE_OCTETS: SINGLE_OCTETS,
+    ESCAPE: ESCAPE,
+    FILLER: FILLER,
+    ALPHABET: ALPHABET,
+    EXTENSION: EXTENSION,
+    characters: characters,
+    septetsOf: septetsOf,
+    pack: pack,
+    unpack: unpack,
+    partsFor: partsFor,
+    hex: hex,
+    parseHex: parseHex,
+    encode: encode,
+    decode: decode
+  };
+})();
+/* sms-core:end */
+(function(){
+  "use strict";
+  var C = SmsCore;
+  var els = {
+    form: document.getElementById("pack-form"),
+    mode: document.getElementById("mode"),
+    count: document.getElementById("count"),
+    countField: document.getElementById("count-field"),
+    input: document.getElementById("input"),
+    label: document.getElementById("input-label"),
+    hint: document.getElementById("input-hint"),
+    err: document.getElementById("err"),
+    out: document.getElementById("out"),
+    facts: document.getElementById("facts")
+  };
+  var LABELS = { encode: "Message", decode: "Packed user data (hex)" };
+  var HINTS = {
+    encode: "Characters outside the default alphabet are refused, not replaced. Enter packs; Shift+Enter starts a new line.",
+    decode: "Space-separated or run together hex octets. Enter reads the data; Shift+Enter starts a new line."
+  };
+  var PLACEHOLDERS = {
+    encode: "Type the message to pack",
+    decode: "E8 32 9B FD 46 97 D9 EC 37"
+  };
+  var BUTTONS = { encode: "Pack", decode: "Read" };
+
+  function block(className, text){
+    var node = document.createElement("div");
+    node.className = className;
+    node.textContent = text;
+    return node;
+  }
+
+  function clearFacts(){
+    els.facts.textContent = "";
+  }
+
+  function addFact(term, value){
+    var dt = document.createElement("dt");
+    dt.textContent = term;
+    var dd = document.createElement("dd");
+    dd.textContent = value;
+    els.facts.appendChild(dt);
+    els.facts.appendChild(dd);
+  }
+
+  function plural(count, word){
+    return count + " " + word + (count === 1 ? "" : "s");
+  }
+
+  function spanPhrase(result){
+    if (result.single) return "one message part with " + plural(result.remaining, "septet") + " to spare";
+    return plural(result.parts, "part") + " of " + C.PART_SEPTETS + " septets, " + plural(result.remaining, "septet") + " to spare";
+  }
+
+  function showPlaceholder(message){
+    els.out.textContent = "";
+    var node = block("sub", message);
+    node.style.padding = "18px 0 6px";
+    els.out.appendChild(node);
+    clearFacts();
+  }
+
+  function renderEncode(result){
+    els.out.textContent = "";
+    els.out.appendChild(block("label", "Packed user data"));
+    els.out.appendChild(block("big code", result.hex));
+    els.out.appendChild(block("sub", plural(result.septets, "septet") + " in " + plural(result.octets.length, "octet")
+      + " of the " + C.SINGLE_OCTETS + "-octet payload; " + spanPhrase(result) + "."));
+    clearFacts();
+    addFact("Characters", String(result.characters));
+    addFact("Septets", String(result.septets));
+    addFact("Octets", String(result.octets.length) + " (limit " + C.SINGLE_OCTETS + ")");
+    addFact("Message parts", String(result.parts));
+    addFact("Room left", plural(result.remaining, "septet"));
+    if (result.extension) addFact("Extension characters", String(result.extension) + " (two septets each)");
+  }
+
+  function renderDecode(result){
+    els.out.textContent = "";
+    els.out.appendChild(block("label", "Message"));
+    if (result.text) els.out.appendChild(block("big text", result.text));
+    else els.out.appendChild(block("big text", "(empty)"));
+    els.out.appendChild(block("sub", plural(result.septets, "septet") + " in " + plural(result.octets, "octet")
+      + "; " + spanPhrase(result) + "."));
+    clearFacts();
+    addFact("Characters", String(result.characters));
+    addFact("Septets", String(result.septets));
+    addFact("Octets", String(result.octets));
+    addFact("Message parts", String(result.parts));
+    if (result.extension) addFact("Extension characters", String(result.extension));
+    if (result.filler) addFact("Carriage return", "the last septet is the packing filler, not a typed one");
+  }
+
+  function syncLabels(){
+    var mode = els.mode.value;
+    els.label.textContent = LABELS[mode];
+    els.hint.textContent = HINTS[mode];
+    els.input.placeholder = PLACEHOLDERS[mode];
+    els.input.classList.toggle("hex", mode === "decode");
+    els.input.rows = mode === "decode" ? 4 : 3;
+    els.countField.hidden = mode !== "decode";
+    els.form.querySelector("button[type=submit]").textContent = BUTTONS[mode];
+  }
+
+  function show(announce){
+    var mode = els.mode.value;
+    els.err.textContent = "";
+    try {
+      if (mode === "encode"){
+        renderEncode(C.encode(els.input.value));
+      } else {
+        renderDecode(C.decode(els.input.value, els.count.value));
+      }
+    } catch (error){
+      if (announce) els.err.textContent = error && error.message ? error.message : String(error);
+      showPlaceholder(mode === "encode"
+        ? "Type a message to see the septets it packs into."
+        : "Paste packed user data to read the message it carries.");
+    }
+  }
+
+  els.form.addEventListener("submit", function(event){
+    event.preventDefault();
+    show(true);
+  });
+  els.mode.addEventListener("change", function(){
+    syncLabels();
+    show(false);
+  });
+  els.count.addEventListener("input", function(){ show(false); });
+  els.input.addEventListener("input", function(){ show(false); });
+  els.input.addEventListener("keydown", function(event){
+    if (event.key === "Enter" && !event.shiftKey){
+      event.preventDefault();
+      show(true);
+    }
+  });
+
+  syncLabels();
+  show(false);
+})();
+</script>
+</body>
+</html>
