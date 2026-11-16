@@ -537,7 +537,9 @@ def apply_attrs(node: Node, mapping: dict, applied: set[str]) -> None:
             apply_attrs(child, mapping, applied)
 
 
-TAG_SPLIT_RE = re.compile(r"(<[^>]*>)")
+# A literal can end in the middle of a tag (``"<strong style=\"color:"``) because the
+# page concatenates the rest; that fragment must not swallow the text before it.
+TAG_SPLIT_RE = re.compile(r"(<[^>]*>|<[^>]*$)")
 ATTR_IN_TAG_RE = re.compile(r"""([^\s=<>"']+)(\s*=\s*)(?:"([^"]*)"|'([^']*)')""")
 
 
