@@ -285,7 +285,7 @@ const pageDirs = fs.readdirSync(path.join(root, 'frontend', 'tools'), { withFile
   .filter((entry) => entry.isDirectory()).length;
 assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageDirs,
   'every listed tool record has a page');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2083, 'public tools');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2084, 'public tools');
 
 // ---- Page contract: shared shell, labelled controls, one hash-pinnable script.
 assert.match(html, /<html lang="en">/);
