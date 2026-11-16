@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Expand an RFC 6570 URI template against a JSON object of variables and see, expression by expression, which operator ran, what it produced and which variables were undefined. Runs entirely in your browser.">
+<script src="/assets/theme-init.js"></script>
+<title>URI Template Expander — virt.tools</title>
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.ut-shell{max-width:900px;margin:0 auto}
+.lead,.hint,.detail{color:var(--text-secondary,#8b949e)}
+.panel{background:var(--surface,#161b22);border:1px solid var(--border,#30363d);border-radius:10px;padding:1rem;margin:1rem 0}
+.field{display:flex;flex-direction:column;gap:.35rem}
+.field label{font-weight:600}
+.field input,.field textarea{box-sizing:border-box;width:100%;background:var(--background,#0d1117);color:var(--text,#c9d1d9);border:1px solid var(--border,#30363d);border-radius:6px;padding:.62rem;font:inherit;font-size:1rem;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+.field input{min-height:44px}
+.field textarea{min-height:11rem;resize:vertical;line-height:1.45}
+.field input:focus-visible,.field textarea:focus-visible,button:focus-visible{outline:2px solid var(--accent,#58a6ff);outline-offset:2px}
+.actions{display:flex;flex-wrap:wrap;gap:.6rem;margin:.9rem 0 .2rem}
+button{border:1px solid var(--border,#30363d);border-radius:6px;background:var(--surface-raised,#21262d);color:var(--text,#c9d1d9);padding:.58rem .85rem;min-height:44px;font:inherit;font-size:.95rem;cursor:pointer}
+button.primary{border-color:var(--accent,#58a6ff);background:var(--accent-soft,#1e3a5f)}
+.examples{display:flex;flex-wrap:wrap;gap:.45rem;margin:.55rem 0 0;padding:0;list-style:none}
+.examples button{font-size:.85rem;min-height:44px;padding:.35rem .6rem}
+.copy-btn{font-size:.8rem;min-height:44px;padding:.25rem .55rem;margin-left:.4rem;vertical-align:middle}
+.status{min-height:1.4rem;margin:.55rem 0 .3rem}
+.status.ok{color:#3fb950}.status.warn{color:#d29922}.status.error{color:#f85149}.status.info{color:var(--text-secondary,#8b949e)}
+.results{margin:.2rem 0 0;display:grid;gap:.7rem}
+.results>div{display:grid;grid-template-columns:10rem 1fr;gap:.4rem 1rem;align-items:baseline}
+.results dt{font-weight:600}
+.results dd{margin:0;overflow-wrap:anywhere}
+.results output{font:600 .98rem/1.45 ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--accent,#58a6ff);word-break:break-all}
+.results .sub{display:block;font-weight:400;font-size:.82rem;color:var(--text-secondary,#8b949e);margin-top:.2rem}
+.mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.9rem}
+.notes{margin:.3rem 0 0;padding-left:1.2rem}
+.notes li{margin:.3rem 0}
+.notes:empty{display:none}
+h2{font-size:1.05rem;margin:.2rem 0 .8rem}
+h2 span{font-weight:500;font-size:.85rem;color:var(--text-secondary,#8b949e);margin-left:.4rem}
+.breakdown{margin:.6rem 0 0;display:grid;gap:.6rem}
+.expr{border:1px solid var(--border,#30363d);border-radius:8px;padding:.65rem .75rem;background:var(--background,#0d1117)}
+.expr header{display:flex;flex-wrap:wrap;gap:.35rem .6rem;align-items:baseline;margin-bottom:.35rem}
+.expr code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.88rem;overflow-wrap:anywhere}
+.expr .op{font-size:.78rem;color:var(--text-secondary,#8b949e)}
+.expr dl{margin:0;display:grid;gap:.25rem}
+.expr dl>div{display:grid;grid-template-columns:5.5rem 1fr;gap:.4rem}
+.expr dt{font-size:.82rem;color:var(--text-secondary,#8b949e)}
+.expr dd{margin:0;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.85rem;overflow-wrap:anywhere;color:var(--text,#c9d1d9)}
+.expr .skipped dd{color:#d29922}
+.empty{margin:.4rem 0 0;color:var(--text-secondary,#8b949e);font-size:.9rem}
+@media(max-width:600px){
+.results>div{grid-template-columns:1fr;gap:.15rem}
+.expr dl>div{grid-template-columns:1fr}
+.panel{padding:.85rem}
+.actions>*{flex:1 1 9rem}
+.copy-btn{margin-left:0}
+}
+</style>
+</head>
+<body><div id="site-header"></div><main class="tool-container"><div class="ut-shell">
+<h1>URI Template Expander</h1>
+<p class="lead">Paste an RFC 6570 template such as <span class="mono">/repos/{owner}/{repo}/issues{?state,labels*,per_page}</span> and a JSON object of variable values. The page expands every expression and shows what each operator did.</p>
+
+<form id="ut-form" novalidate>
+<section class="panel" aria-labelledby="input-title">
+<h2 id="input-title">Template and variables</h2>
+<div class="field">
+<label for="template">URI template</label>
+<textarea id="template" spellcheck="false" autocapitalize="off" aria-describedby="template-hint">/repos/{owner}/{repo}/issues{?state,labels*,per_page}</textarea>
+<p class="hint" id="template-hint">Literals plus expressions in braces. Operators: <span class="mono">+ # . / ; ? &amp;</span>, value modifiers <span class="mono">:3</span> and <span class="mono">*</span>. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> expands from either field.</p>
+</div>
+<div class="field" style="margin-top:.8rem">
+<label for="variables">Variables (JSON object)</label>
+<textarea id="variables" spellcheck="false" autocapitalize="off" aria-describedby="variables-hint">{
+  "owner": "acme",
+  "repo": "widget",
+  "state": "open",
+  "labels": ["bug", "ui"],
+  "per_page": 25
+}</textarea>
+<p class="hint" id="variables-hint">Strings, numbers and booleans expand to strings; arrays and objects become lists and name/value pairs. <span class="mono">null</span> or a missing key means undefined.</p>
+</div>
+<div class="actions"><button id="expand" class="primary" type="submit">Expand template</button></div>
+<ul class="examples" aria-label="Example templates">
+<li><button type="button" data-example="issues">GitHub issues</button></li>
+<li><button type="button" data-example="archive">Archive download</button></li>
+<li><button type="button" data-example="rfc">RFC 6570 sample</button></li>
+<li><button type="button" data-example="fragment">Fragment and labels</button></li>
+</ul>
+<p id="ut-status" class="status info" role="status" aria-live="polite"></p>
+</section>
+</form>
+
+<section class="panel" aria-labelledby="result-title">
+<h2 id="result-title">Expanded URI <span>RFC 6570 level 4</span></h2>
+<dl class="results">
+<div><dt>Result</dt><dd><output id="result-out">—</output><button id="copy" class="copy-btn" type="button">Copy</button><span class="sub" id="copy-status"></span></dd></div>
+<div><dt>Expressions</dt><dd><output id="count-out">—</output><span class="sub" id="count-sub"></span></dd></div>
+<div><dt>Referenced</dt><dd><output id="referenced-out">—</output><span class="sub">Distinct variable names used by at least one expression.</span></dd></div>
+<div><dt>Undefined</dt><dd><output id="undefined-out">—</output><span class="sub" id="undefined-sub"></span></dd></div>
+<div><dt>Unused</dt><dd><output id="unused-out">—</output><span class="sub" id="unused-sub"></span></dd></div>
+</dl>
+<h2 style="margin-top:1rem">Expression by expression</h2>
+<div class="breakdown" id="breakdown"></div>
+<p class="empty" id="breakdown-empty">Every expression is listed here once the template expands.</p>
+<ul class="notes" id="notes"></ul>
+</section>
+
+<section class="panel" aria-labelledby="how-title">
+<h2 id="how-title">How an expression expands</h2>
+<ul class="notes">
+<li><strong>Operator first.</strong> The character right after <code>{</code> picks the prefix and separator: <code>{.var}</code> is a dot label, <code>{/var}</code> a path segment, <code>{;var}</code> a path parameter, <code>{?var}</code> a query, and <code>{+var}</code> / <code>{#var}</code> keep reserved characters instead of encoding them.</li>
+<li><strong>Undefined values vanish.</strong> A missing key or <span class="mono">null</span> is skipped, and an expression whose variables are all undefined expands to nothing at all, prefix included.</li>
+<li><strong>Modifiers.</strong> <code>:N</code> keeps the first N characters of a string value and is refused on lists and objects; <code>*</code> explodes a list or object into repeated name or segment parts.</li>
+<li><strong>Encoding.</strong> Values are percent-encoded as UTF-8, except for the unreserved set; reserved expansion also lets unreserved-plus-reserved characters and existing <code>%XX</code> triplets through unchanged.</li>
+</ul>
+</section>
+</div></main><script src="/assets/tools.js"></script><script src="/assets/app.js"></script>
+<script>
+/* uri-template-core:start */
+const UriTemplate = (() => {
+  'use strict';
+  const MAX_TEMPLATE = 2048;
+  const MAX_VARIABLES = 20000;
+  const UNRESERVED = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
+  const RESERVED = ":/?#[]@!$&'()*+,;=";
+  const OPERATORS = {
+    '': {prefix: '', separator: ',', named: false, ifEmpty: '', allowReserved: false, label: 'Simple string expansion'},
+    '+': {prefix: '', separator: ',', named: false, ifEmpty: '', allowReserved: true, label: 'Reserved expansion'},
+    '#': {prefix: '#', separator: ',', named: false, ifEmpty: '', allowReserved: true, label: 'Fragment expansion'},
+    '.': {prefix: '.', separator: '.', named: false, ifEmpty: '', allowReserved: false, label: 'Label expansion'},
+    '/': {prefix: '/', separator: '/', named: false, ifEmpty: '', allowReserved: false, label: 'Path segment expansion'},
+    ';': {prefix: ';', separator: ';', named: true, ifEmpty: '', allowReserved: false, label: 'Path-style parameter expansion'},
+    '?': {prefix: '?', separator: '&', named: true, ifEmpty: '=', allowReserved: false, label: 'Form-style query expansion'},
+    '&': {prefix: '&', separator: '&', named: true, ifEmpty: '=', allowReserved: false, label: 'Form-style query continuation'}
+  };
+  const RESERVED_OPERATORS = '=,!@|';
+  const VARNAME = /^(?:[A-Za-z0-9_]|%[0-9A-Fa-f]{2})+(?:\.(?:[A-Za-z0-9_]|%[0-9A-Fa-f]{2})+)*$/;
+  const DEFAULTS = {
+    template: '/repos/{owner}/{repo}/issues{?state,labels*,per_page}',
+    variables: '{\n  "owner": "acme",\n  "repo": "widget",\n  "state": "open",\n  "labels": ["bug", "ui"],\n  "per_page": 25\n}'
+  };
+
+  function fail(message) {
+    throw new Error(message);
+  }
+
+  function hex(code) {
+    return '%' + (code < 16 ? '0' : '') + code.toString(16).toUpperCase();
+  }
+
+  function pctOctets(value) {
+    if (value < 0x80) return hex(value);
+    return encodeURIComponent(String.fromCodePoint(value));
+  }
+
+  // Copy allowed characters, percent-encode every other code point as UTF-8.
+  function encode(text, allowReserved) {
+    let out = '';
+    for (let index = 0; index < text.length;) {
+      const code = text.codePointAt(index);
+      const char = String.fromCodePoint(code);
+      index += char.length;
+      if (allowReserved && char === '%' && /^[0-9A-Fa-f]{2}$/.test(text.substr(index, 2))) {
+        out += '%' + text.substr(index, 2);
+        index += 2;
+        continue;
+      }
+      if (code < 0x80 && (UNRESERVED.indexOf(char) >= 0 || (allowReserved && RESERVED.indexOf(char) >= 0))) {
+        out += char;
+        continue;
+      }
+      out += pctOctets(code);
+    }
+    return out;
+  }
+
+  function literal(text) {
+    if (text === '') return '';
+    let out = '';
+    for (let index = 0; index < text.length;) {
+      const code = text.codePointAt(index);
+      const char = String.fromCodePoint(code);
+      if (char === '%') {
+        out += '%' + text.substr(index + 1, 2);
+        index += 3;
+        continue;
+      }
+      index += char.length;
+      if (code < 0x80 && (UNRESERVED.indexOf(char) >= 0 || (RESERVED.indexOf(char) >= 0 && char !== "'"))) {
+        out += char;
+        continue;
+      }
+      out += pctOctets(code);
+    }
+    return out;
+  }
+
+  function describe(code) {
+    if (code === 32) return 'a space';
+    if (code === 34) return 'a double quote';
+    if (code === 39) return 'an apostrophe';
+    if (code < 32) return 'a control character';
+    return '"' + String.fromCodePoint(code) + '"';
+  }
+
+  // Literals follow the template grammar; anything else is escaped with a note.
+  function checkLiterals(text, offset, warnings) {
+    for (let index = 0; index < text.length;) {
+      const code = text.codePointAt(index);
+      const char = String.fromCodePoint(code);
+      if (char === '%') {
+        if (!/^[0-9A-Fa-f]{2}$/.test(text.substr(index + 1, 2))) {
+          fail('The % at character ' + (offset + index + 1) + ' is not a %XX escape.');
+        }
+        index += 3;
+        continue;
+      }
+      index += char.length;
+      if (code < 0x80 && (UNRESERVED.indexOf(char) >= 0 || (RESERVED.indexOf(char) >= 0 && char !== "'"))) continue;
+      warnings.push('The literal ' + describe(code) + ' at character ' + (offset + index - char.length + 1) +
+        ' is outside the template grammar and was percent-encoded as ' + encode(char, false) + '.');
+    }
+  }
+
+  function parseVarspec(spec) {
+    const text = String(spec);
+    let name = text;
+    let explode = false;
+    let prefix = null;
+    if (text.endsWith('*')) {
+      explode = true;
+      name = text.slice(0, -1);
+    }
+    const colon = name.lastIndexOf(':');
+    if (colon >= 0) {
+      const digits = name.slice(colon + 1);
+      prefix = digits;
+      name = name.slice(0, colon);
+    }
+    if (name.indexOf('*') >= 0 || name.indexOf(':') >= 0) {
+      fail('"' + text + '" has more than one value modifier; a varspec takes a prefix (:N) or an * , not both.');
+    }
+    if (name === '') fail('An expression cannot contain an empty variable name; check for a doubled comma.');
+    if (!VARNAME.test(name)) {
+      fail('"' + text + '" is not a valid variable name; use letters, digits, underscores and dots, or a %XX escape.');
+    }
+    if (prefix !== null) {
+      if (!/^[1-9][0-9]{0,3}$/.test(prefix) || Number(prefix) > 9999) {
+        fail('The prefix modifier in "' + text + '" must be 1-9999, written without a leading zero.');
+      }
+      if (explode) {
+        fail('"' + text + '" has more than one value modifier; a varspec takes a prefix (:N) or an * , not both.');
+      }
+    }
+    return { name: name, explain: name, explode: explode, prefix: prefix === null ? null : Number(prefix), source: text };
+  }
+
+  function asText(value) {
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number') return String(value);
+    if (typeof value === 'boolean') return value ? 'true' : 'false';
+    fail('Only strings, numbers, booleans, arrays and objects can be expanded.');
+    return '';
+  }
+
+  function collect(value) {
+    if (Array.isArray(value)) {
+      const members = [];
+      for (const member of value) {
+        if (member === null) continue;
+        if (Array.isArray(member) || typeof member === 'object') {
+          fail('A list may hold strings, numbers or booleans only; nested arrays and objects are not supported.');
+        }
+        members.push(asText(member));
+      }
+      return members.length === 0 ? null : { kind: 'list', members: members };
+    }
+    if (value !== null && typeof value === 'object') {
+      const pairs = [];
+      for (const key of Object.keys(value)) {
+        const member = value[key];
+        if (member === null) continue;
+        if (Array.isArray(member) || typeof member === 'object') {
+          fail('An object value may hold strings, numbers or booleans only; nested arrays and objects are not supported.');
+        }
+        pairs.push([asText(key), asText(member)]);
+      }
+      return pairs.length === 0 ? null : { kind: 'object', pairs: pairs };
+    }
+    return { kind: 'string', value: asText(value) };
+  }
+
+  function expandVarspec(parsed, value, operator) {
+    const shape = collect(value);
+    if (shape === null) return null;
+    const allow = operator.allowReserved;
+    const item = (text) => encode(text, allow);
+    if (shape.kind === 'string') {
+      const text = parsed.prefix === null ? shape.value : Array.from(shape.value).slice(0, parsed.prefix).join('');
+      const body = item(text);
+      if (!operator.named) return body;
+      return item(parsed.name) + (text === '' ? operator.ifEmpty : '=' + body);
+    }
+    if (parsed.prefix !== null) {
+      fail('The prefix modifier on "' + parsed.name + '" applies only to string values; this one is ' +
+        (shape.kind === 'list' ? 'a list.' : 'an object.'));
+    }
+    if (shape.kind === 'list') {
+      if (parsed.explode) {
+        if (operator.named) {
+          return shape.members.map((member) => item(parsed.name) + (member === '' ? operator.ifEmpty : '=' + item(member))).join(operator.separator);
+        }
+        return shape.members.map(item).join(operator.separator);
+      }
+      const joined = shape.members.map(item).join(',');
+      return operator.named ? item(parsed.name) + '=' + joined : joined;
+    }
+    if (parsed.explode) {
+      return shape.pairs.map((pair) => item(pair[0]) + (pair[1] === '' ? operator.ifEmpty : '=' + item(pair[1]))).join(operator.separator);
+    }
+    const flat = [];
+    for (const pair of shape.pairs) {
+      flat.push(item(pair[0]));
+      flat.push(item(pair[1]));
+    }
+    const joined = flat.join(',');
+    return operator.named ? item(parsed.name) + '=' + joined : joined;
+  }
+
+  function splitTemplate(template) {
+    const parts = [];
+    let index = 0;
+    while (index < template.length) {
+      const open = template.indexOf('{', index);
+      if (open < 0) {
+        parts.push({ literal: template.slice(index), offset: index });
+        break;
+      }
+      const close = template.indexOf('}', open + 1);
+      if (open > index) parts.push({ literal: template.slice(index, open), offset: index });
+      parts.push({ expression: template.slice(open, close + 1), offset: open });
+      index = close + 1;
+    }
+    return parts;
+  }
+
+  function scanBraces(template) {
+    let depth = 0;
+    for (let index = 0; index < template.length; index += 1) {
+      const char = template.charAt(index);
+      if (char === '{') {
+        if (depth > 0) {
+          fail('Expressions cannot be nested: the { at character ' + (index + 1) + ' is inside another expression.');
+        }
+        depth = 1;
+      } else if (char === '}') {
+        if (depth === 0) fail('There is a } at character ' + (index + 1) + ' without an opening {.');
+        depth = 0;
+      }
+    }
+    if (depth > 0) {
+      const open = template.lastIndexOf('{');
+      fail('The expression starting at character ' + (open + 1) + ' is never closed with }.');
+    }
+  }
+
+  function parseExpression(text, offset) {
+    const body = text.slice(1, -1);
+    if (body === '') fail('An expression needs at least one variable name, as in {var} or {?var}.');
+    const first = body.charAt(0);
+    let operatorKey = '';
+    if (Object.prototype.hasOwnProperty.call(OPERATORS, first) && first !== '') {
+      operatorKey = first;
+    } else if (RESERVED_OPERATORS.indexOf(first) >= 0) {
+      fail('The operator "' + first + '" is reserved for future extensions and is not expanded here.');
+    }
+    const list = body.slice(operatorKey.length);
+    if (list === '') fail('The expression ' + text + ' has an operator but no variable name after it.');
+    const specs = [];
+    for (const piece of list.split(',')) specs.push(parseVarspec(piece));
+    return { source: text, operator: OPERATORS[operatorKey], operatorKey: operatorKey, offset: offset, specs: specs };
+  }
+
+  function readVariables(input) {
+    if (input === undefined || input === null || input === '') return {};
+    if (typeof input === 'string') {
+      if (input.length > MAX_VARIABLES) fail('Enter fewer variables: the JSON is limited to 20000 characters.');
+      let parsed;
+      try {
+        parsed = JSON.parse(input);
+      } catch (error) {
+        fail('The variables must be a JSON object such as {"owner": "acme"}.');
+      }
+      if (parsed === null || Array.isArray(parsed) || typeof parsed !== 'object') {
+        fail('The variables must be a JSON object mapping names to values.');
+      }
+      return parsed;
+    }
+    if (Array.isArray(input) || typeof input !== 'object') {
+      fail('The variables must be a JSON object mapping names to values.');
+    }
+    return input;
+  }
+
+  function expand(input) {
+    const source = input || {};
+    const template = source.template == null ? '' : String(source.template);
+    if (template.trim() === '') fail('Enter a URI template, for example /repos/{owner}/{repo}.');
+    if (template.length > MAX_TEMPLATE) fail('Enter a shorter template: templates are limited to 2048 characters.');
+    const variables = readVariables(source.variables);
+    scanBraces(template);
+    const parts = splitTemplate(template);
+
+    const expressions = [];
+    const referenced = [];
+    const undefinedNames = [];
+    let out = '';
+    let definedCount = 0;
+    const warnings = [];
+
+    for (const part of parts) {
+      if (part.literal !== undefined) {
+        checkLiterals(part.literal, part.offset, warnings);
+        out += literal(part.literal);
+        continue;
+      }
+      const expression = parseExpression(part.expression, part.offset);
+      const pieces = [];
+      const definedHere = [];
+      const undefinedHere = [];
+      for (const spec of expression.specs) {
+        if (referenced.indexOf(spec.name) < 0) referenced.push(spec.name);
+        const value = Object.prototype.hasOwnProperty.call(variables, spec.name) ? variables[spec.name] : null;
+        if (value === null || value === undefined) {
+          if (undefinedHere.indexOf(spec.name) < 0) undefinedHere.push(spec.name);
+          if (undefinedNames.indexOf(spec.name) < 0) undefinedNames.push(spec.name);
+          continue;
+        }
+        const piece = expandVarspec(spec, value, expression.operator);
+        if (piece === null) {
+          if (undefinedHere.indexOf(spec.name) < 0) undefinedHere.push(spec.name);
+          if (undefinedNames.indexOf(spec.name) < 0) undefinedNames.push(spec.name);
+          continue;
+        }
+        if (definedHere.indexOf(spec.name) < 0) definedHere.push(spec.name);
+        definedCount += 1;
+        pieces.push(piece);
+      }
+      const expansion = pieces.length === 0 ? '' : expression.operator.prefix + pieces.join(expression.operator.separator);
+      out += expansion;
+      expressions.push({
+        expression: expression.source,
+        operator: expression.operatorKey,
+        operatorLabel: expression.operator.label,
+        expansion: expansion,
+        defined: definedHere,
+        undefined: undefinedHere
+      });
+    }
+
+    const unused = [];
+    for (const name of Object.keys(variables)) {
+      if (referenced.indexOf(name) < 0) unused.push(name);
+    }
+    if (expressions.length === 0) {
+      warnings.push('The template has no expressions, so the result is the literal text itself.');
+    }
+    if (undefinedNames.length > 0) {
+      warnings.push(undefinedNames.length + (undefinedNames.length === 1 ? ' variable is' : ' variables are') +
+        ' undefined and ' + (undefinedNames.length === 1 ? 'was' : 'were') + ' skipped: ' + undefinedNames.join(', ') + '.');
+    }
+    if (unused.length > 0) {
+      warnings.push(unused.length + (unused.length === 1 ? ' variable is' : ' variables are') +
+        ' defined but never referenced: ' + unused.join(', ') + '.');
+    }
+
+    return {
+      template: template,
+      expanded: out,
+      expressions: expressions,
+      expressionCount: expressions.length,
+      referenced: referenced,
+      referencedCount: referenced.length,
+      definedCount: definedCount,
+      undefinedNames: undefinedNames,
+      unusedNames: unused,
+      warnings: warnings,
+      warningCount: warnings.length
+    };
+  }
+
+  return {
+    MAX_TEMPLATE: MAX_TEMPLATE,
+    MAX_VARIABLES: MAX_VARIABLES,
+    DEFAULTS: DEFAULTS,
+    OPERATORS: OPERATORS,
+    encode: encode,
+    expand: expand
+  };
+})();
+/* uri-template-core:end */
+(() => {
+'use strict';
+const $ = (id) => document.getElementById(id);
+const form = $('ut-form');
+const templateInput = $('template');
+const variablesInput = $('variables');
+const status = $('ut-status');
+const notes = $('notes');
+const breakdown = $('breakdown');
+const emptyNote = $('breakdown-empty');
+const copyButton = $('copy');
+const copyStatus = $('copy-status');
+const resultOut = $('result-out');
+const countOut = $('count-out'), countSub = $('count-sub');
+const referencedOut = $('referenced-out');
+const undefinedOut = $('undefined-out'), undefinedSub = $('undefined-sub');
+const unusedOut = $('unused-out'), unusedSub = $('unused-sub');
+
+const EXAMPLES = {
+  issues: {
+    template: '/repos/{owner}/{repo}/issues{?state,labels*,per_page}',
+    variables: '{\n  "owner": "acme",\n  "repo": "widget",\n  "state": "open",\n  "labels": ["bug", "ui"],\n  "per_page": 25\n}'
+  },
+  archive: {
+    template: '{scheme}://{host}{/segments*}/archive/{+path}/release{?download,format}',
+    variables: '{\n  "scheme": "https",\n  "host": "files.example.com",\n  "segments": ["build", "2026.11"],\n  "path": "artifacts/app image.tar.gz",\n  "download": true,\n  "format": "raw"\n}'
+  },
+  rfc: {
+    template: 'X{.var:3}{/list*}{;keys*}{#frag}',
+    variables: '{\n  "var": "value",\n  "list": ["red", "green", "blue"],\n  "keys": {"semi": ";", "dot": ".", "comma": ","},\n  "frag": "Hello World!"\n}'
+  },
+  fragment: {
+    template: 'https://{host}/docs{/section*}{?q,page}{#anchor}',
+    variables: '{\n  "host": "docs.example.org",\n  "section": ["guide", "api"],\n  "q": "uri template",\n  "anchor": "examples"\n}'
+  }
+};
+
+function setStatus(message, kind) {
+  status.textContent = message;
+  status.className = 'status ' + (kind || 'info');
+}
+function setText(node, text) {
+  node.textContent = text;
+}
+function clearBreakdown() {
+  breakdown.replaceChildren();
+  emptyNote.hidden = false;
+}
+function clearOutputs() {
+  for (const node of [resultOut, countOut, referencedOut, undefinedOut, unusedOut]) setText(node, '—');
+  for (const node of [countSub, undefinedSub, unusedSub]) setText(node, '');
+  notes.replaceChildren();
+  clearBreakdown();
+  copyButton.disabled = true;
+  setText(copyStatus, '');
+}
+function addNote(text) {
+  const item = document.createElement('li');
+  item.textContent = text;
+  notes.append(item);
+}
+function addRow(list, label, value, skipped) {
+  const row = document.createElement('div');
+  if (skipped) row.className = 'skipped';
+  const term = document.createElement('dt');
+  term.textContent = label;
+  const detail = document.createElement('dd');
+  detail.textContent = value;
+  row.append(term, detail);
+  list.append(row);
+}
+function renderBreakdown(result) {
+  breakdown.replaceChildren();
+  emptyNote.hidden = result.expressionCount > 0;
+  for (const expression of result.expressions) {
+    const card = document.createElement('article');
+    card.className = 'expr';
+    const head = document.createElement('header');
+    const code = document.createElement('code');
+    code.textContent = expression.expression;
+    const op = document.createElement('span');
+    op.className = 'op';
+    op.textContent = expression.operatorLabel;
+    head.append(code, op);
+    const list = document.createElement('dl');
+    addRow(list, 'Expands to', expression.expansion === '' ? '(nothing)' : expression.expansion, expression.expansion === '');
+    if (expression.defined.length > 0) addRow(list, 'Defined', expression.defined.join(', '));
+    if (expression.undefined.length > 0) addRow(list, 'Skipped', expression.undefined.join(', '), true);
+    card.append(head, list);
+    breakdown.append(card);
+  }
+}
+function showResult(result) {
+  setText(resultOut, result.expanded === '' ? '(empty)' : result.expanded);
+  setText(countOut, String(result.expressionCount));
+  setText(countSub, result.expressionCount === 1 ? 'expression, ' + result.definedCount + ' defined value.' : 'expressions, ' + result.definedCount + ' defined values.');
+  setText(referencedOut, result.referencedCount === 0 ? 'none' : result.referenced.join(', '));
+  setText(undefinedOut, result.undefinedNames.length === 0 ? 'none' : result.undefinedNames.join(', '));
+  setText(undefinedSub, result.undefinedNames.length === 0 ? 'Every referenced variable has a value.' : 'Skipped, as RFC 6570 requires.');
+  setText(unusedOut, result.unusedNames.length === 0 ? 'none' : result.unusedNames.join(', '));
+  setText(unusedSub, result.unusedNames.length === 0 ? 'Every value in the JSON is used.' : 'Present in the JSON but not referenced by the template.');
+  notes.replaceChildren();
+  for (const warning of result.warnings) addNote(warning);
+  renderBreakdown(result);
+  copyButton.disabled = false;
+  setStatus(result.warningCount === 0
+    ? 'Expanded with no warnings.'
+    : 'Expanded with ' + result.warningCount + (result.warningCount === 1 ? ' note.' : ' notes.'), 'warn');
+}
+function render() {
+  try {
+    showResult(UriTemplate.expand({ template: templateInput.value, variables: variablesInput.value }));
+  } catch (error) {
+    clearOutputs();
+    setStatus(error.message || String(error), 'error');
+  }
+}
+
+form.addEventListener('submit', (event) => {
+  event.preventDefault();
+  render();
+});
+for (const input of [templateInput, variablesInput]) {
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+      event.preventDefault();
+      render();
+    }
+  });
+}
+document.querySelectorAll('[data-example]').forEach((button) => {
+  button.addEventListener('click', () => {
+    const example = EXAMPLES[button.getAttribute('data-example')];
+    if (!example) return;
+    templateInput.value = example.template;
+    variablesInput.value = example.variables;
+    render();
+    templateInput.focus();
+  });
+});
+copyButton.addEventListener('click', async () => {
+  const text = resultOut.textContent || '';
+  if (!text || text === '—' || text === '(empty)') return;
+  try {
+    await navigator.clipboard.writeText(text);
+    setText(copyStatus, 'Copied to the clipboard.');
+  } catch (error) {
+    setText(copyStatus, 'Copy failed; select the result and copy it manually.');
+  }
+});
+
+render();
+})();
+</script></body></html>

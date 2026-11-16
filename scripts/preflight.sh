@@ -341,6 +341,7 @@ node tests/specific_heat_capacity_converter.test.cjs
 node tests/nth_weekday_of_month.test.cjs
 node tests/universal_integer_codes.test.cjs
 node tests/base91.test.cjs
+node tests/uri_template_expander.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
