@@ -50,6 +50,22 @@ class NestedAttributeRenderTests(unittest.TestCase):
         self.assertFalse(unused)
 
 
+class ParserPortabilityTests(unittest.TestCase):
+    def test_parser_modes_are_pinned_across_python_versions(self):
+        """3.14 moved textarea/title to RCDATA and widened raw text; units drifted."""
+        self.assertEqual(i18n_lib.Builder.CDATA_CONTENT_ELEMENTS, ("script", "style"))
+        self.assertEqual(i18n_lib.Builder.RCDATA_CONTENT_ELEMENTS, ())
+
+    def test_a_textarea_sample_is_parsed_as_markup(self):
+        markup = (
+            '<html><body><main>'
+            '<label>Sample<textarea>&lt;p&gt;Hello&lt;/p&gt;</textarea></label>'
+            '</main></body></html>'
+        )
+        units = units_of(markup)
+        self.assertIn("<p>Hello</p>", units)
+
+
 class JsEscapeTests(unittest.TestCase):
     def test_unicode_escapes_decode_to_the_character(self):
         """`\u00b2` is a superscript two, not the text "u00b2"."""

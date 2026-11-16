@@ -82,7 +82,17 @@ def raw_attr_names(raw_tag: str) -> list[str]:
 
 
 class Builder(HTMLParser):
-    """Build a light element tree while preserving raw script/style content."""
+    """Build a light element tree while preserving raw script/style content.
+
+    Python 3.14 moved ``<textarea>`` and ``<title>`` into a new RCDATA mode and
+    widened the raw-text element list, so the same page produced a different unit
+    set on 3.13 and 3.14 and a memory built on one refused to publish on the
+    other. Pin both lists to the 3.13 behaviour: script/style stay raw, textarea
+    and title stay parsed markup.
+    """
+
+    CDATA_CONTENT_ELEMENTS = ("script", "style")
+    RCDATA_CONTENT_ELEMENTS = ()
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
