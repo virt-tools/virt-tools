@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>TLS Cipher Suite Decoder — Virtual Tools</title>
+<meta name="description" content="Decode a TLS cipher-suite name or two-byte code into its key exchange, authentication, bulk cipher, key length, MAC or PRF and registry status, and read a whole ClientHello offer at once.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.grid1{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;margin:10px 0}
+label.f{font-size:13px;opacity:.85;display:block;margin-bottom:4px}
+.field{background:var(--bg,#14181f);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px}
+.field:focus-within{border-color:var(--accent,#6ea8fe);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#6ea8fe) 18%,transparent)}
+.field input{box-sizing:border-box;width:100%;max-width:none;min-width:0;min-height:44px;background:transparent;color:var(--text,#e6e6e6);border:none;font-size:17px;font-family:ui-monospace,monospace;padding:2px 0;outline:none}
+.field input:focus{box-shadow:none}
+.field .unit{font-size:11px;color:var(--text-dim,#9aa3b2);margin-top:4px}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:14px 0}
+.out .big{font-size:clamp(1.7rem,7vw,2.3rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:4px 0 6px;overflow-wrap:anywhere}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45;overflow-wrap:anywhere}
+.out .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:14px}
+.out .row:last-child{border-bottom:none}
+.out .row .k{color:var(--text-dim,#9aa3b2)}
+.out .row .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right;overflow-wrap:anywhere}
+.out .row .v.dim{color:var(--text-dim,#9aa3b2);font-weight:500}
+@media (max-width:420px){.out .row{flex-direction:column;align-items:flex-start;gap:2px}.out .row .v{text-align:left}}
+.warn{margin:10px 0 0;padding:10px 12px;border-left:3px solid var(--warn,#fbbf24);background:color-mix(in srgb,var(--warn,#fbbf24) 10%,transparent);border-radius:6px;font-size:13px;line-height:1.5}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:16px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus,.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.actions button.ghost{background:transparent;color:var(--text,#e6e6e6);border-color:var(--border,#2a2f3a)}
+.err{color:var(--bad,#f87171);font-size:13px;margin:6px 0;min-height:1.2em}
+.help{font-size:12px;color:var(--text-dim,#9aa3b2);margin:6px 0 0;line-height:1.5}
+table.list{width:100%;border-collapse:collapse;font-size:13px;margin-top:4px}
+table.list th{text-align:left;font-weight:600;color:var(--text-dim,#9aa3b2);border-bottom:1px solid var(--border,#2a2f3a);padding:6px 8px 6px 0;font-size:12px;text-transform:none}
+table.list td{padding:6px 8px 6px 0;border-bottom:1px solid var(--border,#2a2f3a);vertical-align:top;overflow-wrap:anywhere}
+table.list td.code{font-family:ui-monospace,monospace;font-weight:700;white-space:nowrap}
+table.list td.name{font-family:ui-monospace,monospace;font-size:12.5px}
+table.list td.st{color:var(--text-dim,#9aa3b2);white-space:nowrap}
+table.list tr:last-child td{border-bottom:none}
+@media (max-width:560px){
+  table.list thead{display:none}
+  table.list tr{display:block;padding:7px 0;border-bottom:1px solid var(--border,#2a2f3a)}
+  table.list tr:last-child{border-bottom:none}
+  table.list td{display:block;border:none;padding:0;line-height:1.45}
+  table.list td.code{font-size:14px}
+  table.list td.name{font-size:12px;margin:2px 0}
+  table.list td.st{font-size:12px}
+}
+.scroll{overflow-x:auto;margin:0 -4px}
+.note{margin:16px 0 0;font-size:13px;line-height:1.6;color:var(--text-dim,#9aa3b2)}
+.note strong{color:var(--text,#e6e6e6)}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<h1>TLS Cipher Suite Decoder</h1>
+<p>Turn a suite name like TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 or a code like 0x1301 into the key exchange, authentication, bulk cipher and hash it names, or read a whole ClientHello offer at once.</p>
+</div>
+<div class="panel">
+<form id="tls-form" novalidate>
+<div class="grid1">
+<div class="field">
+<label class="f" for="suite">Suite name or code</label>
+<input type="text" id="suite" autocapitalize="characters" autocomplete="off" spellcheck="false" value="TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256" aria-describedby="suite-help">
+<div class="unit">One value, or several separated by spaces or commas</div>
+</div>
+</div>
+<p class="help" id="suite-help">Codes are hexadecimal, written 0x1301 or 1301. Names are the IANA registry names; the lookup ignores case and accepts the value list a ClientHello sends.</p>
+<div class="err" id="tls-err" role="alert" aria-live="polite"></div>
+<div class="actions">
+<button type="submit" class="primary" id="decode">Decode</button>
+<button type="button" class="ghost" id="reset">Reset</button>
+</div>
+</form>
+<div class="out" id="tls-out" aria-live="polite" aria-atomic="true"></div>
+<p class="note" id="note">A cipher suite is a pair of bytes: the code 0x1301 is the bytes 0x13 and 0x01, which is why the registry prints it as {0x13,0x01}. TLS 1.3 suite names carry only the AEAD and the hash (<strong>TLS_AEAD_HASH</strong>), because the key exchange and authentication moved into the handshake: <strong>TLS_AES_128_GCM_SHA256</strong> says AES-128-GCM with the HKDF-SHA256 hash and nothing about certificates. Names of TLS 1.2 and earlier read <strong>TLS_&lt;key exchange&gt;_WITH_&lt;bulk cipher&gt;_&lt;MAC&gt;</strong>, and the key-exchange token also names the authentication, so <strong>ECDHE_RSA</strong> is ephemeral ECDH with an RSA signature. In the AEAD suites (GCM, CCM, ChaCha20-Poly1305) the trailing hash is the PRF rather than a record MAC, and the RFC 6655 CCM suites name no hash at all because their PRF is fixed at SHA-256; the page says which case it found. 0x00FF and 0x5600 are signalling values (secure renegotiation and the fallback indication), not suites a server can select, and the GREASE values of RFC 8701 — 0x0A0A, 0x1A1A and so on — are deliberately unassigned. The registry's Recommended column is its own: <strong>Y</strong> recommended, <strong>N</strong> not recommended (which the registry notes can mean limited applicability rather than a flaw) and <strong>D</strong> discouraged, which should not be negotiated. The page decodes names and codes; it does not judge whether a suite is right for your server, and it never contacts the network — the registry table it uses is compiled into this page.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* tls-core:start */
+var TlsSuites = (function(){
+  "use strict";
+
+  var MAX_VALUES = 32;
+  var MESSAGES = {
+    empty: "Enter a cipher-suite name or code.",
+    tooMany: "Decode at most 32 values at a time.",
+    unknown: "No registry name or four-digit hexadecimal code matches that value."
+  };
+
+  var RAW = [
+    "0000|TLS_NULL_WITH_NULL_NULL|N|RFC 5246;0001|TLS_RSA_WITH_NULL_MD5|D|RFC 5246 / RFC 10015;0002|TLS_RSA_WITH_NULL_SHA|D|RFC 5246 / RFC 10015;0003|TLS_RSA_EXPORT_WITH_RC4_40_MD5|D|RFC 4346 / RFC 6347 / RFC 10015;0004|TLS_R",
+    "SA_WITH_RC4_128_MD5|D|RFC 5246 / RFC 6347 / RFC 10015;0005|TLS_RSA_WITH_RC4_128_SHA|D|RFC 5246 / RFC 6347 / RFC 10015;0006|TLS_RSA_EXPORT_WITH_RC2_CBC_40_MD5|D|RFC 4346 / RFC 10015;0007|TLS_RSA_WITH_IDEA_CBC_SHA|D|RFC 89",
+    "96 / RFC 10015;0008|TLS_RSA_EXPORT_WITH_DES40_CBC_SHA|D|RFC 4346 / RFC 10015;0009|TLS_RSA_WITH_DES_CBC_SHA|D|RFC 8996 / RFC 10015;000a|TLS_RSA_WITH_3DES_EDE_CBC_SHA|D|RFC 5246 / RFC 10015;000b|TLS_DH_DSS_EXPORT_WITH_DES4",
+    "0_CBC_SHA|D|RFC 4346 / RFC 10015;000c|TLS_DH_DSS_WITH_DES_CBC_SHA|D|RFC 8996 / RFC 10015;000d|TLS_DH_DSS_WITH_3DES_EDE_CBC_SHA|D|RFC 5246 / RFC 10015;000e|TLS_DH_RSA_EXPORT_WITH_DES40_CBC_SHA|D|RFC 4346 / RFC 10015;000f|",
+    "TLS_DH_RSA_WITH_DES_CBC_SHA|D|RFC 8996 / RFC 10015;0010|TLS_DH_RSA_WITH_3DES_EDE_CBC_SHA|D|RFC 5246 / RFC 10015;0011|TLS_DHE_DSS_EXPORT_WITH_DES40_CBC_SHA|D|RFC 4346 / RFC 10015;0012|TLS_DHE_DSS_WITH_DES_CBC_SHA|D|RFC 89",
+    "96 / RFC 10015;0013|TLS_DHE_DSS_WITH_3DES_EDE_CBC_SHA|D|RFC 5246 / RFC 10015;0014|TLS_DHE_RSA_EXPORT_WITH_DES40_CBC_SHA|D|RFC 4346 / RFC 10015;0015|TLS_DHE_RSA_WITH_DES_CBC_SHA|D|RFC 8996 / RFC 10015;0016|TLS_DHE_RSA_WIT",
+    "H_3DES_EDE_CBC_SHA|D|RFC 5246 / RFC 10015;0017|TLS_DH_anon_EXPORT_WITH_RC4_40_MD5|D|RFC 4346 / RFC 6347 / RFC 10015;0018|TLS_DH_anon_WITH_RC4_128_MD5|D|RFC 5246 / RFC 6347 / RFC 10015;0019|TLS_DH_anon_EXPORT_WITH_DES40_C",
+    "BC_SHA|D|RFC 4346 / RFC 10015;001a|TLS_DH_anon_WITH_DES_CBC_SHA|D|RFC 8996 / RFC 10015;001b|TLS_DH_anon_WITH_3DES_EDE_CBC_SHA|D|RFC 5246 / RFC 10015;001e|TLS_KRB5_WITH_DES_CBC_SHA|D|RFC 2712 / RFC 9847;001f|TLS_KRB5_WITH",
+    "_3DES_EDE_CBC_SHA|N|RFC 2712;0020|TLS_KRB5_WITH_RC4_128_SHA|D|RFC 2712 / RFC 6347 / RFC 9847;0021|TLS_KRB5_WITH_IDEA_CBC_SHA|D|RFC 2712 / RFC 9847;0022|TLS_KRB5_WITH_DES_CBC_MD5|D|RFC 2712 / RFC 9847;0023|TLS_KRB5_WITH_3",
+    "DES_EDE_CBC_MD5|N|RFC 2712;0024|TLS_KRB5_WITH_RC4_128_MD5|D|RFC 2712 / RFC 6347 / RFC 9847;0025|TLS_KRB5_WITH_IDEA_CBC_MD5|D|RFC 2712 / RFC 9847;0026|TLS_KRB5_EXPORT_WITH_DES_CBC_40_SHA|D|RFC 2712 / RFC 9847;0027|TLS_KRB",
+    "5_EXPORT_WITH_RC2_CBC_40_SHA|D|RFC 2712 / RFC 9847;0028|TLS_KRB5_EXPORT_WITH_RC4_40_SHA|D|RFC 2712 / RFC 6347 / RFC 9847;0029|TLS_KRB5_EXPORT_WITH_DES_CBC_40_MD5|D|RFC 2712 / RFC 9847;002a|TLS_KRB5_EXPORT_WITH_RC2_CBC_40",
+    "_MD5|D|RFC 2712 / RFC 9847;002b|TLS_KRB5_EXPORT_WITH_RC4_40_MD5|D|RFC 2712 / RFC 6347 / RFC 9847;002c|TLS_PSK_WITH_NULL_SHA|D|RFC 4785 / RFC 9847;002d|TLS_DHE_PSK_WITH_NULL_SHA|D|RFC 4785 / RFC 10015;002e|TLS_RSA_PSK_WIT",
+    "H_NULL_SHA|D|RFC 4785 / RFC 10015;002f|TLS_RSA_WITH_AES_128_CBC_SHA|D|RFC 5246 / RFC 10015;0030|TLS_DH_DSS_WITH_AES_128_CBC_SHA|D|RFC 5246 / RFC 10015;0031|TLS_DH_RSA_WITH_AES_128_CBC_SHA|D|RFC 5246 / RFC 10015;0032|TLS_",
+    "DHE_DSS_WITH_AES_128_CBC_SHA|D|RFC 5246 / RFC 10015;0033|TLS_DHE_RSA_WITH_AES_128_CBC_SHA|D|RFC 5246 / RFC 10015;0034|TLS_DH_anon_WITH_AES_128_CBC_SHA|D|RFC 5246 / RFC 10015;0035|TLS_RSA_WITH_AES_256_CBC_SHA|D|RFC 5246 /",
+    " RFC 10015;0036|TLS_DH_DSS_WITH_AES_256_CBC_SHA|D|RFC 5246 / RFC 10015;0037|TLS_DH_RSA_WITH_AES_256_CBC_SHA|D|RFC 5246 / RFC 10015;0038|TLS_DHE_DSS_WITH_AES_256_CBC_SHA|D|RFC 5246 / RFC 10015;0039|TLS_DHE_RSA_WITH_AES_25",
+    "6_CBC_SHA|D|RFC 5246 / RFC 10015;003a|TLS_DH_anon_WITH_AES_256_CBC_SHA|D|RFC 5246 / RFC 10015;003b|TLS_RSA_WITH_NULL_SHA256|D|RFC 5246 / RFC 10015;003c|TLS_RSA_WITH_AES_128_CBC_SHA256|D|RFC 5246 / RFC 10015;003d|TLS_RSA_",
+    "WITH_AES_256_CBC_SHA256|D|RFC 5246 / RFC 10015;003e|TLS_DH_DSS_WITH_AES_128_CBC_SHA256|D|RFC 5246 / RFC 10015;003f|TLS_DH_RSA_WITH_AES_128_CBC_SHA256|D|RFC 5246 / RFC 10015;0040|TLS_DHE_DSS_WITH_AES_128_CBC_SHA256|D|RFC ",
+    "5246 / RFC 10015;0041|TLS_RSA_WITH_CAMELLIA_128_CBC_SHA|D|RFC 5932 / RFC 10015;0042|TLS_DH_DSS_WITH_CAMELLIA_128_CBC_SHA|D|RFC 5932 / RFC 10015;0043|TLS_DH_RSA_WITH_CAMELLIA_128_CBC_SHA|D|RFC 5932 / RFC 10015;0044|TLS_DH",
+    "E_DSS_WITH_CAMELLIA_128_CBC_SHA|D|RFC 5932 / RFC 10015;0045|TLS_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA|D|RFC 5932 / RFC 10015;0046|TLS_DH_anon_WITH_CAMELLIA_128_CBC_SHA|D|RFC 5932 / RFC 10015;0067|TLS_DHE_RSA_WITH_AES_128_CBC",
+    "_SHA256|D|RFC 5246 / RFC 10015;0068|TLS_DH_DSS_WITH_AES_256_CBC_SHA256|D|RFC 5246 / RFC 10015;0069|TLS_DH_RSA_WITH_AES_256_CBC_SHA256|D|RFC 5246 / RFC 10015;006a|TLS_DHE_DSS_WITH_AES_256_CBC_SHA256|D|RFC 5246 / RFC 10015",
+    ";006b|TLS_DHE_RSA_WITH_AES_256_CBC_SHA256|D|RFC 5246 / RFC 10015;006c|TLS_DH_anon_WITH_AES_128_CBC_SHA256|D|RFC 5246 / RFC 10015;006d|TLS_DH_anon_WITH_AES_256_CBC_SHA256|D|RFC 5246 / RFC 10015;006e|TLS_ASCONAEAD128_ASCON",
+    "HASH256|N|NIST SP 800-232;006f|TLS_ASCONAEAD128_SHA256|N|NIST SP 800-232 / RFC 9846;0070|TLS_AES_128_GCM_ASCONHASH256|N|NIST SP 800-232 / RFC 9846;0071|TLS_AES_128_CCM_ASCONHASH256|N|NIST SP 800-232 / RFC 9846;0072|TLS_B",
+    "ELT_CHE256_BELT_HASH|N|draft-kalosha-stb-tls13-01;0073|TLS_BASH_PRG_AE2561_BASH256|N|draft-kalosha-stb-tls13-01;0084|TLS_RSA_WITH_CAMELLIA_256_CBC_SHA|D|RFC 5932 / RFC 10015;0085|TLS_DH_DSS_WITH_CAMELLIA_256_CBC_SHA|D|RF",
+    "C 5932 / RFC 10015;0086|TLS_DH_RSA_WITH_CAMELLIA_256_CBC_SHA|D|RFC 5932 / RFC 10015;0087|TLS_DHE_DSS_WITH_CAMELLIA_256_CBC_SHA|D|RFC 5932 / RFC 10015;0088|TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA|D|RFC 5932 / RFC 10015;0089",
+    "|TLS_DH_anon_WITH_CAMELLIA_256_CBC_SHA|D|RFC 5932 / RFC 10015;008a|TLS_PSK_WITH_RC4_128_SHA|D|RFC 4279 / RFC 6347 / RFC 9847;008b|TLS_PSK_WITH_3DES_EDE_CBC_SHA|N|RFC 4279;008c|TLS_PSK_WITH_AES_128_CBC_SHA|N|RFC 4279;008d",
+    "|TLS_PSK_WITH_AES_256_CBC_SHA|N|RFC 4279;008e|TLS_DHE_PSK_WITH_RC4_128_SHA|D|RFC 4279 / RFC 6347 / RFC 10015;008f|TLS_DHE_PSK_WITH_3DES_EDE_CBC_SHA|D|RFC 4279 / RFC 10015;0090|TLS_DHE_PSK_WITH_AES_128_CBC_SHA|D|RFC 4279 ",
+    "/ RFC 10015;0091|TLS_DHE_PSK_WITH_AES_256_CBC_SHA|D|RFC 4279 / RFC 10015;0092|TLS_RSA_PSK_WITH_RC4_128_SHA|D|RFC 4279 / RFC 6347 / RFC 10015;0093|TLS_RSA_PSK_WITH_3DES_EDE_CBC_SHA|D|RFC 4279 / RFC 10015;0094|TLS_RSA_PSK_",
+    "WITH_AES_128_CBC_SHA|D|RFC 4279 / RFC 10015;0095|TLS_RSA_PSK_WITH_AES_256_CBC_SHA|D|RFC 4279 / RFC 10015;0096|TLS_RSA_WITH_SEED_CBC_SHA|D|RFC 4162 / RFC 10015;0097|TLS_DH_DSS_WITH_SEED_CBC_SHA|D|RFC 4162 / RFC 10015;0098",
+    "|TLS_DH_RSA_WITH_SEED_CBC_SHA|D|RFC 4162 / RFC 10015;0099|TLS_DHE_DSS_WITH_SEED_CBC_SHA|D|RFC 4162 / RFC 10015;009a|TLS_DHE_RSA_WITH_SEED_CBC_SHA|D|RFC 4162 / RFC 10015;009b|TLS_DH_anon_WITH_SEED_CBC_SHA|D|RFC 4162 / RFC",
+    " 10015;009c|TLS_RSA_WITH_AES_128_GCM_SHA256|D|RFC 5288 / RFC 10015;009d|TLS_RSA_WITH_AES_256_GCM_SHA384|D|RFC 5288 / RFC 10015;009e|TLS_DHE_RSA_WITH_AES_128_GCM_SHA256|D|RFC 5288 / RFC 10015;009f|TLS_DHE_RSA_WITH_AES_256",
+    "_GCM_SHA384|D|RFC 5288 / RFC 10015;00a0|TLS_DH_RSA_WITH_AES_128_GCM_SHA256|D|RFC 5288 / RFC 10015;00a1|TLS_DH_RSA_WITH_AES_256_GCM_SHA384|D|RFC 5288 / RFC 10015;00a2|TLS_DHE_DSS_WITH_AES_128_GCM_SHA256|D|RFC 5288 / RFC 1",
+    "0015;00a3|TLS_DHE_DSS_WITH_AES_256_GCM_SHA384|D|RFC 5288 / RFC 10015;00a4|TLS_DH_DSS_WITH_AES_128_GCM_SHA256|D|RFC 5288 / RFC 10015;00a5|TLS_DH_DSS_WITH_AES_256_GCM_SHA384|D|RFC 5288 / RFC 10015;00a6|TLS_DH_anon_WITH_AES",
+    "_128_GCM_SHA256|D|RFC 5288 / RFC 10015;00a7|TLS_DH_anon_WITH_AES_256_GCM_SHA384|D|RFC 5288 / RFC 10015;00a8|TLS_PSK_WITH_AES_128_GCM_SHA256|N|RFC 5487;00a9|TLS_PSK_WITH_AES_256_GCM_SHA384|N|RFC 5487;00aa|TLS_DHE_PSK_WITH",
+    "_AES_128_GCM_SHA256|D|RFC 5487 / RFC 10015;00ab|TLS_DHE_PSK_WITH_AES_256_GCM_SHA384|D|RFC 5487 / RFC 10015;00ac|TLS_RSA_PSK_WITH_AES_128_GCM_SHA256|D|RFC 5487 / RFC 10015;00ad|TLS_RSA_PSK_WITH_AES_256_GCM_SHA384|D|RFC 54",
+    "87 / RFC 10015;00ae|TLS_PSK_WITH_AES_128_CBC_SHA256|N|RFC 5487;00af|TLS_PSK_WITH_AES_256_CBC_SHA384|N|RFC 5487;00b0|TLS_PSK_WITH_NULL_SHA256|D|RFC 5487 / RFC 9847;00b1|TLS_PSK_WITH_NULL_SHA384|D|RFC 5487 / RFC 9847;00b2|",
+    "TLS_DHE_PSK_WITH_AES_128_CBC_SHA256|D|RFC 5487 / RFC 10015;00b3|TLS_DHE_PSK_WITH_AES_256_CBC_SHA384|D|RFC 5487 / RFC 10015;00b4|TLS_DHE_PSK_WITH_NULL_SHA256|D|RFC 5487 / RFC 10015;00b5|TLS_DHE_PSK_WITH_NULL_SHA384|D|RFC ",
+    "5487 / RFC 10015;00b6|TLS_RSA_PSK_WITH_AES_128_CBC_SHA256|D|RFC 5487 / RFC 10015;00b7|TLS_RSA_PSK_WITH_AES_256_CBC_SHA384|D|RFC 5487 / RFC 10015;00b8|TLS_RSA_PSK_WITH_NULL_SHA256|D|RFC 5487 / RFC 10015;00b9|TLS_RSA_PSK_W",
+    "ITH_NULL_SHA384|D|RFC 5487 / RFC 10015;00ba|TLS_RSA_WITH_CAMELLIA_128_CBC_SHA256|D|RFC 5932 / RFC 10015;00bb|TLS_DH_DSS_WITH_CAMELLIA_128_CBC_SHA256|D|RFC 5932 / RFC 10015;00bc|TLS_DH_RSA_WITH_CAMELLIA_128_CBC_SHA256|D|R",
+    "FC 5932 / RFC 10015;00bd|TLS_DHE_DSS_WITH_CAMELLIA_128_CBC_SHA256|D|RFC 5932 / RFC 10015;00be|TLS_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA256|D|RFC 5932 / RFC 10015;00bf|TLS_DH_anon_WITH_CAMELLIA_128_CBC_SHA256|D|RFC 5932 / RFC",
+    " 10015;00c0|TLS_RSA_WITH_CAMELLIA_256_CBC_SHA256|D|RFC 5932 / RFC 10015;00c1|TLS_DH_DSS_WITH_CAMELLIA_256_CBC_SHA256|D|RFC 5932 / RFC 10015;00c2|TLS_DH_RSA_WITH_CAMELLIA_256_CBC_SHA256|D|RFC 5932 / RFC 10015;00c3|TLS_DHE",
+    "_DSS_WITH_CAMELLIA_256_CBC_SHA256|D|RFC 5932 / RFC 10015;00c4|TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA256|D|RFC 5932 / RFC 10015;00c5|TLS_DH_anon_WITH_CAMELLIA_256_CBC_SHA256|D|RFC 5932 / RFC 10015;00c6|TLS_SM4_GCM_SM3|N|RF",
+    "C 8998;00c7|TLS_SM4_CCM_SM3|N|RFC 8998;00ff|TLS_EMPTY_RENEGOTIATION_INFO_SCSV|N|RFC 5746;1301|TLS_AES_128_GCM_SHA256|Y|RFC 9846;1302|TLS_AES_256_GCM_SHA384|Y|RFC 9846;1303|TLS_CHACHA20_POLY1305_SHA256|Y|RFC 9846;1304|TLS",
+    "_AES_128_CCM_SHA256|Y|RFC 9846;1305|TLS_AES_128_CCM_8_SHA256|N|RFC 9846 / IESG Action 2018-08-16;1306|TLS_AEGIS_256_SHA512|N|draft-denis-tls-aegis-07;1307|TLS_AEGIS_128L_SHA256|N|draft-denis-tls-aegis-07;5600|TLS_FALLBAC",
+    "K_SCSV|N|RFC 7507;c001|TLS_ECDH_ECDSA_WITH_NULL_SHA|D|RFC 8422 / RFC 10015;c002|TLS_ECDH_ECDSA_WITH_RC4_128_SHA|D|RFC 8422 / RFC 6347 / RFC 10015;c003|TLS_ECDH_ECDSA_WITH_3DES_EDE_CBC_SHA|D|RFC 8422 / RFC 10015;c004|TLS_",
+    "ECDH_ECDSA_WITH_AES_128_CBC_SHA|D|RFC 8422 / RFC 10015;c005|TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA|D|RFC 8422 / RFC 10015;c006|TLS_ECDHE_ECDSA_WITH_NULL_SHA|D|RFC 8422 / RFC 9847;c007|TLS_ECDHE_ECDSA_WITH_RC4_128_SHA|D|RFC ",
+    "8422 / RFC 6347 / RFC 9847;c008|TLS_ECDHE_ECDSA_WITH_3DES_EDE_CBC_SHA|N|RFC 8422;c009|TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA|N|RFC 8422;c00a|TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA|N|RFC 8422;c00b|TLS_ECDH_RSA_WITH_NULL_SHA|D",
+    "|RFC 8422 / RFC 10015;c00c|TLS_ECDH_RSA_WITH_RC4_128_SHA|D|RFC 8422 / RFC 6347 / RFC 10015;c00d|TLS_ECDH_RSA_WITH_3DES_EDE_CBC_SHA|D|RFC 8422 / RFC 10015;c00e|TLS_ECDH_RSA_WITH_AES_128_CBC_SHA|D|RFC 8422 / RFC 10015;c00f",
+    "|TLS_ECDH_RSA_WITH_AES_256_CBC_SHA|D|RFC 8422 / RFC 10015;c010|TLS_ECDHE_RSA_WITH_NULL_SHA|D|RFC 8422 / RFC 9847;c011|TLS_ECDHE_RSA_WITH_RC4_128_SHA|D|RFC 8422 / RFC 6347 / RFC 9847;c012|TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_S",
+    "HA|N|RFC 8422;c013|TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA|N|RFC 8422;c014|TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA|N|RFC 8422;c015|TLS_ECDH_anon_WITH_NULL_SHA|D|RFC 8422 / RFC 10015;c016|TLS_ECDH_anon_WITH_RC4_128_SHA|D|RFC 8422 /",
+    " RFC 6347 / RFC 10015;c017|TLS_ECDH_anon_WITH_3DES_EDE_CBC_SHA|D|RFC 8422 / RFC 10015;c018|TLS_ECDH_anon_WITH_AES_128_CBC_SHA|D|RFC 8422 / RFC 10015;c019|TLS_ECDH_anon_WITH_AES_256_CBC_SHA|D|RFC 8422 / RFC 10015;c01a|TLS",
+    "_SRP_SHA_WITH_3DES_EDE_CBC_SHA|N|RFC 5054;c01b|TLS_SRP_SHA_RSA_WITH_3DES_EDE_CBC_SHA|N|RFC 5054;c01c|TLS_SRP_SHA_DSS_WITH_3DES_EDE_CBC_SHA|N|RFC 5054;c01d|TLS_SRP_SHA_WITH_AES_128_CBC_SHA|N|RFC 5054;c01e|TLS_SRP_SHA_RSA_",
+    "WITH_AES_128_CBC_SHA|N|RFC 5054;c01f|TLS_SRP_SHA_DSS_WITH_AES_128_CBC_SHA|N|RFC 5054;c020|TLS_SRP_SHA_WITH_AES_256_CBC_SHA|N|RFC 5054;c021|TLS_SRP_SHA_RSA_WITH_AES_256_CBC_SHA|N|RFC 5054;c022|TLS_SRP_SHA_DSS_WITH_AES_256",
+    "_CBC_SHA|N|RFC 5054;c023|TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256|N|RFC 5289;c024|TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384|N|RFC 5289;c025|TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA256|D|RFC 5289 / RFC 10015;c026|TLS_ECDH_ECDSA_W",
+    "ITH_AES_256_CBC_SHA384|D|RFC 5289 / RFC 10015;c027|TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256|N|RFC 5289;c028|TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384|N|RFC 5289;c029|TLS_ECDH_RSA_WITH_AES_128_CBC_SHA256|D|RFC 5289 / RFC 10015;c",
+    "02a|TLS_ECDH_RSA_WITH_AES_256_CBC_SHA384|D|RFC 5289 / RFC 10015;c02b|TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256|Y|RFC 5289;c02c|TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384|Y|RFC 5289;c02d|TLS_ECDH_ECDSA_WITH_AES_128_GCM_SHA256|",
+    "D|RFC 5289 / RFC 10015;c02e|TLS_ECDH_ECDSA_WITH_AES_256_GCM_SHA384|D|RFC 5289 / RFC 10015;c02f|TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256|Y|RFC 5289;c030|TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384|Y|RFC 5289;c031|TLS_ECDH_RSA_WITH",
+    "_AES_128_GCM_SHA256|D|RFC 5289 / RFC 10015;c032|TLS_ECDH_RSA_WITH_AES_256_GCM_SHA384|D|RFC 5289 / RFC 10015;c033|TLS_ECDHE_PSK_WITH_RC4_128_SHA|D|RFC 5489 / RFC 6347 / RFC 9847;c034|TLS_ECDHE_PSK_WITH_3DES_EDE_CBC_SHA|N|",
+    "RFC 5489;c035|TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA|N|RFC 5489;c036|TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA|N|RFC 5489;c037|TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA256|N|RFC 5489;c038|TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA384|N|RFC 5489;c",
+    "039|TLS_ECDHE_PSK_WITH_NULL_SHA|D|RFC 5489 / RFC 9847;c03a|TLS_ECDHE_PSK_WITH_NULL_SHA256|D|RFC 5489 / RFC 9847;c03b|TLS_ECDHE_PSK_WITH_NULL_SHA384|D|RFC 5489 / RFC 9847;c03c|TLS_RSA_WITH_ARIA_128_CBC_SHA256|D|RFC 6209 /",
+    " RFC 10015;c03d|TLS_RSA_WITH_ARIA_256_CBC_SHA384|D|RFC 6209 / RFC 10015;c03e|TLS_DH_DSS_WITH_ARIA_128_CBC_SHA256|D|RFC 6209 / RFC 10015;c03f|TLS_DH_DSS_WITH_ARIA_256_CBC_SHA384|D|RFC 6209 / RFC 10015;c040|TLS_DH_RSA_WITH",
+    "_ARIA_128_CBC_SHA256|D|RFC 6209 / RFC 10015;c041|TLS_DH_RSA_WITH_ARIA_256_CBC_SHA384|D|RFC 6209 / RFC 10015;c042|TLS_DHE_DSS_WITH_ARIA_128_CBC_SHA256|D|RFC 6209 / RFC 10015;c043|TLS_DHE_DSS_WITH_ARIA_256_CBC_SHA384|D|RFC",
+    " 6209 / RFC 10015;c044|TLS_DHE_RSA_WITH_ARIA_128_CBC_SHA256|D|RFC 6209 / RFC 10015;c045|TLS_DHE_RSA_WITH_ARIA_256_CBC_SHA384|D|RFC 6209 / RFC 10015;c046|TLS_DH_anon_WITH_ARIA_128_CBC_SHA256|D|RFC 6209 / RFC 10015;c047|TL",
+    "S_DH_anon_WITH_ARIA_256_CBC_SHA384|D|RFC 6209 / RFC 10015;c048|TLS_ECDHE_ECDSA_WITH_ARIA_128_CBC_SHA256|N|RFC 6209;c049|TLS_ECDHE_ECDSA_WITH_ARIA_256_CBC_SHA384|N|RFC 6209;c04a|TLS_ECDH_ECDSA_WITH_ARIA_128_CBC_SHA256|D|R",
+    "FC 6209 / RFC 10015;c04b|TLS_ECDH_ECDSA_WITH_ARIA_256_CBC_SHA384|D|RFC 6209 / RFC 10015;c04c|TLS_ECDHE_RSA_WITH_ARIA_128_CBC_SHA256|N|RFC 6209;c04d|TLS_ECDHE_RSA_WITH_ARIA_256_CBC_SHA384|N|RFC 6209;c04e|TLS_ECDH_RSA_WITH",
+    "_ARIA_128_CBC_SHA256|D|RFC 6209 / RFC 10015;c04f|TLS_ECDH_RSA_WITH_ARIA_256_CBC_SHA384|D|RFC 6209 / RFC 10015;c050|TLS_RSA_WITH_ARIA_128_GCM_SHA256|D|RFC 6209 / RFC 10015;c051|TLS_RSA_WITH_ARIA_256_GCM_SHA384|D|RFC 6209 ",
+    "/ RFC 10015;c052|TLS_DHE_RSA_WITH_ARIA_128_GCM_SHA256|D|RFC 6209 / RFC 10015;c053|TLS_DHE_RSA_WITH_ARIA_256_GCM_SHA384|D|RFC 6209 / RFC 10015;c054|TLS_DH_RSA_WITH_ARIA_128_GCM_SHA256|D|RFC 6209 / RFC 10015;c055|TLS_DH_RS",
+    "A_WITH_ARIA_256_GCM_SHA384|D|RFC 6209 / RFC 10015;c056|TLS_DHE_DSS_WITH_ARIA_128_GCM_SHA256|D|RFC 6209 / RFC 10015;c057|TLS_DHE_DSS_WITH_ARIA_256_GCM_SHA384|D|RFC 6209 / RFC 10015;c058|TLS_DH_DSS_WITH_ARIA_128_GCM_SHA256",
+    "|D|RFC 6209 / RFC 10015;c059|TLS_DH_DSS_WITH_ARIA_256_GCM_SHA384|D|RFC 6209 / RFC 10015;c05a|TLS_DH_anon_WITH_ARIA_128_GCM_SHA256|D|RFC 6209 / RFC 10015;c05b|TLS_DH_anon_WITH_ARIA_256_GCM_SHA384|D|RFC 6209 / RFC 10015;c0",
+    "5c|TLS_ECDHE_ECDSA_WITH_ARIA_128_GCM_SHA256|N|RFC 6209;c05d|TLS_ECDHE_ECDSA_WITH_ARIA_256_GCM_SHA384|N|RFC 6209;c05e|TLS_ECDH_ECDSA_WITH_ARIA_128_GCM_SHA256|D|RFC 6209 / RFC 10015;c05f|TLS_ECDH_ECDSA_WITH_ARIA_256_GCM_SH",
+    "A384|D|RFC 6209 / RFC 10015;c060|TLS_ECDHE_RSA_WITH_ARIA_128_GCM_SHA256|N|RFC 6209;c061|TLS_ECDHE_RSA_WITH_ARIA_256_GCM_SHA384|N|RFC 6209;c062|TLS_ECDH_RSA_WITH_ARIA_128_GCM_SHA256|D|RFC 6209 / RFC 10015;c063|TLS_ECDH_RS",
+    "A_WITH_ARIA_256_GCM_SHA384|D|RFC 6209 / RFC 10015;c064|TLS_PSK_WITH_ARIA_128_CBC_SHA256|N|RFC 6209;c065|TLS_PSK_WITH_ARIA_256_CBC_SHA384|N|RFC 6209;c066|TLS_DHE_PSK_WITH_ARIA_128_CBC_SHA256|D|RFC 6209 / RFC 10015;c067|TL",
+    "S_DHE_PSK_WITH_ARIA_256_CBC_SHA384|D|RFC 6209 / RFC 10015;c068|TLS_RSA_PSK_WITH_ARIA_128_CBC_SHA256|D|RFC 6209 / RFC 10015;c069|TLS_RSA_PSK_WITH_ARIA_256_CBC_SHA384|D|RFC 6209 / RFC 10015;c06a|TLS_PSK_WITH_ARIA_128_GCM_S",
+    "HA256|N|RFC 6209;c06b|TLS_PSK_WITH_ARIA_256_GCM_SHA384|N|RFC 6209;c06c|TLS_DHE_PSK_WITH_ARIA_128_GCM_SHA256|D|RFC 6209 / RFC 10015;c06d|TLS_DHE_PSK_WITH_ARIA_256_GCM_SHA384|D|RFC 6209 / RFC 10015;c06e|TLS_RSA_PSK_WITH_AR",
+    "IA_128_GCM_SHA256|D|RFC 6209 / RFC 10015;c06f|TLS_RSA_PSK_WITH_ARIA_256_GCM_SHA384|D|RFC 6209 / RFC 10015;c070|TLS_ECDHE_PSK_WITH_ARIA_128_CBC_SHA256|N|RFC 6209;c071|TLS_ECDHE_PSK_WITH_ARIA_256_CBC_SHA384|N|RFC 6209;c072",
+    "|TLS_ECDHE_ECDSA_WITH_CAMELLIA_128_CBC_SHA256|N|RFC 6367;c073|TLS_ECDHE_ECDSA_WITH_CAMELLIA_256_CBC_SHA384|N|RFC 6367;c074|TLS_ECDH_ECDSA_WITH_CAMELLIA_128_CBC_SHA256|D|RFC 6367 / RFC 10015;c075|TLS_ECDH_ECDSA_WITH_CAMEL",
+    "LIA_256_CBC_SHA384|D|RFC 6367 / RFC 10015;c076|TLS_ECDHE_RSA_WITH_CAMELLIA_128_CBC_SHA256|N|RFC 6367;c077|TLS_ECDHE_RSA_WITH_CAMELLIA_256_CBC_SHA384|N|RFC 6367;c078|TLS_ECDH_RSA_WITH_CAMELLIA_128_CBC_SHA256|D|RFC 6367 / ",
+    "RFC 10015;c079|TLS_ECDH_RSA_WITH_CAMELLIA_256_CBC_SHA384|D|RFC 6367 / RFC 10015;c07a|TLS_RSA_WITH_CAMELLIA_128_GCM_SHA256|D|RFC 6367 / RFC 10015;c07b|TLS_RSA_WITH_CAMELLIA_256_GCM_SHA384|D|RFC 6367 / RFC 10015;c07c|TLS_D",
+    "HE_RSA_WITH_CAMELLIA_128_GCM_SHA256|D|RFC 6367 / RFC 10015;c07d|TLS_DHE_RSA_WITH_CAMELLIA_256_GCM_SHA384|D|RFC 6367 / RFC 10015;c07e|TLS_DH_RSA_WITH_CAMELLIA_128_GCM_SHA256|D|RFC 6367 / RFC 10015;c07f|TLS_DH_RSA_WITH_CAM",
+    "ELLIA_256_GCM_SHA384|D|RFC 6367 / RFC 10015;c080|TLS_DHE_DSS_WITH_CAMELLIA_128_GCM_SHA256|D|RFC 6367 / RFC 10015;c081|TLS_DHE_DSS_WITH_CAMELLIA_256_GCM_SHA384|D|RFC 6367 / RFC 10015;c082|TLS_DH_DSS_WITH_CAMELLIA_128_GCM_",
+    "SHA256|D|RFC 6367 / RFC 10015;c083|TLS_DH_DSS_WITH_CAMELLIA_256_GCM_SHA384|D|RFC 6367 / RFC 10015;c084|TLS_DH_anon_WITH_CAMELLIA_128_GCM_SHA256|D|RFC 6367 / RFC 10015;c085|TLS_DH_anon_WITH_CAMELLIA_256_GCM_SHA384|D|RFC 6",
+    "367 / RFC 10015;c086|TLS_ECDHE_ECDSA_WITH_CAMELLIA_128_GCM_SHA256|N|RFC 6367;c087|TLS_ECDHE_ECDSA_WITH_CAMELLIA_256_GCM_SHA384|N|RFC 6367;c088|TLS_ECDH_ECDSA_WITH_CAMELLIA_128_GCM_SHA256|D|RFC 6367 / RFC 10015;c089|TLS_E",
+    "CDH_ECDSA_WITH_CAMELLIA_256_GCM_SHA384|D|RFC 6367 / RFC 10015;c08a|TLS_ECDHE_RSA_WITH_CAMELLIA_128_GCM_SHA256|N|RFC 6367;c08b|TLS_ECDHE_RSA_WITH_CAMELLIA_256_GCM_SHA384|N|RFC 6367;c08c|TLS_ECDH_RSA_WITH_CAMELLIA_128_GCM_",
+    "SHA256|D|RFC 6367 / RFC 10015;c08d|TLS_ECDH_RSA_WITH_CAMELLIA_256_GCM_SHA384|D|RFC 6367 / RFC 10015;c08e|TLS_PSK_WITH_CAMELLIA_128_GCM_SHA256|N|RFC 6367;c08f|TLS_PSK_WITH_CAMELLIA_256_GCM_SHA384|N|RFC 6367;c090|TLS_DHE_P",
+    "SK_WITH_CAMELLIA_128_GCM_SHA256|D|RFC 6367 / RFC 10015;c091|TLS_DHE_PSK_WITH_CAMELLIA_256_GCM_SHA384|D|RFC 6367 / RFC 10015;c092|TLS_RSA_PSK_WITH_CAMELLIA_128_GCM_SHA256|D|RFC 6367 / RFC 10015;c093|TLS_RSA_PSK_WITH_CAMEL",
+    "LIA_256_GCM_SHA384|D|RFC 6367 / RFC 10015;c094|TLS_PSK_WITH_CAMELLIA_128_CBC_SHA256|N|RFC 6367;c095|TLS_PSK_WITH_CAMELLIA_256_CBC_SHA384|N|RFC 6367;c096|TLS_DHE_PSK_WITH_CAMELLIA_128_CBC_SHA256|D|RFC 6367 / RFC 10015;c09",
+    "7|TLS_DHE_PSK_WITH_CAMELLIA_256_CBC_SHA384|D|RFC 6367 / RFC 10015;c098|TLS_RSA_PSK_WITH_CAMELLIA_128_CBC_SHA256|D|RFC 6367 / RFC 10015;c099|TLS_RSA_PSK_WITH_CAMELLIA_256_CBC_SHA384|D|RFC 6367 / RFC 10015;c09a|TLS_ECDHE_P",
+    "SK_WITH_CAMELLIA_128_CBC_SHA256|N|RFC 6367;c09b|TLS_ECDHE_PSK_WITH_CAMELLIA_256_CBC_SHA384|N|RFC 6367;c09c|TLS_RSA_WITH_AES_128_CCM|D|RFC 6655 / RFC 10015;c09d|TLS_RSA_WITH_AES_256_CCM|D|RFC 6655 / RFC 10015;c09e|TLS_DHE",
+    "_RSA_WITH_AES_128_CCM|D|RFC 6655 / RFC 10015;c09f|TLS_DHE_RSA_WITH_AES_256_CCM|D|RFC 6655 / RFC 10015;c0a0|TLS_RSA_WITH_AES_128_CCM_8|D|RFC 6655 / RFC 10015;c0a1|TLS_RSA_WITH_AES_256_CCM_8|D|RFC 6655 / RFC 10015;c0a2|TLS",
+    "_DHE_RSA_WITH_AES_128_CCM_8|D|RFC 6655 / RFC 10015;c0a3|TLS_DHE_RSA_WITH_AES_256_CCM_8|D|RFC 6655 / RFC 10015;c0a4|TLS_PSK_WITH_AES_128_CCM|N|RFC 6655;c0a5|TLS_PSK_WITH_AES_256_CCM|N|RFC 6655;c0a6|TLS_DHE_PSK_WITH_AES_12",
+    "8_CCM|D|RFC 6655 / RFC 10015;c0a7|TLS_DHE_PSK_WITH_AES_256_CCM|D|RFC 6655 / RFC 10015;c0a8|TLS_PSK_WITH_AES_128_CCM_8|N|RFC 6655;c0a9|TLS_PSK_WITH_AES_256_CCM_8|N|RFC 6655;c0aa|TLS_PSK_DHE_WITH_AES_128_CCM_8|D|RFC 6655 /",
+    " RFC 10015;c0ab|TLS_PSK_DHE_WITH_AES_256_CCM_8|D|RFC 6655 / RFC 10015;c0ac|TLS_ECDHE_ECDSA_WITH_AES_128_CCM|N|RFC 7251;c0ad|TLS_ECDHE_ECDSA_WITH_AES_256_CCM|N|RFC 7251;c0ae|TLS_ECDHE_ECDSA_WITH_AES_128_CCM_8|N|RFC 7251;c",
+    "0af|TLS_ECDHE_ECDSA_WITH_AES_256_CCM_8|N|RFC 7251;c0b0|TLS_ECCPWD_WITH_AES_128_GCM_SHA256|N|RFC 8492;c0b1|TLS_ECCPWD_WITH_AES_256_GCM_SHA384|N|RFC 8492;c0b2|TLS_ECCPWD_WITH_AES_128_CCM_SHA256|N|RFC 8492;c0b3|TLS_ECCPWD_W",
+    "ITH_AES_256_CCM_SHA384|N|RFC 8492;c0b4|TLS_SHA256_SHA256|D|RFC 9150 / RFC 9847;c0b5|TLS_SHA384_SHA384|D|RFC 9150 / RFC 9847;c100|TLS_GOSTR341112_256_WITH_KUZNYECHIK_CTR_OMAC|N|RFC 9189;c101|TLS_GOSTR341112_256_WITH_MAGMA",
+    "_CTR_OMAC|N|RFC 9189;c102|TLS_GOSTR341112_256_WITH_28147_CNT_IMIT|N|RFC 9189;c103|TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L|N|RFC 9367;c104|TLS_GOSTR341112_256_WITH_MAGMA_MGM_L|N|RFC 9367;c105|TLS_GOSTR341112_256_WITH_KU",
+    "ZNYECHIK_MGM_S|N|RFC 9367;c106|TLS_GOSTR341112_256_WITH_MAGMA_MGM_S|N|RFC 9367;cca8|TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256|Y|RFC 7905;cca9|TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256|Y|RFC 7905;ccaa|TLS_DHE_RSA_WI",
+    "TH_CHACHA20_POLY1305_SHA256|D|RFC 7905 / RFC 10015;ccab|TLS_PSK_WITH_CHACHA20_POLY1305_SHA256|N|RFC 7905;ccac|TLS_ECDHE_PSK_WITH_CHACHA20_POLY1305_SHA256|Y|RFC 7905;ccad|TLS_DHE_PSK_WITH_CHACHA20_POLY1305_SHA256|D|RFC 79",
+    "05 / RFC 10015;ccae|TLS_RSA_PSK_WITH_CHACHA20_POLY1305_SHA256|D|RFC 7905 / RFC 10015;d001|TLS_ECDHE_PSK_WITH_AES_128_GCM_SHA256|Y|RFC 8442;d002|TLS_ECDHE_PSK_WITH_AES_256_GCM_SHA384|Y|RFC 8442;d003|TLS_ECDHE_PSK_WITH_AES",
+    "_128_CCM_8_SHA256|N|RFC 8442;d005|TLS_ECDHE_PSK_WITH_AES_128_CCM_SHA256|Y|RFC 8442"
+  ].join("");
+
+  var HASH_LABEL = {
+    SHA: "SHA-1", SHA256: "SHA-256", SHA384: "SHA-384", SHA512: "SHA-512",
+    MD5: "MD5", SM3: "SM3", NULL: "none", ASCONHASH256: "ASCON-Hash256",
+    BELT_HASH: "BELT-Hash", BASH256: "BASH256"
+  };
+  var HASH_TOKENS = ["ASCONHASH256", "BELT_HASH", "BASH256", "SHA256", "SHA384",
+                     "SHA512", "SHA", "MD5", "SM3", "NULL"];
+
+  var CIPHERS = {
+    NULL: ["no bulk cipher", 0, "none", false],
+    RC4_40: ["RC4", 40, "stream", false],
+    RC4_128: ["RC4", 128, "stream", false],
+    RC2_CBC_40: ["RC2", 40, "CBC", false],
+    DES40_CBC: ["DES", 40, "CBC", false],
+    DES_CBC_40: ["DES", 40, "CBC", false],
+    DES_CBC: ["DES", 56, "CBC", false],
+    "3DES_EDE_CBC": ["Triple DES (EDE)", 168, "CBC", false],
+    IDEA_CBC: ["IDEA", 128, "CBC", false],
+    AES_128_CBC: ["AES", 128, "CBC", false],
+    AES_256_CBC: ["AES", 256, "CBC", false],
+    AES_128_GCM: ["AES", 128, "GCM", true],
+    AES_256_GCM: ["AES", 256, "GCM", true],
+    AES_128_CCM: ["AES", 128, "CCM", true],
+    AES_256_CCM: ["AES", 256, "CCM", true],
+    AES_128_CCM_8: ["AES", 128, "CCM with an 8-byte tag", true],
+    AES_256_CCM_8: ["AES", 256, "CCM with an 8-byte tag", true],
+    CAMELLIA_128_CBC: ["Camellia", 128, "CBC", false],
+    CAMELLIA_256_CBC: ["Camellia", 256, "CBC", false],
+    CAMELLIA_128_GCM: ["Camellia", 128, "GCM", true],
+    CAMELLIA_256_GCM: ["Camellia", 256, "GCM", true],
+    SEED_CBC: ["SEED", 128, "CBC", false],
+    ARIA_128_CBC: ["ARIA", 128, "CBC", false],
+    ARIA_256_CBC: ["ARIA", 256, "CBC", false],
+    ARIA_128_GCM: ["ARIA", 128, "GCM", true],
+    ARIA_256_GCM: ["ARIA", 256, "GCM", true],
+    CHACHA20_POLY1305: ["ChaCha20-Poly1305", 256, "AEAD", true],
+    SM4_CBC: ["SM4", 128, "CBC", false],
+    SM4_GCM: ["SM4", 128, "GCM", true],
+    SM4_CCM: ["SM4", 128, "CCM", true],
+    AEGIS_128L: ["AEGIS-128L", 128, "AEAD", true],
+    AEGIS_256: ["AEGIS-256", 256, "AEAD", true],
+    ASCONAEAD128: ["Ascon-AEAD128", 128, "AEAD", true],
+    BELT_CHE256: ["BELT-CHE256", 256, "CTR", false],
+    BASH_PRG_AE2561: ["BASH-PRG-AE2561", 256, "AEAD", true],
+    KUZNYECHIK_CTR_OMAC: ["Kuznyechik", 256, "CTR with OMAC", false],
+    MAGMA_CTR_OMAC: ["Magma", 64, "CTR with OMAC", false],
+    "28147_CNT_IMIT": ["GOST 28147-89", 256, "CNT with IMIT", false],
+    KUZNYECHIK_MGM_L: ["Kuznyechik", 256, "MGM", true],
+    MAGMA_MGM_L: ["Magma", 64, "MGM", true],
+    KUZNYECHIK_MGM_S: ["Kuznyechik", 256, "MGM", true],
+    MAGMA_MGM_S: ["Magma", 64, "MGM", true]
+  };
+
+  var KX = {
+    NULL: ["none (initial state)", "none", false],
+    RSA: ["RSA key transport", "RSA", false],
+    DH_DSS: ["static Diffie-Hellman", "DSA", false],
+    DH_RSA: ["static Diffie-Hellman", "RSA", false],
+    DHE_DSS: ["ephemeral Diffie-Hellman", "DSA", true],
+    DHE_RSA: ["ephemeral Diffie-Hellman", "RSA", true],
+    DH_anon: ["anonymous static Diffie-Hellman", "none", false],
+    ECDH_ECDSA: ["static ECDH", "ECDSA", false],
+    ECDH_RSA: ["static ECDH", "RSA", false],
+    ECDHE_ECDSA: ["ephemeral ECDH", "ECDSA", true],
+    ECDHE_RSA: ["ephemeral ECDH", "RSA", true],
+    ECDH_anon: ["anonymous static ECDH", "none", false],
+    PSK: ["pre-shared key", "pre-shared key", true],
+    RSA_PSK: ["RSA key transport, then a pre-shared key", "pre-shared key", false],
+    DHE_PSK: ["ephemeral Diffie-Hellman, then a pre-shared key", "pre-shared key", true],
+    PSK_DHE: ["ephemeral Diffie-Hellman, then a pre-shared key", "pre-shared key", true],
+    ECDHE_PSK: ["ephemeral ECDH, then a pre-shared key", "pre-shared key", true],
+    SRP_SHA: ["SRP", "password", true],
+    SRP_SHA_RSA: ["SRP with an RSA signature", "RSA", true],
+    SRP_SHA_DSS: ["SRP with a DSA signature", "DSA", true],
+    KRB5: ["Kerberos 5", "Kerberos", true],
+    CECPQ1: ["post-quantum CECPQ1 key exchange", "RSA", true],
+    ECCPWD: ["ECCPWD password-authenticated ECDH", "password", true],
+    GOSTR341112_256: ["GOST 34.10-2012 key exchange", "GOST", true]
+  };
+
+  var SIGNALING = { 255: true, 22016: true };
+  var BY_CODE = {}, BY_NAME = {}, SIZE = 0;
+
+  (function load(){
+    var rows = RAW.split(";");
+    for (var i = 0; i < rows.length; i++){
+      var f = rows[i].split("|");
+      if (f.length < 4 || !/^[0-9a-fA-F]{4}$/.test(f[0])) continue;
+      var code = parseInt(f[0], 16);
+      var rec = {
+        code: code,
+        hex: "0x" + f[0].toUpperCase(),
+        name: f[1],
+        recommended: f[2],
+        reference: f[3]
+      };
+      BY_CODE[code] = rec;
+      BY_NAME[f[1].toUpperCase()] = rec;
+      SIZE++;
+    }
+  })();
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function parseName(name){
+    if (typeof name !== "string" || name.indexOf("TLS_") !== 0) return null;
+    var body = name.slice(4);
+    var kx = null;
+    var rest = body;
+    var at = body.indexOf("_WITH_");
+    if (at > 0){
+      kx = body.slice(0, at);
+      rest = body.slice(at + 6);
+    }
+    var integrity = null;
+    if (rest === "SHA256_SHA256") integrity = "SHA256";
+    else if (rest === "SHA384_SHA384") integrity = "SHA384";
+    var exported = false;
+    if (kx !== null && kx.slice(-7) === "_EXPORT"){
+      exported = true;
+      kx = kx.slice(0, -7);
+    }
+    if (integrity !== null){
+      return {
+        keyExchange: "integrity only, no encryption",
+        auth: null,
+        forwardSecret: null,
+        exportGrade: exported,
+        integrityOnly: true,
+        cipher: "no bulk cipher",
+        bits: 0,
+        mode: "none",
+        aead: false,
+        mac: HASH_LABEL[integrity],
+        noHashInName: false
+      };
+    }
+    var cipher = null, mac = null;
+    for (var i = 0; i < HASH_TOKENS.length; i++){
+      var h = HASH_TOKENS[i];
+      if (rest.length > h.length + 1 && rest.slice(-(h.length + 1)) === "_" + h){
+        cipher = rest.slice(0, -(h.length + 1));
+        mac = h;
+        break;
+      }
+    }
+    if (cipher === null && Object.prototype.hasOwnProperty.call(CIPHERS, rest)){
+      cipher = rest;
+      mac = null;
+    }
+    if (cipher === null || !Object.prototype.hasOwnProperty.call(CIPHERS, cipher)) return null;
+    if (kx !== null && !Object.prototype.hasOwnProperty.call(KX, kx)) return null;
+    var c = CIPHERS[cipher];
+    var k = kx === null ? null : KX[kx];
+    return {
+      keyExchange: k === null ? "not in the name" : k[0],
+      auth: k === null ? "not in the name" : k[1],
+      forwardSecret: k === null ? null : k[2],
+      exportGrade: exported,
+      integrityOnly: false,
+      cipher: c[0],
+      bits: c[1],
+      mode: c[2],
+      aead: c[3],
+      mac: mac === null ? null : HASH_LABEL[mac],
+      noHashInName: mac === null
+    };
+  }
+
+  function grease(code){
+    var hi = code >> 8;
+    var lo = code & 255;
+    return hi === lo && (lo & 15) === 10;
+  }
+
+  function fromRecord(rec){
+    var kind = SIGNALING[rec.code] ? "signaling" : "suite";
+    return {
+      code: rec.code,
+      hex: rec.hex,
+      name: rec.name,
+      recommended: rec.recommended,
+      reference: rec.reference,
+      kind: kind,
+      parsed: kind === "suite" ? parseName(rec.name) : null
+    };
+  }
+
+  function fromToken(token){
+    var t = String(token).trim();
+    var up = t.toUpperCase();
+    if (up.indexOf("TLS_") === 0){
+      if (!Object.prototype.hasOwnProperty.call(BY_NAME, up)) fail(MESSAGES.unknown);
+      return fromRecord(BY_NAME[up]);
+    }
+    var m = /^(?:0X)?([0-9A-F]{4})$/.exec(up);
+    if (!m) fail(MESSAGES.unknown);
+    var code = parseInt(m[1], 16);
+    if (Object.prototype.hasOwnProperty.call(BY_CODE, code)) return fromRecord(BY_CODE[code]);
+    return {
+      code: code,
+      hex: "0x" + m[1],
+      name: null,
+      recommended: null,
+      reference: null,
+      kind: grease(code) ? "grease" : "unassigned",
+      parsed: null
+    };
+  }
+
+  function analyze(input){
+    var raw = String(input && input.value != null ? input.value : "").trim();
+    if (raw === "") fail(MESSAGES.empty);
+    var tokens = raw.split(/[\s,]+/).filter(function(x){ return x.length > 0; });
+    if (tokens.length === 0) fail(MESSAGES.empty);
+    if (tokens.length > MAX_VALUES) fail(MESSAGES.tooMany);
+    var suites = [];
+    for (var i = 0; i < tokens.length; i++) suites.push(fromToken(tokens[i]));
+    return {
+      mode: suites.length === 1 ? "single" : "list",
+      count: suites.length,
+      bytes: suites.length * 2,
+      suites: suites
+    };
+  }
+
+  function statusLabel(recommended){
+    if (recommended === "Y") return "Recommended";
+    if (recommended === "N") return "Not recommended";
+    if (recommended === "D") return "Discouraged";
+    return "Not stated";
+  }
+
+  return {
+    analyze: analyze,
+    parseName: parseName,
+    statusLabel: statusLabel,
+    MESSAGES: MESSAGES,
+    MAX_VALUES: MAX_VALUES,
+    registrySize: SIZE
+  };
+})();
+/* tls-core:end */
+</script>
+<script>
+(function(){
+  "use strict";
+
+  var defaults = { value: "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256" };
+  var els = {
+    form: document.getElementById("tls-form"),
+    input: document.getElementById("suite"),
+    err: document.getElementById("tls-err"),
+    out: document.getElementById("tls-out"),
+    reset: document.getElementById("reset")
+  };
+
+  function clear(node){
+    while (node.firstChild) node.removeChild(node.firstChild);
+  }
+
+  function addRow(parent, key, value, dim){
+    var row = document.createElement("div");
+    row.className = "row";
+    var k = document.createElement("span");
+    k.className = "k";
+    k.textContent = key;
+    var v = document.createElement("span");
+    v.className = dim ? "v dim" : "v";
+    v.textContent = value;
+    row.appendChild(k);
+    row.appendChild(v);
+    parent.appendChild(row);
+  }
+
+  function blocks(suite){
+    var hi = (suite.code >> 8) & 255;
+    var lo = suite.code & 255;
+    return "0x" + hex2(hi) + ",0x" + hex2(lo) + " (" + suite.code + ")";
+  }
+
+  function hex2(n){
+    return (n < 16 ? "0" : "") + n.toString(16).toUpperCase();
+  }
+
+  function note(parent, text){
+    var p = document.createElement("div");
+    p.className = "warn";
+    p.textContent = text;
+    parent.appendChild(p);
+  }
+
+  function renderSingle(suite){
+    var big = document.createElement("div");
+    big.className = "big";
+    big.textContent = suite.hex;
+    els.out.appendChild(big);
+    var sub = document.createElement("div");
+    sub.className = "sub";
+    sub.textContent = suite.name || (suite.kind === "grease"
+      ? "A GREASE value: deliberately unassigned"
+      : "Not in the registry");
+    els.out.appendChild(sub);
+
+    if (suite.name) addRow(els.out, "Registry name", suite.name);
+    addRow(els.out, "Code", blocks(suite));
+
+    if (suite.kind === "signaling"){
+      note(els.out, "This is a signalling value, not a cipher suite: the client offers it alongside the suites to advertise a capability, and a server never selects it.");
+      addRow(els.out, "IANA status", TlsSuites.statusLabel(suite.recommended), true);
+      if (suite.reference) addRow(els.out, "Reference", suite.reference, true);
+      return;
+    }
+    if (suite.kind !== "suite" || !suite.parsed){
+      note(els.out, suite.kind === "grease"
+        ? "GREASE values are two equal bytes ending in 0xA. Clients insert them to keep servers from rejecting unknown code points, and they name no real cipher."
+        : "The registry has no suite at this code. It may be unassigned, private use (0xFF00 to 0xFFFF) or newer than the table compiled into this page.");
+      return;
+    }
+
+    var p = suite.parsed;
+    addRow(els.out, "Key exchange", p.keyExchange);
+    addRow(els.out, "Authentication", p.auth === null ? "none" : p.auth,
+      p.auth === null);
+    addRow(els.out, "Forward secrecy", p.forwardSecret === null
+      ? "not in the name"
+      : (p.forwardSecret ? "yes, the key is ephemeral" : "no, a static key"),
+      p.forwardSecret === null);
+    addRow(els.out, "Bulk cipher", p.bits ? p.cipher + " (" + p.bits + " bits)" : p.cipher);
+    addRow(els.out, "Mode", p.mode, true);
+    addRow(els.out, "MAC / PRF", p.mac === null ? "not in the name" : p.mac, p.mac === null);
+    addRow(els.out, "IANA status", TlsSuites.statusLabel(suite.recommended), true);
+    if (suite.reference) addRow(els.out, "Reference", suite.reference, true);
+
+    if (p.noHashInName){
+      note(els.out, "This suite names no hash: the CCM suites of RFC 6655 run their PRF over SHA-256 by definition, and the GOST modes carry their integrity inside the cipher mode.");
+    }
+    if (p.integrityOnly){
+      note(els.out, "An integrity-only suite: it authenticates records without encrypting them, from RFC 9150.");
+    }
+    if (p.exportGrade){
+      note(els.out, "An export-era suite, limited to 40-bit keys by the rules of its time. It is kept in the registry for decoding old traffic, not for use.");
+    }
+  }
+
+  function renderList(result){
+    var big = document.createElement("div");
+    big.className = "big";
+    big.textContent = result.count + (result.count === 1 ? " suite" : " suites");
+    els.out.appendChild(big);
+    var sub = document.createElement("div");
+    sub.className = "sub";
+    sub.textContent = result.bytes + " bytes on the wire: each suite takes two";
+    els.out.appendChild(sub);
+
+    var wrap = document.createElement("div");
+    wrap.className = "scroll";
+    var table = document.createElement("table");
+    table.className = "list";
+    var caption = document.createElement("caption");
+    caption.className = "help";
+    caption.textContent = "In the order given";
+    caption.style.textAlign = "left";
+    table.appendChild(caption);
+    var head = document.createElement("tr");
+    ["Code", "Name", "Registry"].forEach(function(label){
+      var th = document.createElement("th");
+      th.scope = "col";
+      th.textContent = label;
+      head.appendChild(th);
+    });
+    var thead = document.createElement("thead");
+    thead.appendChild(head);
+    table.appendChild(thead);
+    var body = document.createElement("tbody");
+    var discouraged = 0, recommended = 0, signaling = 0;
+    result.suites.forEach(function(suite){
+      var tr = document.createElement("tr");
+      var td1 = document.createElement("td");
+      td1.className = "code";
+      td1.textContent = suite.hex;
+      var td2 = document.createElement("td");
+      td2.className = "name";
+      td2.textContent = suite.name || (suite.kind === "grease" ? "GREASE value" : "not in the registry");
+      var td3 = document.createElement("td");
+      td3.className = "st";
+      td3.textContent = suite.kind === "suite" || suite.kind === "signaling"
+        ? TlsSuites.statusLabel(suite.recommended) : "—";
+      if (suite.recommended === "D") discouraged++;
+      if (suite.recommended === "Y") recommended++;
+      if (suite.kind === "signaling") signaling++;
+      tr.appendChild(td1);
+      tr.appendChild(td2);
+      tr.appendChild(td3);
+      body.appendChild(tr);
+    });
+    table.appendChild(body);
+    wrap.appendChild(table);
+    els.out.appendChild(wrap);
+
+    var summary = [];
+    if (recommended) summary.push(recommended + (recommended === 1 ? " is" : " are") + " recommended");
+    if (discouraged) summary.push(discouraged + " " + (discouraged === 1 ? "is" : "are") + " discouraged");
+    if (signaling) summary.push(signaling + " " + (signaling === 1 ? "is a signalling value" : "are signalling values") + ", not a suite");
+    if (summary.length){
+      var p = document.createElement("p");
+      p.className = "help";
+      p.textContent = "In this list, " + summary.join(", ") + ".";
+      els.out.appendChild(p);
+    }
+  }
+
+  function showError(message){
+    els.err.textContent = message;
+    clear(els.out);
+    var p = document.createElement("div");
+    p.className = "sub";
+    p.textContent = "Fix the value to decode it.";
+    els.out.appendChild(p);
+  }
+
+  function run(){
+    try {
+      var result = TlsSuites.analyze({ value: els.input.value });
+      els.err.textContent = "";
+      clear(els.out);
+      if (result.mode === "single") renderSingle(result.suites[0]);
+      else renderList(result);
+    } catch (error){
+      showError(error.message);
+    }
+  }
+
+  els.form.addEventListener("submit", function(event){
+    event.preventDefault();
+    run();
+    if (els.err.textContent) els.input.focus();
+  });
+
+  els.input.addEventListener("input", function(){
+    if (els.err.textContent) els.err.textContent = "";
+  });
+
+  els.reset.addEventListener("click", function(){
+    els.input.value = defaults.value;
+    run();
+    els.input.focus();
+  });
+
+  run();
+})();
+</script>
+</body>
+</html>
