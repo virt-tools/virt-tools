@@ -31,6 +31,7 @@ node tests/packing_list_generator.test.cjs
 node tests/audio_sync_drift_calculator.test.cjs
 node tests/fishing_line_capacity_calculator.test.cjs
 node tests/uncompressed_video_data_rate_calculator.test.cjs
+node tests/video_scan_format_timing_calculator.test.cjs
 node tests/rectangular_waveguide_calculator.test.cjs
 node tests/golf_course_handicap_calculator.test.cjs
 node tests/render_time_estimator.test.cjs

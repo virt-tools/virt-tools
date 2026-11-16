@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Video Scan Format Timing Calculator — Virtual Tools</title>
+<meta name="description" content="Read the line and frame timing of a standard video scan format: total and active samples per line, blanking in samples and microseconds, line rate, frame or field rate and the pixel clock that carries it.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:12px;margin:10px 0}
+label.f{font-size:13px;opacity:.85;display:block;margin-bottom:4px}
+.field{background:var(--bg,#14181f);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px}
+.field:focus-within{border-color:var(--accent,#6ea8fe);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#6ea8fe) 18%,transparent)}
+.field input,.field select{box-sizing:border-box;width:100%;background:transparent;color:var(--text,#e6e6e6);border:none;font-size:18px;font-family:ui-monospace,monospace;padding:2px 0;outline:none}
+.field select{font-size:15px}
+.field .unit{font-size:11px;color:var(--text-dim,#9aa3b2);margin-top:4px}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:14px 0}
+.out .big{font-size:clamp(1.6rem,6vw,2.15rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:4px 0 6px;overflow-wrap:anywhere}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45}
+.out .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:14px}
+.out .row:last-child{border-bottom:none}
+.out .row .k{color:var(--text-dim,#9aa3b2)}
+.out .row .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right}
+.out .warn{color:var(--warn,#f0b429);font-size:12.5px;margin:10px 0 0;line-height:1.45}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.err{color:var(--bad,#f87171);font-size:13px;margin:6px 0;min-height:1.2em}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;margin:10px 0 0;line-height:1.5}
+[hidden]{display:none !important}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<h1>Video Scan Format Timing Calculator</h1>
+<p>Read the line and frame timing of a standard scan format — samples per line, blanking, line rate and the pixel clock that carries it.</p>
+</div>
+<div class="panel">
+<form id="timing-form" novalidate>
+<div class="grid2">
+<div class="field"><label class="f" for="in-format">Scan format</label><select id="in-format"></select><div class="unit">standard-definition and HD rasters</div></div>
+<div class="field"><label class="f" for="in-clock">Pixel clock</label><input type="text" id="in-clock" inputmode="decimal" autocomplete="off" value="74.250"><div class="unit">MHz, the format's nominal clock unless you override it</div></div>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions"><button type="submit">Read the timing</button></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"><span style="color:var(--text-dim,#9aa3b2)">Choose a scan format to see its timing.</span></div>
+<p class="note">A scan format fixes four numbers: active samples per line, active lines, samples per total line including blanking, and total lines per frame. The line rate is the pixel clock divided by the samples per total line, and the frame rate is that line rate divided by the total lines, so 1080p at 25 Hz has 2,640 samples in a 35.556 µs line and 1,125 lines in a 40 ms frame. Interlaced formats carry two fields per frame at twice the frame rate. Fractional rates such as 59.94 are the 60 Hz timing divided by 1.001. Values are nominal: sync widths, tolerances and ancillary data are not modelled. Everything is calculated in this page and nothing is uploaded or stored.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* scan-timing-core:start */
+var ScanTimingCore = (function(){
+  "use strict";
+  var FORMATS = [
+    {key: "525i5994", label: "525i/59.94", group: "Standard definition", standard: "ITU-R BT.601-7", width: 720, height: 486, lines: 525, samples: 858, clock: 13.5, interlaced: true},
+    {key: "625i50", label: "625i/50", group: "Standard definition", standard: "ITU-R BT.601-7", width: 720, height: 576, lines: 625, samples: 864, clock: 13.5, interlaced: true},
+    {key: "720p50", label: "720p/50", group: "720-line HD", standard: "SMPTE ST 296", width: 1280, height: 720, lines: 750, samples: 1980, clock: 74.25, interlaced: false},
+    {key: "720p5994", label: "720p/59.94", group: "720-line HD", standard: "SMPTE ST 296", width: 1280, height: 720, lines: 750, samples: 1650, clock: 74.25 / 1.001, interlaced: false},
+    {key: "720p60", label: "720p/60", group: "720-line HD", standard: "SMPTE ST 296", width: 1280, height: 720, lines: 750, samples: 1650, clock: 74.25, interlaced: false},
+    {key: "1080i50", label: "1080i/50", group: "1080-line HD", standard: "SMPTE ST 274 / ITU-R BT.709", width: 1920, height: 1080, lines: 1125, samples: 2640, clock: 74.25, interlaced: true},
+    {key: "1080i5994", label: "1080i/59.94", group: "1080-line HD", standard: "SMPTE ST 274 / ITU-R BT.709", width: 1920, height: 1080, lines: 1125, samples: 2200, clock: 74.25 / 1.001, interlaced: true},
+    {key: "1080i60", label: "1080i/60", group: "1080-line HD", standard: "SMPTE ST 274 / ITU-R BT.709", width: 1920, height: 1080, lines: 1125, samples: 2200, clock: 74.25, interlaced: true},
+    {key: "1080p2398", label: "1080p/23.98", group: "1080-line HD", standard: "SMPTE ST 274 / ITU-R BT.709", width: 1920, height: 1080, lines: 1125, samples: 2750, clock: 74.25 / 1.001, interlaced: false},
+    {key: "1080p24", label: "1080p/24", group: "1080-line HD", standard: "SMPTE ST 274 / ITU-R BT.709", width: 1920, height: 1080, lines: 1125, samples: 2750, clock: 74.25, interlaced: false},
+    {key: "1080p25", label: "1080p/25", group: "1080-line HD", standard: "SMPTE ST 274 / ITU-R BT.709", width: 1920, height: 1080, lines: 1125, samples: 2640, clock: 74.25, interlaced: false},
+    {key: "1080p2997", label: "1080p/29.97", group: "1080-line HD", standard: "SMPTE ST 274 / ITU-R BT.709", width: 1920, height: 1080, lines: 1125, samples: 2200, clock: 74.25 / 1.001, interlaced: false},
+    {key: "1080p30", label: "1080p/30", group: "1080-line HD", standard: "SMPTE ST 274 / ITU-R BT.709", width: 1920, height: 1080, lines: 1125, samples: 2200, clock: 74.25, interlaced: false},
+    {key: "1080p50", label: "1080p/50", group: "1080-line HD", standard: "SMPTE ST 274 / ITU-R BT.709", width: 1920, height: 1080, lines: 1125, samples: 2640, clock: 148.5, interlaced: false},
+    {key: "1080p5994", label: "1080p/59.94", group: "1080-line HD", standard: "SMPTE ST 274 / ITU-R BT.709", width: 1920, height: 1080, lines: 1125, samples: 2200, clock: 148.5 / 1.001, interlaced: false},
+    {key: "1080p60", label: "1080p/60", group: "1080-line HD", standard: "SMPTE ST 274 / ITU-R BT.709", width: 1920, height: 1080, lines: 1125, samples: 2200, clock: 148.5, interlaced: false}
+  ];
+  var LIMITS = {clock: [1, 1000, "MHz"]};
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function find(key){
+    var raw = String(key == null ? "" : key).trim().toLowerCase();
+    for (var i = 0; i < FORMATS.length; i += 1){
+      if (FORMATS[i].key.toLowerCase() === raw || FORMATS[i].label.toLowerCase() === raw) return FORMATS[i];
+    }
+    fail("Choose a scan format from the list.");
+  }
+
+  function clockValue(value){
+    var raw = String(value == null ? "" : value).trim();
+    if (!raw) fail("Pixel clock is required.");
+    if (!/^[-+]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(raw)) fail("Pixel clock must be a number in MHz.");
+    var number = Number(raw);
+    if (!isFinite(number)) fail("Pixel clock must be a number in MHz.");
+    if (number < LIMITS.clock[0] || number > LIMITS.clock[1]){
+      fail("Pixel clock must be from " + LIMITS.clock[0] + " to " + LIMITS.clock[1] + " MHz.");
+    }
+    return number;
+  }
+
+  function normalise(input){
+    var options = input || {};
+    return {format: find(options.format), clock: clockValue(options.clock)};
+  }
+
+  function calculate(input){
+    var state = normalise(input);
+    var format = state.format;
+    var mhz = state.clock;
+    var lineRate = mhz * 1e6 / format.samples;
+    var frameRate = lineRate / format.lines;
+    return {
+      key: format.key,
+      label: format.label,
+      group: format.group,
+      standard: format.standard,
+      width: format.width,
+      height: format.height,
+      lines: format.lines,
+      activeLines: format.height,
+      samples: format.samples,
+      activeSamples: format.width,
+      blankingSamples: format.samples - format.width,
+      blankingLines: format.lines - format.height,
+      interlaced: format.interlaced,
+      nominalClock: format.clock,
+      clock: mhz,
+      lineRate: lineRate,
+      linePeriodUs: 1e6 / lineRate,
+      activeLineUs: format.width / mhz,
+      blankingUs: (format.samples - format.width) / mhz,
+      frameRate: frameRate,
+      framePeriodMs: 1000 / frameRate,
+      nominalFrameRate: format.clock * 1e6 / (format.samples * format.lines),
+      fieldRate: format.interlaced ? frameRate * 2 : null,
+      driftPercent: (mhz - format.clock) / format.clock * 100,
+      samplesPerFrame: format.samples * format.lines,
+      activeSharePercent: format.width * format.height / (format.samples * format.lines) * 100
+    };
+  }
+
+  return {
+    FORMATS: FORMATS,
+    LIMITS: LIMITS,
+    normalise: normalise,
+    calculate: calculate
+  };
+})();
+/* scan-timing-core:end */
+(function(){
+"use strict";
+
+var els = {
+  format: document.getElementById("in-format"),
+  clock: document.getElementById("in-clock"),
+  err: document.getElementById("err"),
+  out: document.getElementById("out")
+};
+
+function fmt(value, digits){
+  var rounded = Math.abs(value) < 0.5 * Math.pow(10, -digits) ? 0 : value;
+  return rounded.toLocaleString(undefined, {minimumFractionDigits: digits, maximumFractionDigits: digits});
+}
+function clear(node){
+  while (node.firstChild) node.removeChild(node.firstChild);
+}
+function addRow(parent, label, value){
+  var row = document.createElement("div");
+  row.className = "row";
+  var key = document.createElement("span");
+  key.className = "k";
+  key.textContent = label;
+  var val = document.createElement("span");
+  val.className = "v";
+  val.textContent = value;
+  row.appendChild(key);
+  row.appendChild(val);
+  parent.appendChild(row);
+}
+function addWarning(parent, message){
+  var p = document.createElement("p");
+  p.className = "warn";
+  p.textContent = message;
+  parent.appendChild(p);
+}
+function placeholder(node, message){
+  var span = document.createElement("span");
+  span.style.color = "var(--text-dim,#9aa3b2)";
+  span.textContent = message;
+  node.appendChild(span);
+}
+
+function buildOptions(){
+  var groups = {};
+  var order = [];
+  ScanTimingCore.FORMATS.forEach(function(format){
+    if (!groups[format.group]){
+      groups[format.group] = document.createElement("optgroup");
+      groups[format.group].label = format.group;
+      order.push(format.group);
+    }
+    var option = document.createElement("option");
+    option.value = format.key;
+    option.textContent = format.label;
+    groups[format.group].appendChild(option);
+  });
+  order.forEach(function(name){ els.format.appendChild(groups[name]); });
+  els.format.value = "1080p25";
+}
+
+function render(result){
+  clear(els.out);
+  var big = document.createElement("div");
+  big.className = "big";
+  big.textContent = result.label;
+  var sub = document.createElement("div");
+  sub.className = "sub";
+  sub.textContent = result.width.toLocaleString() + " × " + result.height.toLocaleString() +
+    " active · " + result.lines.toLocaleString() + " lines per frame · " + result.standard;
+  els.out.appendChild(big);
+  els.out.appendChild(sub);
+
+  addRow(els.out, "Pixel clock", fmt(result.clock, 3) + " MHz");
+  addRow(els.out, "Line rate", fmt(result.lineRate / 1000, 3) + " kHz · " + fmt(result.linePeriodUs, 3) + " µs");
+  addRow(els.out, "Active line", result.activeSamples.toLocaleString() + " samples · " + fmt(result.activeLineUs, 3) + " µs");
+  addRow(els.out, "Horizontal blanking", result.blankingSamples.toLocaleString() + " samples · " + fmt(result.blankingUs, 3) + " µs");
+  addRow(els.out, "Frame rate", fmt(result.frameRate, 3) + " fps · " + fmt(result.framePeriodMs, 3) + " ms");
+  addRow(els.out, "Field rate", result.interlaced ? fmt(result.fieldRate, 3) + " Hz" : "Progressive");
+  addRow(els.out, "Vertical blanking", result.blankingLines.toLocaleString() + " lines · " +
+    fmt(result.blankingLines / result.lines * 100, 2) + "% of the frame");
+  addRow(els.out, "Active picture", fmt(result.activeSharePercent, 2) + "% of all samples");
+
+  if (Math.abs(result.driftPercent) >= 0.005){
+    addWarning(els.out, "The clock is " + fmt(Math.abs(result.driftPercent), 2) + "% " +
+      (result.driftPercent > 0 ? "above" : "below") + " the " + fmt(result.nominalClock, 3) +
+      " MHz this format specifies, so the frame rate follows the clock.");
+  }
+  if (result.frameRate < 1 || result.frameRate > 240){
+    addWarning(els.out, "This clock gives " + fmt(result.frameRate, 3) +
+      " fps, outside the 1–240 fps range these formats use. Check the clock.");
+  }
+}
+
+function calculate(){
+  var result;
+  try {
+    result = ScanTimingCore.calculate({format: els.format.value, clock: els.clock.value});
+  } catch (error){
+    els.err.textContent = error.message;
+    clear(els.out);
+    placeholder(els.out, "Check the pixel clock.");
+    return;
+  }
+  els.err.textContent = "";
+  render(result);
+}
+
+function syncClock(){
+  var format = null;
+  ScanTimingCore.FORMATS.forEach(function(candidate){
+    if (candidate.key === els.format.value) format = candidate;
+  });
+  if (format) els.clock.value = fmt(format.clock, 3);
+  calculate();
+}
+
+buildOptions();
+els.format.addEventListener("change", syncClock);
+els.clock.addEventListener("input", calculate);
+document.getElementById("timing-form").addEventListener("submit", function(event){
+  event.preventDefault();
+  calculate();
+});
+
+calculate();
+})();
+</script>
+</body>
+</html>

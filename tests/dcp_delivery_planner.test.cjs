@@ -225,7 +225,7 @@ assert.ok(!/style="[^"]*width:\s*\d{3,}px/.test(html), 'fixed wide inline styles
 
 const publicCount = catalog.tools.filter((tool) => tool.listed).length;
 assert.ok(publicCount >= 2068, 'the catalog keeps growing: ' + publicCount);
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Video').length, 48, 'Video count');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Video').length, 49, 'Video count');
 
 console.log('dcp-delivery-planner: 27 catalog cases, ' + fixture.vectors.length +
   ' reference vectors, identities and page contracts passed');
