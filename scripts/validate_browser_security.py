@@ -86,9 +86,15 @@ def generated_locale_prefixes() -> tuple[str, ...]:
 TAG_RE = re.compile(r"<\s*([a-zA-Z][a-zA-Z0-9-]*)")
 
 
+ATTR_VALUE_RE = re.compile(r"""=\s*(?:"[^"]*"|'[^']*')""")
+
+
 def tag_counts(path: Path) -> dict[str, int]:
     counts: dict[str, int] = {}
-    for name in TAG_RE.findall(path.read_text(encoding="utf-8")):
+    # A tag inside an attribute value (``placeholder="<svg>...</svg>"``) is text,
+    # and the serializer legitimately escapes it, so it is not markup to compare.
+    markup = ATTR_VALUE_RE.sub("=", path.read_text(encoding="utf-8"))
+    for name in TAG_RE.findall(markup):
         key = name.lower()
         counts[key] = counts.get(key, 0) + 1
     return counts
