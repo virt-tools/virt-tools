@@ -345,6 +345,7 @@ node tests/uri_template_expander.test.cjs
 node tests/soccer_pitch_marking_calculator.test.cjs
 node tests/radar_prf_ambiguity_calculator.test.cjs
 node tests/interference_fit_calculator.test.cjs
+node tests/heat_flux_density_converter.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
