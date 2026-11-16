@@ -512,7 +512,9 @@ def _replace_direct_text(node: Node, mapping: dict, applied: set[str]) -> None:
         # the translated words to the neighbouring inline elements.
         lead = child[: len(child) - len(child.lstrip())]
         trail = child[len(child.rstrip()):]
-        node.children[index] = lead + escape_text(mapping[key]) + trail
+        # Store the raw text: serialize() escapes text nodes on the way out, so
+        # escaping here too produced "&amp;amp;" on every page with an ampersand.
+        node.children[index] = lead + mapping[key] + trail
 
 
 def attr_units(node: Node) -> set[str]:
