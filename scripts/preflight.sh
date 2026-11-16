@@ -348,6 +348,7 @@ node tests/interference_fit_calculator.test.cjs
 node tests/heat_flux_density_converter.test.cjs
 node tests/hebrew_calendar_converter.test.cjs
 node tests/intel_hex_inspector.test.cjs
+node tests/brewing_water_salts.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
