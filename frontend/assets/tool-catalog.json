@@ -214225,6 +214225,357 @@
         }
       ],
       "listed": true
+    },
+    {
+      "slug": "systemd-socket-unit-builder",
+      "name": "systemd Socket Unit Builder",
+      "description": "Write a systemd .socket unit for socket activation from unix, TCP, IPv6 or bare-port listen addresses, with Accept= validation, SocketMode, socket ownership and the exact companion service it needs. Runs locally.",
+      "category": "System",
+      "legacyCategory": null,
+      "subcategory": "Generation",
+      "tags": [
+        "systemd",
+        "socket unit",
+        "socket activation",
+        "listenstream",
+        "accept",
+        "linux",
+        "generation"
+      ],
+      "aliases": [
+        "systemd Socket Activation Builder",
+        "systemd .socket Generator",
+        "Socket Unit Generator",
+        "systemd ListenStream Builder"
+      ],
+      "icon": "🔌",
+      "added": "2026-11-16T16:40:00Z",
+      "risk": "low",
+      "maturity": "draft",
+      "reviewedAt": null,
+      "method": "Composes one systemd .socket unit from a base name, a description and one to eight ListenStream addresses. Addresses follow systemd.socket(5): a leading slash is an AF_UNIX file-system socket, a leading @ an AF_UNIX abstract socket, a single number a port listened on over IPv6 (dual-stack by default through BindIPv6Only=default), v.w.x.y:port an IPv4 socket, and [x]:y an IPv6 socket. File-system paths must be absolute, at most 4096 characters, free of backslashes, //, . and .. segments and a trailing slash, and fit in 107 bytes because sockaddr_un.sun_path is 108 with the terminator; abstract names need at least one character after @ and no whitespace. Ports are 1-65535 with no leading zeros; IPv4 hosts must be strict dotted quads and IPv6 hosts must be bracketed and valid, compared against a full compression-aware parser. Interface scopes (address%iface) and AF_VSOCK addresses are rejected rather than half-supported, because a literal percent would have to be doubled for unit-file specifier expansion. Addresses are emitted in input order, duplicates are refused, and spaces, double quotes and percent signs in unix names are written as \\x20, \\x22 and %% so the parser reads back the exact name. Accept=yes is emitted only when selected; it changes the companion unit to the template <base>@.service, where systemd starts one instance per connection and attaches the connection to the instance's standard input and output. With Accept=no the service receives every listening socket as file descriptors starting at 3 (sd_listen_fds(3)) and must not bind the address itself. MaxConnections is validated and written only with Accept=yes, and only when it differs from the default 64. SocketMode (four-digit octal), SocketUser and SocketGroup apply only to file-system unix sockets - the man page scopes the mode to file nodes - so they are ignored, not emitted, for TCP, IPv6, port-only and abstract addresses; SocketMode is written only when it differs from the default 0666, and parent directories are created with the default DirectoryMode=0755. The [Install] section with WantedBy=sockets.target is optional. The page reports the generated file name, the matching service name, the listen mix and the activation contract, warns that a bare port is an IPv6 wildcard and that a unix socket is not removed on stop, and never inspects the host or executes anything.",
+      "sources": [
+        {
+          "title": "systemd 262 manual: systemd.socket — ListenStream address formats, Accept=, MaxConnections=, SocketMode=, SocketUser= and the matching service unit",
+          "url": "https://www.freedesktop.org/software/systemd/man/latest/systemd.socket.html"
+        },
+        {
+          "title": "systemd 262 manual: sd_listen_fds — file descriptors passed to the activated service, starting at SD_LISTEN_FDS_START = 3",
+          "url": "https://www.freedesktop.org/software/systemd/man/latest/sd_listen_fds.html"
+        }
+      ],
+      "testCases": [
+        {
+          "name": "Default unix socket unit",
+          "kind": "golden",
+          "input": {},
+          "expected": {
+            "socketFilename": "example-app.socket",
+            "serviceFilename": "example-app.service",
+            "listenCount": 1,
+            "unixCount": 1,
+            "tcpCount": 0,
+            "socketUnit": "[Unit]\nDescription=Example application socket\n\n[Socket]\nListenStream=/run/example-app.sock\n\n[Install]\nWantedBy=sockets.target\n"
+          }
+        },
+        {
+          "name": "TCP, IPv6 and bare port with per-connection instances",
+          "kind": "golden",
+          "input": {
+            "name": "web",
+            "description": "Web app",
+            "listen": "127.0.0.1:8080\n[::1]:8443\n8080",
+            "accept": true,
+            "maxConnections": "32"
+          },
+          "expected": {
+            "socketFilename": "web.socket",
+            "serviceFilename": "web@.service",
+            "listenCount": 3,
+            "unixCount": 0,
+            "tcpCount": 3,
+            "socketUnit": "[Unit]\nDescription=Web app\n\n[Socket]\nListenStream=127.0.0.1:8080\nListenStream=[::1]:8443\nListenStream=8080\nAccept=yes\nMaxConnections=32\n\n[Install]\nWantedBy=sockets.target\n"
+          }
+        },
+        {
+          "name": "Unix socket with ownership and a private mode",
+          "kind": "golden",
+          "input": {
+            "name": "api",
+            "description": "API socket",
+            "listen": "/run/api/app.sock",
+            "socketMode": "0660",
+            "socketUser": "api",
+            "socketGroup": "www-data"
+          },
+          "expected": {
+            "socketFilename": "api.socket",
+            "serviceFilename": "api.service",
+            "listenCount": 1,
+            "unixCount": 1,
+            "socketUnit": "[Unit]\nDescription=API socket\n\n[Socket]\nListenStream=/run/api/app.sock\nSocketMode=0660\nSocketUser=api\nSocketGroup=www-data\n\n[Install]\nWantedBy=sockets.target\n"
+          }
+        },
+        {
+          "name": "Abstract socket carries no file mode or owner",
+          "kind": "golden",
+          "input": {
+            "name": "cache",
+            "description": "Cache socket",
+            "listen": "@cache-v1",
+            "socketMode": "0600",
+            "socketUser": "cache"
+          },
+          "expected": {
+            "serviceFilename": "cache.service",
+            "listenCount": 1,
+            "unixCount": 0,
+            "socketUnit": "[Unit]\nDescription=Cache socket\n\n[Socket]\nListenStream=@cache-v1\n\n[Install]\nWantedBy=sockets.target\n",
+            "excludes": [
+              "SocketMode=",
+              "SocketUser="
+            ]
+          }
+        },
+        {
+          "name": "Two unix sockets keep their order",
+          "kind": "golden",
+          "input": {
+            "description": "Two sockets",
+            "listen": "/run/a.sock\n/var/run/b.sock"
+          },
+          "expected": {
+            "serviceFilename": "example-app.service",
+            "listenCount": 2,
+            "unixCount": 2,
+            "socketUnit": "[Unit]\nDescription=Two sockets\n\n[Socket]\nListenStream=/run/a.sock\nListenStream=/var/run/b.sock\n\n[Install]\nWantedBy=sockets.target\n"
+          }
+        },
+        {
+          "name": "No install section",
+          "kind": "golden",
+          "input": {
+            "name": "oneshot",
+            "description": "No install",
+            "listen": "/run/x.sock",
+            "install": false
+          },
+          "expected": {
+            "socketFilename": "oneshot.socket",
+            "listenCount": 1,
+            "socketUnit": "[Unit]\nDescription=No install\n\n[Socket]\nListenStream=/run/x.sock\n",
+            "excludes": [
+              "[Install]",
+              "WantedBy="
+            ]
+          }
+        },
+        {
+          "name": "Eight addresses at the cap",
+          "kind": "boundary",
+          "input": {
+            "description": "Eight listeners",
+            "listen": "9000\n9001\n9002\n9003\n9004\n9005\n9006\n9007",
+            "accept": true
+          },
+          "expected": {
+            "listenCount": 8,
+            "tcpCount": 8,
+            "contains": [
+              "ListenStream=9007",
+              "Accept=yes"
+            ]
+          }
+        },
+        {
+          "name": "Default mode and limit stay implicit",
+          "kind": "boundary",
+          "input": {
+            "listen": "/run/a.sock",
+            "socketMode": "0666",
+            "accept": true,
+            "maxConnections": "64"
+          },
+          "expected": {
+            "serviceFilename": "example-app@.service",
+            "listenCount": 1,
+            "contains": [
+              "Accept=yes"
+            ],
+            "excludes": [
+              "MaxConnections=",
+              "SocketMode="
+            ]
+          }
+        },
+        {
+          "name": "Spaces and percent are escaped in a unix path",
+          "kind": "boundary",
+          "input": {
+            "listen": "/run/my socket 100%.sock"
+          },
+          "expected": {
+            "listenCount": 1,
+            "contains": [
+              "ListenStream=/run/my\\x20socket\\x20100%%.sock"
+            ]
+          }
+        },
+        {
+          "name": "A trailing newline is not an address",
+          "kind": "boundary",
+          "input": {
+            "listen": "/run/a.sock\n"
+          },
+          "expected": {
+            "listenCount": 1,
+            "contains": [
+              "ListenStream=/run/a.sock"
+            ]
+          }
+        },
+        {
+          "name": "Socket suffix in the base name",
+          "kind": "validation",
+          "input": {
+            "name": "a.socket"
+          },
+          "expectedError": "Use a valid base unit name without .socket or .service."
+        },
+        {
+          "name": "No listen address",
+          "kind": "validation",
+          "input": {
+            "listen": ""
+          },
+          "expectedError": "Add at least one listen address."
+        },
+        {
+          "name": "Empty middle line",
+          "kind": "validation",
+          "input": {
+            "listen": "/run/a.sock\n\n/run/b.sock"
+          },
+          "expectedError": "Listen address line 2 is empty."
+        },
+        {
+          "name": "Duplicate listen address",
+          "kind": "validation",
+          "input": {
+            "listen": "/run/a.sock\n/run/a.sock"
+          },
+          "expectedError": "Listen addresses must be unique."
+        },
+        {
+          "name": "Nine addresses",
+          "kind": "validation",
+          "input": {
+            "listen": "9000\n9001\n9002\n9003\n9004\n9005\n9006\n9007\n9008"
+          },
+          "expectedError": "Use at most 8 listen addresses."
+        },
+        {
+          "name": "Hostname instead of an IPv4 literal",
+          "kind": "validation",
+          "input": {
+            "listen": "localhost:80"
+          },
+          "expectedError": "Use a dotted-quad IPv4 address such as 127.0.0.1, or put an IPv6 address in brackets."
+        },
+        {
+          "name": "Unbracketed IPv6",
+          "kind": "validation",
+          "input": {
+            "listen": "::1:8080"
+          },
+          "expectedError": "Put an IPv6 address in brackets, such as [::1]:8080."
+        },
+        {
+          "name": "Bracketed address without a port",
+          "kind": "validation",
+          "input": {
+            "listen": "[::1]"
+          },
+          "expectedError": "Bracketed IPv6 addresses must be written as [address]:port."
+        },
+        {
+          "name": "Interface scope",
+          "kind": "validation",
+          "input": {
+            "listen": "[fe80::1%eth0]:80"
+          },
+          "expectedError": "Interface scopes (%eth0) are not supported here; drop the scope or use a global address."
+        },
+        {
+          "name": "Port above the range",
+          "kind": "validation",
+          "input": {
+            "listen": "70000"
+          },
+          "expectedError": "Port numbers must be between 1 and 65535."
+        },
+        {
+          "name": "Port with a leading zero",
+          "kind": "validation",
+          "input": {
+            "listen": "08080"
+          },
+          "expectedError": "Port numbers cannot have leading zeros."
+        },
+        {
+          "name": "Parent component in the path",
+          "kind": "validation",
+          "input": {
+            "listen": "/run/../etc/x.sock"
+          },
+          "expectedError": "Unix socket paths cannot contain .. components."
+        },
+        {
+          "name": "Non-octal socket mode",
+          "kind": "validation",
+          "input": {
+            "listen": "/run/a.sock",
+            "socketMode": "0999"
+          },
+          "expectedError": "SocketMode must be a four-digit octal mode from 0000 to 0777."
+        },
+        {
+          "name": "Socket user with a space",
+          "kind": "validation",
+          "input": {
+            "listen": "/run/a.sock",
+            "socketUser": "api user"
+          },
+          "expectedError": "SocketUser contains unsupported characters."
+        },
+        {
+          "name": "Zero connection limit",
+          "kind": "validation",
+          "input": {
+            "listen": "/run/a.sock",
+            "accept": true,
+            "maxConnections": "0"
+          },
+          "expectedError": "MaxConnections must be a positive integer up to 100000."
+        },
+        {
+          "name": "AF_VSOCK address",
+          "kind": "validation",
+          "input": {
+            "listen": "vsock:2:1024"
+          },
+          "expectedError": "AF_VSOCK addresses are not supported by this builder."
+        },
+        {
+          "name": "Leading whitespace",
+          "kind": "validation",
+          "input": {
+            "listen": " /run/a.sock"
+          },
+          "expectedError": "Listen addresses cannot start or end with whitespace."
+        }
+      ],
+      "listed": true
     }
   ]
 }
