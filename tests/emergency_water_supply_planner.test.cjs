@@ -232,7 +232,7 @@ assert.equal(new Set(record.tags).size, record.tags.length, 'tags are unique');
 assert.equal(new Set(record.aliases).size, record.aliases.length, 'aliases are unique');
 assert.ok(record.tags.includes('emergency'));
 assert.ok(record.aliases.includes('Emergency Water Planner'));
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Safety & Emergency').length, 47, 'Safety & Emergency count');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Safety & Emergency').length, 48, 'Safety & Emergency count');
 
 assert.equal(record.testCases.length, 22, 'catalog case count');
 assert.equal(record.testCases.filter((testCase) => testCase.kind === 'golden').length, 10);

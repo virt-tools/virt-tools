@@ -329,6 +329,7 @@ node tests/film_footage_running_time_calculator.test.cjs
 node tests/phon_sone_loudness_converter.test.cjs
 node tests/sandbag_barrier_calculator.test.cjs
 node tests/http_range_request_planner.test.cjs
+node tests/ladder_setup_calculator.test.cjs
 node tests/core_dump_pattern_builder.test.cjs
 node tests/shell_quote_builder.test.cjs
 node tests/playing_time_rotation_planner.test.cjs
