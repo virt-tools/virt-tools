@@ -351,6 +351,7 @@ node tests/intel_hex_inspector.test.cjs
 node tests/brewing_water_salts.test.cjs
 node tests/quilt_setting_triangles.test.cjs
 node tests/wifi_data_rate_calculator.test.cjs
+node tests/iso_3166_country_code_converter.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
