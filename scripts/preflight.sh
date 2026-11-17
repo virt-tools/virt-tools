@@ -378,6 +378,7 @@ node tests/kubernetes_resource_quantity_converter.test.cjs
 node tests/leadscrew_torque_calculator.test.cjs
 node tests/cellular_frequency_reuse_planner.test.cjs
 node tests/specific_energy_converter.test.cjs
+node tests/stained_glass_materials_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
