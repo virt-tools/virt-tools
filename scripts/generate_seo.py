@@ -24,6 +24,12 @@ It also adds a per-page `Content-Security-Policy` meta element that pins every
 inline script and inline event handler by SHA-256 hash, so browsers that support
 hashes reject script that was not present at build time.
 
+Search-result budgets keep the snippet honest: the injected `<meta name="description">`
+is fitted to `DESC_LIMIT` characters (sentence boundary first, otherwise a word
+boundary plus one ellipsis), and a `<title>` longer than `TITLE_LIMIT` drops the
+brand suffix instead of being truncated. og/twitter descriptions and the JSON-LD
+description keep the full text, because social cards do not cut at 160.
+
 Idempotent: any previously injected block (delimited by SEO/CSP/NAV/RELATED
 BEGIN/END comments) is removed before re-inserting, so re-runs don't accumulate.
 """
@@ -50,6 +56,32 @@ END = "<!-- SEO END -->"
 
 BLOCK_RE = re.compile(re.escape(BEGIN) + r".*?" + re.escape(END) + r"\n?", re.DOTALL)
 
+# Search snippets: a result title usually survives about 60 characters and a
+# description about 160 before the engine truncates mid-sentence. The description
+# budget leaves room for the ellipsis it appends, so the emitted length never
+# exceeds DESC_LIMIT.
+TITLE_LIMIT = 60
+DESC_LIMIT = 158
+ELLIPSIS = "…"
+# A sentence cut shorter than this is not worth the tidier ending: a snippet that
+# stops at the first sentence of a 1,000-character description wastes most of the
+# budget, so fall through to the longest word-boundary cut instead.
+DESC_MIN_KEEP = 110
+
+# Separators a title may carry before the brand, including the HTML entities a
+# hand-written page source uses ("&mdash;") and the plain hyphen some translated
+# titles ended up with.
+BRAND_SUFFIX_RE = re.compile(
+    r"\s+(?:&mdash;|&ndash;|—|–|-)\s+(?:Virtual Tools|virt\.tools)\s*$",
+    re.IGNORECASE,
+)
+TITLE_RE = re.compile(r"<title(\s[^>]*)?>(.*?)</title>", re.IGNORECASE | re.DOTALL)
+_SENTENCE_END_RE = re.compile(r"[.!?…][\"'”’)\]]*(?=\s|$)")
+
+# What a word-boundary cut must not leave dangling: dashes, list punctuation and
+# separators that read as a truncated thought.
+_DANGLING = " \t\r\n—–-,;:/|·"
+
 
 def esc_attr(s: str) -> str:
     """Escape a value for use inside an HTML attribute."""
@@ -60,6 +92,74 @@ def jsonld(obj) -> str:
     """Serialise JSON-LD, escaping characters that could break the <script> context."""
     s = json.dumps(obj, ensure_ascii=False)
     return s.replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
+
+
+def _trim_dangling(text: str) -> str:
+    """Drop separators and a partial character reference from a cut's tail."""
+    text = re.sub(r"&[A-Za-z#0-9]{0,7}$", "", text.rstrip(_DANGLING))
+    return text.rstrip(_DANGLING)
+
+
+def fit_description(text: str, limit: int = DESC_LIMIT) -> str:
+    """Fit a description into a search snippet of at most `limit` characters.
+
+    A description that already fits is returned unchanged. Otherwise the cut
+    prefers the last complete sentence inside the budget; if no sentence ends
+    late enough, it falls back to the last word boundary and marks the cut with
+    a single ellipsis. A cut never splits a word, never leaves a dangling dash
+    or entity, and never stacks ellipses. A single unbreakable token longer than
+    the budget is returned whole rather than chopped.
+    """
+    text = " ".join((text or "").split())
+    if not text or len(text) <= limit:
+        return text
+    # Reserve the ellipsis: it may still end up unused if a sentence fits.
+    body = text[: limit - len(ELLIPSIS)].rstrip()
+
+    sentence = None
+    for match in _SENTENCE_END_RE.finditer(body):
+        if match.end() >= DESC_MIN_KEEP:
+            sentence = match.end()
+    if sentence:
+        return _trim_dangling(body[:sentence])
+
+    space = body.rfind(" ")
+    if space < DESC_MIN_KEEP:
+        return text
+    clipped = _trim_dangling(body[:space])
+    if not clipped:
+        return text
+    # Never stack ellipses: a description that already trails off keeps one.
+    clipped = re.sub(r"(?:\.\.\.|…)$", "", clipped).rstrip(_DANGLING)
+    return clipped + ELLIPSIS if clipped else text
+
+
+def budget_title(title: str, limit: int = TITLE_LIMIT) -> str:
+    """Drop the brand suffix when '<name> — <brand>' would not fit a snippet.
+
+    The name is never shortened: a real 70-character name is a better title than
+    a chopped one, so it ships bare. A short title keeps its suffix untouched.
+    """
+    visible = html.unescape(title or "").strip()
+    if len(visible) <= limit:
+        return title
+    match = BRAND_SUFFIX_RE.search(title or "")
+    if not match:
+        return title
+    return title[: match.start()].rstrip() or title
+
+
+def apply_title_budget(page: Path) -> None:
+    """Rewrite this page's <title> through `budget_title` (idempotent)."""
+    text = page.read_text(encoding="utf-8")
+    match = TITLE_RE.search(text)
+    if not match:
+        return
+    fitted = budget_title(match.group(2))
+    if fitted == match.group(2):
+        return
+    updated = text[: match.start(2)] + fitted + text[match.end(2):]
+    page.write_text(updated, encoding="utf-8")
 
 
 def load_manifest(root: Path) -> dict:
@@ -326,8 +426,9 @@ def inject_tool_links(page: Path, nav: str, related: str | None) -> None:
 def homepage_block(base: str, alternates: str = "", title: str = SITE_NAME, desc: str = HOME_DESC,
                    lang: str = "en", url: str | None = None) -> str:
     url = url or base + "/"
+    snippet = fit_description(desc)
     tags = meta_tags(
-        ("name", "description", desc),
+        ("name", "description", snippet),
         ("property", "og:title", title),
         ("property", "og:description", desc),
         ("property", "og:type", "website"),
@@ -376,7 +477,7 @@ def tool_block(base: str, t: dict, alternates: str = "", name: str | None = None
     name = name or t.get("name", slug)
     desc = desc or t.get("description", name)
     tags = meta_tags(
-        ("name", "description", desc),
+        ("name", "description", fit_description(desc)),
         ("property", "og:title", name + " — " + SITE_NAME),
         ("property", "og:description", desc),
         ("property", "og:type", "website"),
@@ -592,6 +693,7 @@ def main() -> int:
 
     home = root / "index.html"
     inject(home, homepage_block(base, hreflang_tags(alternate_block(base, "", manifest))))
+    apply_title_budget(home)
 
     n = 0
     for t in tools:
@@ -599,6 +701,7 @@ def main() -> int:
         if page.exists():
             alternates = hreflang_tags(alternate_block(base, "tools/" + t["slug"] + "/", manifest))
             inject(page, tool_block(base, t, alternates))
+            apply_title_budget(page)
             name = t.get("name") or t["slug"]
             inject_tool_links(
                 page,
@@ -628,6 +731,7 @@ def main() -> int:
                 inject(page, homepage_block(base, alternates, meta.get("name") or SITE_NAME,
                                             meta.get("description") or HOME_DESC,
                                             info.get("htmlLang", code), url))
+                apply_title_budget(page)
             else:
                 slug = relative.strip("/").split("/")[-1]
                 record = by_slug.get(slug)
@@ -636,6 +740,7 @@ def main() -> int:
                 inject(page, tool_block(base, record, alternates, meta.get("name"),
                                         meta.get("description"), url, info.get("htmlLang", code),
                                         meta.get("guidance")))
+                apply_title_budget(page)
                 name = meta.get("name") or record.get("name") or slug
                 inject_tool_links(
                     page,
