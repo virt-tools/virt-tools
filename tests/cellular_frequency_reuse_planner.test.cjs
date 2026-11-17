@@ -40,7 +40,7 @@ for (const source of record.sources) {
   assert.match(source.url, /^https:\/\//, 'https source');
   assert.ok(source.title.length > 60, 'source titles say what the page supplies');
 }
-assert.ok(catalog.tools.filter((tool) => tool.listed).length >= 2112, 'public tools');
+assert.ok(catalog.tools.filter((tool) => tool.listed).length >= 2113, 'public tools');
 assert.ok(catalog.tools.filter((tool) => tool.category === 'Communications Engineering').length >= 50,
   'Communications Engineering count');
 // No other record claims this slug, name or alias.

@@ -38,7 +38,7 @@ for (const source of record.sources) {
   assert.match(source.url, /^https:\/\/en\.wikipedia\.org\/wiki\//, 'fetched source');
   assert.ok(source.title.length > 90, 'source titles say what the page supplies');
 }
-assert.ok(catalog.tools.filter((tool) => tool.listed).length >= 2112, 'public tools');
+assert.ok(catalog.tools.filter((tool) => tool.listed).length >= 2113, 'public tools');
 assert.ok(catalog.tools.filter((tool) => tool.category === 'Mechanical & Structural Engineering').length >= 50,
   'Mechanical & Structural Engineering count');
 // No other record claims this slug, name or alias.
