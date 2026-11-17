@@ -188,6 +188,16 @@ def numeric_tokens(text: str) -> list[str]:
     return sorted(normalized)
 
 
+# Slugs whose extracted units are data, not copy. The identical-prose rule
+# exists to catch a page that was skipped; on these pages the identical strings
+# are the correct translation, and changing them would break the tool.
+DATA_UNIT_PAGES: dict[str, str] = {
+    "iso-3166-country-code-converter": (
+        "the country table holds ISO English short names that are also the lookup keys"
+    ),
+}
+
+
 def check_page(payload: dict, locale: str, written: dict) -> tuple[list[str], list[str]]:
     problems: list[str] = []
     warnings: list[str] = []
@@ -260,10 +270,17 @@ def check_page(payload: dict, locale: str, written: dict) -> tuple[list[str], li
     # One untranslated unit can be a font stack or a format name; most of them
     # means the page was skipped. Only the second case fails the batch.
     if identical and len(identical) >= 3 and len(identical) * 2 >= max(3, prose):
-        problems.append(
+        message = (
             f"{slug}: {len(identical)} of {prose} prose units are identical to the English, "
             f"first: {identical[0][:50]!r}"
         )
+        # A page whose units are data rather than copy is allowed to keep them:
+        # translating a lookup key breaks the tool while translating the prose
+        # around it is still required, so only this judgement is relaxed.
+        if slug in DATA_UNIT_PAGES:
+            warnings.append(f"{message} - allowed: {DATA_UNIT_PAGES[slug]}")
+        else:
+            problems.append(message)
     elif identical:
         warnings.append(f"{slug}: {len(identical)} prose unit(s) left in English, first: {identical[0][:40]!r}")
     if whitespace:

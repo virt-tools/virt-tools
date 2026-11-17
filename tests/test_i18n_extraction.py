@@ -1,11 +1,19 @@
 import unittest
 
-from scripts import i18n_lib
+from scripts import i18n_batch, i18n_lib
 
 
 def units_of(markup: str) -> list[str]:
     root, _ = i18n_lib.parse(markup)
     return i18n_lib.units(i18n_lib.extract_units(root))
+
+
+class DataUnitExemptionTests(unittest.TestCase):
+    def test_only_the_iso_table_may_keep_identical_prose(self):
+        """The identical-prose gate is relaxed for one page; keep it that way."""
+        self.assertEqual(set(i18n_batch.DATA_UNIT_PAGES),
+                         {"iso-3166-country-code-converter"})
+        self.assertTrue(i18n_batch.DATA_UNIT_PAGES["iso-3166-country-code-converter"])
 
 
 class AttributeExtractionTests(unittest.TestCase):
