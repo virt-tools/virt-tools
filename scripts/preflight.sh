@@ -388,6 +388,7 @@ node tests/lambert_conic_projection.test.cjs
 node tests/clef_reading_calculator.test.cjs
 node tests/dolly_zoom_planner.test.cjs
 node tests/bulk_cargo_lift_calculator.test.cjs
+node tests/pan_law_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"

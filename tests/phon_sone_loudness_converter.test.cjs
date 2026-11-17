@@ -209,7 +209,7 @@ const pageDirs = fs.readdirSync(path.join(root, 'frontend', 'tools'), { withFile
   .filter((entry) => entry.isDirectory()).length;
 assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageDirs,
   'every listed tool record has a page');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2119, 'public tools');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2120, 'public tools');
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record missing');
 assert.equal(record.name, 'Phon to Sone Loudness Converter');
@@ -234,7 +234,7 @@ assert.equal(new Set(record.aliases).size, record.aliases.length, 'aliases uniqu
 assert.equal(new Set(record.tags).size, record.tags.length, 'tags unique');
 assert.ok(record.testCases.length >= 20, `expected at least 20 cases, found ${record.testCases.length}`);
 assert.equal(catalog.tools.filter((tool) => tool.slug === slug).length, 1, 'slug unique');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Audio').length, 50, 'Audio count');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Audio').length, 51, 'Audio count');
 for (const other of catalog.tools) {
   if (other.slug === slug) continue;
   assert.ok(!record.aliases.map((alias) => alias.toLowerCase()).includes(other.name.toLowerCase()),
