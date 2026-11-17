@@ -383,6 +383,7 @@ node tests/cobs_encoder_decoder.test.cjs
 node tests/flour_protein_blend_calculator.test.cjs
 node tests/working_hours_between_dates.test.cjs
 node tests/dhcp_classless_route_encoder.test.cjs
+node tests/lambert_conic_projection.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
