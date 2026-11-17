@@ -386,6 +386,7 @@ node tests/working_hours_between_dates.test.cjs
 node tests/dhcp_classless_route_encoder.test.cjs
 node tests/lambert_conic_projection.test.cjs
 node tests/clef_reading_calculator.test.cjs
+node tests/dolly_zoom_planner.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"

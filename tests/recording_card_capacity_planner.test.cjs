@@ -283,7 +283,7 @@ assert.equal(new Set(record.tags).size, record.tags.length, 'tags are unique');
 assert.equal(new Set(record.aliases).size, record.aliases.length, 'aliases are unique');
 assert.ok(record.tags.includes('offload'));
 assert.ok(record.aliases.includes('Card Capacity Calculator'));
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Video').length, 49, 'Video count');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Video').length, 50, 'Video count');
 assert.equal(catalog.tools.filter((tool) => tool.slug === slug).length, 1, 'no rival record');
 for (const tool of catalog.tools) {
   if (tool.slug === slug) continue;
