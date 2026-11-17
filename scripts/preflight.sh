@@ -371,6 +371,7 @@ node tests/fiber_trunk_sizing_calculator.test.cjs
 node tests/tide_height_calculator.test.cjs
 node tests/midi_pitch_bend_calculator.test.cjs
 node tests/speaker_crossover_calculator.test.cjs
+node tests/ipv6_transition_address_decoder.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
