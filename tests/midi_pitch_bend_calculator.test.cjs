@@ -219,8 +219,8 @@ for (const tool of catalog.tools) {
     assert.ok(!(tool.tags || []).includes(tag), 'tag is not already taken: ' + tag + ' on ' + tool.slug);
   }
 }
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Music').length, 49, 'Music count');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2116, 'public tools');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Music').length, 50, 'Music count');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2117, 'public tools');
 
 // ---- Replay every case stored in the record.
 for (const item of record.testCases) {
