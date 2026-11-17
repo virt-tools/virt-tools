@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Kubernetes Resource Quantity Converter — Virtual Tools</title>
+<meta name="description" content="Convert Kubernetes CPU and memory quantities such as 250m, 1.5, 64Mi or 128974848 into cores and bytes, and add a list of container requests into one exact total.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.kq-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px;margin:10px 0}
+label.f{font-size:13px;opacity:.85;display:block;margin-bottom:4px}
+.field{background:var(--bg,#14181f);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px}
+.field:focus-within{border-color:var(--accent,#6ea8fe);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#6ea8fe) 18%,transparent)}
+.field input,.field select{box-sizing:border-box;width:100%;min-height:44px;background:transparent;color:var(--text,#e6e6e6);border:none;font-size:16px;padding:2px 0;outline:none}
+.field textarea{box-sizing:border-box;width:100%;min-height:118px;background:transparent;color:var(--text,#e6e6e6);border:none;font:14px/1.6 ui-monospace,monospace;padding:2px 0;outline:none;resize:vertical}
+.field .unit{font-size:11px;color:var(--text-dim,#9aa3b2);margin-top:4px;line-height:1.4}
+.field.wide{grid-column:1/-1}
+.kq-summary{font-size:15px;margin:14px 0 6px;line-height:1.5}
+.kq-summary strong{font-family:ui-monospace,monospace;font-size:1.15em}
+.kq-table{width:100%;border-collapse:collapse;margin:6px 0 2px;font-size:14px}
+.kq-table[hidden],.kq-warn[hidden]{display:none}
+.kq-table th,.kq-table td{padding:8px 8px;border-bottom:1px solid var(--border,#2a2f3a);text-align:left;vertical-align:top}
+.kq-table th{color:var(--text-dim,#9aa3b2);font-size:12px;font-weight:600;letter-spacing:.02em}
+.kq-table td.num{font-family:ui-monospace,monospace;white-space:nowrap}
+.kq-table td.wrap{font-family:ui-monospace,monospace;overflow-wrap:anywhere}
+.kq-table tfoot td{font-weight:700;border-top:2px solid var(--border,#2a2f3a);border-bottom:none}
+.kq-warn{margin:12px 0 0;padding:0;list-style:none}
+.kq-warn li{font-size:13px;line-height:1.5;color:var(--warn,#d69200);border-left:3px solid var(--warn,#d69200);padding:2px 0 2px 10px;margin:6px 0}
+.err{color:var(--bad,#f87171);font-size:13px;margin:6px 0;min-height:1.2em}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button.secondary{background:transparent;color:var(--text,#e6e6e6);border-color:var(--border,#2a2f3a)}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;margin:10px 0 0;line-height:1.55}
+@media (max-width:520px){
+.kq-table thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
+.kq-table,.kq-table tbody,.kq-table tfoot,.kq-table tr,.kq-table td{display:block;width:100%}
+.kq-table tr{padding:8px 0;border-bottom:1px solid var(--border,#2a2f3a)}
+.kq-table td{border:none;padding:2px 0}
+.kq-table td.num,.kq-table td.wrap{white-space:normal}
+.kq-table td[data-label]::before{content:attr(data-label) " ";color:var(--text-dim,#9aa3b2);font-size:11px;font-family:inherit}
+.kq-table tfoot tr{border-bottom:none}
+}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<h1>Kubernetes Resource Quantity Converter</h1>
+<p>Turn Kubernetes CPU and memory quantities such as <code>250m</code>, <code>1.5</code>, <code>64Mi</code> or <code>129e6</code> into cores and bytes, and add a list of container requests into one exact total.</p>
+</div>
+<div class="panel">
+<form id="kq-form" novalidate>
+<div class="kq-grid">
+<div class="field">
+<label class="f" for="in-kind">Resource</label>
+<select id="in-kind">
+<option value="cpu" selected>CPU (cores and millicores)</option>
+<option value="memory">Memory or storage (bytes)</option>
+</select>
+<div class="unit">CPU is counted in cores, memory in bytes.</div>
+</div>
+<div class="field wide">
+<label class="f" for="in-list">Quantities</label>
+<textarea id="in-list" rows="5" spellcheck="false" autocomplete="off" aria-describedby="list-help">app = 0.25
+worker = 1.5
+sidecar = 250m</textarea>
+<div class="unit" id="list-help">One quantity per line. Add <code>name =</code> in front to keep track of which container it came from; lines starting with <code>#</code> are ignored.</div>
+</div>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions"><button type="submit">Convert</button><button type="button" class="secondary" id="reset">Reset</button></div>
+</form>
+<div id="out" aria-live="polite" aria-atomic="true">
+<p class="kq-summary" id="summary"></p>
+<table class="kq-table" id="result-table" hidden>
+<caption class="sr-only">Each quantity in core or byte base units, and the total of all lines</caption>
+<thead>
+<tr><th scope="col" id="th-name">Name</th><th scope="col" id="th-raw">Quantity</th><th scope="col" id="th-base">Cores</th><th scope="col" id="th-also">Millicores</th></tr>
+</thead>
+<tbody id="result-body"></tbody>
+<tfoot id="result-foot"></tfoot>
+</table>
+<ul class="kq-warn" id="warnings" hidden></ul>
+</div>
+<p class="note">A Kubernetes quantity is a fixed-point number with an optional suffix: <code>m</code> is one thousandth, <code>k</code> to <code>E</code> are powers of ten, and <code>Ki</code> to <code>Ei</code> are powers of 1024. So <code>250m</code> and <code>0.25</code> are the same amount of CPU, and <code>1.5Gi</code> is 1,610,612,736 bytes. Every figure here is computed exactly in whole units — no floating point — and the total is the sum of the lines as Kubernetes would store them, so a quantity with more than three decimal places is rounded up to the nearest <code>0.001</code> first. Nothing is sent or stored.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* k8s-quantity-core:start */
+var K8sQuantityCore = (function(){
+  "use strict";
+  var MAX_MAGNITUDE = 9223372036854775807n;
+  var DECIMAL_SUFFIX = { k: 3, M: 6, G: 9, T: 12, P: 15, E: 18 };
+  var BINARY_SUFFIX = { Ki: 10, Mi: 20, Gi: 30, Ti: 40, Pi: 50, Ei: 60 };
+  var MAX_LINES = 40;
+  var MAX_TEXT = 4000;
+  var DEFAULTS = {
+    cpu: "app = 0.25\nworker = 1.5\nsidecar = 250m",
+    memory: "app = 64Mi\nworker = 512Mi\ncache = 1.5Gi"
+  };
+  var POW10 = [1n];
+
+  function fail(message){ throw new Error(message); }
+
+  function pow10(exponent){
+    while (POW10.length <= exponent){ POW10.push(POW10[POW10.length - 1] * 10n); }
+    return POW10[exponent];
+  }
+
+  function abs(value){ return value < 0n ? -value : value; }
+
+  function has(map, key){
+    return Object.prototype.hasOwnProperty.call(map, key);
+  }
+
+  function formatDecimal(m, s){
+    var negative = m < 0n;
+    var digits = abs(m).toString();
+    if (s > 0){
+      while (digits.length <= s){ digits = "0" + digits; }
+      digits = digits.slice(0, digits.length - s) + "." + digits.slice(digits.length - s);
+    }
+    return (negative ? "-" : "") + digits;
+  }
+
+  function normalize(m, s){
+    if (m === 0n) return { m: 0n, s: 0 };
+    if (s < 0){ m *= pow10(-s); s = 0; }
+    while (s > 0 && m % 10n === 0n){ m /= 10n; s -= 1; }
+    return { m: m, s: s };
+  }
+
+  function add(left, right){
+    var s = Math.max(left.s, right.s);
+    return normalize(left.m * pow10(s - left.s) + right.m * pow10(s - right.s), s);
+  }
+
+  // Kubernetes keeps at most three decimal places and rounds up in magnitude.
+  function ceilMilli(value){
+    if (value.s <= 3) return value.m * pow10(3 - value.s);
+    var divisor = pow10(value.s - 3);
+    var magnitude = (abs(value.m) + divisor - 1n) / divisor;
+    return value.m < 0n ? -magnitude : magnitude;
+  }
+
+  function binaryExact(value){
+    if (value.s !== 0 || value.m === 0n) return null;
+    var magnitude = abs(value.m);
+    var units = ["Ei", "Pi", "Ti", "Gi", "Mi", "Ki"];
+    var shifts = [60, 50, 40, 30, 20, 10];
+    for (var i = 0; i < units.length; i += 1){
+      var factor = 1n << BigInt(shifts[i]);
+      if (magnitude >= factor && magnitude % factor === 0n){
+        return (value.m / factor).toString() + units[i] + "B";
+      }
+    }
+    return null;
+  }
+
+  function roundScaled(m, divisor, digits){
+    var factor = pow10(digits);
+    var scaled = (2n * abs(m) * factor + divisor) / (2n * divisor);
+    return formatDecimal(m < 0n ? -scaled : scaled, digits);
+  }
+
+  function humanBytes(value){
+    if (value.s !== 0) return { text: "", exact: false };
+    var magnitude = abs(value.m);
+    var units = [["EiB", 60], ["PiB", 50], ["TiB", 40], ["GiB", 30], ["MiB", 20], ["KiB", 10]];
+    for (var i = 0; i < units.length; i += 1){
+      var factor = 1n << BigInt(units[i][1]);
+      if (magnitude >= factor){
+        if (magnitude % factor === 0n){
+          return { text: (value.m / factor).toString() + units[i][0], exact: true };
+        }
+        return { text: roundScaled(value.m, factor, 2) + units[i][0], exact: false };
+      }
+    }
+    return { text: "", exact: false };
+  }
+
+  function grammarMessage(text){
+    return "\"" + text + "\" is not a Kubernetes quantity. Write a number such as 0.5, 250m, 128 or 1.5Gi, using the suffix m, k, M, G, T, P or E, a binary suffix Ki, Mi, Gi, Ti, Pi or Ei, or an exponent such as 1e3.";
+  }
+
+  function parseQuantity(raw){
+    var text = String(raw == null ? "" : raw).trim();
+    if (!text) fail("A quantity is required.");
+    if (text.length > 40) fail("\"" + text + "\" is not a Kubernetes quantity: they are short, like 250m or 1.5Gi.");
+    var match = /^([+-]?)(?:(\d+)(?:\.(\d*))?|\.(\d+))(?:[eE]([+-]?\d+))?(Ki|Mi|Gi|Ti|Pi|Ei|m|k|M|G|T|P|E)?$/.exec(text);
+    if (!match) fail(grammarMessage(text));
+    var integerPart = match[2] || "";
+    var fractionPart = match[3] !== undefined ? match[3] : (match[4] || "");
+    var suffix = match[6] || "";
+    if (match[5] && suffix) fail(grammarMessage(text));
+    var exponent = match[5] ? Number(match[5]) : 0;
+    if (Math.abs(exponent) > 30) fail(grammarMessage(text));
+    var digits = (integerPart + fractionPart).replace(/^0+(?=\d)/, "");
+    var mantissa = BigInt(digits);
+    if (match[1] === "-") mantissa = -mantissa;
+    var scale = fractionPart.length - exponent;
+    if (suffix === "m"){
+      scale += 3;
+    } else if (has(DECIMAL_SUFFIX, suffix)){
+      mantissa *= pow10(DECIMAL_SUFFIX[suffix]);
+    } else if (has(BINARY_SUFFIX, suffix)){
+      mantissa *= 1n << BigInt(BINARY_SUFFIX[suffix]);
+    }
+    var parsed = normalize(mantissa, scale);
+    if (abs(parsed.m) > MAX_MAGNITUDE * pow10(parsed.s)){
+      fail("\"" + text + "\" is larger than 2^63-1 (9223372036854775807), the largest magnitude a Kubernetes quantity can hold.");
+    }
+    var milliUnits = ceilMilli(parsed);
+    var stored = parsed.s > 3 ? normalize(milliUnits, 3) : parsed;
+    return {
+      raw: text,
+      suffix: suffix,
+      value: stored,
+      exact: formatDecimal(stored.m, stored.s),
+      milliUnits: milliUnits.toString(),
+      roundedFrom: parsed.s > 3 ? formatDecimal(parsed.m, parsed.s) : null,
+      binary: binaryExact(stored)
+    };
+  }
+
+  function convert(input){
+    var options = input || {};
+    var kind = options.kind === "memory" ? "memory" : "cpu";
+    var text = String(options.text == null ? "" : options.text);
+    if (text.length > MAX_TEXT) fail("Paste at most 4,000 characters at a time.");
+    var lines = text.split(/\r?\n/);
+    var rows = [];
+    var warnings = [];
+    for (var index = 0; index < lines.length; index += 1){
+      var line = lines[index].trim();
+      if (!line || line.charAt(0) === "#") continue;
+      if (rows.length >= MAX_LINES) fail("Convert at most " + MAX_LINES + " quantities at a time.");
+      var number = index + 1;
+      var name = "";
+      var quantity = line;
+      var equals = line.indexOf("=");
+      if (equals >= 0){
+        name = line.slice(0, equals).trim();
+        quantity = line.slice(equals + 1).trim();
+        if (!name) fail("Line " + number + ": put a name before the \"=\" sign, or remove it.");
+        if (!quantity) fail("Line " + number + ": the name needs a quantity after the \"=\" sign.");
+      }
+      if (!quantity) fail("Line " + number + ": a quantity is required.");
+      var parsed;
+      try {
+        parsed = parseQuantity(quantity);
+      } catch (error){
+        fail("Line " + number + ": " + error.message);
+      }
+      if (kind === "cpu" && has(BINARY_SUFFIX, parsed.suffix)){
+        fail("Line " + number + ": CPU is measured in cores, so write a decimal number or use the m suffix (250m is 0.25 cores); binary suffixes like Mi are for memory and storage.");
+      }
+      if (kind === "cpu" && has(DECIMAL_SUFFIX, parsed.suffix)){
+        fail("Line " + number + ": CPU is measured in cores, so write a decimal number or use the m suffix (250m is 0.25 cores); the suffix " + parsed.suffix + " is for memory and storage.");
+      }
+      if (parsed.roundedFrom){
+        warnings.push("Line " + number + ": Kubernetes keeps at most three decimal places, so " + parsed.roundedFrom + " is stored as " + parsed.exact + ".");
+      }
+      if (kind === "memory" && parsed.value.s > 0){
+        var hint = parsed.suffix === "m"
+          ? " — did you mean " + parsed.raw.slice(0, -1) + "Mi or " + parsed.raw.slice(0, -1) + "M?"
+          : ".";
+        warnings.push("Line " + number + ": " + parsed.exact + " bytes is not a whole number of bytes" + hint);
+      }
+      rows.push({
+        name: name,
+        raw: parsed.raw,
+        exact: parsed.exact,
+        milli: parsed.milliUnits,
+        binary: parsed.binary,
+        value: parsed.value
+      });
+    }
+    if (!rows.length) fail("Enter at least one quantity, one per line.");
+    var total = { m: 0n, s: 0 };
+    for (var row = 0; row < rows.length; row += 1){
+      total = add(total, rows[row].value);
+    }
+    if (abs(total.m) > MAX_MAGNITUDE * pow10(total.s)){
+      warnings.push("The total is larger than 2^63-1, so no single Kubernetes quantity can hold it; split it into more than one resource.");
+    }
+    var totalMilli = total.s <= 3 ? (total.m * pow10(3 - total.s)).toString() : ceilMilli(total).toString();
+    var human = kind === "memory" ? humanBytes(total) : { text: "", exact: false };
+    return {
+      kind: kind,
+      count: rows.length,
+      rows: rows,
+      total: total,
+      totalExact: formatDecimal(total.m, total.s),
+      totalMilli: totalMilli,
+      totalBinary: binaryExact(total) || "",
+      totalHuman: human.text,
+      totalHumanApprox: human.text !== "" && human.exact === false,
+      warnings: warnings
+    };
+  }
+
+  return {
+    DEFAULTS: DEFAULTS,
+    MAX_LINES: MAX_LINES,
+    parseQuantity: parseQuantity,
+    convert: convert,
+    formatDecimal: formatDecimal
+  };
+})();
+/* k8s-quantity-core:end */
+(function(){
+  "use strict";
+  var els = {
+    form: document.getElementById("kq-form"),
+    kind: document.getElementById("in-kind"),
+    text: document.getElementById("in-list"),
+    err: document.getElementById("err"),
+    reset: document.getElementById("reset"),
+    out: document.getElementById("out"),
+    summary: document.getElementById("summary"),
+    table: document.getElementById("result-table"),
+    body: document.getElementById("result-body"),
+    foot: document.getElementById("result-foot"),
+    warnings: document.getElementById("warnings"),
+    thBase: document.getElementById("th-base"),
+    thAlso: document.getElementById("th-also")
+  };
+
+  function group(text){
+    var negative = text.charAt(0) === "-";
+    var body = negative ? text.slice(1) : text;
+    var parts = body.split(".");
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    return (negative ? "-" : "") + parts.join(".");
+  }
+
+  function cell(text, className, label){
+    var node = document.createElement("td");
+    if (className) node.className = className;
+    if (label) node.setAttribute("data-label", label);
+    node.textContent = text;
+    return node;
+  }
+
+  function clear(node){
+    while (node.firstChild) node.removeChild(node.firstChild);
+  }
+
+  function render(result){
+    var memory = result.kind === "memory";
+    els.thBase.textContent = memory ? "Bytes" : "Cores";
+    els.thAlso.textContent = memory ? "Exact binary" : "Millicores";
+    clear(els.body);
+    for (var i = 0; i < result.rows.length; i += 1){
+      var row = result.rows[i];
+      var tr = document.createElement("tr");
+      tr.appendChild(cell(row.name || "—", "", "Name"));
+      tr.appendChild(cell(row.raw, "wrap", "Quantity"));
+      tr.appendChild(cell(group(row.exact), "num", memory ? "Bytes" : "Cores"));
+      tr.appendChild(cell(memory ? (row.binary || "—") : group(row.milli) + "m", "num", memory ? "Exact binary" : "Millicores"));
+      els.body.appendChild(tr);
+    }
+    clear(els.foot);
+    var foot = document.createElement("tr");
+    foot.appendChild(cell("Total", "", "Name"));
+    foot.appendChild(cell(result.count + (result.count === 1 ? " quantity" : " quantities"), "", "Quantity"));
+    foot.appendChild(cell(group(result.totalExact), "num", memory ? "Bytes" : "Cores"));
+    foot.appendChild(cell(memory ? (result.totalBinary || "—") : group(result.totalMilli) + "m", "num", memory ? "Exact binary" : "Millicores"));
+    els.foot.appendChild(foot);
+
+    if (memory){
+      els.summary.textContent = "";
+      var strong = document.createElement("strong");
+      strong.textContent = group(result.totalExact) + " bytes";
+      els.summary.appendChild(strong);
+      var rest = result.totalHuman ? " (" + (result.totalHumanApprox ? "≈ " : "") + result.totalHuman + ")" : "";
+      els.summary.appendChild(document.createTextNode(rest + " across " + result.count + (result.count === 1 ? " quantity." : " quantities.")));
+    } else {
+      els.summary.textContent = "";
+      var cores = document.createElement("strong");
+      cores.textContent = group(result.totalExact) + (result.totalExact === "1" || result.totalExact === "-1" ? " core" : " cores");
+      els.summary.appendChild(cores);
+      els.summary.appendChild(document.createTextNode(" (" + group(result.totalMilli) + "m) across " + result.count + (result.count === 1 ? " quantity." : " quantities.")));
+    }
+
+    clear(els.warnings);
+    if (result.warnings.length){
+      for (var w = 0; w < result.warnings.length; w += 1){
+        var item = document.createElement("li");
+        item.textContent = result.warnings[w];
+        els.warnings.appendChild(item);
+      }
+      els.warnings.hidden = false;
+    } else {
+      els.warnings.hidden = true;
+    }
+    els.table.hidden = false;
+  }
+
+  function placeholder(){
+    clear(els.body);
+    clear(els.foot);
+    clear(els.warnings);
+    els.warnings.hidden = true;
+    els.table.hidden = true;
+    els.summary.textContent = "";
+    var strong = document.createElement("strong");
+    strong.textContent = "Enter at least one quantity";
+    els.summary.appendChild(strong);
+    els.summary.appendChild(document.createTextNode(" — one per line, like 250m or 1.5Gi."));
+  }
+
+  function calculate(showError){
+    var result;
+    try {
+      result = K8sQuantityCore.convert({ kind: els.kind.value, text: els.text.value });
+    } catch (error){
+      if (showError) els.err.textContent = error.message;
+      placeholder();
+      return;
+    }
+    els.err.textContent = "";
+    render(result);
+  }
+
+  els.text.addEventListener("input", function(){ calculate(false); });
+  els.text.addEventListener("blur", function(){ calculate(true); });
+  els.kind.addEventListener("change", function(){
+    var previous = els.kind.value === "memory" ? K8sQuantityCore.DEFAULTS.cpu : K8sQuantityCore.DEFAULTS.memory;
+    if (els.text.value.trim() === previous.trim()){
+      els.text.value = K8sQuantityCore.DEFAULTS[els.kind.value];
+    }
+    els.err.textContent = "";
+    calculate(false);
+  });
+  els.form.addEventListener("submit", function(event){
+    event.preventDefault();
+    calculate(true);
+  });
+  els.reset.addEventListener("click", function(){
+    els.text.value = K8sQuantityCore.DEFAULTS[els.kind.value];
+    els.err.textContent = "";
+    calculate(false);
+    els.text.focus();
+  });
+
+  calculate(false);
+})();
+</script>
+</body>
+</html>
