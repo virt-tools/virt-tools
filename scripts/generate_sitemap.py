@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Generate the sitemap index and its per-locale child sitemaps.
 
-The site has no static internal links (the catalog, breadcrumbs and related
-tools are rendered by app.js), so this file set is the only discovery path
-crawlers get. It is therefore generated from the same sources the pages are:
+Every page carries a build-time breadcrumb and related-tools block, but a
+crawler still finds the whole catalog fastest through this file set, and it is
+the only machine-readable index of what exists per locale. It is therefore
+generated from the same sources the pages are:
 
   frontend/assets/tool-catalog.json   listed tools
   frontend/assets/i18n/manifest.json  pages that exist per locale

@@ -331,9 +331,10 @@ that flag is informational today and does not gate publishing.
 
 ## Sitemaps
 
-The pages carry no static internal links — the catalog, breadcrumb and related
-tools are rendered by `app.js` — so the sitemap set is the only discovery path
-crawlers get, and it is generated from the same sources the pages are:
+Pages carry a build-time breadcrumb and related-tools block (injected by
+`scripts/generate_seo.py`, so crawlers see them without JavaScript), and the
+sitemap set is the machine-readable index of what exists per locale. Both are
+generated from the same sources the pages are:
 
 | File | Contents |
 | --- | --- |

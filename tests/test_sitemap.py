@@ -1,9 +1,9 @@
 """The sitemap index must stay in step with the catalog and the i18n manifest.
 
-The site ships no static internal links, so these files are the only discovery
-path a crawler gets: a stale child silently drops URLs, and a duplicate one
-wastes crawl budget. These tests pin the layout, the counts, the hreflang sets
-and the staleness gate that the image build runs.
+The sitemap set is the machine-readable index of what exists per locale, on top
+of the build-time breadcrumb and related-tools links: a stale child silently
+drops URLs, and a duplicate one wastes crawl budget. These tests pin the layout,
+the counts, the hreflang sets and the staleness gate that the image build runs.
 """
 
 from __future__ import annotations
