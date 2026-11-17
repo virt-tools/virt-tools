@@ -375,6 +375,7 @@ node tests/ipv6_transition_address_decoder.test.cjs
 node tests/proc_net_socket_decoder.test.cjs
 node tests/hockey_goalie_stats_calculator.test.cjs
 node tests/kubernetes_resource_quantity_converter.test.cjs
+node tests/leadscrew_torque_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
