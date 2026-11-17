@@ -379,6 +379,7 @@ node tests/leadscrew_torque_calculator.test.cjs
 node tests/cellular_frequency_reuse_planner.test.cjs
 node tests/specific_energy_converter.test.cjs
 node tests/stained_glass_materials_calculator.test.cjs
+node tests/cobs_encoder_decoder.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
