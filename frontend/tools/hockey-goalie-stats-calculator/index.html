@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Hockey Goalie Stats Calculator — Virtual Tools</title>
+<meta name="description" content="Turn a goaltender's minutes, goals against and saves into goals against average, save percentage, shots faced and shots against per 60 minutes.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:12px;margin:10px 0}
+label.f{font-size:13px;opacity:.85;display:block;margin-bottom:4px}
+.field{background:var(--bg,#14181f);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px}
+.field:focus-within{border-color:var(--accent,#6ea8fe);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#6ea8fe) 18%,transparent)}
+.field input{box-sizing:border-box;width:100%;min-height:44px;background:transparent;color:var(--text,#e6e6e6);border:none;font-size:18px;font-family:ui-monospace,monospace;padding:2px 0;outline:none}
+.field .unit{font-size:11px;color:var(--text-dim,#9aa3b2);margin-top:4px;line-height:1.4}
+.field.wide{grid-column:1/-1}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:14px 0}
+.out .big{font-size:clamp(1.9rem,7vw,2.5rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:4px 0 6px;overflow-wrap:anywhere}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45}
+.out .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:14px}
+.out .row:last-child{border-bottom:none}
+.out .row .k{color:var(--text-dim,#9aa3b2)}
+.out .row .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right;white-space:nowrap}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.err{color:var(--bad,#f87171);font-size:13px;margin:6px 0;min-height:1.2em}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;margin:10px 0 0;line-height:1.55}
+@media (max-width:380px){.out .row{display:block}.out .row .v{display:block;text-align:left;margin-top:2px}}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<h1>Hockey Goalie Stats Calculator</h1>
+<p>Enter a goaltender's minutes played, goals against and saves to get goals against average, save percentage and shots faced.</p>
+</div>
+<div class="panel">
+<form id="goalie-form" novalidate>
+<div class="grid2">
+<div class="field wide">
+<label class="f" for="in-minutes">Minutes played</label>
+<input type="text" id="in-minutes" autocomplete="off" spellcheck="false" value="58:12" aria-describedby="minutes-help">
+<div class="unit" id="minutes-help">Use <code>mm:ss</code> like <code>58:12</code>, or a decimal number of minutes like <code>58.2</code>.</div>
+</div>
+<div class="field">
+<label class="f" for="in-goals">Goals against</label>
+<input type="text" id="in-goals" inputmode="numeric" autocomplete="off" value="2">
+<div class="unit">goals charged to this goaltender</div>
+</div>
+<div class="field">
+<label class="f" for="in-saves">Saves</label>
+<input type="text" id="in-saves" inputmode="numeric" autocomplete="off" value="27">
+<div class="unit">shots stopped, not goals allowed</div>
+</div>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions"><button type="submit">Calculate stats</button><button type="button" class="secondary" id="reset">Reset</button></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"></div>
+<p class="note">GAA is 60 × goals against ÷ minutes played — the goals a goaltender allows per 60 minutes. Shots on goal include the goals that went in, so shots faced is saves plus goals against, and save percentage is saves ÷ shots faced. A goalie who faced no shots has no save percentage, shown as a dash. Enter only goals charged to the goaltender: official GAA leaves out empty-net and shootout goals, and overtime goals and time are included. Everything is calculated in this page; nothing is sent or stored.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* goalie-core:start */
+var GoalieStatsCore = (function(){
+  "use strict";
+  var MAX_MINUTES = 100000;
+  var MAX_COUNT = 10000;
+  var DEFAULTS = { minutes: "58:12", goalsAgainst: 2, saves: 27 };
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function count(value, label){
+    var raw = String(value == null ? "" : value).trim();
+    if (!raw) fail(label + " is required.");
+    if (!/^\d+$/.test(raw)) fail(label + " must be a whole number from 0 to " + MAX_COUNT + ".");
+    var parsed = Number(raw);
+    if (!isFinite(parsed) || parsed < 0 || parsed > MAX_COUNT){
+      fail(label + " must be a whole number from 0 to " + MAX_COUNT + ".");
+    }
+    return parsed;
+  }
+
+  function minutes(value){
+    var raw = String(value == null ? "" : value).trim();
+    if (!raw) fail("Minutes played is required.");
+    var seconds;
+    var colon = /^(\d{1,6}):([0-5]\d)$/.exec(raw);
+    if (colon){
+      seconds = Number(colon[1]) * 60 + Number(colon[2]);
+    } else if (/^\d{1,6}(?:\.\d{1,4})?$/.test(raw)){
+      if (Number(raw) <= 0) fail("Minutes played must be greater than zero.");
+      seconds = Math.round(Number(raw) * 60);
+      if (seconds < 1) fail("Minutes played must be at least one second.");
+    } else {
+      fail("Minutes played must be minutes and seconds with the seconds below 60, like 58:12, or a decimal number of minutes like 58.2.");
+    }
+    if (seconds <= 0) fail("Minutes played must be greater than zero.");
+    if (seconds > MAX_MINUTES * 60) fail("Minutes played must be " + MAX_MINUTES + " minutes or fewer.");
+    return seconds;
+  }
+
+  function roundTo(value, digits){
+    var factor = Math.pow(10, digits);
+    var scaled = value * factor;
+    var rounded = scaled < 0 ? Math.ceil(scaled - 0.5) : Math.floor(scaled + 0.5);
+    return rounded / factor;
+  }
+
+  function clock(seconds){
+    var whole = Math.floor(seconds / 60);
+    var rest = seconds % 60;
+    return whole + ":" + (rest < 10 ? "0" : "") + rest;
+  }
+
+  function calculate(input){
+    var supplied = input || {};
+    var options = {};
+    var keys = Object.keys(DEFAULTS);
+    for (var i = 0; i < keys.length; i++){
+      var key = keys[i];
+      options[key] = supplied[key] === undefined || supplied[key] === null ? DEFAULTS[key] : supplied[key];
+    }
+
+    var seconds = minutes(options.minutes);
+    var goalsAgainst = count(options.goalsAgainst, "Goals against");
+    var saves = count(options.saves, "Saves");
+    var shotsAgainst = saves + goalsAgainst;
+    var minutesPlayed = seconds / 60;
+    var savePct = shotsAgainst > 0 ? roundTo(saves / shotsAgainst, 3) : null;
+
+    return {
+      seconds: seconds,
+      minutesPlayed: minutesPlayed,
+      minutesText: clock(seconds),
+      goalsAgainst: goalsAgainst,
+      saves: saves,
+      shotsAgainst: shotsAgainst,
+      gaa: roundTo(60 * goalsAgainst / minutesPlayed, 2),
+      savePct: savePct,
+      savePctPercent: savePct === null ? null : roundTo(savePct * 100, 1),
+      shotsAgainstPer60: roundTo(60 * shotsAgainst / minutesPlayed, 2)
+    };
+  }
+
+  function formatGaa(result){
+    return result.gaa.toFixed(2);
+  }
+
+  function formatSavePct(result){
+    if (result.savePct === null) return "\u2014";
+    return result.savePct.toFixed(3).replace(/^0/, "");
+  }
+
+  function formatPercent(result){
+    if (result.savePctPercent === null) return "\u2014";
+    return result.savePctPercent.toFixed(1) + "%";
+  }
+
+  function formatRate(value){
+    return value.toFixed(2);
+  }
+
+  return {
+    MAX_MINUTES: MAX_MINUTES,
+    MAX_COUNT: MAX_COUNT,
+    DEFAULTS: DEFAULTS,
+    calculate: calculate,
+    formatGaa: formatGaa,
+    formatSavePct: formatSavePct,
+    formatPercent: formatPercent,
+    formatRate: formatRate
+  };
+})();
+/* goalie-core:end */
+(function(){
+"use strict";
+
+var els = {
+  minutes: document.getElementById("in-minutes"),
+  goals: document.getElementById("in-goals"),
+  saves: document.getElementById("in-saves"),
+  err: document.getElementById("err"),
+  out: document.getElementById("out")
+};
+
+function clear(node){
+  while (node.firstChild) node.removeChild(node.firstChild);
+}
+function addRow(parent, label, value){
+  var row = document.createElement("div");
+  row.className = "row";
+  var key = document.createElement("span");
+  key.className = "k";
+  key.textContent = label;
+  var val = document.createElement("span");
+  val.className = "v";
+  val.textContent = value;
+  row.appendChild(key);
+  row.appendChild(val);
+  parent.appendChild(row);
+}
+function placeholder(node, message){
+  var span = document.createElement("span");
+  span.style.color = "var(--text-dim,#9aa3b2)";
+  span.textContent = message;
+  node.appendChild(span);
+}
+
+function render(result){
+  clear(els.out);
+  var big = document.createElement("div");
+  big.className = "big";
+  big.textContent = GoalieStatsCore.formatGaa(result);
+  var sub = document.createElement("div");
+  sub.className = "sub";
+  sub.textContent = "goals against average over " + result.minutesText + " (" + result.seconds + " seconds)";
+  els.out.appendChild(big);
+  els.out.appendChild(sub);
+
+  addRow(els.out, "Save percentage", GoalieStatsCore.formatSavePct(result));
+  addRow(els.out, "Save percentage as a percentage", GoalieStatsCore.formatPercent(result));
+  addRow(els.out, "Shots against (saves + goals against)", String(result.shotsAgainst));
+  addRow(els.out, "Shots against per 60 minutes", GoalieStatsCore.formatRate(result.shotsAgainstPer60));
+  addRow(els.out, "Saves", String(result.saves));
+  addRow(els.out, "Minutes played", result.minutesText);
+}
+
+function calculate(showError){
+  var result;
+  try {
+    result = GoalieStatsCore.calculate({
+      minutes: els.minutes.value,
+      goalsAgainst: els.goals.value,
+      saves: els.saves.value
+    });
+  } catch (error){
+    if (showError) els.err.textContent = error.message;
+    clear(els.out);
+    placeholder(els.out, "Enter minutes played, goals against and saves.");
+    return;
+  }
+  els.err.textContent = "";
+  render(result);
+}
+
+var inputs = [els.minutes, els.goals, els.saves];
+inputs.forEach(function(input){
+  input.addEventListener("input", function(){ calculate(false); });
+  input.addEventListener("blur", function(){ calculate(true); });
+});
+document.getElementById("goalie-form").addEventListener("submit", function(event){
+  event.preventDefault();
+  calculate(true);
+});
+document.getElementById("reset").addEventListener("click", function(){
+  els.minutes.value = GoalieStatsCore.DEFAULTS.minutes;
+  els.goals.value = String(GoalieStatsCore.DEFAULTS.goalsAgainst);
+  els.saves.value = String(GoalieStatsCore.DEFAULTS.saves);
+  els.err.textContent = "";
+  calculate(false);
+});
+
+calculate(false);
+})();
+</script>
+</body>
+</html>
