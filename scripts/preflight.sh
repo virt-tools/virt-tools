@@ -18,6 +18,7 @@ python3 scripts/validate_browser_security.py
 python3 scripts/validate_operations.py
 python3 scripts/generate_i18n.py --check
 python3 scripts/i18n_status.py --check
+python3 scripts/generate_sitemap.py frontend https://virt.tools --dry-run
 node scripts/validate_javascript.mjs frontend
 node scripts/validate_formula_workbenches.mjs .
 node tests/security/math-expression.test.cjs

@@ -328,3 +328,47 @@ any memory that disagrees, so "Reset" reads the same everywhere.
 `reviewed` in a memory records whether a native speaker checked it. A batch
 written by a model is `false` and stays `false` until someone reviews the page;
 that flag is informational today and does not gate publishing.
+
+## Sitemaps
+
+The pages carry no static internal links — the catalog, breadcrumb and related
+tools are rendered by `app.js` — so the sitemap set is the only discovery path
+crawlers get, and it is generated from the same sources the pages are:
+
+| File | Contents |
+| --- | --- |
+| `sitemap.xml` | index of the four children below |
+| `sitemap-pages.xml` | `/`, `/feedback/`, `/privacy/` and the two locale homes |
+| `sitemap-tools-en.xml` | every listed tool, English |
+| `sitemap-tools-de.xml` | every tool with a German memory |
+| `sitemap-tools-es.xml` | every tool with a Spanish memory |
+
+`scripts/generate_sitemap.py` builds it from `frontend/assets/tool-catalog.json`,
+`frontend/assets/i18n/manifest.json`, `data/tool-curation.json` and
+`data/generated-conversion-tools.json`; `scripts/generate_sitemap.sh` is a
+wrapper that keeps the old `<web_root> <base_url>` arguments working. The split
+is by content type and locale, never by tool category: categories are a UI
+filter with no URLs of their own, while separate locale files give per-locale
+indexing reports in Search Console.
+
+Every URL carries the same `xhtml:link` hreflang set (x-default, en, and each
+locale that has the page), every tool URL carries a `lastmod` from the catalog's
+`reviewedAt`/`added` clamped to today, and the generator refuses to write a set
+that would duplicate a URL, lose a listed tool, empty a child, date a `lastmod`
+in the future, or disagree about hreflang between locales.
+
+The files are build output and are not committed. The image build generates them
+and then runs `--check`, which fails the release when a child no longer matches
+the catalog:
+
+```sh
+sh scripts/generate_sitemap.sh frontend https://virt.tools           # write
+python3 scripts/generate_sitemap.py frontend https://virt.tools --check
+```
+
+Adding or editing a tool therefore needs no sitemap edit — the catalog date moves
+the `lastmod` and the next build re-derives every child — but a new tool appears
+in a locale child only once its translation memory exists, and an unlisted,
+redirected or quarantined slug drops out on the next build. `tests/test_sitemap.py`
+pins the layout, counts, hreflang sets, `lastmod` clamping and the staleness gate,
+and runs in preflight.
