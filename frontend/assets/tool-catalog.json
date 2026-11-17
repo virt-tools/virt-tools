@@ -220199,6 +220199,357 @@
         }
       ],
       "listed": true
+    },
+    {
+      "slug": "proc-net-socket-decoder",
+      "name": "Linux Socket Table Decoder",
+      "description": "Decode a row of /proc/net/tcp, tcp6, udp or udp6 into the local and remote address and port, the socket state, the queue sizes, the UID and the socket inode. Runs in your browser.",
+      "category": "System",
+      "legacyCategory": null,
+      "subcategory": "Conversion",
+      "tags": [
+        "system",
+        "linux",
+        "procfs",
+        "proc-net-tcp",
+        "socket",
+        "socket-table",
+        "tcp-state",
+        "netstat",
+        "ss",
+        "inode",
+        "decoder",
+        "conversion"
+      ],
+      "aliases": [
+        "Linux Socket Table Decoder",
+        "linux socket table decoder",
+        "Socket Table Decoder",
+        "socket table decoder",
+        "/proc/net/tcp Decoder",
+        "proc/net/tcp decoder",
+        "proc net tcp decoder",
+        "proc net tcp6 decoder",
+        "Linux Socket Decoder",
+        "linux socket decoder",
+        "netstat Output Decoder",
+        "netstat decoder",
+        "ss Output Decoder",
+        "ss decoder"
+      ],
+      "icon": "🔌",
+      "added": "2026-11-17T05:02:00Z",
+      "risk": "low",
+      "maturity": "draft",
+      "reviewedAt": null,
+      "guidance": "Use it when ss, netstat or lsof are missing - a scratch container, a chroot, a busybox or distroless image - and the kernel's own socket table is all you have. Paste the rows as /proc prints them, header and all. The inode in the last column is what ties a row to a process: it appears as socket:[N] among that process's open files, and the page shows the one-liner that finds it. In a UDP table the state reads 07 while the socket is unconnected and 01 once connect() fixed its peer.",
+      "method": "The /proc row has no labels, so the page locates the first token shaped like an address:port pair and then requires every column after it to match its own shape, which is what keeps a pasted header or a shifted row from being read as data. The kernel prints the address as one 32-bit word for tcp and udp, or four 32-bit words for tcp6 and udp6, with %08X straight from the socket's stored __be32 field rather than in network order, and the port as %04X; on a little-endian host the four octets of each word therefore read backwards, so 0100007F is 127.0.0.1, 3500007F is 127.0.0.53 and 00000000000000000000000001000000 is ::1. The decoder reverses the octets of each word and then formats IPv6 in RFC 5952 canonical form - lowercase, no leading zeros, the longest run of two or more zero groups collapsed, the first run winning a tie - and prints an IPv4-mapped address in mixed notation as ::ffff:a.b.c.d, which is why an IPv6 endpoint comes back bracketed with the port after the bracket. Column 4 is the low byte of the kernel's sk_state enum: the page carries the thirteen values from include/net/tcp_states.h, and because a UDP socket keeps the same enum it reads 07 (CLOSE) while unconnected and 01 (ESTABLISHED) once connect() fixed its peer, so udp mode relabels those two and flags every other code as unexpected. tx_queue:rx_queue is converted from hex to bytes, tr:tm->when to the timer state plus jiffies, retrnsmt to a count, and uid, the probes-out column and the inode are read as decimal. The page accepts the full eleven-column row, the short local/remote/state form and a lone endpoint, skips a header line and counts it, and refuses a row whose fields do not line up with the column name and the value that failed instead of shifting the rest by one. The seven debug fields after the inode - reference count, a zero pointer, retransmission timeout, delayed-ACK control word, congestion window and slow-start threshold - are counted but not interpreted. Everything is computed locally with integer arithmetic: no network access, uploads or storage.",
+      "sources": [
+        {
+          "title": "Linux kernel documentation, The /proc/net/tcp and /proc/net/tcp6 variables: the annotated row layout used by the column reference, including the transmit and receive queues, the timer and jiffies fields, the uid, the probe counter, the inode and the debug tail.",
+          "url": "https://www.kernel.org/doc/html/latest/networking/proc_net_tcp.html"
+        },
+        {
+          "title": "proc_pid_net(5) from the Linux man-pages: /proc/net/tcp and /proc/net/udp hold the kernel hash slot, the local and remote address and port, the socket status, the queue sizes, the timer fields and the effective UID of the creator.",
+          "url": "https://man7.org/linux/man-pages/man5/proc_pid_net.5.html"
+        },
+        {
+          "title": "Linux kernel include/net/tcp_states.h: the sk_state enum read by the page, TCP_ESTABLISHED = 1 through TCP_BOUND_INACTIVE = 13, with TCP_CLOSE = 7 and TCP_LISTEN = 10.",
+          "url": "https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/include/net/tcp_states.h"
+        },
+        {
+          "title": "Linux kernel net/ipv4/tcp_ipv4.c, tcp4_seq_show: the seq_printf that writes each row as %4d: %08X:%04X %08X:%04X %02X %08X:%08X %02X:%08lX %08X %5u %8d %llu, which fixes the column order and shows the address printed from the stored field rather than in network order.",
+          "url": "https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/net/ipv4/tcp_ipv4.c"
+        },
+        {
+          "title": "RFC 9293, Transmission Control Protocol: the state names and transitions behind the st column and the state table, and the reason a listener, a TIME_WAIT socket and a half-open connection are distinguished.",
+          "url": "https://www.rfc-editor.org/rfc/rfc9293.html"
+        }
+      ],
+      "testCases": [
+        {
+          "name": "A listener on 127.0.0.1:8080",
+          "kind": "golden",
+          "input": {
+            "rows": "  0: 0100007F:1F90 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 1234567 1",
+            "table": "tcp"
+          },
+          "expected": {
+            "local": "127.0.0.1:8080",
+            "address": "127.0.0.1",
+            "port": 8080,
+            "hex": "0100007F",
+            "family": 4,
+            "remote": "0.0.0.0:0",
+            "stateCode": "0A",
+            "stateName": "LISTEN",
+            "uid": 1000,
+            "inode": 1234567,
+            "tx": 0,
+            "rx": 0,
+            "timer": "no timer pending",
+            "jiffies": 0,
+            "retransmits": 0,
+            "extra": 1,
+            "skipped": 0,
+            "table": "tcp"
+          }
+        },
+        {
+          "name": "The kernel documentation's established example row",
+          "kind": "golden",
+          "input": {
+            "rows": "46: 010310AC:9C4C 030310AC:1770 01 00000150:00000000 01:00000019 00000000 1000 0 54165785 4 0 25 4 27 3 -1",
+            "table": "tcp"
+          },
+          "expected": {
+            "local": "172.16.3.1:40012",
+            "address": "172.16.3.1",
+            "port": 40012,
+            "remote": "172.16.3.3:6000",
+            "stateCode": "01",
+            "stateName": "ESTABLISHED",
+            "uid": 1000,
+            "inode": 54165785,
+            "tx": 336,
+            "rx": 0,
+            "timer": "retransmit timer pending",
+            "jiffies": 25,
+            "retransmits": 0,
+            "extra": 7
+          }
+        },
+        {
+          "name": "A dual-stack IPv6 listener on port 8080",
+          "kind": "golden",
+          "input": {
+            "rows": "0: 00000000000000000000000000000000:1F90 00000000000000000000000000000000:0000 0A 00000000:00000000 00:00000000 00000000 0 0 122738225 1",
+            "table": "tcp"
+          },
+          "expected": {
+            "local": "[::]:8080",
+            "address": "::",
+            "port": 8080,
+            "family": 6,
+            "remote": "[::]:0",
+            "stateCode": "0A",
+            "stateName": "LISTEN",
+            "uid": 0,
+            "inode": 122738225
+          }
+        },
+        {
+          "name": "An IPv4-mapped address in a tcp6 row",
+          "kind": "golden",
+          "input": {
+            "rows": "0: 0000000000000000FFFF00000100007F:1F90 00000000000000000000000000000000:0000 01 00000000:00000000 00:00000000 00000000 0 0 99 1",
+            "table": "tcp"
+          },
+          "expected": {
+            "local": "[::ffff:127.0.0.1]:8080",
+            "address": "::ffff:127.0.0.1",
+            "port": 8080,
+            "family": 6,
+            "remote": "[::]:0",
+            "stateCode": "01",
+            "stateName": "ESTABLISHED",
+            "inode": 99
+          }
+        },
+        {
+          "name": "An unconnected UDP socket in a udp table",
+          "kind": "golden",
+          "input": {
+            "rows": "82: 3500007F:0035 00000000:0000 07 00000000:00000000 00:00000000 00000000 990 0 3291 2 000000004e237c76 0",
+            "table": "udp"
+          },
+          "expected": {
+            "local": "127.0.0.53:53",
+            "address": "127.0.0.53",
+            "port": 53,
+            "stateCode": "07",
+            "stateName": "CLOSE",
+            "stateMeaning": "An unconnected UDP socket: it knows only its local address and accepts datagrams from any peer.",
+            "uid": 990,
+            "inode": 3291,
+            "extra": 3,
+            "table": "udp"
+          }
+        },
+        {
+          "name": "The short local remote state form",
+          "kind": "golden",
+          "input": {
+            "rows": "0100007F:1F90 00000000:0000 0A",
+            "table": "tcp"
+          },
+          "expected": {
+            "local": "127.0.0.1:8080",
+            "remote": "0.0.0.0:0",
+            "stateCode": "0A",
+            "stateName": "LISTEN",
+            "uid": null,
+            "inode": null,
+            "tx": null,
+            "rx": null,
+            "timer": null,
+            "retransmits": null,
+            "extra": 0
+          }
+        },
+        {
+          "name": "A lone endpoint decodes without a peer or state",
+          "kind": "boundary",
+          "input": {
+            "rows": "00000000:0016",
+            "table": "tcp"
+          },
+          "expected": {
+            "local": "0.0.0.0:22",
+            "address": "0.0.0.0",
+            "port": 22,
+            "family": 4,
+            "remote": null,
+            "stateCode": null,
+            "stateName": null,
+            "uid": null,
+            "inode": null
+          }
+        },
+        {
+          "name": "The highest port in TIME_WAIT, with its timer word",
+          "kind": "boundary",
+          "input": {
+            "rows": "1: 0100007F:FFFF 0100007F:0016 06 00000000:00000000 03:00000000 00000000 0 0 42",
+            "table": "tcp"
+          },
+          "expected": {
+            "local": "127.0.0.1:65535",
+            "port": 65535,
+            "remote": "127.0.0.1:22",
+            "stateCode": "06",
+            "stateName": "TIME_WAIT",
+            "timer": "TIME_WAIT, so not every field is filled in",
+            "jiffies": 0,
+            "inode": 42,
+            "uid": 0
+          }
+        },
+        {
+          "name": "Lowercase hex is accepted and reported uppercase",
+          "kind": "boundary",
+          "input": {
+            "rows": "0100007F:1f90",
+            "table": "tcp"
+          },
+          "expected": {
+            "local": "127.0.0.1:8080",
+            "hex": "0100007F",
+            "port": 8080,
+            "family": 4
+          }
+        },
+        {
+          "name": "An all-ones IPv6 address keeps every group",
+          "kind": "boundary",
+          "input": {
+            "rows": "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF:0000",
+            "table": "tcp"
+          },
+          "expected": {
+            "local": "[ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff]:0",
+            "address": "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff",
+            "port": 0,
+            "family": 6
+          }
+        },
+        {
+          "name": "Both endpoints wildcard, connected state CLOSE",
+          "kind": "boundary",
+          "input": {
+            "rows": "00000000:0000 00000000:0000 07",
+            "table": "tcp"
+          },
+          "expected": {
+            "local": "0.0.0.0:0",
+            "remote": "0.0.0.0:0",
+            "stateCode": "07",
+            "stateName": "CLOSE",
+            "stateMeaning": "No connection: the socket is free, or bound but not listening."
+          }
+        },
+        {
+          "name": "A header line before the data row is skipped",
+          "kind": "boundary",
+          "input": {
+            "rows": "sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n   2: 0100007F:1FF1 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1001        0 119527834 1",
+            "table": "tcp"
+          },
+          "expected": {
+            "local": "127.0.0.1:8177",
+            "port": 8177,
+            "stateName": "LISTEN",
+            "uid": 1001,
+            "inode": 119527834,
+            "skipped": 1
+          }
+        },
+        {
+          "name": "An empty input is refused",
+          "kind": "validation",
+          "input": {
+            "rows": "   ",
+            "table": "tcp"
+          },
+          "expectedError": "Paste a row from /proc/net/tcp, tcp6, udp or udp6, or an address:port pair such as 0100007F:1F90."
+        },
+        {
+          "name": "Text without an address pair is refused",
+          "kind": "validation",
+          "input": {
+            "rows": "nope",
+            "table": "tcp"
+          },
+          "expectedError": "No address:port pair in \"nope\". The local address is eight hex digits for IPv4 or thirty-two for IPv6, a colon, then the port in hex."
+        },
+        {
+          "name": "A three-digit port is refused by name",
+          "kind": "validation",
+          "input": {
+            "rows": "0100007F:1F9",
+            "table": "tcp"
+          },
+          "expectedError": "The port in \"0100007F:1F9\" must be four hex digits, as the kernel prints it."
+        },
+        {
+          "name": "A row that mixes IPv4 and IPv6 is refused",
+          "kind": "validation",
+          "input": {
+            "rows": "0100007F:1F90 00000000000000000000000000000000:0000",
+            "table": "tcp"
+          },
+          "expectedError": "\"0100007F:1F90\" and \"00000000000000000000000000000000:0000\" are different address families. tcp and udp print IPv4 addresses, tcp6 and udp6 print IPv6, so one row cannot hold both."
+        },
+        {
+          "name": "A non-hex state column is refused",
+          "kind": "validation",
+          "input": {
+            "rows": "0100007F:1F90 00000000:0000 0G",
+            "table": "tcp"
+          },
+          "expectedError": "The state column of \"0100007F:1F90 00000000:0000 0G\" should be one or two hex digits, but reads \"0G\"."
+        },
+        {
+          "name": "A non-numeric uid is refused",
+          "kind": "validation",
+          "input": {
+            "rows": "0100007F:1F90 00000000:0000 0A 00000000:00000000 00:00000000 00000000 abc 0 1",
+            "table": "tcp"
+          },
+          "expectedError": "The uid column of \"0100007F:1F90 00000000:0000 0A 00000000:0...\" should be a decimal user id, but reads \"abc\"."
+        }
+      ],
+      "listed": true
     }
   ]
 }

@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Linux Socket Table Decoder — Virtual Tools</title>
+<meta name="description" content="Decode a row of /proc/net/tcp, tcp6, udp or udp6 into the local and remote address and port, the socket state, the queue sizes, the UID and the socket inode.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+[hidden]{display:none !important}
+label.f{font-size:13px;opacity:.85;display:block;margin-bottom:4px}
+.field{background:var(--bg,#14181f);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px;margin:0 0 12px}
+.field:focus-within{border-color:var(--accent,#6ea8fe);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#6ea8fe) 18%,transparent)}
+.field textarea{box-sizing:border-box;min-width:0;width:100%;min-height:88px;background:transparent;color:var(--text,#e6e6e6);border:none;font-family:ui-monospace,monospace;font-size:14px;line-height:1.5;padding:2px 0;outline:none;resize:vertical;white-space:pre-wrap;overflow-wrap:anywhere}
+.field select{box-sizing:border-box;width:100%;min-height:44px;background:transparent;color:var(--text,#e6e6e6);border:none;font:inherit;font-size:15px;outline:none}
+.field .unit{font-size:11px;color:var(--text-dim,#9aa3b2);margin-top:4px;line-height:1.45;overflow-wrap:anywhere}
+.short{max-width:22rem}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:12px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 20px;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);color:var(--text,#e6e6e6);cursor:pointer;min-height:44px}
+.actions button.primary{background:var(--accent,#6ea8fe);border-color:var(--accent,#6ea8fe);color:#0b1017;padding:10px 24px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:14px 0}
+.out:empty{display:none}
+.out .big{font-size:clamp(1.35rem,6vw,2.2rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:4px 0 2px;overflow-wrap:anywhere;color:var(--accent,#6ea8fe)}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45;overflow-wrap:anywhere}
+.out .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:7px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:13.5px}
+.out .row:last-of-type{border-bottom:none}
+.out .row .k{color:var(--text-dim,#9aa3b2);flex:0 0 auto}
+.out .row .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right;overflow-wrap:anywhere;word-break:break-word}
+.out .hint{margin:12px 0 0;padding:10px 12px;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg,#14181f);font-size:13.5px;line-height:1.5}
+.out .hint strong{color:var(--text,#e6e6e6)}
+.out .hint code{display:block;margin-top:6px;font-size:12.5px;line-height:1.5;overflow-wrap:anywhere;white-space:pre-wrap;color:var(--text,#e6e6e6)}
+.err{color:var(--bad,#f87171);font-size:13px;margin:6px 0;min-height:1.2em;line-height:1.4}
+.status{font-size:13px;color:var(--text-dim,#9aa3b2);margin:6px 0 0;min-height:1.2em}
+.details h2{font-size:1rem;margin:22px 0 8px}
+.tbl-wrap{overflow-x:auto;border:1px solid var(--border,#2a2f3a);border-radius:8px}
+table.socks{display:table;width:100%;border-collapse:collapse;font-size:13px}
+table.socks th,table.socks td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border,#2a2f3a);vertical-align:top;overflow-wrap:anywhere}
+table.socks th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim,#9aa3b2);font-weight:700}
+table.socks tr:last-child td{border-bottom:none}
+table.socks td.mono{font-family:ui-monospace,monospace;font-weight:600;color:var(--accent,#6ea8fe)}
+table.socks td.state{white-space:nowrap;font-family:ui-monospace,monospace}
+.cols{display:grid;gap:8px;margin:10px 0 4px}
+.col{display:grid;grid-template-columns:11rem minmax(0,1fr);gap:10px;align-items:baseline;font-size:13.5px;padding:6px 0;border-bottom:1px solid var(--border,#2a2f3a)}
+.col:last-child{border-bottom:none}
+.col .name{font-family:ui-monospace,monospace;color:var(--text-dim,#9aa3b2);overflow-wrap:anywhere}
+.col .what{line-height:1.45;overflow-wrap:anywhere}
+table.states{display:table;width:100%;border-collapse:collapse;font-size:13.5px}
+table.states th,table.states td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border,#2a2f3a);vertical-align:top}
+table.states th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim,#9aa3b2);font-weight:700}
+table.states tr:last-child td{border-bottom:none}
+table.states td.code{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);white-space:nowrap}
+table.states td.name{font-family:ui-monospace,monospace;white-space:nowrap}
+@media (max-width:560px){
+.col{grid-template-columns:minmax(0,1fr)}
+.col .what{grid-column:1 / -1;font-size:12.5px;color:var(--text-dim,#9aa3b2)}
+.out .row{flex-wrap:wrap;row-gap:2px}
+.out .row .v{flex:1 1 100%;text-align:left}
+table.socks,table.socks thead,table.socks tbody,table.socks tr,table.socks td{display:block}
+table.socks thead{display:none}
+table.socks tr{padding:8px 0;border-bottom:1px solid var(--border,#2a2f3a)}
+table.socks tr:last-child{border-bottom:none}
+table.socks td{border-bottom:none;padding:3px 10px}
+table.socks td[data-label]::before{content:attr(data-label) ":";color:var(--text-dim,#9aa3b2);font-size:11px;text-transform:uppercase;letter-spacing:.04em;margin-right:.4em}
+table.states,table.states thead,table.states tbody,table.states tr,table.states td{display:block}
+table.states thead{display:none}
+table.states tr{padding:8px 10px;border-bottom:1px solid var(--border,#2a2f3a)}
+table.states tr:last-child{border-bottom:none}
+table.states td{border-bottom:none;padding:2px 0}
+table.states td.name{white-space:normal}
+}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;margin:18px 0 0;line-height:1.55}
+.note code{font-size:.95em}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<h1>Linux Socket Table Decoder</h1>
+<p>Turn a row of <code>/proc/net/tcp</code>, <code>tcp6</code>, <code>udp</code> or <code>udp6</code> back into addresses and ports, the socket state, the queues, the UID and the socket inode — the fields <code>ss</code> and <code>netstat</code> hide behind hex.</p>
+</div>
+<div class="panel">
+<form id="sock-form" novalidate>
+<div class="field">
+<label class="f" for="rows">Socket table rows</label>
+<textarea id="rows" rows="4" spellcheck="false" autocomplete="off" aria-describedby="rows-help">  0: 0100007F:1F90 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 1234567 1</textarea>
+<div class="unit" id="rows-help">Paste one or more rows, header line included or not, then press Decode or Ctrl+Enter. A bare <code>0100007F:1F90</code> decodes just one endpoint.</div>
+</div>
+<div class="field short">
+<label class="f" for="table">Table the rows came from</label>
+<select id="table">
+<option value="tcp">tcp / tcp6</option>
+<option value="udp">udp / udp6</option>
+</select>
+<div class="unit">The state column means something different in a UDP table.</div>
+</div>
+<div class="actions">
+<button type="submit" class="primary">Decode</button>
+<button type="button" id="reset" class="secondary">Reset</button>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"></div>
+<p class="status" id="status" role="status" aria-live="polite"></p>
+</div>
+<section class="details" aria-labelledby="cols-title">
+<h2 id="cols-title">What the columns hold</h2>
+<div class="cols" id="cols"></div>
+</section>
+<section class="details" aria-labelledby="states-title">
+<h2 id="states-title">State codes in the st column</h2>
+<div class="tbl-wrap">
+<table class="states">
+<thead><tr><th scope="col">Code</th><th scope="col">State</th><th scope="col">Meaning</th></tr></thead>
+<tbody id="states-body"></tbody>
+</table>
+</div>
+</section>
+<p class="note" id="method">The address columns are not dotted quads: the kernel prints the address as a 32-bit word (<code>tcp</code>, <code>udp</code>) or four 32-bit words (<code>tcp6</code>, <code>udp6</code>) with <code>%08X</code> straight from memory, and the port as <code>%04X</code>. On a little-endian host — x86, ARM64, RISC-V, every machine that produces these dumps in practice — each word's four octets therefore read backwards: <code>0100007F</code> is 127.0.0.1, <code>3500007F</code> is 127.0.0.53 and <code>00000000000000000000000001000000</code> is <code>::1</code>. The state column is the low byte of the kernel's <code>sk_state</code> enum, which is why <code>0A</code> is LISTEN and <code>06</code> is TIME_WAIT; a UDP socket is unconnected (<code>07</code>) until <code>connect()</code> fixes its peer, when it reads <code>01</code>. The page accepts the full eleven-column row, the short <code>local remote state</code> form and a lone endpoint, skips a header line, and refuses a row whose fields do not line up instead of guessing at shifted columns. Everything is decoded locally in your browser; nothing is sent or stored.</p>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* procnet-core:start */
+var ProcNetCore = (function(){
+  "use strict";
+  var TCP_STATES = [
+    {code:"01", name:"ESTABLISHED", meaning:"The connection is open and both sides may send data."},
+    {code:"02", name:"SYN_SENT", meaning:"connect() sent a SYN and waits for the peer's SYN-ACK."},
+    {code:"03", name:"SYN_RECV", meaning:"A SYN arrived and a SYN-ACK went back; the handshake is half open."},
+    {code:"04", name:"FIN_WAIT1", meaning:"A FIN was sent here and is waiting to be acknowledged."},
+    {code:"05", name:"FIN_WAIT2", meaning:"The local FIN was acknowledged; waiting for the peer's FIN."},
+    {code:"06", name:"TIME_WAIT", meaning:"Both FINs are exchanged; the socket lingers so late segments can expire."},
+    {code:"07", name:"CLOSE", meaning:"No connection: the socket is free, or bound but not listening."},
+    {code:"08", name:"CLOSE_WAIT", meaning:"The peer closed and the local process has not called close() yet."},
+    {code:"09", name:"LAST_ACK", meaning:"Closed locally from CLOSE_WAIT; waiting for the last acknowledgement."},
+    {code:"0A", name:"LISTEN", meaning:"A server socket waiting for incoming connections."},
+    {code:"0B", name:"CLOSING", meaning:"Both sides sent a FIN at once, so both are still to be acknowledged."},
+    {code:"0C", name:"NEW_SYN_RECV", meaning:"A SYN waiting in a listener's backlog, not yet a full connection."},
+    {code:"0D", name:"BOUND_INACTIVE", meaning:"A pseudo-state used by the inet_diag interface; it is not printed in these tables."}
+  ];
+  var TIMERS = {
+    0: "no timer pending",
+    1: "retransmit timer pending",
+    2: "another timer pending, such as delayed ACK or keepalive",
+    3: "TIME_WAIT, so not every field is filled in",
+    4: "zero window probe timer pending"
+  };
+  var ENDPOINT = /^([0-9A-Fa-f]{8}|[0-9A-Fa-f]{32}):([0-9A-Fa-f]{4})$/;
+
+  function fail(message){ throw new Error(message); }
+  function clip(value){
+    var text = String(value);
+    return text.length > 44 ? text.slice(0, 41) + "..." : text;
+  }
+  function isZeroHex(value){ return /^0+$/.test(value); }
+
+  function canonical6(bytes){
+    var index;
+    var mapped = true;
+    for (index = 0; index < 10; index += 1) if (bytes[index] !== 0) mapped = false;
+    if (mapped && bytes[10] === 255 && bytes[11] === 255) return "::ffff:" + bytes.slice(12).join(".");
+    var groups = [];
+    for (index = 0; index < 8; index += 1) groups.push(bytes[index * 2] * 256 + bytes[index * 2 + 1]);
+    var bestStart = -1;
+    var bestLength = 0;
+    index = 0;
+    while (index < 8) {
+      if (groups[index] !== 0) { index += 1; continue; }
+      var run = index;
+      while (run < 8 && groups[run] === 0) run += 1;
+      if (run - index > bestLength && run - index >= 2) { bestStart = index; bestLength = run - index; }
+      index = run;
+    }
+    var text = groups.map(function(group){ return group.toString(16); });
+    if (bestStart < 0) return text.join(":");
+    return text.slice(0, bestStart).join(":") + "::" + text.slice(bestStart + bestLength).join(":");
+  }
+
+  function decodeEndpoint(token){
+    var found = ENDPOINT.exec(String(token));
+    if (!found) fail("\"" + clip(token) + "\" is not an address:port pair. Use eight hex digits for IPv4 or thirty-two for IPv6, a colon, then four hex digits of port.");
+    var hex = found[1].toUpperCase();
+    var port = parseInt(found[2], 16);
+    var family = hex.length === 8 ? 4 : 6;
+    var bytes = [];
+    var index;
+    if (family === 4) {
+      for (index = 6; index >= 0; index -= 2) bytes.push(parseInt(hex.substr(index, 2), 16));
+    } else {
+      for (index = 0; index < 4; index += 1) {
+        var word = hex.substr(index * 8, 8);
+        for (var at = 6; at >= 0; at -= 2) bytes.push(parseInt(word.substr(at, 2), 16));
+      }
+    }
+    var address = family === 4 ? bytes.join(".") : canonical6(bytes);
+    return { hex: hex, family: family, address: address, port: port, text: (family === 4 ? address : "[" + address + "]") + ":" + port, wildcard: isZeroHex(hex) };
+  }
+
+  function stateFor(code, table){
+    var value = parseInt(code, 16);
+    var base = null;
+    for (var index = 0; index < TCP_STATES.length; index += 1) {
+      if (parseInt(TCP_STATES[index].code, 16) === value) base = TCP_STATES[index];
+    }
+    if (!base) return { code: String(code).toUpperCase(), name: "UNKNOWN", meaning: "Not one of the kernel's sk_state values. The row may come from a patched kernel or a newer enum." };
+    if (table === "udp") {
+      if (value === 1) return { code: base.code, name: base.name, meaning: "A connected UDP socket: connect() fixed the peer, so the remote column is filled in." };
+      if (value === 7) return { code: base.code, name: base.name, meaning: "An unconnected UDP socket: it knows only its local address and accepts datagrams from any peer." };
+      return { code: base.code, name: base.name, meaning: base.meaning + " That code is not expected in a UDP table." };
+    }
+    return { code: base.code, name: base.name, meaning: base.meaning };
+  }
+
+  function stateRows(table){
+    var rows = [];
+    for (var index = 0; index < TCP_STATES.length; index += 1) {
+      var entry = TCP_STATES[index];
+      var value = parseInt(entry.code, 16);
+      if (table === "udp" && value !== 1 && value !== 7) continue;
+      rows.push({ code: entry.code, name: entry.name, meaning: stateFor(entry.code, table).meaning });
+    }
+    return rows;
+  }
+
+  function readRow(tokens, at, table, line){
+    var local = decodeEndpoint(tokens[at]);
+    var rest = tokens.slice(at + 1);
+    var remote = null;
+    var state = null;
+    var pos = 0;
+    if (rest.length && ENDPOINT.test(rest[0])) {
+      remote = decodeEndpoint(rest[0]);
+      pos = 1;
+      if (remote.family !== local.family) fail("\"" + tokens[at] + "\" and \"" + rest[0] + "\" are different address families. tcp and udp print IPv4 addresses, tcp6 and udp6 print IPv6, so one row cannot hold both.");
+    }
+    if (rest.length > pos) {
+      if (!/^[0-9A-Fa-f]{1,2}$/.test(rest[pos])) fail("The state column of \"" + clip(line) + "\" should be one or two hex digits, but reads \"" + clip(rest[pos]) + "\".");
+      state = stateFor(rest[pos], table);
+      pos += 1;
+    }
+    var fields = rest.slice(pos);
+    var row = {
+      line: clip(line), table: table, family: local.family,
+      local: local, remote: remote, state: state,
+      queues: null, timer: null, retransmits: null, uid: null, probes: null, inode: null,
+      extra: fields.length > 6 ? fields.length - 6 : 0
+    };
+    if (fields[0] !== undefined) {
+      var queue = /^([0-9A-Fa-f]{8}):([0-9A-Fa-f]{8})$/.exec(fields[0]);
+      if (!queue) fail("The tx_queue:rx_queue column of \"" + clip(line) + "\" should be two 8-digit hex values, but reads \"" + clip(fields[0]) + "\".");
+      row.queues = { tx: parseInt(queue[1], 16), rx: parseInt(queue[2], 16) };
+    }
+    if (fields[1] !== undefined) {
+      var timer = /^([0-9A-Fa-f]{2,8}):([0-9A-Fa-f]{8})$/.exec(fields[1]);
+      if (!timer) fail("The tr:tm->when column of \"" + clip(line) + "\" should be a timer state, a colon, then 8 hex jiffies, but reads \"" + clip(fields[1]) + "\".");
+      var code = parseInt(timer[1], 16);
+      row.timer = { code: timer[1].toUpperCase(), jiffies: parseInt(timer[2], 16), label: TIMERS[code] || "unknown timer state" };
+    }
+    if (fields[2] !== undefined) {
+      if (!/^[0-9A-Fa-f]{1,8}$/.test(fields[2])) fail("The retrnsmt column of \"" + clip(line) + "\" should be a hex count, but reads \"" + clip(fields[2]) + "\".");
+      row.retransmits = parseInt(fields[2], 16);
+    }
+    if (fields[3] !== undefined) {
+      if (!/^[0-9]{1,10}$/.test(fields[3])) fail("The uid column of \"" + clip(line) + "\" should be a decimal user id, but reads \"" + clip(fields[3]) + "\".");
+      row.uid = Number(fields[3]);
+    }
+    if (fields[4] !== undefined) {
+      if (!/^[0-9]{1,10}$/.test(fields[4])) fail("The timeout column of \"" + clip(line) + "\" should be a decimal count, but reads \"" + clip(fields[4]) + "\".");
+      row.probes = Number(fields[4]);
+    }
+    if (fields[5] !== undefined) {
+      if (!/^[0-9]{1,20}$/.test(fields[5])) fail("The inode column of \"" + clip(line) + "\" should be a decimal inode number, but reads \"" + clip(fields[5]) + "\".");
+      row.inode = Number(fields[5]);
+    }
+    return row;
+  }
+
+  function parse(text, table){
+    var kind = table === "udp" ? "udp" : "tcp";
+    var raw = String(text === undefined || text === null ? "" : text);
+    if (!raw.trim()) fail("Paste a row from /proc/net/tcp, tcp6, udp or udp6, or an address:port pair such as 0100007F:1F90.");
+    var lines = raw.split(/\r?\n/);
+    var rows = [];
+    var skipped = 0;
+    for (var index = 0; index < lines.length; index += 1) {
+      var line = lines[index].trim();
+      if (!line) continue;
+      var tokens = line.split(/\s+/);
+      var at = -1;
+      for (var token = 0; token < tokens.length; token += 1) {
+        if (ENDPOINT.test(tokens[token])) { at = token; break; }
+      }
+      if (at < 0) {
+        for (var loose = 0; loose < tokens.length; loose += 1) {
+          if (/^[0-9A-Fa-f]{8,32}:[0-9A-Fa-f]{0,4}$/.test(tokens[loose])) {
+            fail("The port in \"" + clip(tokens[loose]) + "\" must be four hex digits, as the kernel prints it.");
+          }
+        }
+        if (/^(sl|local_address|num)$/i.test(tokens[0]) || /local_address/i.test(line)) { skipped += 1; continue; }
+        fail("No address:port pair in \"" + clip(line) + "\". The local address is eight hex digits for IPv4 or thirty-two for IPv6, a colon, then the port in hex.");
+      }
+      rows.push(readRow(tokens, at, kind, line));
+    }
+    if (!rows.length) fail("No socket row found. Paste a data line from the table, not its header.");
+    return { table: kind, rows: rows, skipped: skipped };
+  }
+
+  function parseOne(text, table){
+    var result = parse(text, table);
+    if (result.rows.length > 1) fail("Paste one row to decode a single socket; " + result.rows.length + " rows were given.");
+    var item = result.rows[0];
+    return {
+      table: result.table,
+      skipped: result.skipped,
+      local: item.local.text,
+      address: item.local.address,
+      port: item.local.port,
+      hex: item.local.hex,
+      family: item.family,
+      remote: item.remote ? item.remote.text : null,
+      stateCode: item.state ? item.state.code : null,
+      stateName: item.state ? item.state.name : null,
+      stateMeaning: item.state ? item.state.meaning : null,
+      uid: item.uid,
+      inode: item.inode,
+      tx: item.queues ? item.queues.tx : null,
+      rx: item.queues ? item.queues.rx : null,
+      timer: item.timer ? item.timer.label : null,
+      jiffies: item.timer ? item.timer.jiffies : null,
+      retransmits: item.retransmits,
+      extra: item.extra
+    };
+  }
+
+  function summary(rows){
+    var order = [];
+    var counts = {};
+    var index;
+    for (index = 0; index < rows.length; index += 1) {
+      var key = rows[index].state ? rows[index].state.name : "no state";
+      if (counts[key] === undefined) { counts[key] = 0; order.push(key); }
+      counts[key] += 1;
+    }
+    order.sort(function(a, b){
+      if (counts[a] !== counts[b]) return counts[b] - counts[a];
+      return a < b ? -1 : 1;
+    });
+    var parts = [];
+    for (index = 0; index < order.length; index += 1) parts.push(counts[order[index]] + " " + order[index]);
+    return parts.join(" \u00b7 ");
+  }
+
+  return {
+    TCP_STATES: TCP_STATES,
+    parse: parse,
+    parseOne: parseOne,
+    decodeEndpoint: decodeEndpoint,
+    canonical6: canonical6,
+    stateFor: stateFor,
+    stateRows: stateRows,
+    summary: summary
+  };
+})();
+/* procnet-core:end */
+(function(){
+  "use strict";
+  var C = ProcNetCore;
+  function $(id){ return document.getElementById(id); }
+  function el(tag, cls, text){
+    var node = document.createElement(tag);
+    if (cls) node.className = cls;
+    if (text != null) node.textContent = text;
+    return node;
+  }
+  var els = { form: $("sock-form"), input: $("rows"), table: $("table"), err: $("err"), out: $("out"), status: $("status"), reset: $("reset"), cols: $("cols"), states: $("states-body") };
+  var DEFAULTS = "  0: 0100007F:1F90 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 1234567 1";
+  var COLUMNS = [
+    ["sl", "The kernel hash slot the socket sits in, printed with a trailing colon."],
+    ["local_address", "Local address and port: the address as one or four 8-digit hex words, then the port in hex."],
+    ["rem_address", "The peer's address and port, or zeros when the socket is not connected."],
+    ["st", "The socket state, as the low byte of the kernel's sk_state enum in hex."],
+    ["tx_queue:rx_queue", "Bytes queued for transmission and bytes sitting in the receive queue, in hex."],
+    ["tr:tm->when", "Timer state, then the jiffies until that timer fires."],
+    ["retrnsmt", "Unrecovered retransmission timeouts for the socket."],
+    ["uid", "Effective user id of the process that created the socket."],
+    ["timeout", "Unanswered zero-window probes; older kernels print a timeout counter in this column."],
+    ["inode", "Socket inode. The same number appears as socket:[n] in that process's /proc/PID/fd."],
+    ["ref \u00b7 pointer \u00b7 ...", "Kernel debugging tail: reference count, a pointer word, then RTO, delayed-ACK tick, ack.quick, congestion window and slow-start threshold."]
+  ];
+
+  function row(key, value){
+    var line = el("div", "row");
+    line.appendChild(el("span", "k", key));
+    line.appendChild(el("span", "v", value));
+    return line;
+  }
+  function hint(title, text, command){
+    var box = el("p", "hint");
+    box.appendChild(el("strong", "", title));
+    box.appendChild(document.createTextNode(" \u2014 " + text));
+    if (command) box.appendChild(el("code", "", command));
+    return box;
+  }
+  function bytes(value){ return value + " B"; }
+  function remoteText(remote){
+    if (!remote) return "\u2014";
+    if (remote.wildcard && remote.port === 0) return remote.text + " (not connected)";
+    return remote.text;
+  }
+  function protoWord(table){ return table === "udp" ? "UDP" : "TCP"; }
+
+  function renderOne(result){
+    var item = result.rows[0];
+    var out = els.out;
+    out.appendChild(el("div", "big", item.local.text));
+    out.appendChild(el("p", "sub", protoWord(item.table) + " \u00b7 " + (item.state ? item.state.code + " " + item.state.name : "endpoint only")));
+    out.appendChild(row("Local", item.local.text + (item.local.port === 0 ? " (any port)" : "")));
+    out.appendChild(row("Remote", remoteText(item.remote)));
+    out.appendChild(row("State", item.state ? item.state.code + " " + item.state.name : "\u2014"));
+    out.appendChild(row("Queues", item.queues ? "tx " + bytes(item.queues.tx) + " \u00b7 rx " + bytes(item.queues.rx) : "\u2014"));
+    out.appendChild(row("Timer", item.timer ? item.timer.label + " \u00b7 " + item.timer.jiffies + " jiffies" : "\u2014"));
+    out.appendChild(row("Retransmits", item.retransmits === null ? "\u2014" : String(item.retransmits)));
+    out.appendChild(row("UID", item.uid === null ? "\u2014" : String(item.uid)));
+    out.appendChild(row("Socket inode", item.inode === null ? "\u2014" : String(item.inode)));
+    out.appendChild(row("Address family", item.family === 4 ? "IPv4 (8 hex digits)" : "IPv6 (32 hex digits)"));
+    if (item.state) out.appendChild(hint("What this state means", item.state.meaning));
+    if (item.inode !== null) {
+      out.appendChild(hint("Who holds it", 
+        "the process that owns inode " + item.inode + " lists the socket as socket:[" + item.inode + "] among its open files, so this one-liner prints the owning shell's view:",
+        "ls -l /proc/[0-9]*/fd 2>/dev/null | grep 'socket:\\[" + item.inode + "\\]'"));
+    }
+    if (item.extra > 0) {
+      out.appendChild(hint("Kernel tail", "this row carries " + item.extra + " more debug field" + (item.extra === 1 ? "" : "s") + " after the inode, out of a tail of seven: the reference count, a pointer word, the retransmission timeout, the delayed-ACK control word, the congestion window and the slow-start threshold."));
+    }
+  }
+
+  function renderMany(result){
+    var out = els.out;
+    out.appendChild(el("div", "big", String(result.rows.length)));
+    out.appendChild(el("p", "sub", result.rows.length + " sockets \u00b7 " + C.summary(result.rows)));
+    var wrap = el("div", "tbl-wrap");
+    var table = el("table", "socks");
+    table.setAttribute("aria-label", "Decoded socket rows");
+    var head = document.createElement("thead");
+    var headRow = document.createElement("tr");
+    ["Local", "Remote", "State", "UID", "Inode"].forEach(function(label){
+      var cell = document.createElement("th");
+      cell.setAttribute("scope", "col");
+      cell.textContent = label;
+      headRow.appendChild(cell);
+    });
+    head.appendChild(headRow);
+    table.appendChild(head);
+    var body = document.createElement("tbody");
+    result.rows.forEach(function(item){
+      var line = document.createElement("tr");
+      var local = document.createElement("td");
+      local.className = "mono";
+      local.setAttribute("data-label", "Local");
+      local.textContent = item.local.text;
+      line.appendChild(local);
+      var remote = document.createElement("td");
+      remote.className = "mono";
+      remote.setAttribute("data-label", "Remote");
+      remote.textContent = remoteText(item.remote);
+      line.appendChild(remote);
+      var state = document.createElement("td");
+      state.className = "state";
+      state.setAttribute("data-label", "State");
+      state.textContent = item.state ? item.state.code + " " + item.state.name : "\u2014";
+      line.appendChild(state);
+      var uid = document.createElement("td");
+      uid.setAttribute("data-label", "UID");
+      uid.textContent = item.uid === null ? "\u2014" : String(item.uid);
+      line.appendChild(uid);
+      var inode = document.createElement("td");
+      inode.className = "mono";
+      inode.setAttribute("data-label", "Inode");
+      inode.textContent = item.inode === null ? "\u2014" : String(item.inode);
+      line.appendChild(inode);
+      body.appendChild(line);
+    });
+    table.appendChild(body);
+    wrap.appendChild(table);
+    out.appendChild(wrap);
+    out.appendChild(hint("Want the detail?", "paste one row on its own to see its queues, timer and the command that finds the process holding it."));
+  }
+
+  function renderStates(){
+    var rows = C.stateRows(els.table.value);
+    els.states.textContent = "";
+    rows.forEach(function(entry){
+      var line = document.createElement("tr");
+      var code = el("td", "code", entry.code);
+      var name = el("td", "name", entry.name);
+      var meaning = el("td", "", entry.meaning);
+      line.appendChild(code);
+      line.appendChild(name);
+      line.appendChild(meaning);
+      els.states.appendChild(line);
+    });
+  }
+
+  function buildColumns(){
+    COLUMNS.forEach(function(pair){
+      var line = el("div", "col");
+      line.appendChild(el("span", "name", pair[0]));
+      line.appendChild(el("span", "what", pair[1]));
+      els.cols.appendChild(line);
+    });
+  }
+
+  function run(){
+    try {
+      var result = C.parse(els.input.value, els.table.value);
+      els.err.textContent = "";
+      els.out.textContent = "";
+      if (result.rows.length === 1) renderOne(result);
+      else renderMany(result);
+      var count = result.rows.length;
+      els.status.textContent = "Decoded " + count + " " + protoWord(result.table) + " row" + (count === 1 ? "" : "s") +
+        (result.skipped ? "; skipped " + result.skipped + " header line" + (result.skipped === 1 ? "" : "s") : "") + " in the browser.";
+    } catch (error) {
+      els.err.textContent = error.message;
+      els.out.textContent = "";
+      els.status.textContent = "The row above could not be decoded.";
+    }
+  }
+
+  function autosize(){
+    els.input.style.height = "auto";
+    els.input.style.height = Math.min(320, Math.max(88, els.input.scrollHeight + 2)) + "px";
+  }
+
+  els.input.addEventListener("input", autosize);
+  els.input.addEventListener("keydown", function(event){
+    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+      event.preventDefault();
+      run();
+    }
+  });
+  els.form.addEventListener("submit", function(event){
+    event.preventDefault();
+    run();
+    if (els.err.textContent) els.input.focus();
+  });
+  els.reset.addEventListener("click", function(){
+    els.input.value = DEFAULTS;
+    els.table.value = "tcp";
+    renderStates();
+    run();
+    els.input.focus();
+  });
+  els.table.addEventListener("change", function(){
+    renderStates();
+    if (els.input.value.trim()) run();
+  });
+
+  buildColumns();
+  renderStates();
+  autosize();
+  run();
+})();
+</script>
+</body>
+</html>
