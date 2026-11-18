@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Code 128 Barcode Generator &mdash; Virtual Tools</title>
+<meta name="description" content="Encode printable ASCII text as a Code 128 barcode: the page picks the shortest mix of sets B and C, shows the modulo-103 check symbol and the module count, and draws the bars as an SVG between ten-module quiet zones.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+[hidden]{display:none!important}
+label.f{font-size:13px;opacity:.85;display:block;margin-bottom:4px}
+.field{background:var(--bg,#14181f);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px;min-width:0}
+.field:focus-within{border-color:var(--accent,#6ea8fe);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#6ea8fe) 18%,transparent)}
+.field input{box-sizing:border-box;width:100%;max-width:none;min-width:0;background:transparent;color:var(--text,#e6e6e6);border:none;font-size:18px;font-family:ui-monospace,monospace;padding:2px 0;outline:none;min-height:28px}
+.field input:focus{box-shadow:none}
+.field .unit{font-size:11px;color:var(--text-dim,#9aa3b2);margin-top:4px;line-height:1.35}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:14px 0}
+.out .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:14px}
+.out .row:last-child{border-bottom:none}
+.out .row .k{color:var(--text-dim,#9aa3b2)}
+.out .row .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right;overflow-wrap:anywhere}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus,.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.err{color:var(--bad,#f87171);font-size:13px;margin:6px 0;min-height:1.2em}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;margin:10px 0 0;line-height:1.5}
+.bc{background:#fff;border-radius:8px;padding:10px 8px 8px;margin:0 0 14px;overflow:hidden}
+.bc svg{display:block;width:100%;height:auto}
+.bc .bc-text{font-family:ui-monospace,monospace;color:#111;text-align:center;font-size:14px;letter-spacing:.12em;margin:8px 0 0;overflow-wrap:anywhere}
+@media (max-width:360px){.out .row{display:block}.out .row .v{display:block;text-align:left;margin-top:2px}}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<h1>Code 128 Barcode Generator</h1>
+<p>Turn text into a Code 128 barcode, with the check symbol and module count a label needs.</p>
+</div>
+<div class="panel">
+<form id="barcode-form" novalidate>
+<div class="field"><label class="f" for="in-text">Text to encode</label><input type="text" id="in-text" autocomplete="off" spellcheck="false" value="ABC-1234" aria-describedby="text-help"><div class="unit" id="text-help">printable ASCII, up to 48 characters; runs of digits are packed two per symbol</div></div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions"><button type="submit">Draw the barcode</button></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"><span style="color:var(--text-dim,#9aa3b2)">Enter text to see its barcode.</span></div>
+<p class="note">Each Code 128 symbol is eleven modules wide: three bars and three spaces, one to four modules each. Set B carries one printable ASCII character per symbol and set C carries two digits, so this page switches to C only where the switch saves a symbol &mdash; four digits at either end of the text, or six or more in the middle. The check symbol is the weighted sum of the start and data symbols modulo 103 and is drawn before the stop pattern. Quiet zones of ten modules sit at both ends; choose the module width your label and scanner need and test-scan a print before a production run. FNC codes and GS1-128 application identifiers are not offered, and everything runs in your browser with no storage, uploads or network access.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* code128-core:start */
+var Code128Core = (function(){
+  "use strict";
+  var PATTERNS = [
+    "11011001100", "11001101100", "11001100110", "10010011000",
+    "10010001100", "10001001100", "10011001000", "10011000100",
+    "10001100100", "11001001000", "11001000100", "11000100100",
+    "10110011100", "10011011100", "10011001110", "10111001100",
+    "10011101100", "10011100110", "11001110010", "11001011100",
+    "11001001110", "11011100100", "11001110100", "11101101110",
+    "11101001100", "11100101100", "11100100110", "11101100100",
+    "11100110100", "11100110010", "11011011000", "11011000110",
+    "11000110110", "10100011000", "10001011000", "10001000110",
+    "10110001000", "10001101000", "10001100010", "11010001000",
+    "11000101000", "11000100010", "10110111000", "10110001110",
+    "10001101110", "10111011000", "10111000110", "10001110110",
+    "11101110110", "11010001110", "11000101110", "11011101000",
+    "11011100010", "11011101110", "11101011000", "11101000110",
+    "11100010110", "11101101000", "11101100010", "11100011010",
+    "11101111010", "11001000010", "11110001010", "10100110000",
+    "10100001100", "10010110000", "10010000110", "10000101100",
+    "10000100110", "10110010000", "10110000100", "10011010000",
+    "10011000010", "10000110100", "10000110010", "11000010010",
+    "11001010000", "11110111010", "11000010100", "10001111010",
+    "10100111100", "10010111100", "10010011110", "10111100100",
+    "10011110100", "10011110010", "11110100100", "11110010100",
+    "11110010010", "11011011110", "11011110110", "11110110110",
+    "10101111000", "10100011110", "10001011110", "10111101000",
+    "10111100010", "11110101000", "11110100010", "10111011110",
+    "10111101110", "11101011110", "11110101110", "11010000100",
+    "11010010000", "11010011100", "11000111010"
+  ];
+  var STOP = "1100011101011";
+  var QUIET_MODULES = 10;
+  var MAX_LENGTH = 48;
+  var START_B = 104;
+  var START_C = 105;
+  var SWITCH_TO_C = 99;
+  var SWITCH_TO_B = 100;
+  var MESSAGES = {
+    empty: "Enter the text to encode.",
+    tooLong: "Keep the barcode text to 48 characters or fewer.",
+    ascii: "Only printable ASCII can be encoded; remove characters outside U+0020 to U+007E."
+  };
+  var DEFAULTS = { text: "ABC-1234" };
+  function fail(message){ throw new Error(message); }
+  function validate(text){
+    var raw = text == null ? "" : String(text);
+    if (raw.length === 0) fail(MESSAGES.empty);
+    if (raw.length > MAX_LENGTH) fail(MESSAGES.tooLong);
+    for (var i = 0; i < raw.length; i += 1){
+      var code = raw.charCodeAt(i);
+      if (code < 32 || code > 126) fail(MESSAGES.ascii);
+    }
+    return raw;
+  }
+  function digit(ch){ return ch >= "0" && ch <= "9"; }
+  function pair(text, index){
+    return (text.charCodeAt(index) - 48) * 10 + (text.charCodeAt(index + 1) - 48);
+  }
+  function keep(plan, pos, state, cost, previous, values){
+    if (cost < plan.cost[pos][state]){
+      plan.cost[pos][state] = cost;
+      plan.from[pos][state] = previous;
+      plan.emit[pos][state] = values;
+    }
+  }
+  function plan(text){
+    var n = text.length;
+    var cost = [], from = [], emit = [];
+    var i, state;
+    for (i = 0; i <= n; i += 1){
+      cost.push([Infinity, Infinity]);
+      from.push([-1, -1]);
+      emit.push([null, null]);
+    }
+    cost[0][0] = 1;
+    cost[0][1] = 1;
+    var model = { cost: cost, from: from, emit: emit };
+    for (i = 0; i < n; i += 1){
+      var value = text.charCodeAt(i) - 32;
+      keep(model, i + 1, 0, cost[i][0] + 1, 0, [value]);
+      keep(model, i + 1, 0, cost[i][1] + 2, 1, [SWITCH_TO_B, value]);
+      if (i + 1 < n && digit(text.charAt(i)) && digit(text.charAt(i + 1))){
+        var two = pair(text, i);
+        keep(model, i + 2, 1, cost[i][1] + 1, 1, [two]);
+        keep(model, i + 2, 1, cost[i][0] + 2, 0, [SWITCH_TO_C, two]);
+      }
+    }
+    var at = cost[n][0] <= cost[n][1] ? 0 : 1;
+    var values = [], pos = n;
+    while (pos > 0){
+      var step = emit[pos][at];
+      for (var k = step.length - 1; k >= 0; k -= 1) values.unshift(step[k]);
+      var previous = from[pos][at];
+      pos -= at === 1 ? 2 : 1;
+      at = previous;
+    }
+    var start = at === 0 ? START_B : START_C;
+    var symbols = [start].concat(values);
+    var sum = start;
+    for (i = 0; i < values.length; i += 1) sum += values[i] * (i + 1);
+    var check = sum % 103;
+    symbols.push(check);
+    var bits = "";
+    for (i = 0; i < symbols.length; i += 1) bits += PATTERNS[symbols[i]];
+    bits += STOP;
+    var sets = [start === START_B ? "B" : "C"];
+    var current = start === START_B ? 0 : 1;
+    for (i = 0; i < values.length; i += 1){
+      if (current === 0 && values[i] === SWITCH_TO_C){ current = 1; if (sets.indexOf("C") < 0) sets.push("C"); }
+      if (current === 1 && values[i] === SWITCH_TO_B){ current = 0; if (sets.indexOf("B") < 0) sets.push("B"); }
+    }
+    return {
+      text: text,
+      start: start,
+      dataValues: values,
+      check: check,
+      symbols: symbols,
+      dataSymbols: values.length,
+      totalSymbols: symbols.length + 1,
+      modules: QUIET_MODULES * 2 + bits.length,
+      bits: bits,
+      sets: sets
+    };
+  }
+  function calculate(input){
+    var options = input || {};
+    return plan(validate(options.text == null ? DEFAULTS.text : options.text));
+  }
+  return {
+    calculate: calculate,
+    PATTERNS: PATTERNS,
+    STOP: STOP,
+    MAX_LENGTH: MAX_LENGTH,
+    QUIET_MODULES: QUIET_MODULES,
+    MESSAGES: MESSAGES,
+    DEFAULTS: DEFAULTS
+  };
+})();
+/* code128-core:end */
+(function(){
+"use strict";
+var els = {
+  text: document.getElementById("in-text"),
+  err: document.getElementById("err"),
+  out: document.getElementById("out")
+};
+function clear(node){ while (node.firstChild) node.removeChild(node.firstChild); }
+function svgRect(svg, x, width, fill){
+  var node = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  node.setAttribute("x", String(x));
+  node.setAttribute("y", "0");
+  node.setAttribute("width", String(width));
+  node.setAttribute("height", "60");
+  node.setAttribute("fill", fill);
+  svg.appendChild(node);
+}
+function addRow(parent, label, text){
+  var row = document.createElement("div"); row.className = "row";
+  var key = document.createElement("span"); key.className = "k"; key.textContent = label;
+  var val = document.createElement("span"); val.className = "v"; val.textContent = text;
+  row.appendChild(key); row.appendChild(val); parent.appendChild(row);
+}
+function placeholder(message){
+  var span = document.createElement("span");
+  span.style.color = "var(--text-dim,#9aa3b2)"; span.textContent = message;
+  els.out.appendChild(span);
+}
+function render(result){
+  clear(els.out);
+  var block = document.createElement("div"); block.className = "bc";
+  var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 " + result.modules + " 60");
+  svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", "Code 128 barcode for " + result.text);
+  svgRect(svg, 0, result.modules, "#fff");
+  var x = Code128Core.QUIET_MODULES;
+  for (var i = 0; i < result.bits.length; i += 1){
+    if (result.bits.charAt(i) === "1"){
+      var run = 1;
+      while (i + run < result.bits.length && result.bits.charAt(i + run) === "1") run += 1;
+      svgRect(svg, x, run, "#000");
+      x += run; i += run - 1;
+    } else {
+      x += 1;
+    }
+  }
+  var caption = document.createElement("p"); caption.className = "bc-text";
+  caption.textContent = result.text;
+  block.appendChild(svg); block.appendChild(caption);
+  els.out.appendChild(block);
+  addRow(els.out, "Code sets", result.sets.join(", "));
+  addRow(els.out, "Data symbols", String(result.dataSymbols));
+  addRow(els.out, "Check symbol", String(result.check));
+  addRow(els.out, "Barcode modules", String(result.modules));
+}
+function run(){
+  var result;
+  try {
+    result = Code128Core.calculate({ text: els.text.value });
+  } catch (error){
+    els.err.textContent = error.message; clear(els.out);
+    placeholder("Enter printable ASCII text to draw a barcode."); return;
+  }
+  els.err.textContent = ""; render(result);
+}
+els.text.addEventListener("input", run);
+document.getElementById("barcode-form").addEventListener("submit", function(event){ event.preventDefault(); run(); });
+run();
+})();
+</script>
+</body>
+</html>
