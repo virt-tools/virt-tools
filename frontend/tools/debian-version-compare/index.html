@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Debian Version Comparison &mdash; Virtual Tools</title>
+<meta name="description" content="Compare two Debian package versions the way dpkg does: epoch, upstream version and Debian revision, with the tilde and character-order rules, and see which part of the string decided the order.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 16px;margin:0}
+.field{display:flex;flex-direction:column;gap:6px;margin:0}
+input[type=text]{box-sizing:border-box;width:100%;min-height:44px;padding:9px 10px;border-radius:8px;
+  border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);color:var(--text,#e6e6e6);
+  font:inherit;font-family:ui-monospace,monospace;font-size:15px;outline:none}
+input[type=text]:focus-visible{outline:2px solid var(--accent,#6ea8fe);outline-offset:1px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 0}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.err{color:var(--bad,#f87171);font-size:13px;margin:10px 0 0;min-height:1.2em}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:16px 0 0}
+.out .label{text-align:center;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-dim,#9aa3b2)}
+.out .big{font-size:clamp(1.3rem,6vw,1.9rem);font-weight:800;text-align:center;padding:2px 0 4px;overflow-wrap:anywhere;line-height:1.3}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:6px 0 0;line-height:1.5;overflow-wrap:anywhere}
+.out .notes{margin:12px 0 0;padding:0;list-style:none;display:grid;gap:6px}
+.out .notes li{font-size:12.5px;line-height:1.45;color:var(--text-dim,#9aa3b2);padding-left:14px;position:relative;overflow-wrap:anywhere}
+.out .notes li::before{content:"!";position:absolute;left:0;color:var(--warn,#fbbf24);font-weight:700}
+.out .notes li.ok::before{content:"i";color:var(--accent,#6ea8fe)}
+.rows-title{color:var(--text-dim,#9aa3b2);font-size:12.5px;letter-spacing:.03em;margin:18px 0 0}
+table.rows{display:table;width:100%;border-collapse:collapse;margin:6px 0 0;font-size:13.5px}
+table.rows[hidden]{display:none}
+table.rows th,table.rows td{border-bottom:1px solid var(--border,#2a2f3a);padding:7px 8px;text-align:left;vertical-align:top}
+table.rows thead th{color:var(--text-dim,#9aa3b2);font-weight:600;font-size:12px;letter-spacing:.03em}
+table.rows tbody th{font-weight:500;width:30%}
+table.rows td{font-family:ui-monospace,monospace;overflow-wrap:anywhere}
+table.rows td.outcome{font-family:inherit;white-space:nowrap}
+table.rows tr.decided th,table.rows tr.decided td{color:var(--accent,#6ea8fe)}
+.note{color:var(--text-dim,#9aa3b2);font-size:12.5px;line-height:1.55;margin:18px 0 0;max-width:820px}
+@media (max-width:640px){
+  .grid{grid-template-columns:1fr}
+  .actions button{flex:1 1 auto}
+  table.rows,table.rows tbody{display:block;width:auto}
+  table.rows thead{display:none}
+  table.rows tbody tr{display:block;border-bottom:1px solid var(--border,#2a2f3a);padding:8px 0}
+  table.rows tbody th,table.rows tbody td{display:block;width:auto;border:0;padding:1px 0}
+  table.rows tbody td:nth-child(2)::before{content:"A: ";color:var(--text-dim,#9aa3b2)}
+  table.rows tbody td:nth-child(3)::before{content:"B: ";color:var(--text-dim,#9aa3b2)}
+  table.rows td.outcome{white-space:normal}
+}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<h1>Debian Version Comparison</h1>
+<p>Compare two Debian package versions the way dpkg does. Enter the versions as they appear in a <code>Version:</code> field &mdash; epoch, upstream version and Debian revision &mdash; and read which one is later, which part decided it, and why.</p>
+</div>
+<div class="panel">
+<form id="ver-form" novalidate>
+<div class="grid">
+<div class="field">
+<label for="left">Version A</label>
+<input type="text" id="left" name="left" autocomplete="off" spellcheck="false" autocapitalize="off" value="1:2.3-4">
+</div>
+<div class="field">
+<label for="right">Version B</label>
+<input type="text" id="right" name="right" autocomplete="off" spellcheck="false" autocapitalize="off" value="1:2.2.9-1">
+</div>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions">
+<button type="submit">Compare versions</button>
+</div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"></div>
+<p class="rows-title" id="rows-title" hidden>Comparison detail</p>
+<table class="rows" id="rows" aria-labelledby="rows-title" hidden>
+<thead><tr><th scope="col">Part</th><th scope="col">Version A</th><th scope="col">Version B</th><th scope="col">Result</th></tr></thead>
+<tbody id="rows-body"></tbody>
+</table>
+<p class="note" id="method">A Debian version is an optional epoch, an upstream version and an optional Debian revision: <code>epoch:upstream-version-debian-revision</code>. The epoch is an unsigned whole number, assumed to be zero when it is missing, and it is compared first. The upstream version and the Debian revision are then compared with the same rule, left to right: first the run of non-digit characters, compared so that a tilde sorts before everything including the end of the string and letters sort before every other character, then the run of digits, compared as numbers with leading zeros ignored. dpkg breaks the string at its last hyphen, so a revision may itself contain dots and plus signs. A missing revision compares as an empty string, which is why 1.0 equals 1.0-0 and sorts before 1.0-1. dpkg itself is not consulted: the comparison is implemented in your browser from the published algorithm, so a version dpkg would refuse may be refused here with a message instead of a result, and an empty field is refused rather than compared as an empty string. Nothing is sent, stored or uploaded.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* debver-core:start */
+var DebVersion = (function(){
+  "use strict";
+  var MAX_LENGTH = 128;
+  var ALLOWED = /^[A-Za-z0-9.+~:-]+$/;
+  var PART_LABEL = {epoch: "epoch", upstream: "upstream version", revision: "Debian revision"};
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function isDigit(ch){
+    return ch >= "0" && ch <= "9";
+  }
+
+  function clip(text){
+    var value = String(text);
+    return value.length > 32 ? value.slice(0, 32) + "..." : value;
+  }
+
+  // dpkg's character order: a tilde sorts before everything, letters before
+  // every other character, and digits are taken out and compared as numbers.
+  function orderChar(ch){
+    if (ch === "" || isDigit(ch)) return 0;
+    if (ch === "~") return -1;
+    var code = ch.charCodeAt(0);
+    if ((code >= 65 && code <= 90) || (code >= 97 && code <= 122)) return code;
+    return code + 256;
+  }
+
+  function runFrom(text, start){
+    var at = start;
+    while (at < text.length && isDigit(text.charAt(at))){
+      at += 1;
+    }
+    return {text: text.slice(start, at), end: at};
+  }
+
+  function nonDigitRunFrom(text, start){
+    var at = start;
+    while (at < text.length && !isDigit(text.charAt(at))){
+      at += 1;
+    }
+    return text.slice(start, at);
+  }
+
+  function stripZeros(run){
+    var at = 0;
+    while (at < run.length && run.charAt(at) === "0") at += 1;
+    return run.slice(at);
+  }
+
+  // The one algorithm dpkg applies to the upstream version and the revision.
+  function compareStrings(a, b){
+    var i = 0;
+    var j = 0;
+    while (i < a.length || j < b.length){
+      var firstDiff = 0;
+      var runA = i;
+      var runB = j;
+      while ((i < a.length && !isDigit(a.charAt(i))) || (j < b.length && !isDigit(b.charAt(j)))){
+        var ac = orderChar(i < a.length ? a.charAt(i) : "");
+        var bc = orderChar(j < b.length ? b.charAt(j) : "");
+        if (ac !== bc){
+          return {
+            result: ac < bc ? -1 : 1,
+            kind: "non-digit",
+            leftRun: nonDigitRunFrom(a, runA),
+            rightRun: nonDigitRunFrom(b, runB),
+            leftAtEnd: i >= a.length,
+            rightAtEnd: j >= b.length
+          };
+        }
+        i += 1;
+        j += 1;
+      }
+      while (i < a.length && a.charAt(i) === "0") i += 1;
+      while (j < b.length && b.charAt(j) === "0") j += 1;
+      var digitStartA = i;
+      var digitStartB = j;
+      while (i < a.length && isDigit(a.charAt(i)) && j < b.length && isDigit(b.charAt(j))){
+        if (firstDiff === 0) firstDiff = a.charCodeAt(i) - b.charCodeAt(j);
+        i += 1;
+        j += 1;
+      }
+      var leftDigit = i < a.length && isDigit(a.charAt(i));
+      var rightDigit = j < b.length && isDigit(b.charAt(j));
+      if (leftDigit || rightDigit){
+        return {
+          result: leftDigit ? 1 : -1,
+          kind: "digit",
+          reason: "length",
+          leftRun: runFrom(a, digitStartA).text,
+          rightRun: runFrom(b, digitStartB).text,
+          leftLonger: leftDigit
+        };
+      }
+      if (firstDiff !== 0){
+        return {
+          result: firstDiff < 0 ? -1 : 1,
+          kind: "digit",
+          reason: "digits",
+          leftRun: runFrom(a, digitStartA).text,
+          rightRun: runFrom(b, digitStartB).text,
+          leftLonger: false
+        };
+      }
+    }
+    return {result: 0, kind: null, leftRun: "", rightRun: ""};
+  }
+
+  // Epochs are unsigned whole numbers with no stated upper bound, so they are
+  // compared as digit strings instead of floating point numbers.
+  function compareNumbers(aText, bText){
+    var a = stripZeros(aText);
+    var b = stripZeros(bText);
+    if (a.length !== b.length){
+      return {result: a.length < b.length ? -1 : 1, kind: "number", leftRun: aText, rightRun: bText};
+    }
+    if (a === b) return {result: 0, kind: null, leftRun: aText, rightRun: bText};
+    return {result: a < b ? -1 : 1, kind: "number", leftRun: aText, rightRun: bText};
+  }
+
+  function parse(text, label){
+    var raw = String(text == null ? "" : text).trim();
+    if (!raw) fail("Enter version " + label + ".");
+    if (raw.length > MAX_LENGTH) fail("Keep version " + label + " to at most " + MAX_LENGTH + " characters.");
+    if (/\s/.test(raw)) fail("Version " + label + " contains a space; a Debian version has none.");
+    if (!ALLOWED.test(raw)){
+      var bad = raw.match(/[^A-Za-z0-9.+~:-]/);
+      var shown = bad ? bad[0] : raw.charAt(0);
+      fail("Version " + label + " may use only letters, digits and the characters . + - : ~; "
+        + "\"" + clip(shown) + "\" is not one of them.");
+    }
+    var colon = raw.indexOf(":");
+    var epochText = "0";
+    var epochGiven = false;
+    var rest = raw;
+    if (colon !== -1){
+      epochText = raw.slice(0, colon);
+      if (!/^[0-9]+$/.test(epochText)){
+        fail("The part of version " + label + " before the first colon must be the epoch, an unsigned whole number; "
+          + "\"" + clip(epochText) + "\" is not.");
+      }
+      epochGiven = true;
+      rest = raw.slice(colon + 1);
+    }
+    var hyphen = rest.lastIndexOf("-");
+    var upstream = rest;
+    var revision = null;
+    if (hyphen !== -1){
+      upstream = rest.slice(0, hyphen);
+      revision = rest.slice(hyphen + 1);
+      if (revision === ""){
+        fail("Version " + label + " ends with a hyphen, so its Debian revision is empty; dpkg refuses that version.");
+      }
+    }
+    if (upstream === "") fail("Version " + label + " has no upstream version before its hyphen.");
+    return {
+      raw: raw,
+      epoch: epochText,
+      epochGiven: epochGiven,
+      upstream: upstream,
+      revision: revision,
+      hasRevision: revision !== null,
+      upstreamStartsWithDigit: /^[0-9]/.test(upstream),
+      upstreamHasHyphen: upstream.indexOf("-") !== -1,
+      hasColonInUpstream: upstream.indexOf(":") !== -1
+    };
+  }
+
+  function quote(text){
+    return "\"" + text + "\"";
+  }
+
+  function stepText(part, step){
+    var where = "The " + PART_LABEL[part] + " decided it: ";
+    if (step.kind === "number"){
+      return where + "epoch " + step.leftRun + " is a larger whole number than " + step.rightRun
+        + ", and the epoch is compared before everything else.";
+    }
+    if (step.kind === "digit"){
+      if (step.reason === "length"){
+        return where + "the digit run " + quote(step.leftRun) + " "
+          + (step.leftLonger ? "has more digits than " : "has fewer digits than ")
+          + quote(step.rightRun) + ", so it is the "
+          + (step.leftLonger ? "larger" : "smaller") + " number.";
+      }
+      return where + "the digit runs " + quote(step.leftRun) + " and " + quote(step.rightRun)
+        + " were compared as numbers, and " + (step.result > 0 ? "the first is larger." : "the second is larger.");
+    }
+    var left = step.leftAtEnd ? "the end of version A" : quote(step.leftRun);
+    var right = step.rightAtEnd ? "the end of version B" : quote(step.rightRun);
+    return where + "the non-digit runs " + left + " and " + right
+      + " were compared in dpkg's character order, where letters sort by ASCII value, "
+      + "other characters after the letters, and a tilde before everything.";
+  }
+
+  function build(left, right, relation, part, step){
+    var rows = [];
+    var names = ["epoch", "upstream", "revision"];
+    var values = {
+      epoch: [left.epoch, right.epoch],
+      upstream: [left.upstream, right.upstream],
+      revision: [left.revision === null ? "(none)" : left.revision,
+        right.revision === null ? "(none)" : right.revision]
+    };
+    var reached = part === null ? "all" : part;
+    for (var index = 0; index < names.length; index += 1){
+      var name = names[index];
+      var outcome;
+      if (part === name){
+        outcome = relation > 0 ? "A is newer" : "A is older";
+      } else if (part === null){
+        outcome = "equal";
+      } else if (names.indexOf(name) < names.indexOf(reached)){
+        outcome = "equal";
+      } else {
+        outcome = "not compared";
+      }
+      rows.push({
+        part: name,
+        label: name === "epoch" ? "Epoch" : (name === "upstream" ? "Upstream version" : "Debian revision"),
+        left: values[name][0],
+        right: values[name][1],
+        outcome: outcome,
+        decided: part === name
+      });
+    }
+
+    var headline = relation > 0 ? "Version A is newer" : (relation < 0 ? "Version A is older" : "Same version");
+    var subline;
+    if (relation === 0){
+      subline = quote(left.raw) + " and " + quote(right.raw) + " compare equal under dpkg's rules.";
+    } else {
+      subline = quote(left.raw) + " sorts " + (relation > 0 ? "after" : "before") + " " + quote(right.raw)
+        + ", so version " + (relation > 0 ? "B is the older" : "B is the newer") + " one.";
+    }
+
+    var notes = [];
+    if (step) notes.push({text: stepText(part, step), info: true});
+    if ((left.raw + right.raw).indexOf("~") !== -1){
+      notes.push({text: "A tilde sorts before everything, even the end of the string, so 1.0~rc1 is older than 1.0 and 1.0-1~bpo1 is older than 1.0-1.", info: true});
+    }
+    if (!left.hasRevision || !right.hasRevision){
+      notes.push({text: "A missing Debian revision compares as an empty string: 1.0 equals 1.0-0 and sorts before 1.0-1.", info: true});
+    }
+    if (left.epochGiven || right.epochGiven){
+      if (left.epochGiven && right.epochGiven && left.epoch !== "0" && right.epoch !== "0"){
+        notes.push({text: "Both versions carry an epoch, which is compared as a whole number before the rest of the string.", info: true});
+      } else if ((left.epochGiven && left.epoch === "0") || (right.epochGiven && right.epoch === "0")){
+        notes.push({text: "An epoch of 0 written out explicitly compares the same as no epoch at all.", info: true});
+      } else if (left.epochGiven !== right.epochGiven){
+        notes.push({text: "Only one version writes an epoch; the missing one is taken as 0.", info: true});
+      }
+    }
+    if (!left.upstreamStartsWithDigit || !right.upstreamStartsWithDigit){
+      var which = !left.upstreamStartsWithDigit && !right.upstreamStartsWithDigit ? "Both versions have"
+        : (!left.upstreamStartsWithDigit ? "Version A has" : "Version B has");
+      notes.push({text: which + " an upstream version that does not start with a digit, which Debian Policy asks for; dpkg still compares it and so does this tool.", info: false});
+    }
+    if (left.upstreamHasHyphen || right.upstreamHasHyphen){
+      var hyphenWhich = left.upstreamHasHyphen && right.upstreamHasHyphen ? "Both versions keep"
+        : (left.upstreamHasHyphen ? "Version A keeps" : "Version B keeps");
+      notes.push({text: hyphenWhich + " a hyphen inside the upstream part; Debian Policy reserves hyphens for the revision separator, and dpkg compares the string as written.", info: false});
+    }
+    if (left.hasColonInUpstream){
+      notes.push({text: "Version A has a second colon inside the upstream version; that is allowed only when an epoch is present, and the colon is compared in character order.", info: false});
+    }
+    if (relation === 0 && left.raw !== right.raw){
+      notes.push({text: "The two spellings differ but compare equal: leading zeros and an absent revision do not change the order.", info: true});
+    }
+
+    return {
+      left: left,
+      right: right,
+      relation: relation,
+      decidedBy: part,
+      step: step,
+      rows: rows,
+      headline: headline,
+      subline: subline,
+      notes: notes,
+      noteText: notes.map(function(note){ return note.text; }).join(" ")
+    };
+  }
+
+  function compare(leftText, rightText){
+    var left = parse(leftText, "A");
+    var right = parse(rightText, "B");
+    var epoch = compareNumbers(left.epoch, right.epoch);
+    if (epoch.result !== 0) return build(left, right, epoch.result, "epoch", epoch);
+    var upstream = compareStrings(left.upstream, right.upstream);
+    if (upstream.result !== 0) return build(left, right, upstream.result, "upstream", upstream);
+    var revision = compareStrings(left.hasRevision ? left.revision : "",
+      right.hasRevision ? right.revision : "");
+    if (revision.result !== 0) return build(left, right, revision.result, "revision", revision);
+    return build(left, right, 0, null, null);
+  }
+
+  return {
+    MAX_LENGTH: MAX_LENGTH,
+    orderChar: orderChar,
+    compareStrings: compareStrings,
+    compareNumbers: compareNumbers,
+    parse: parse,
+    compare: compare
+  };
+})();
+/* debver-core:end */
+(function(){
+  "use strict";
+  var C = DebVersion;
+  var els = {
+    form: document.getElementById("ver-form"),
+    left: document.getElementById("left"),
+    right: document.getElementById("right"),
+    err: document.getElementById("err"),
+    out: document.getElementById("out"),
+    rowsTitle: document.getElementById("rows-title"),
+    rows: document.getElementById("rows"),
+    rowsBody: document.getElementById("rows-body")
+  };
+
+  function line(text, className){
+    var node = document.createElement("div");
+    node.className = className || "sub";
+    node.textContent = text;
+    return node;
+  }
+
+  function placeholder(message){
+    els.out.textContent = "";
+    var node = line(message);
+    node.style.padding = "18px 0 6px";
+    els.out.appendChild(node);
+  }
+
+  function hideResult(){
+    els.rows.hidden = true;
+    els.rowsTitle.hidden = true;
+    els.rowsBody.textContent = "";
+  }
+
+  function render(result){
+    els.out.textContent = "";
+    els.out.appendChild(line("Comparison", "label"));
+    els.out.appendChild(line(result.headline, "big"));
+    els.out.appendChild(line(result.subline));
+    if (result.notes.length){
+      var list = document.createElement("ul");
+      list.className = "notes";
+      result.notes.forEach(function(note){
+        var item = document.createElement("li");
+        item.textContent = note.text;
+        if (note.info) item.className = "ok";
+        list.appendChild(item);
+      });
+      els.out.appendChild(list);
+    }
+    els.rowsBody.textContent = "";
+    result.rows.forEach(function(row){
+      var tr = document.createElement("tr");
+      if (row.decided) tr.className = "decided";
+      var th = document.createElement("th");
+      th.scope = "row";
+      th.textContent = row.label;
+      var left = document.createElement("td");
+      left.textContent = row.left;
+      var right = document.createElement("td");
+      right.textContent = row.right;
+      var outcome = document.createElement("td");
+      outcome.className = "outcome";
+      outcome.textContent = row.outcome;
+      tr.appendChild(th);
+      tr.appendChild(left);
+      tr.appendChild(right);
+      tr.appendChild(outcome);
+      els.rowsBody.appendChild(tr);
+    });
+    els.rowsTitle.hidden = false;
+    els.rows.hidden = false;
+  }
+
+  function calculate(){
+    var result;
+    try {
+      result = C.compare(els.left.value, els.right.value);
+    } catch (error){
+      hideResult();
+      els.err.textContent = error.message;
+      placeholder("Fix the field above to see the comparison.");
+      return;
+    }
+    els.err.textContent = "";
+    render(result);
+  }
+
+  els.form.addEventListener("submit", function(event){
+    event.preventDefault();
+    calculate();
+  });
+  [els.left, els.right].forEach(function(field){
+    field.addEventListener("input", calculate);
+    field.addEventListener("change", calculate);
+  });
+
+  calculate();
+})();
+</script>
+</body>
+</html>

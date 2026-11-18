@@ -146,7 +146,7 @@ for (const phrase of ['testcase', 'precedence', 'DOCTYPE', 'no network']) {
 }
 assert.equal(record.sources.length, 3, 'sources are cited');
 assert.ok(record.sources.every((source) => typeof source.title === 'string' && source.title.length > 20));
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Developer').length, 50, 'Developer count');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Developer').length, 51, 'Developer count');
 assert.equal(catalog.tools.filter((tool) => tool.slug === slug).length, 1, 'one record');
 assert.equal(catalog.tools.filter((tool) => tool.name === record.name).length, 1, 'one name');
 assert.equal(catalog.tools.filter((tool) => (tool.tags || []).includes('junit')).length, 1, 'one junit tool');
