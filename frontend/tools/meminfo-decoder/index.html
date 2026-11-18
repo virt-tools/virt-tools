@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>meminfo Decoder &mdash; Virtual Tools</title>
+<meta name="description" content="Decode a pasted /proc/meminfo dump into the memory breakdown free reports: total, in use, available, free, buffers, page cache, buff/cache, shared memory, slab, kernel and swap, with each share of RAM.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.field{display:flex;flex-direction:column;gap:6px;margin:0}
+textarea#meminfo{box-sizing:border-box;width:100%;min-height:132px;max-width:720px;padding:10px 12px;border-radius:8px;
+  border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);color:var(--text,#e6e6e6);
+  font-family:ui-monospace,monospace;font-size:14.5px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;
+  resize:vertical;outline:none}
+textarea#meminfo:focus-visible{outline:2px solid var(--accent,#6ea8fe);outline-offset:1px}
+textarea#meminfo::placeholder{color:var(--text-dim,#9aa3b2)}
+.hint{color:var(--text-dim,#9aa3b2);font-size:12.5px;margin:10px 0 0;line-height:1.45;max-width:720px}
+.hint code{font-family:ui-monospace,monospace;font-size:12px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:12px 0 0}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.err{color:var(--bad,#f87171);font-size:13px;margin:10px 0 0;min-height:1.2em}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:16px 0 0}
+.out .label{text-align:center;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-dim,#9aa3b2)}
+.out .big{font-size:clamp(1.1rem,5.2vw,1.7rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:2px 0 4px;overflow-wrap:anywhere;line-height:1.35}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:6px 0 0;line-height:1.45;overflow-wrap:anywhere}
+.out .notes{margin:12px 0 0;padding:0;list-style:none;display:grid;gap:6px}
+.out .notes li{font-size:12.5px;line-height:1.45;color:var(--text-dim,#9aa3b2);padding-left:14px;position:relative;overflow-wrap:anywhere}
+.out .notes li::before{content:"!";position:absolute;left:0;color:var(--warn,#fbbf24);font-weight:700}
+.out .notes li.ok::before{content:"i";color:var(--accent,#6ea8fe)}
+.bars{margin:16px 0 0}
+.bar-label{font-size:12.5px;color:var(--text-dim,#9aa3b2);margin:0 0 6px;line-height:1.45}
+.bar-label .k{font-family:ui-monospace,monospace;color:var(--text,#e6e6e6)}
+.bar{display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--border,#2a2f3a);margin:0 0 14px}
+.bar span{display:block;height:100%}
+.bar[hidden]{display:none}
+.bar span.used{background:var(--accent,#6ea8fe)}
+.bar span.swap{background:var(--warn,#fbbf24)}
+.rows{display:table;width:100%;border-collapse:collapse;margin:6px 0 0;font-size:13.5px}
+.rows[hidden]{display:none}
+.rows-title{color:var(--text-dim,#9aa3b2);font-size:12.5px;letter-spacing:.03em;margin:18px 0 0}
+.rows th,.rows td{border-bottom:1px solid var(--border,#2a2f3a);padding:7px 8px;text-align:left;vertical-align:top}
+.rows thead th{color:var(--text-dim,#9aa3b2);font-weight:600;font-size:12px;letter-spacing:.03em}
+.rows tbody th{font-weight:500;width:58%}
+.rows td{font-family:ui-monospace,monospace;text-align:right;overflow-wrap:anywhere}
+.fname{display:block}
+.fkey{display:block;font-size:11.5px;color:var(--text-dim,#9aa3b2);font-family:ui-monospace,monospace;margin-top:2px}
+.note{color:var(--text-dim,#9aa3b2);font-size:12.5px;line-height:1.55;margin:18px 0 0;max-width:820px}
+@media (max-width:560px){
+  .actions button{flex:1 1 auto}
+  .rows,.rows tbody{display:block;width:auto}
+  .rows thead{display:none}
+  .rows tbody tr{display:block;border-bottom:1px solid var(--border,#2a2f3a);padding:8px 0}
+  .rows tbody th,.rows tbody td{display:block;width:auto;border:0;padding:0}
+  .rows tbody td{text-align:left;margin-top:2px}
+}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<h1>meminfo Decoder</h1>
+<p>Paste the contents of /proc/meminfo and read the breakdown free reports: how much RAM is in use, what is genuinely available, how much sits in buffers and page cache, and how much of swap is spent.</p>
+</div>
+<div class="panel">
+<form id="meminfo-form" novalidate>
+<div class="field">
+<label for="meminfo">/proc/meminfo contents</label>
+<textarea id="meminfo" rows="8" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="MemTotal:       16316312 kB&#10;MemFree:         1212488 kB&#10;MemAvailable:    9345120 kB&#10;Buffers:          412336 kB&#10;Cached:          5821440 kB&#10;SwapTotal:       2097148 kB&#10;SwapFree:        1048182 kB"></textarea>
+</div>
+<p class="hint">Paste the whole file from <code>cat /proc/meminfo</code>, or just the lines you have. Values are read in kB, blank lines and # comments are ignored, and a repeated field is refused.</p>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions">
+<button type="submit">Decode</button>
+</div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"></div>
+<div class="bars" id="bars" hidden>
+<p class="bar-label" id="ram-label"></p>
+<div class="bar" role="img" aria-labelledby="ram-label"><span class="used" id="ram-used"></span></div>
+<p class="bar-label" id="swap-label"></p>
+<div class="bar" role="img" aria-labelledby="swap-label" id="swap-bar"><span class="swap" id="swap-used"></span></div>
+</div>
+<p class="rows-title" id="rows-title" hidden>Memory fields</p>
+<table class="rows" id="rows" aria-labelledby="rows-title" hidden>
+<thead><tr><th scope="col">Field</th><th scope="col">Size</th></tr></thead>
+<tbody>
+<tr><th scope="row"><span class="fname">Total RAM</span><span class="fkey">MemTotal</span></th><td id="mem-total"></td></tr>
+<tr><th scope="row"><span class="fname">In use</span><span class="fkey">MemTotal - MemAvailable</span></th><td id="mem-used"></td></tr>
+<tr><th scope="row"><span class="fname">Available</span><span class="fkey">MemAvailable</span></th><td id="mem-available"></td></tr>
+<tr><th scope="row"><span class="fname">Free</span><span class="fkey">MemFree</span></th><td id="mem-free"></td></tr>
+<tr><th scope="row"><span class="fname">Buffers</span><span class="fkey">Buffers</span></th><td id="mem-buffers"></td></tr>
+<tr><th scope="row"><span class="fname">Page cache</span><span class="fkey">Cached</span></th><td id="mem-cached"></td></tr>
+<tr><th scope="row"><span class="fname">Buff/cache</span><span class="fkey">Buffers + Cached + SReclaimable</span></th><td id="mem-buffcache"></td></tr>
+<tr><th scope="row"><span class="fname">Shared memory</span><span class="fkey">Shmem</span></th><td id="mem-shared"></td></tr>
+<tr><th scope="row"><span class="fname">Slab</span><span class="fkey">Slab</span></th><td id="mem-slab"></td></tr>
+<tr><th scope="row"><span class="fname">Kernel stacks and page tables</span><span class="fkey">KernelStack + PageTables + SecPageTables</span></th><td id="mem-kernel"></td></tr>
+<tr><th scope="row"><span class="fname">Swap total</span><span class="fkey">SwapTotal</span></th><td id="mem-swap-total"></td></tr>
+<tr><th scope="row"><span class="fname">Swap in use</span><span class="fkey">SwapTotal - SwapFree</span></th><td id="mem-swap-used"></td></tr>
+<tr><th scope="row"><span class="fname">Dirty and writeback</span><span class="fkey">Dirty + Writeback</span></th><td id="mem-dirty"></td></tr>
+</tbody>
+</table>
+<p class="note" id="method">Each line is read as a field name, a colon, a whole number and an optional kB unit; blank lines and # comments are skipped, a field repeated twice is refused, and a value in any other unit is refused. MemTotal and MemFree are required. Total RAM is MemTotal. In use is MemTotal minus MemAvailable, the figure free(1) documents for its used column; a dump without MemAvailable falls back to MemFree plus Buffers and Cached as the available figure, and to MemTotal minus Free, Buffers and Cached as in use, which is what kernels before 3.14 allowed. Buff/cache is Buffers + Cached + SReclaimable, matching the cache and buff/cache columns of free(1), and shared memory is Shmem. Kernel stacks and page tables add KernelStack, PageTables and SecPageTables. Swap in use is SwapTotal minus SwapFree. Every share is that field divided by MemTotal, or by SwapTotal for the swap rows, rounded half up to one decimal. The two bars partition RAM into in use and available and swap into in use and free, so each bar adds to exactly its total. Sizes are shown in KiB, MiB or GiB by magnitude. The page reads only the text you paste: it does not query the host, so cgroup limits, watermarks and reclaim behaviour are not modelled, and nothing here is a diagnosis of the machine. Everything is calculated in your browser; nothing is sent, stored or uploaded.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* meminfo-core:start */
+var MeminfoCore = (function(){
+  "use strict";
+  var REQUIRED = ["MemTotal", "MemFree"];
+  var DISPLAYED = ["MemTotal", "MemFree", "MemAvailable", "Buffers", "Cached", "SReclaimable",
+    "Shmem", "Slab", "SwapTotal", "SwapFree", "KernelStack", "PageTables", "SecPageTables",
+    "Dirty", "Writeback", "CommitLimit", "Committed_AS"];
+  var DEFAULT_DUMP = [
+    "MemTotal:       16316312 kB",
+    "MemFree:         1212488 kB",
+    "MemAvailable:    9345120 kB",
+    "Buffers:          412336 kB",
+    "Cached:          5821440 kB",
+    "SwapCached:        18240 kB",
+    "Active:          6102448 kB",
+    "Inactive:        4473920 kB",
+    "SwapTotal:       2097148 kB",
+    "SwapFree:        1048182 kB",
+    "Dirty:              1284 kB",
+    "Writeback:            0 kB",
+    "AnonPages:       4915320 kB",
+    "Mapped:           712440 kB",
+    "Shmem:            364088 kB",
+    "Slab:             664212 kB",
+    "SReclaimable:     502184 kB",
+    "SUnreclaim:      162028 kB",
+    "KernelStack:        9216 kB",
+    "PageTables:        41880 kB",
+    "CommitLimit:    10261272 kB",
+    "Committed_AS:    7012844 kB",
+    "HugePages_Total:       0",
+    "Hugepagesize:       2048 kB"
+  ].join("\n");
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function clip(text){
+    var value = String(text);
+    return value.length > 40 ? value.slice(0, 40) + "..." : value;
+  }
+
+  function parseDump(input){
+    var raw = String(input == null ? "" : input);
+    if (!raw.trim()) fail("Paste the contents of /proc/meminfo, one field per line.");
+    var lines = raw.split(/\r?\n/);
+    var fields = {};
+    var order = [];
+    for (var index = 0; index < lines.length; index += 1){
+      var line = lines[index];
+      if (!line.trim()) continue;
+      if (/^\s*#/.test(line)) continue;
+      var match = /^\s*([A-Za-z_][A-Za-z0-9_()]*)\s*:\s*(.*?)\s*$/.exec(line);
+      if (!match){
+        fail("Line " + (index + 1) + " does not look like a /proc/meminfo field: \"" + clip(line) + "\".");
+      }
+      var key = match[1];
+      var rest = match[2];
+      if (!rest) fail(key + " has no value; /proc/meminfo writes a number after the colon.");
+      var value = /^(\d+)(?:\s+(kB|KB|kb|KiB))?$/.exec(rest);
+      if (!value){
+        var unit = /^\d+\s+(\S+)$/.exec(rest);
+        if (unit) fail("\"" + clip(unit[1]) + "\" is not a unit /proc/meminfo uses; values are in kB.");
+        fail(key + " reads \"" + clip(rest) + "\"; /proc/meminfo values are whole numbers of kB.");
+      }
+      if (Object.prototype.hasOwnProperty.call(fields, key)){
+        fail(key + " appears twice; paste a single copy of /proc/meminfo.");
+      }
+      fields[key] = parseInt(value[1], 10);
+      order.push(key);
+    }
+    if (!order.length) fail("Paste the contents of /proc/meminfo, one field per line.");
+    return {fields: fields, order: order};
+  }
+
+  function kbOf(fields, key){
+    return Object.prototype.hasOwnProperty.call(fields, key) ? fields[key] : 0;
+  }
+
+  function formatKb(kb){
+    var value = Number(kb);
+    if (!isFinite(value)) return "0 KiB";
+    if (value >= 1048576) return (value / 1048576).toFixed(2) + " GiB";
+    if (value >= 1024) return (value / 1024).toFixed(1) + " MiB";
+    return Math.round(value) + " KiB";
+  }
+
+  function percent(value, base){
+    if (!(base > 0)) return 0;
+    return Math.round((Number(value) * 1000) / Number(base)) / 10;
+  }
+
+  function decode(input){
+    var parsed = parseDump(input);
+    var fields = parsed.fields;
+    for (var index = 0; index < REQUIRED.length; index += 1){
+      if (!Object.prototype.hasOwnProperty.call(fields, REQUIRED[index])){
+        fail("This does not look like /proc/meminfo: the " + REQUIRED[index] + " line is missing.");
+      }
+    }
+    var totalKb = fields.MemTotal;
+    if (!(totalKb > 0)) fail("MemTotal reads 0 kB, so there is no RAM to divide.");
+    var freeKb = fields.MemFree;
+    if (freeKb > totalKb) fail("MemFree reads more than MemTotal, so the dump is inconsistent.");
+
+    var buffersKb = kbOf(fields, "Buffers");
+    var cachedKb = kbOf(fields, "Cached");
+    var sreclaimableKb = kbOf(fields, "SReclaimable");
+    var hasAvailable = Object.prototype.hasOwnProperty.call(fields, "MemAvailable");
+    var availableKb = hasAvailable
+      ? fields.MemAvailable
+      : Math.min(totalKb, freeKb + buffersKb + cachedKb);
+    var usedKb = Math.max(0, totalKb - availableKb);
+    var buffCacheKb = buffersKb + cachedKb + sreclaimableKb;
+    var sharedKb = kbOf(fields, "Shmem");
+    var slabKb = kbOf(fields, "Slab");
+    var kernelKb = kbOf(fields, "KernelStack") + kbOf(fields, "PageTables") + kbOf(fields, "SecPageTables");
+    var swapTotalKb = kbOf(fields, "SwapTotal");
+    var swapFreeKb = kbOf(fields, "SwapFree");
+    if (swapFreeKb > swapTotalKb){
+      fail("SwapFree reads more than SwapTotal, so the dump is inconsistent.");
+    }
+    var swapUsedKb = swapTotalKb - swapFreeKb;
+    var dirtyKb = kbOf(fields, "Dirty");
+    var writebackKb = kbOf(fields, "Writeback");
+    var hasCommitLimit = Object.prototype.hasOwnProperty.call(fields, "CommitLimit");
+    var hasCommittedAs = Object.prototype.hasOwnProperty.call(fields, "Committed_AS");
+    var commitLimitKb = hasCommitLimit ? fields.CommitLimit : null;
+    var committedAsKb = hasCommittedAs ? fields.Committed_AS : null;
+
+    var usedPercent = percent(usedKb, totalKb);
+    var availablePercent = percent(availableKb, totalKb);
+    var freePercent = percent(freeKb, totalKb);
+    var buffCachePercent = percent(buffCacheKb, totalKb);
+    var swapUsedPercent = percent(swapUsedKb, swapTotalKb);
+    var sharedPercent = percent(sharedKb, totalKb);
+
+    var notes = [];
+    if (hasAvailable){
+      notes.push({text: "In use is MemTotal minus MemAvailable, the formula free(1) documents for its used column.", info: true});
+    } else {
+      notes.push({text: "This dump has no MemAvailable line, so available is MemFree plus Buffers and Cached, and in use is MemTotal minus that - the fallback for kernels before 3.14.", info: false});
+    }
+    if (hasAvailable && fields.MemAvailable > totalKb){
+      notes.push({text: "MemAvailable reads more than MemTotal, so in use is reported as zero.", info: false});
+    }
+    if (swapTotalKb === 0){
+      notes.push({text: "No swap is configured: SwapTotal is zero.", info: true});
+    } else if (swapUsedKb > 0){
+      notes.push({text: "Swap holds " + formatKb(swapUsedKb) + " in use of " + formatKb(swapTotalKb) + " (" + swapUsedPercent.toFixed(1) + " %).", info: true});
+    } else {
+      notes.push({text: "Swap is configured (" + formatKb(swapTotalKb) + ") and nothing is swapped out.", info: true});
+    }
+    if (committedAsKb !== null && commitLimitKb !== null && commitLimitKb > 0){
+      notes.push({text: "Committed_AS is " + formatKb(committedAsKb) + " against a CommitLimit of " + formatKb(commitLimitKb) + " (" + percent(committedAsKb, commitLimitKb).toFixed(1) + " %).", info: true});
+    }
+    if (dirtyKb + writebackKb > 0){
+      notes.push({text: formatKb(dirtyKb) + " is dirty and " + formatKb(writebackKb) + " is in writeback, so some pages are waiting for the disk.", info: false});
+    }
+    var otherCount = 0;
+    for (var at = 0; at < parsed.order.length; at += 1){
+      if (DISPLAYED.indexOf(parsed.order[at]) === -1) otherCount += 1;
+    }
+    if (otherCount > 0){
+      notes.push({text: otherCount + " other field" + (otherCount === 1 ? "" : "s") + " in this dump " + (otherCount === 1 ? "is" : "are") + " not shown in the table.", info: true});
+    }
+
+    var headline = usedPercent.toFixed(1) + " % of RAM in use";
+    var subline = formatKb(totalKb) + " total, " + formatKb(usedKb) + " in use, "
+      + formatKb(availableKb) + " available" + (swapTotalKb > 0
+        ? ", swap " + formatKb(swapUsedKb) + " of " + formatKb(swapTotalKb) + " used"
+        : ", no swap");
+
+    return {
+      totalKb: totalKb,
+      usedKb: usedKb,
+      availableKb: availableKb,
+      freeKb: freeKb,
+      buffersKb: buffersKb,
+      cachedKb: cachedKb,
+      sreclaimableKb: sreclaimableKb,
+      buffCacheKb: buffCacheKb,
+      sharedKb: sharedKb,
+      sharedPercent: sharedPercent,
+      slabKb: slabKb,
+      kernelKb: kernelKb,
+      swapTotalKb: swapTotalKb,
+      swapFreeKb: swapFreeKb,
+      swapUsedKb: swapUsedKb,
+      swapUsedPercent: swapUsedPercent,
+      dirtyKb: dirtyKb,
+      writebackKb: writebackKb,
+      commitLimitKb: commitLimitKb,
+      committedAsKb: committedAsKb,
+      usedPercent: usedPercent,
+      availablePercent: availablePercent,
+      freePercent: freePercent,
+      buffCachePercent: buffCachePercent,
+      hasAvailable: hasAvailable,
+      otherCount: otherCount,
+      headline: headline,
+      subline: subline,
+      notes: notes,
+      noteText: notes.map(function(note){ return note.text; }).join(" ")
+    };
+  }
+
+  return {
+    REQUIRED: REQUIRED,
+    DISPLAYED: DISPLAYED,
+    DEFAULT_DUMP: DEFAULT_DUMP,
+    parseDump: parseDump,
+    formatKb: formatKb,
+    percent: percent,
+    decode: decode
+  };
+})();
+/* meminfo-core:end */
+(function(){
+  "use strict";
+  var C = MeminfoCore;
+  var els = {
+    form: document.getElementById("meminfo-form"),
+    input: document.getElementById("meminfo"),
+    err: document.getElementById("err"),
+    out: document.getElementById("out"),
+    bars: document.getElementById("bars"),
+    ramLabel: document.getElementById("ram-label"),
+    ramUsed: document.getElementById("ram-used"),
+    swapLabel: document.getElementById("swap-label"),
+    swapUsed: document.getElementById("swap-used"),
+    swapBar: document.getElementById("swap-bar"),
+    rowsTitle: document.getElementById("rows-title"),
+    rowTable: document.getElementById("rows"),
+    total: document.getElementById("mem-total"),
+    used: document.getElementById("mem-used"),
+    available: document.getElementById("mem-available"),
+    free: document.getElementById("mem-free"),
+    buffers: document.getElementById("mem-buffers"),
+    cached: document.getElementById("mem-cached"),
+    buffCache: document.getElementById("mem-buffcache"),
+    shared: document.getElementById("mem-shared"),
+    slab: document.getElementById("mem-slab"),
+    kernel: document.getElementById("mem-kernel"),
+    swapTotal: document.getElementById("mem-swap-total"),
+    swapUsedCell: document.getElementById("mem-swap-used"),
+    dirty: document.getElementById("mem-dirty")
+  };
+
+  var ROW_IDS = ["total", "used", "available", "free", "buffers", "cached", "buffCache",
+    "shared", "slab", "kernel", "swapTotal", "swapUsedCell", "dirty"];
+
+  function line(text, className){
+    var node = document.createElement("div");
+    node.className = className || "sub";
+    node.textContent = text;
+    return node;
+  }
+
+  function placeholder(message){
+    els.out.textContent = "";
+    var node = line(message);
+    node.style.padding = "18px 0 6px";
+    els.out.appendChild(node);
+  }
+
+  function hideResult(){
+    for (var index = 0; index < ROW_IDS.length; index += 1) els[ROW_IDS[index]].textContent = "";
+    els.bars.hidden = true;
+    els.rowsTitle.hidden = true;
+    els.rowTable.hidden = true;
+  }
+
+  function share(valueKb, baseKb, label){
+    if (!(baseKb > 0)) return "none";
+    return C.formatKb(valueKb) + " (" + C.percent(valueKb, baseKb).toFixed(1) + " % of " + label + ")";
+  }
+
+  function render(result){
+    els.out.textContent = "";
+    els.out.appendChild(line("Memory in use", "label"));
+    els.out.appendChild(line(result.headline, "big"));
+    els.out.appendChild(line(result.subline));
+    if (result.notes.length){
+      var list = document.createElement("ul");
+      list.className = "notes";
+      result.notes.forEach(function(note){
+        var item = document.createElement("li");
+        item.textContent = note.text;
+        if (note.info) item.className = "ok";
+        list.appendChild(item);
+      });
+      els.out.appendChild(list);
+    }
+
+    els.ramLabel.textContent = "RAM: " + C.formatKb(result.usedKb) + " in use, "
+      + C.formatKb(result.availableKb) + " available";
+    els.ramUsed.style.width = Math.max(0, Math.min(100, result.usedPercent)) + "%";
+    if (result.swapTotalKb > 0){
+      els.swapLabel.textContent = "Swap: " + C.formatKb(result.swapUsedKb) + " in use of "
+        + C.formatKb(result.swapTotalKb);
+      els.swapUsed.style.width = Math.max(0, Math.min(100, result.swapUsedPercent)) + "%";
+      els.swapBar.hidden = false;
+    } else {
+      els.swapLabel.textContent = "Swap: none configured";
+      els.swapUsed.style.width = "0%";
+      els.swapBar.hidden = true;
+    }
+    els.bars.hidden = false;
+
+    els.total.textContent = share(result.totalKb, result.totalKb, "RAM");
+    els.used.textContent = share(result.usedKb, result.totalKb, "RAM");
+    els.available.textContent = result.hasAvailable
+      ? share(result.availableKb, result.totalKb, "RAM")
+      : "no MemAvailable line";
+    els.free.textContent = share(result.freeKb, result.totalKb, "RAM");
+    els.buffers.textContent = share(result.buffersKb, result.totalKb, "RAM");
+    els.cached.textContent = share(result.cachedKb, result.totalKb, "RAM");
+    els.buffCache.textContent = share(result.buffCacheKb, result.totalKb, "RAM");
+    els.shared.textContent = share(result.sharedKb, result.totalKb, "RAM");
+    els.slab.textContent = share(result.slabKb, result.totalKb, "RAM");
+    els.kernel.textContent = share(result.kernelKb, result.totalKb, "RAM");
+    els.swapTotal.textContent = result.swapTotalKb > 0
+      ? share(result.swapTotalKb, result.totalKb, "RAM")
+      : "none configured";
+    els.swapUsedCell.textContent = result.swapTotalKb > 0
+      ? C.formatKb(result.swapUsedKb) + " (" + result.swapUsedPercent.toFixed(1) + " % of swap)"
+      : "none configured";
+    els.dirty.textContent = share(result.dirtyKb + result.writebackKb, result.totalKb, "RAM");
+    els.rowsTitle.hidden = false;
+    els.rowTable.hidden = false;
+  }
+
+  function decode(announce){
+    var raw = els.input.value;
+    if (!String(raw).trim()){
+      hideResult();
+      els.err.textContent = announce ? "Paste the contents of /proc/meminfo, one field per line." : "";
+      placeholder("Paste /proc/meminfo to break the memory down.");
+      return;
+    }
+    var result;
+    try {
+      result = C.decode(raw);
+    } catch (error){
+      hideResult();
+      els.err.textContent = error.message;
+      placeholder("Paste /proc/meminfo to break the memory down.");
+      return;
+    }
+    els.err.textContent = "";
+    render(result);
+  }
+
+  function fit(){
+    els.input.style.height = "auto";
+    els.input.style.height = Math.min(320, Math.max(132, els.input.scrollHeight + 2)) + "px";
+  }
+
+  els.form.addEventListener("submit", function(event){
+    event.preventDefault();
+    fit();
+    decode(true);
+  });
+  els.input.addEventListener("input", function(){ decode(false); });
+  els.input.addEventListener("change", fit);
+
+  els.input.value = C.DEFAULT_DUMP;
+  fit();
+  decode(false);
+})();
+</script>
+</body>
+</html>
