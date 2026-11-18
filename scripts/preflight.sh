@@ -398,6 +398,7 @@ node tests/debian_version_compare.test.cjs
 node tests/pipe_offset_calculator.test.cjs
 node tests/helical_antenna_designer.test.cjs
 node tests/code128_barcode_generator.test.cjs
+node tests/ganache_ratio_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
