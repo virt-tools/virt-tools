@@ -198,8 +198,8 @@ assert.ok(!/<table/i.test(html), 'the listing stays a flow of cards, not a table
 assert.ok(!/style="[^"]*width:\s*\d{3,}px/.test(html), 'fixed wide inline styles');
 
 const publicCount = catalog.tools.filter((tool) => tool.listed).length;
-assert.equal(publicCount, 2120, 'the catalog keeps growing: ' + publicCount);
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Networking').length, 50,
+assert.equal(publicCount, 2121, 'the catalog keeps growing: ' + publicCount);
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Networking').length, 51,
   'Networking count');
 
 console.log(slug + ': ' + fixture.vectors.length + ' reference plans, ' +
