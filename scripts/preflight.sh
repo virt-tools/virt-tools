@@ -343,6 +343,7 @@ node tests/ip3_intercept_calculator.test.cjs
 node tests/bearing_l10_life_calculator.test.cjs
 node tests/specific_heat_capacity_converter.test.cjs
 node tests/thermal_expansion_coefficient_converter.test.cjs
+node tests/jump_ring_coil_calculator.test.cjs
 node tests/nth_weekday_of_month.test.cjs
 node tests/universal_integer_codes.test.cjs
 node tests/base91.test.cjs
