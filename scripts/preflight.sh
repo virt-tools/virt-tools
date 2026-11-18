@@ -394,6 +394,7 @@ node tests/meminfo_decoder.test.cjs
 node tests/ipf_gl_points.test.cjs
 node tests/debian_version_compare.test.cjs
 node tests/pipe_offset_calculator.test.cjs
+node tests/helical_antenna_designer.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
