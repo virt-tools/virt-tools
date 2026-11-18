@@ -41,8 +41,8 @@ assert.equal(record.testCases.length, 25);
 assert.equal(record.testCases.filter((t) => t.kind === 'golden').length, 7);
 assert.equal(record.testCases.filter((t) => t.kind === 'boundary').length, 3);
 assert.equal(record.testCases.filter((t) => t.kind === 'validation').length, 15);
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2122, 'public tools');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Sports & Outdoors').length, 50, 'Sports & Outdoors count');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2123, 'public tools');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Sports & Outdoors').length, 51, 'Sports & Outdoors count');
 // No other record claims this name, slug or any alias.
 for (const other of catalog.tools) {
   if (other.slug === slug) continue;

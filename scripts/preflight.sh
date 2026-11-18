@@ -391,6 +391,7 @@ node tests/bulk_cargo_lift_calculator.test.cjs
 node tests/pan_law_calculator.test.cjs
 node tests/ipv4_header_decoder.test.cjs
 node tests/meminfo_decoder.test.cjs
+node tests/ipf_gl_points.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
