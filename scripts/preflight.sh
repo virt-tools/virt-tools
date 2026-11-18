@@ -402,6 +402,7 @@ node tests/ganache_ratio_calculator.test.cjs
 node tests/clock_hand_angle_calculator.test.cjs
 node tests/ldap_filter_dn_escaper.test.cjs
 node tests/kml_geojson_converter.test.cjs
+node tests/ritardando_accelerando_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
