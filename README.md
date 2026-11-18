@@ -93,6 +93,13 @@ retained with `listed: false` for review history.
 Keep tools client-side. If you need a JS library, vendor it under
 `frontend/vendor/` rather than loading from a CDN, to preserve privacy.
 
+Most tools inherit the 1180px reading column. A tool whose main surface is a
+wide data grid can opt into the workbench width by starting its landmark with
+`<main data-layout="wide">`; the shared header mirrors that attribute so the
+brand and controls stay on the same vertical edges. Use it only when a
+multi-column table or board is the primary content — prose, forms, and
+fixed-size canvas tools read better in the default column.
+
 Small formula-only calculators are declared in `data/formula-workbenches.json` and
 generated into domain workbenches. Their former routes remain in source and
 redirect to the exact replacement formula with `?formula=<legacy-slug>`; do not

@@ -262,6 +262,11 @@
     mount.setAttribute("data-ready", "true");
     var main = document.querySelector("main");
     if (main && !main.id) main.id = "main-content";
+    // A tool opts into the wide workbench shell on its landmark; mirror it onto
+    // the header so both share the same horizontal track.
+    if (main && main.getAttribute("data-layout") === "wide") {
+      mount.setAttribute("data-layout", "wide");
+    }
     if (main && !document.querySelector(".skip-link")) {
       document.body.insertBefore(el("a", { class: "skip-link", href: "#" + main.id }, [t("nav.skip")]), document.body.firstChild);
     }
