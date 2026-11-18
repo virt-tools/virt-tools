@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Stabilization Crop Planner — Virtual Tools</title>
+<meta name="description" content="Work out the crop a stabilised shot needs: from the residual shake and roll, get the margin off each side, the zoom, the pixels and field of view kept, and the shake a crop budget can absorb.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+[hidden]{display:none!important}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:12px;margin:10px 0}
+label.f{font-size:13px;opacity:.85;display:block;margin-bottom:4px}
+.field{background:var(--bg,#14181f);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px;min-width:0}
+.field:focus-within{border-color:var(--accent,#6ea8fe);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#6ea8fe) 18%,transparent)}
+.field input{box-sizing:border-box;width:100%;max-width:none;min-width:0;background:transparent;color:var(--text,#e6e6e6);border:none;font-size:18px;font-family:ui-monospace,monospace;padding:2px 0;outline:none;min-height:44px}
+.field input:focus{box-shadow:none}
+.field .unit{font-size:11px;color:var(--text-dim,#9aa3b2);margin-top:4px;line-height:1.35}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:14px 0}
+.out .big{font-size:clamp(1.65rem,6vw,2.35rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:4px 0 6px;overflow-wrap:anywhere;color:var(--accent,#6ea8fe)}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45;overflow-wrap:anywhere}
+.out .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:14px}
+.out .row:last-child{border-bottom:none}
+.out .row .k{color:var(--text-dim,#9aa3b2)}
+.out .row .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right;overflow-wrap:anywhere}
+.budget{margin:16px 0 0}
+.budget h2{font-size:13px;font-weight:600;color:var(--text-dim,#9aa3b2);margin:0}
+.budget ul{margin:6px 0 0;padding:0;list-style:none}
+.budget li{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:13.5px;border-bottom:1px solid var(--border,#2a2f3a);padding:6px 2px}
+.budget li:last-child{border-bottom:none}
+.budget .k{color:var(--text-dim,#9aa3b2)}
+.budget .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right;overflow-wrap:anywhere}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:46px;white-space:nowrap}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.err{color:var(--bad,#f87171);font-size:13px;margin:6px 0;min-height:1.2em}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;margin:10px 0 0;line-height:1.5}
+@media (max-width:360px){.out .row{display:block}.out .row .v{display:block;text-align:left;margin-top:2px}
+.budget li{display:block}.budget .v{display:block;text-align:left;margin-top:2px}}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<h1>Stabilization Crop Planner</h1>
+<p>See how much of the frame a stabilised shot has to give up: the margin off each side left by the residual shake and roll, the zoom it costs, and the pixels and field of view that remain.</p>
+</div>
+<div class="panel">
+<form id="st-form" novalidate>
+<div class="grid2">
+<div class="field"><label class="f" for="in-width">Frame width</label><input type="text" id="in-width" inputmode="numeric" autocomplete="off" value="3840" aria-describedby="width-help"><div class="unit" id="width-help">pixels as recorded — 3840 is UHD</div></div>
+<div class="field"><label class="f" for="in-height">Frame height</label><input type="text" id="in-height" inputmode="numeric" autocomplete="off" value="2160" aria-describedby="height-help"><div class="unit" id="height-help">pixels as recorded; sets the corner radius the roll turns on</div></div>
+<div class="field"><label class="f" for="in-shake">Residual shake</label><input type="text" id="in-shake" inputmode="decimal" autocomplete="off" value="24" aria-describedby="shake-help"><div class="unit" id="shake-help">pixels of peak movement either side of centre that the stabiliser leaves</div></div>
+<div class="field"><label class="f" for="in-roll">Residual roll</label><input type="text" id="in-roll" inputmode="decimal" autocomplete="off" value="0.3" aria-describedby="roll-help"><div class="unit" id="roll-help">degrees of peak rotation left after stabilisation</div></div>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions"><button type="submit" id="go">Plan the crop</button></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"><span style="color:var(--text-dim,#9aa3b2)">Enter a frame size, a residual shake and a residual roll to see the crop.</span></div>
+<p class="note">A stabiliser can only move the picture inside the recorded frame, so every pixel of shake or roll has to be paid for with a margin the crop can slide into. The margin is the residual shake plus the roll in radians multiplied by half the frame diagonal, the farthest a corner travels when the frame turns about its centre, rounded up to a whole pixel. Keeping the shot's shape means zooming uniformly, so the short side sets the zoom: the crop is scaled up until the short side has that margin on both edges, the long side then gives up the same share of its pixels, and both sides land on even pixel counts. The crop budget table inverts the relation: for a chosen zoom it gives the short-side margin and the largest shake that still fits beside the roll. Shake and roll are what you measure or expect after stabilisation, so this plans a crop rather than predicting what a particular stabiliser will do; off-centre crops, rolling-shutter skew, parallax between near and far subjects and resampling softening are not modelled. Everything runs in your browser with no storage, uploads or network access.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* stabilization-crop-core:start */
+var StabilizationCropCore = (function(){
+  "use strict";
+  var DEFAULTS = { width: "3840", height: "2160", shakePx: "24", rollDeg: "0.3" };
+  var LIMITS = {
+    width: { min: 64, max: 16384, unit: "pixels", integer: true },
+    height: { min: 64, max: 16384, unit: "pixels", integer: true },
+    shakePx: { min: 0, max: 1000, unit: "px" },
+    rollDeg: { min: 0, max: 20, unit: "degrees" }
+  };
+  var BUDGET_ZOOMS = [2, 5, 10, 20];
+  function fail(message){
+    throw new Error(message);
+  }
+  function parseNumber(raw, label, limits){
+    var text = String(raw == null ? "" : raw).trim();
+    if (!text) fail(label + " is required.");
+    var message = label + " must be a " + (limits.integer ? "whole number" : "number")
+      + " from " + limits.min + " to " + limits.max + " " + limits.unit + ".";
+    if (!/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(text)) fail(message);
+    var value = Number(text);
+    if (!isFinite(value) || value < limits.min || value > limits.max) fail(message);
+    if (limits.integer && Math.floor(value) !== value) fail(message);
+    return value;
+  }
+  function calculate(input){
+    var options = input || {};
+    var width = parseNumber(options.width == null ? DEFAULTS.width : options.width,
+      "Frame width", LIMITS.width);
+    var height = parseNumber(options.height == null ? DEFAULTS.height : options.height,
+      "Frame height", LIMITS.height);
+    var shakePx = parseNumber(options.shakePx == null ? DEFAULTS.shakePx : options.shakePx,
+      "Shake", LIMITS.shakePx);
+    var rollDeg = parseNumber(options.rollDeg == null ? DEFAULTS.rollDeg : options.rollDeg,
+      "Roll", LIMITS.rollDeg);
+    var shortSide = Math.min(width, height);
+    var longSide = Math.max(width, height);
+    var diagonalPx = Math.sqrt(width * width + height * height);
+    var rollMarginPx = rollDeg * Math.PI / 180 * diagonalPx / 2;
+    var marginPx = Math.max(0, Math.ceil(shakePx + rollMarginPx - 1e-9));
+    if (shortSide - 2 * marginPx < 64){
+      fail("The shake and roll need more margin than this frame can give up.");
+    }
+    var scale = shortSide / (shortSide - 2 * marginPx);
+    var cropWidth = 2 * Math.floor(width / scale / 2 + 1e-9);
+    var cropHeight = 2 * Math.floor(height / scale / 2 + 1e-9);
+    var budget = BUDGET_ZOOMS.map(function(zoom){
+      var margin = shortSide * (1 - 1 / (1 + zoom / 100)) / 2;
+      var maxShake = margin - rollMarginPx;
+      return {
+        zoomPercent: zoom,
+        marginPx: margin,
+        maxShakePx: maxShake < 0 ? 0 : maxShake
+      };
+    });
+    return {
+      width: width,
+      height: height,
+      shakePx: shakePx,
+      rollDeg: rollDeg,
+      shortSide: shortSide,
+      longSide: longSide,
+      diagonalPx: diagonalPx,
+      rollMarginPx: rollMarginPx,
+      marginPx: marginPx,
+      scale: scale,
+      cropWidth: cropWidth,
+      cropHeight: cropHeight,
+      marginShortPx: (shortSide - Math.min(cropWidth, cropHeight)) / 2,
+      marginLongPx: (longSide - Math.max(cropWidth, cropHeight)) / 2,
+      zoomPercent: (scale - 1) * 100,
+      resolutionPercent: cropWidth * cropHeight / (width * height) * 100,
+      fovPercent: cropWidth / width * 100,
+      flMultiplier: scale,
+      shakePercent: shakePx / width * 100,
+      budget: budget
+    };
+  }
+  return {
+    calculate: calculate,
+    DEFAULTS: DEFAULTS,
+    LIMITS: LIMITS
+  };
+})();
+/* stabilization-crop-core:end */
+(function(){
+"use strict";
+var els = {
+  width: document.getElementById("in-width"), height: document.getElementById("in-height"),
+  shake: document.getElementById("in-shake"), roll: document.getElementById("in-roll"),
+  err: document.getElementById("err"), out: document.getElementById("out"),
+  form: document.getElementById("st-form")
+};
+function clear(node){ while (node.firstChild) node.removeChild(node.firstChild); }
+function plain(value, digits){
+  var text = Number(value).toFixed(digits);
+  if (text.indexOf(".") > -1) text = text.replace(/0+$/, "").replace(/\.$/, "");
+  return text === "-0" ? "0" : text;
+}
+function group(value){
+  return Number(value).toLocaleString("en-US");
+}
+function addRow(parent, label, value){
+  var row = document.createElement("div"); row.className = "row";
+  var key = document.createElement("span"); key.className = "k"; key.textContent = label;
+  var val = document.createElement("span"); val.className = "v"; val.textContent = value;
+  row.appendChild(key); row.appendChild(val); parent.appendChild(row);
+}
+function placeholder(message){
+  var span = document.createElement("span");
+  span.style.color = "var(--text-dim,#9aa3b2)"; span.textContent = message;
+  els.out.appendChild(span);
+}
+function render(result){
+  clear(els.out);
+  var big = document.createElement("div"); big.className = "big";
+  big.textContent = plain(result.zoomPercent, 2) + "% zoom";
+  var sub = document.createElement("div"); sub.className = "sub";
+  sub.textContent = group(result.cropWidth) + " × " + group(result.cropHeight) + " px kept at "
+    + plain(result.scale, 3) + "× · " + plain(result.marginShortPx, 1) + " px margin on the short side";
+  els.out.appendChild(big); els.out.appendChild(sub);
+  addRow(els.out, "Margin, short / long side", plain(result.marginShortPx, 1) + " / "
+    + plain(result.marginLongPx, 1) + " px");
+  addRow(els.out, "From shake / from roll", plain(result.shakePx, 2) + " px / "
+    + plain(result.rollMarginPx, 2) + " px");
+  addRow(els.out, "Zoom factor", plain(result.scale, 3) + "×");
+  addRow(els.out, "Field of view kept", plain(result.fovPercent, 2) + " % of the width");
+  addRow(els.out, "Pixels kept", plain(result.resolutionPercent, 2) + " %");
+  addRow(els.out, "Shake as frame width", plain(result.shakePercent, 3) + " %");
+  var wrap = document.createElement("div"); wrap.className = "budget";
+  var head = document.createElement("h2"); head.textContent = "Crop budget at this roll";
+  var list = document.createElement("ul");
+  wrap.appendChild(head); wrap.appendChild(list);
+  result.budget.forEach(function(entry){
+    var item = document.createElement("li");
+    var key = document.createElement("span"); key.className = "k";
+    key.textContent = entry.zoomPercent + "% zoom · " + plain(entry.marginPx, 1) + " px margin";
+    var val = document.createElement("span"); val.className = "v";
+    val.textContent = "up to " + plain(entry.maxShakePx, 1) + " px shake";
+    item.appendChild(key); item.appendChild(val); list.appendChild(item);
+  });
+  els.out.appendChild(wrap);
+}
+function run(){
+  var result;
+  try {
+    result = StabilizationCropCore.calculate({
+      width: els.width.value, height: els.height.value,
+      shakePx: els.shake.value, rollDeg: els.roll.value
+    });
+  } catch (error){
+    els.err.textContent = error.message; clear(els.out);
+    placeholder("Check the frame size, shake and roll above."); return;
+  }
+  els.err.textContent = ""; render(result);
+}
+[els.width, els.height, els.shake, els.roll].forEach(function(input){
+  input.addEventListener("input", run);
+});
+els.form.addEventListener("submit", function(event){
+  event.preventDefault(); run();
+});
+run();
+})();
+</script>
+</body>
+</html>
