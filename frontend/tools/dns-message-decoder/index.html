@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>DNS Message Decoder &mdash; Virtual Tools</title>
+<meta name="description" content="Decode a DNS message from its hex wire bytes: header flags, opcode and response code, the question, and every answer, authority and additional record with compressed names, TTL and A, AAAA, CNAME, NS, PTR, MX, TXT, SOA, SRV, CAA and OPT data.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.field{display:flex;flex-direction:column;gap:6px;margin:0}
+textarea#hex{box-sizing:border-box;width:100%;min-height:104px;max-width:760px;padding:10px 12px;border-radius:8px;
+  border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);color:var(--text,#e6e6e6);
+  font-family:ui-monospace,monospace;font-size:15px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;
+  resize:vertical;outline:none}
+textarea#hex:focus-visible{outline:2px solid var(--accent,#6ea8fe);outline-offset:1px}
+textarea#hex::placeholder{color:var(--text-dim,#9aa3b2)}
+.hint{color:var(--text-dim,#9aa3b2);font-size:12.5px;margin:10px 0 0;line-height:1.45;max-width:760px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:12px 0 0}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.err{color:var(--bad,#f87171);font-size:13px;margin:10px 0 0;min-height:1.2em}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:16px 0 0}
+.out .label{text-align:center;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-dim,#9aa3b2)}
+.out .big{font-size:clamp(1.1rem,5.2vw,1.7rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:2px 0 4px;overflow-wrap:anywhere;line-height:1.35}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:6px 0 0;line-height:1.45;overflow-wrap:anywhere}
+.out .notes{margin:12px 0 0;padding:0;list-style:none;display:grid;gap:6px}
+.out .notes li{font-size:12.5px;line-height:1.45;color:var(--text-dim,#9aa3b2);padding-left:14px;position:relative;overflow-wrap:anywhere}
+.out .notes li::before{content:"!";position:absolute;left:0;color:var(--warn,#fbbf24);font-weight:700}
+.out .notes li.ok::before{content:"i";color:var(--accent,#6ea8fe)}
+.wrap{overflow-x:auto;margin:18px 0 0}
+.ref{display:table;width:100%;border-collapse:collapse;font-size:13.5px}
+.ref caption{caption-side:top;text-align:left;color:var(--text-dim,#9aa3b2);font-size:12.5px;padding:0 0 6px}
+.ref th,.ref td{border-bottom:1px solid var(--border,#2a2f3a);padding:7px 8px;text-align:left;vertical-align:top}
+.ref thead th{color:var(--text-dim,#9aa3b2);font-weight:600;font-size:12px;letter-spacing:.03em}
+.ref tbody th{font-weight:500;width:38%}
+.ref td{font-family:ui-monospace,monospace;overflow-wrap:anywhere}
+.ref td.data{min-width:12em}
+.note{color:var(--text-dim,#9aa3b2);font-size:12.5px;line-height:1.55;margin:18px 0 0;max-width:820px}
+@media (max-width:560px){
+  .actions button{flex:1 1 auto}
+  .ref th,.ref td{padding:6px 5px;font-size:12.5px}
+  .ref tbody th{width:32%}
+  .wrap{overflow-x:visible}
+  #records-table thead{display:none}
+  #records-table,#records-table tbody,#records-table tr,#records-table td{display:block;width:100%}
+  #records-table caption{display:block;width:100%;text-align:left;white-space:normal}
+  #records-table tr{display:grid;grid-template-columns:auto auto 1fr;gap:2px 8px;padding:9px 0;border-bottom:1px solid var(--border,#2a2f3a)}
+  #records-table td{padding:0;border:0;min-width:0}
+  #records-table td:nth-child(1){grid-row:1;grid-column:1;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-dim,#9aa3b2)}
+  #records-table td:nth-child(2){grid-row:1;grid-column:2 / span 2;font-weight:600;overflow-wrap:anywhere}
+  #records-table td:nth-child(3){grid-row:2;grid-column:1;font-size:12.5px;color:var(--text-dim,#9aa3b2)}
+  #records-table td:nth-child(4){grid-row:2;grid-column:2;font-size:12.5px;color:var(--text-dim,#9aa3b2)}
+  #records-table td:nth-child(5){grid-row:2;grid-column:3;font-size:12.5px;color:var(--text-dim,#9aa3b2);text-align:right}
+  #records-table td:nth-child(6){grid-row:3;grid-column:1 / span 3;padding-top:4px;overflow-wrap:anywhere;min-width:0}
+}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<h1>DNS Message Decoder</h1>
+<p>Paste the hex bytes of a DNS query or response and read the header, the question and every record: names are decompressed, and A, AAAA, CNAME, NS, PTR, MX, TXT, SOA, SRV, CAA and EDNS0 OPT data is rendered field by field.</p>
+</div>
+<div class="panel">
+<form id="message-form" novalidate>
+<div class="field">
+<label for="hex">Message bytes (hex)</label>
+<textarea id="hex" rows="5" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="2b c2 81 80 00 01 00 02 00 00 00 00 07 65 78 61 6d 70 6c 65 03 63 6f 6d 00 00 01 00 01"></textarea>
+</div>
+<p class="hint">Twelve bytes or more. Spaces, colons, commas, 0x prefixes and dump offset labels are ignored, so a capture line, a tcpdump -x line or a hex dump pastes straight in.</p>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions">
+<button type="submit">Decode</button>
+</div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"></div>
+<div class="wrap">
+<table class="ref" id="header-fields">
+<caption>The decoded header</caption>
+<tbody>
+<tr><th scope="row">Transaction ID</th><td id="message-id"></td></tr>
+<tr><th scope="row">Flags</th><td id="flags"></td></tr>
+<tr><th scope="row">Opcode</th><td id="opcode"></td></tr>
+<tr><th scope="row">Response code</th><td id="rcode"></td></tr>
+<tr><th scope="row">Counts</th><td id="counts"></td></tr>
+<tr><th scope="row">EDNS0</th><td id="edns"></td></tr>
+</tbody>
+</table>
+</div>
+<div class="wrap">
+<table class="ref" id="questions-table">
+<caption>Question section</caption>
+<thead><tr><th scope="col">Name</th><th scope="col">Type</th><th scope="col">Class</th></tr></thead>
+<tbody id="questions"></tbody>
+</table>
+</div>
+<div class="wrap">
+<table class="ref" id="records-table">
+<caption>Answer, authority and additional records</caption>
+<thead><tr><th scope="col">Section</th><th scope="col">Name</th><th scope="col">TTL</th><th scope="col">Class</th><th scope="col">Type</th><th scope="col" class="data">Data</th></tr></thead>
+<tbody id="records"></tbody>
+</table>
+</div>
+<p class="note" id="method">The message is read at the offsets RFC 1035 gives it: a 16-bit transaction ID, a 16-bit flags word, four 16-bit section counts, then the question and the answer, authority and additional records, each with a name, type, class, TTL and length-prefixed data. Names are read label by label and followed through compression pointers that must point to an earlier byte, so a loop or a forward pointer is refused instead of hanging the page. Types and their names come from the IANA DNS parameters registry: A, AAAA, CNAME, NS, PTR, MX, TXT, SOA, SRV, CAA and the EDNS0 OPT pseudo-record are decoded field by field, while other types are shown as raw hex because their structure is not interpreted here. DNSSEC signature records are not validated and no DNS query is made. Everything runs in your browser; nothing is sent anywhere.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* dns-message-core:start */
+var DNSMessageCore = (function(){
+  "use strict";
+  var TYPES = {
+    0:["Reserved",""],1:["A","a host address"],2:["NS","an authoritative name server"],
+    3:["MD","a mail destination (OBSOLETE - use MX)"],4:["MF","a mail forwarder (OBSOLETE - use MX)"],5:["CNAME","the canonical name for an alias"],
+    6:["SOA","marks the start of a zone of authority"],7:["MB","a mailbox domain name (EXPERIMENTAL)"],8:["MG","a mail group member (EXPERIMENTAL)"],
+    9:["MR","a mail rename domain name (EXPERIMENTAL)"],10:["NULL","a null RR (EXPERIMENTAL)"],11:["WKS","a well known service description"],
+    12:["PTR","a domain name pointer"],13:["HINFO","host information"],14:["MINFO","mailbox or mail list information"],
+    15:["MX","mail exchange"],16:["TXT","text strings"],17:["RP","for Responsible Person"],
+    18:["AFSDB","for AFS Data Base location"],19:["X25","for X.25 PSDN address"],20:["ISDN","for ISDN address"],
+    21:["RT","for Route Through"],22:["NSAP","for NSAP address, NSAP style A record"],23:["NSAP-PTR","for domain name pointer, NSAP style"],
+    24:["SIG","for security signature"],25:["KEY","for security key"],26:["PX","X.400 mail mapping information"],
+    27:["GPOS","Geographical Position"],28:["AAAA","IP6 Address"],29:["LOC","Location Information"],
+    30:["NXT","Next Domain (OBSOLETE)"],31:["EID","Endpoint Identifier"],32:["NIMLOC","Nimrod Locator"],
+    33:["SRV","Server Selection"],34:["ATMA","ATM Address"],35:["NAPTR","Naming Authority Pointer"],
+    36:["KX","Key Exchanger"],37:["CERT","CERT"],38:["A6","A6 (OBSOLETE - use AAAA)"],
+    39:["DNAME","DNAME"],40:["SINK","SINK"],41:["OPT","EDNS0 option"],
+    42:["APL","APL"],43:["DS","Delegation Signer"],44:["SSHFP","SSH Key Fingerprint"],
+    45:["IPSECKEY","IPSECKEY"],46:["RRSIG","RRSIG"],47:["NSEC","NSEC"],
+    48:["DNSKEY","DNSKEY"],49:["DHCID","DHCID"],50:["NSEC3","NSEC3"],
+    51:["NSEC3PARAM","NSEC3PARAM"],52:["TLSA","TLSA"],53:["SMIMEA","S/MIME cert association"],
+    54:["DELEGPARAM","Extensible Delegation Indirection (TEMPORARY - registered 2026-10-16, expires 2027-10-16)"],55:["HIP","Host Identity Protocol"],56:["NINFO","NINFO"],57:["RKEY","RKEY"],
+    58:["TALINK","Trust Anchor LINK"],59:["CDS","Child DS"],60:["CDNSKEY","DNSKEY(s) the child wants reflected in DS"],
+    61:["OPENPGPKEY","OpenPGP Key"],62:["CSYNC","Child-To-Parent Synchronization"],63:["ZONEMD","Message Digest for DNS Zone"],
+    64:["SVCB","RR for DNS SVCB"],65:["HTTPS","RR for DNS HTTPS"],66:["DSYNC","RR for DNS DSYNC"],
+    67:["HHIT","Hierarchical Host Identity Tag"],68:["BRID","UAS Broadcast Remote Identification"],69:["UNECE","Value coded per a UNECE Recommendation"],
+    70:["ISO","Value coded per an ISO standard"],99:["SPF","SPF"],100:["UINFO",""],
+    101:["UID",""],102:["GID",""],103:["UNSPEC",""],
+    104:["NID",""],105:["L32",""],106:["L64",""],
+    107:["LP",""],108:["EUI48","an RCODE (RCODE 48?)"],109:["EUI64",""],
+    128:["NXNAME","NXDOMAIN indicator for Compact Denial of Existence"],249:["TKEY","Transaction Key"],
+    250:["TSIG","Transaction Signature"],251:["IXFR","incremental transfer"],252:["AXFR","transfer of an entire zone"],
+    253:["MAILB","mailbox-related RRs (MB, MG or MR)"],254:["MAILA","mail agent RRs (OBSOLETE - see MX)"],255:["ANY","A request for some or all records the server has available"],
+    256:["URI","URI"],257:["CAA","Certification Authority Restriction"],258:["AVC","Application Visibility and Control"],
+    259:["DOA","Digital Object Architecture"],260:["AMTRELAY","Automatic Multicast Tunneling Relay"],261:["RESINFO","Resolver Information as Key/Value Pairs"],
+    262:["WALLET","Public wallet address"],263:["CLA","BP Convergence Layer Adapter"],264:["IPN","BP Node Number"],
+    32768:["TA","DNSSEC Trust Authorities"],32769:["DLV","DNSSEC Lookaside Validation (OBSOLETE)"],61440:["DELEG","Extensible Delegation (TEMPORARY - registered 2026-10-16, expires 2027-10-16)"],
+    65535:["Reserved",""]
+  };
+  var CLASSES = {1:"IN",2:"CS",3:"CH",4:"HS",254:"NONE",255:"ANY"};
+  var OPCODES = {0:"QUERY",1:"IQUERY",2:"STATUS",4:"NOTIFY",5:"UPDATE",6:"DSO"};
+  var RCODES = {0:"NOERROR",1:"FORMERR",2:"SERVFAIL",3:"NXDOMAIN",4:"NOTIMP",5:"REFUSED",6:"YXDOMAIN",7:"YXRRSET",8:"NXRRSET",9:"NOTAUTH",10:"NOTZONE",11:"DSOTYPENI",16:"BADVERS",17:"BADKEY",18:"BADTIME",19:"BADMODE",20:"BADNAME",21:"BADALG",22:"BADTRUNC",23:"BADCOOKIE"};
+  var MAX_BYTES = 65535;
+  var MAX_POINTERS = 64;
+  var DEFAULT_HEX = "2b c2 81 80 00 01 00 02 00 00 00 00 07 65 78 61 6d 70 6c 65 03 63 6f 6d 00 00 01 00 01 c0 0c 00 01 00 01 00 00 01 2c 00 04 ac 42 93 f3 c0 0c 00 01 00 01 00 00 01 2c 00 04 68 14 17 9a";
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function isHex(text){
+    return /^[0-9a-f]+$/i.test(text);
+  }
+
+  function byteHex(value){
+    var text = value.toString(16);
+    while (text.length < 2) text = "0" + text;
+    return text;
+  }
+
+  function hexWord(value){
+    var text = value.toString(16);
+    while (text.length < 4) text = "0" + text;
+    return "0x" + text;
+  }
+
+  function hexBytes(bytes, from, to){
+    var parts = [];
+    for (var at = from; at < to; at += 1) parts.push(byteHex(bytes[at]));
+    return parts.join(" ");
+  }
+
+  function plural(count, one, many){
+    return count + " " + (count === 1 ? one : many);
+  }
+
+  function parseBytes(input){
+    var value = input;
+    if (value && typeof value === "object" && !Array.isArray(value)) value = value.hex;
+    var raw = String(value == null ? "" : value);
+    if (!raw.trim()) fail("Paste the hex bytes of a DNS message, such as 12 34 81 80 00 01 00 01.");
+    var tokens = raw.trim().split(/[\s,;|]+/);
+    var bytes = [];
+    for (var index = 0; index < tokens.length; index += 1){
+      var token = tokens[index];
+      if (!token) continue;
+      if (token.charAt(token.length - 1) === ":"){
+        var label = token.slice(0, -1).replace(/^0x/i, "");
+        if (!isHex(label)) fail("The offset label \"" + token + "\" is not hex.");
+        continue;
+      }
+      var groups = token.split(":");
+      for (var part = 0; part < groups.length; part += 1){
+        var body = groups[part].replace(/^0x/i, "");
+        if (!body || !isHex(body)) fail("\"" + groups[part] + "\" is not a hex byte.");
+        if (body.length % 2) fail("\"" + groups[part] + "\" has an odd number of hex digits.");
+        for (var at = 0; at < body.length; at += 2){
+          bytes.push(parseInt(body.slice(at, at + 2), 16));
+        }
+      }
+      if (bytes.length > MAX_BYTES) fail("Paste at most 65,535 bytes, the largest DNS message over TCP.");
+    }
+    if (!bytes.length) fail("Paste the hex bytes of a DNS message, such as 12 34 81 80 00 01 00 01.");
+    return bytes;
+  }
+
+  function word(bytes, at){
+    return (bytes[at] << 8) | bytes[at + 1];
+  }
+
+  function long(bytes, at){
+    return ((bytes[at] << 24) | (bytes[at + 1] << 16) | (bytes[at + 2] << 8) | bytes[at + 3]) >>> 0;
+  }
+
+  function labelText(bytes, from, length){
+    var out = "";
+    for (var at = 0; at < length; at += 1){
+      var value = bytes[from + at];
+      if (value >= 0x21 && value <= 0x7e && value !== 0x2e && value !== 0x5c){
+        out += String.fromCharCode(value);
+      } else {
+        var digits = String(value);
+        while (digits.length < 3) digits = "0" + digits;
+        out += "\\" + digits;
+      }
+    }
+    return out;
+  }
+
+  function readName(bytes, offset, limit){
+    var labels = [];
+    var pos = offset;
+    var next = -1;
+    var jumped = false;
+    var jumps = 0;
+    var total = 1;
+    while (true){
+      if (pos >= limit) fail("The name starting at byte " + offset + " runs past the end of the " + limit + "-byte message.");
+      var length = bytes[pos];
+      if ((length & 0xc0) === 0xc0){
+        if (pos + 1 >= limit) fail("The compression pointer at byte " + pos + " is cut off by the end of the message.");
+        var target = ((length & 0x3f) << 8) | bytes[pos + 1];
+        if (target >= limit) fail("The compression pointer at byte " + pos + " points to byte " + target + ", past the end of the " + limit + "-byte message.");
+        if (target >= pos) fail("The compression pointer at byte " + pos + " points forward to byte " + target + "; a pointer may only refer to an earlier byte.");
+        if (!jumped){
+          next = pos + 2;
+          jumped = true;
+        }
+        jumps += 1;
+        if (jumps > MAX_POINTERS) fail("The name starting at byte " + offset + " follows more than " + MAX_POINTERS + " compression pointers, which cannot be a valid name.");
+        pos = target;
+        continue;
+      }
+      if (length & 0xc0) fail("The length byte at byte " + pos + " sets the top two bits, so it is neither a label nor a compression pointer.");
+      pos += 1;
+      if (length === 0){
+        if (!jumped) next = pos;
+        break;
+      }
+      if (pos + length > limit) fail("The label at byte " + pos + " claims " + length + " bytes, past the end of the " + limit + "-byte message.");
+      labels.push(labelText(bytes, pos, length));
+      total += length + 1;
+      if (total > 255) fail("The name starting at byte " + offset + " is longer than the 255-byte DNS limit.");
+      pos += length;
+    }
+    return {name: labels.length ? labels.join(".") + "." : ".", next: next};
+  }
+
+  function typeText(type){
+    var entry = TYPES[type];
+    return entry && entry[0] ? entry[0] : "TYPE" + type;
+  }
+
+  function typeLabel(type){
+    var entry = TYPES[type];
+    return entry ? entry[1] || "" : "";
+  }
+
+  function classText(value){
+    return CLASSES[value] || "CLASS" + value;
+  }
+
+  function ipv6Text(bytes, at){
+    var groups = [];
+    for (var index = 0; index < 8; index += 1){
+      groups.push(((bytes[at + index * 2] << 8) | bytes[at + index * 2 + 1]).toString(16));
+    }
+    var bestStart = -1;
+    var bestLength = 0;
+    var runStart = -1;
+    for (var at2 = 0; at2 <= 8; at2 += 1){
+      if (at2 < 8 && groups[at2] === "0"){
+        if (runStart === -1) runStart = at2;
+      } else {
+        if (runStart !== -1){
+          var runLength = at2 - runStart;
+          if (runLength > bestLength){ bestLength = runLength; bestStart = runStart; }
+          runStart = -1;
+        }
+      }
+    }
+    if (bestLength < 2) return groups.join(":");
+    var head = groups.slice(0, bestStart).join(":");
+    var tail = groups.slice(bestStart + bestLength).join(":");
+    return head + "::" + tail;
+  }
+
+  function txtText(bytes, from, to){
+    var parts = [];
+    var pos = from;
+    while (pos < to){
+      var length = bytes[pos];
+      pos += 1;
+      if (pos + length > to) fail("The TXT string at byte " + (pos - 1) + " claims " + length + " bytes, past the end of the record data.");
+      var text = "";
+      for (var at = pos; at < pos + length; at += 1){
+        var value = bytes[at];
+        if (value === 0x22) text += "\\\"";
+        else if (value === 0x5c) text += "\\\\";
+        else if (value >= 0x20 && value <= 0x7e) text += String.fromCharCode(value);
+        else {
+          var digits = String(value);
+          while (digits.length < 3) digits = "0" + digits;
+          text += "\\" + digits;
+        }
+      }
+      parts.push("\"" + text + "\"");
+      pos += length;
+    }
+    return parts.length ? parts.join(" ") : "\"\"";
+  }
+
+  function charText(bytes, from, to){
+    var out = "";
+    for (var at = from; at < to; at += 1){
+      var value = bytes[at];
+      if (value >= 0x20 && value <= 0x7e && value !== 0x5c) out += String.fromCharCode(value);
+      else {
+        var digits = String(value);
+        while (digits.length < 3) digits = "0" + digits;
+        out += "\\" + digits;
+      }
+    }
+    return out;
+  }
+
+  function readRecordName(bytes, at, end, what){
+    if (at >= end) fail("The " + what + " record's data is empty where a domain name is expected.");
+    var read = readName(bytes, at, bytes.length);
+    if (read.next > end) fail("The " + what + " name at byte " + at + " runs past the record's " + (end - at) + " bytes of data.");
+    return read;
+  }
+
+  function decodeRdata(bytes, type, start, end){
+    var length = end - start;
+    if (type === 1){
+      if (length !== 4) fail("An A record must carry 4 bytes of address; this one declares " + length + ".");
+      return bytes[start] + "." + bytes[start + 1] + "." + bytes[start + 2] + "." + bytes[start + 3];
+    }
+    if (type === 28){
+      if (length !== 16) fail("An AAAA record must carry 16 bytes of address; this one declares " + length + ".");
+      return ipv6Text(bytes, start);
+    }
+    if (type === 2 || type === 5 || type === 12){
+      var target = readRecordName(bytes, start, end, typeText(type));
+      if (target.next !== end) fail("The " + typeText(type) + " record's data must be one domain name; the record carries " + plural(end - target.next, "byte", "bytes") + " after it.");
+      return target.name;
+    }
+    if (type === 15){
+      if (length < 3) fail("An MX record needs 2 bytes of preference and a name; this one declares " + length + ".");
+      var preference = word(bytes, start);
+      var exchange = readRecordName(bytes, start + 2, end, "MX");
+      if (exchange.next !== end) fail("The MX record's data must be a preference and one name; the record carries " + plural(end - exchange.next, "byte", "bytes") + " after it.");
+      return preference + " " + exchange.name;
+    }
+    if (type === 16) return txtText(bytes, start, end);
+    if (type === 6){
+      var mname = readRecordName(bytes, start, end, "SOA");
+      var rname = readRecordName(bytes, mname.next, end, "SOA");
+      if (rname.next + 20 !== end) fail("A SOA record needs 20 bytes after its two names; this one has " + (end - rname.next) + ".");
+      return mname.name + " " + rname.name + " " + long(bytes, rname.next) + " " + long(bytes, rname.next + 4)
+        + " " + long(bytes, rname.next + 8) + " " + long(bytes, rname.next + 12) + " " + long(bytes, rname.next + 16);
+    }
+    if (type === 33){
+      if (length < 7) fail("An SRV record needs 6 bytes of priority, weight and port plus a name; this one declares " + length + ".");
+      var srv = readRecordName(bytes, start + 6, end, "SRV");
+      if (srv.next !== end) fail("The SRV record's data must be 6 bytes and one name; the record carries " + plural(end - srv.next, "byte", "bytes") + " after it.");
+      return word(bytes, start) + " " + word(bytes, start + 2) + " " + word(bytes, start + 4) + " " + srv.name;
+    }
+    if (type === 257){
+      if (length < 2) fail("A CAA record needs a flags byte and a tag length; this one declares " + length + ".");
+      var tagLength = bytes[start + 1];
+      if (2 + tagLength > length) fail("The CAA tag at byte " + (start + 2) + " claims " + tagLength + " bytes, past the record data.");
+      var tag = charText(bytes, start + 2, start + 2 + tagLength);
+      var value = charText(bytes, start + 2 + tagLength, end);
+      return bytes[start] + " " + tag + " \"" + value + "\"";
+    }
+    if (type === 41) return optText(bytes, start, end);
+    var shown = Math.min(length, 32);
+    return length + " bytes, not decoded: " + hexBytes(bytes, start, start + shown) + (length > shown ? " ..." : "");
+  }
+
+  function optText(bytes, start, end){
+    var parts = [];
+    var pos = start;
+    while (pos < end){
+      if (pos + 4 > end) fail("The OPT option at byte " + pos + " is cut off before its 4-byte code and length.");
+      var code = word(bytes, pos);
+      var length = word(bytes, pos + 2);
+      pos += 4;
+      if (pos + length > end) fail("The OPT option at byte " + (pos - 4) + " claims " + length + " bytes of data, past the end of the record.");
+      parts.push("option " + code + " (" + length + " bytes)" + (length ? ": " + hexBytes(bytes, pos, pos + Math.min(length, 24)) + (length > 24 ? " ..." : "") : ""));
+      pos += length;
+    }
+    return parts.length ? parts.join("; ") : "no options";
+  }
+
+  function decode(input){
+    var bytes = parseBytes(input);
+    var length = bytes.length;
+    if (length < 12) fail("A DNS message is at least 12 bytes; " + length + " were pasted.");
+
+    var id = word(bytes, 0);
+    var flags = word(bytes, 2);
+    var qr = (flags & 0x8000) !== 0;
+    var opcode = (flags >> 11) & 0x0f;
+    var aa = (flags & 0x0400) !== 0;
+    var tc = (flags & 0x0200) !== 0;
+    var rd = (flags & 0x0100) !== 0;
+    var ra = (flags & 0x0080) !== 0;
+    var z = (flags & 0x0040) !== 0;
+    var ad = (flags & 0x0020) !== 0;
+    var cd = (flags & 0x0010) !== 0;
+    var lowRcode = flags & 0x0f;
+    var qdcount = word(bytes, 4);
+    var ancount = word(bytes, 6);
+    var nscount = word(bytes, 8);
+    var arcount = word(bytes, 10);
+
+    var pos = 12;
+    var questions = [];
+    var records = [];
+    var notes = [];
+    var edns = null;
+    for (var q = 0; q < qdcount; q += 1){
+      if (pos >= length) fail("The header declares " + plural(qdcount, "question", "questions") + " but the message ends after " + q + ".");
+      var qname = readName(bytes, pos, length);
+      pos = qname.next;
+      if (pos + 4 > length) fail("Question " + (q + 1) + " is cut off before its type and class.");
+      var qtype = word(bytes, pos);
+      var qclass = word(bytes, pos + 2);
+      pos += 4;
+      questions.push({name: qname.name, type: qtype, typeText: typeText(qtype), className: classText(qclass), classValue: qclass});
+    }
+
+    var sections = [
+      {name: "answer", count: ancount, label: "answer"},
+      {name: "authority", count: nscount, label: "authority"},
+      {name: "additional", count: arcount, label: "additional"}
+    ];
+    for (var s = 0; s < sections.length; s += 1){
+      var section = sections[s];
+      for (var r = 0; r < section.count; r += 1){
+        if (pos >= length) fail("The header declares " + plural(section.count, section.label + " record", section.label + " records")
+          + " but the message ends after " + r + ".");
+        var name = readName(bytes, pos, length);
+        pos = name.next;
+        if (pos + 10 > length) fail("The " + section.label + " record " + (r + 1) + " is cut off before its type, class, TTL and length.");
+        var type = word(bytes, pos);
+        var klass = word(bytes, pos + 2);
+        var ttl = long(bytes, pos + 4);
+        var rdlength = word(bytes, pos + 8);
+        pos += 10;
+        if (pos + rdlength > length) fail("The " + section.label + " record " + (r + 1) + " declares " + rdlength + " bytes of data but only " + (length - pos) + " remain in the message.");
+        var data;
+        if (type === 41){
+          if (name.name !== ".") fail("The OPT record's name must be the root, not \"" + name.name + "\".");
+          data = optText(bytes, pos, pos + rdlength);
+          edns = {payload: klass, extended: (ttl >>> 24) & 0xff, version: (ttl >>> 16) & 0xff, flags: ttl & 0xffff, data: data};
+        } else {
+          data = decodeRdata(bytes, type, pos, pos + rdlength);
+        }
+        records.push({
+          section: section.name,
+          name: name.name,
+          type: type,
+          typeText: typeText(type),
+          typeLabel: typeLabel(type),
+          classValue: klass,
+          className: type === 41 ? String(klass) : classText(klass),
+          ttl: ttl,
+          length: rdlength,
+          data: data
+        });
+        pos += rdlength;
+      }
+    }
+
+    var rcode = lowRcode;
+    if (edns && edns.extended) rcode = (edns.extended << 4) | lowRcode;
+    var rcodeName = RCODES[rcode] || ("RCODE" + rcode);
+    var opcodeName = OPCODES[opcode] || ("OPCODE" + opcode);
+
+    if (pos < length) notes.push(length - pos + " bytes after the last record are not part of any section.");
+    if (edns) notes.push("EDNS0 OPT: UDP payload " + edns.payload + ", version " + edns.version + ", extended RCODE " + edns.extended
+      + ", flags " + hexWord(edns.flags) + (edns.flags & 0x8000 ? " with the DO bit set" : " with the DO bit clear") + ".");
+    if (edns && edns.version !== 0) notes.push("EDNS version " + edns.version + " is not version 0, so a resolver may answer BADVERS.");
+    if (rcode !== lowRcode) notes.push("The response code is extended by the OPT record: " + lowRcode + " in the header, " + rcode + " in total.");
+    if (tc) notes.push("The TC bit is set: this response was truncated and the full answer needs a TCP retry.");
+
+    var flagParts = [];
+    if (qr) flagParts.push("QR");
+    if (aa) flagParts.push("AA");
+    if (tc) flagParts.push("TC");
+    if (rd) flagParts.push("RD");
+    if (ra) flagParts.push("RA");
+    if (z) flagParts.push("Z");
+    if (ad) flagParts.push("AD");
+    if (cd) flagParts.push("CD");
+    var flagsText = flagParts.length ? flagParts.join(" ") : "none set";
+
+    var lines = records.map(function(record){
+      return record.section + " | " + record.name + " | " + (record.type === 41 ? "-" : record.ttl) + " | " + record.className + " | " + record.typeText + " | " + record.data;
+    });
+    var questionLines = questions.map(function(question){
+      return question.name + " | " + question.className + " | " + question.typeText;
+    });
+    var countsText = plural(qdcount, "question", "questions") + ", " + plural(ancount, "answer", "answers")
+      + ", " + plural(nscount, "authority record", "authority records") + ", " + plural(arcount, "additional record", "additional records");
+    var questionText = questions.length ? questions.map(function(question){
+      return question.name + " " + question.className + " " + question.typeText;
+    }).join("; ") : "none";
+    var headline = (qr ? "Response" : "Query") + ", " + rcodeName + " (" + rcode + ")";
+    var subline = countsText + "; " + length + " bytes" + (edns ? "; EDNS0 payload " + edns.payload : "") + (tc ? "; truncated" : "");
+
+    return {
+      id: id,
+      idText: hexWord(id) + " (" + id + ")",
+      flags: flags,
+      flagsText: flagsText,
+      qr: qr, aa: aa, tc: tc, rd: rd, ra: ra, z: z, ad: ad, cd: cd,
+      opcode: opcode,
+      opcodeText: opcodeName + " (" + opcode + ")",
+      rcode: rcode,
+      rcodeText: rcodeName + " (" + rcode + ")",
+      qdcount: qdcount, ancount: ancount, nscount: nscount, arcount: arcount,
+      countsText: countsText,
+      questionText: questionText,
+      questionLines: questionLines,
+      questions: questions,
+      records: records,
+      lines: lines,
+      answerLines: lines.filter(function(line){ return line.indexOf("answer | ") === 0; }),
+      authorityLines: lines.filter(function(line){ return line.indexOf("authority | ") === 0; }),
+      additionalLines: lines.filter(function(line){ return line.indexOf("additional | ") === 0; }),
+      edns: edns ? true : false,
+      ednsText: edns ? ("UDP payload " + edns.payload + ", version " + edns.version + ", flags " + hexWord(edns.flags)) : "not present",
+      notes: notes,
+      noteText: notes.join(" "),
+      headline: headline,
+      subline: subline,
+      byteLength: length
+    };
+  }
+
+  function parseOnly(input){
+    return parseBytes(input).slice(0);
+  }
+
+  return {
+    TYPES: TYPES,
+    CLASSES: CLASSES,
+    OPCODES: OPCODES,
+    RCODES: RCODES,
+    MAX_BYTES: MAX_BYTES,
+    DEFAULT_HEX: DEFAULT_HEX,
+    parseBytes: parseBytes,
+    parseOnly: parseOnly,
+    readName: readName,
+    typeText: typeText,
+    classText: classText,
+    decode: decode
+  };
+})();
+/* dns-message-core:end */
+(function(){
+  "use strict";
+  var C = DNSMessageCore;
+  var els = {
+    form: document.getElementById("message-form"),
+    hex: document.getElementById("hex"),
+    err: document.getElementById("err"),
+    out: document.getElementById("out"),
+    messageId: document.getElementById("message-id"),
+    flags: document.getElementById("flags"),
+    opcode: document.getElementById("opcode"),
+    rcode: document.getElementById("rcode"),
+    counts: document.getElementById("counts"),
+    edns: document.getElementById("edns"),
+    headerTable: document.getElementById("header-fields"),
+    questionsTable: document.getElementById("questions-table"),
+    questions: document.getElementById("questions"),
+    recordsTable: document.getElementById("records-table"),
+    records: document.getElementById("records")
+  };
+
+  function line(text, className){
+    var node = document.createElement("div");
+    node.className = className || "sub";
+    node.textContent = text;
+    return node;
+  }
+
+  function placeholder(message){
+    els.out.textContent = "";
+    var node = line(message);
+    node.style.padding = "18px 0 6px";
+    els.out.appendChild(node);
+  }
+
+  function clearTables(){
+    els.headerTable.style.display = "none";
+    els.questionsTable.style.display = "none";
+    els.recordsTable.style.display = "none";
+    els.questions.textContent = "";
+    els.records.textContent = "";
+  }
+
+  function cell(text, tag){
+    var node = document.createElement(tag || "td");
+    node.textContent = text;
+    return node;
+  }
+
+  function render(result){
+    els.out.textContent = "";
+    els.out.appendChild(line("Decoded message", "label"));
+    els.out.appendChild(line(result.headline, "big"));
+    els.out.appendChild(line(result.subline));
+    if (result.notes.length){
+      var list = document.createElement("ul");
+      list.className = "notes";
+      result.notes.forEach(function(note){
+        var item = document.createElement("li");
+        item.textContent = note;
+        if (note.indexOf("not part of any section") === -1 && note.indexOf("truncated") === -1) item.className = "ok";
+        list.appendChild(item);
+      });
+      els.out.appendChild(list);
+    }
+    els.messageId.textContent = result.idText;
+    els.flags.textContent = result.flagsText;
+    els.opcode.textContent = result.opcodeText;
+    els.rcode.textContent = result.rcodeText;
+    els.counts.textContent = result.countsText;
+    els.edns.textContent = result.ednsText;
+    els.headerTable.style.display = "";
+
+    els.questions.textContent = "";
+    if (result.questions.length){
+      result.questions.forEach(function(question){
+        var row = document.createElement("tr");
+        row.appendChild(cell(question.name, "th"));
+        row.firstChild.setAttribute("scope", "row");
+        row.appendChild(cell(question.typeText));
+        row.appendChild(cell(question.className));
+        els.questions.appendChild(row);
+      });
+      els.questionsTable.style.display = "";
+    }
+
+    els.records.textContent = "";
+    if (result.records.length){
+      result.records.forEach(function(record){
+        var row = document.createElement("tr");
+        row.appendChild(cell(record.section));
+        row.appendChild(cell(record.name));
+        row.appendChild(cell(record.type === 41 ? "-" : String(record.ttl)));
+        row.appendChild(cell(record.className));
+        row.appendChild(cell(record.typeText));
+        var data = cell(record.data);
+        data.className = "data";
+        row.appendChild(data);
+        els.records.appendChild(row);
+      });
+      els.recordsTable.style.display = "";
+    }
+  }
+
+  function decode(announce){
+    var raw = els.hex.value;
+    if (!String(raw).trim()){
+      clearTables();
+      els.err.textContent = announce ? "Paste the hex bytes of a DNS message, such as 12 34 81 80 00 01 00 01." : "";
+      placeholder("Paste the hex bytes of a DNS message to decode it.");
+      return;
+    }
+    var result;
+    try {
+      result = C.decode(raw);
+    } catch (error){
+      clearTables();
+      els.err.textContent = error.message;
+      placeholder("Paste the hex bytes of a DNS message to decode it.");
+      return;
+    }
+    els.err.textContent = "";
+    render(result);
+  }
+
+  function fit(){
+    els.hex.style.height = "auto";
+    els.hex.style.height = Math.min(340, Math.max(104, els.hex.scrollHeight + 2)) + "px";
+  }
+
+  els.form.addEventListener("submit", function(event){
+    event.preventDefault();
+    fit();
+    decode(true);
+  });
+  els.hex.addEventListener("input", function(){ fit(); decode(false); });
+  els.hex.addEventListener("change", fit);
+
+  els.hex.value = C.DEFAULT_HEX;
+  fit();
+  decode(false);
+})();
+</script>
+</body>
+</html>

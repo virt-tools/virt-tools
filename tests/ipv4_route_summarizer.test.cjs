@@ -347,7 +347,7 @@ assert.equal(new Set(record.tags).size, record.tags.length, 'tags are unique');
 assert.equal(new Set(record.aliases).size, record.aliases.length, 'aliases are unique');
 assert.ok(record.tags.includes('supernet'));
 assert.ok(record.aliases.includes('Route Summarization Calculator'));
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Networking').length, 51, 'Networking count');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Networking').length, 52, 'Networking count');
 assert.equal(catalog.tools.filter((tool) => tool.slug === slug).length, 1, 'no rival record');
 for (const tool of catalog.tools) {
   if (tool.slug === slug) continue;
