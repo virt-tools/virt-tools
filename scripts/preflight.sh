@@ -416,6 +416,7 @@ node tests/gas_compressibility_factor_calculator.test.cjs
 node tests/scale_model_size_converter.test.cjs
 node tests/bed_size_converter.test.cjs
 node tests/code39_barcode_generator.test.cjs
+node tests/brewhouse_water_planner.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
