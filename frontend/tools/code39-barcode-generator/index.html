@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Code 39 Barcode Generator &mdash; Virtual Tools</title>
+<meta name="description" content="Encode upper-case text as a Code 39 barcode: the 43-character set, three wide elements per symbol, the optional modulo-43 check character, the module count and an SVG between ten-module quiet zones. Runs locally in your browser.">
+<link rel="stylesheet" href="/assets/style.css">
+<link rel="stylesheet" href="/assets/tool-css/tool-form-3c8cf9e7.css">
+<style>
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.field label.chk{display:flex;gap:8px;align-items:center;font-size:14px;min-height:44px;cursor:pointer}
+.field label.chk input{width:18px;height:18px;margin:0;flex:0 0 auto;accent-color:var(--accent,#6ea8fe)}
+.out .row{gap:12px;padding:7px 0}
+.out .row .k{flex:1 1 auto;min-width:0}
+.out .row .v{text-align:right;overflow-wrap:anywhere}
+.bc{background:#fff;border-radius:8px;padding:10px 8px 8px;margin:0 0 14px;overflow:hidden}
+.bc svg{display:block;width:100%;height:auto}
+.bc .bc-text{font-family:ui-monospace,monospace;color:#111;text-align:center;font-size:13px;letter-spacing:.18em;margin:8px 4px 0;overflow-wrap:anywhere}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;margin:10px 0 0;line-height:1.5}
+@media (max-width:520px){.out .row{display:block}.out .row .v{display:block;text-align:left;margin-top:2px}}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<h1>Code 39 Barcode Generator</h1>
+<p>Turn upper-case text into a Code 39 barcode, with the check character and module count an asset label needs.</p>
+</div>
+<div class="panel">
+<form id="barcode-form" novalidate>
+<div class="grid2">
+<div class="field"><label class="f" for="in-text">Text to encode</label><input type="text" id="in-text" autocomplete="off" spellcheck="false" value="VT-2026-001" aria-describedby="text-help"><div class="unit" id="text-help">A-Z, 0-9, space and <code>- . $ / + %</code>; up to 40 characters, upper case only</div></div>
+<div class="field"><label class="chk" for="in-check"><input type="checkbox" id="in-check" checked>Add the modulo-43 check character</label><label class="chk" for="in-hri"><input type="checkbox" id="in-hri" checked>Show the text under the bars</label></div>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions"><button type="submit">Draw the barcode</button></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"><span style="color:var(--text-dim,#9aa3b2)">Enter text to see its barcode.</span></div>
+<p class="note">Every Code 39 symbol is nine elements wide &mdash; five bars and four spaces, exactly three of them wide &mdash; plus a one-module gap between symbols, drawn here at a 1:3 narrow-to-wide ratio. The optional check character is the sum of the character values modulo 43, taken from <code>0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-. $/+%</code>, and is drawn before the stop symbol. Ten-module quiet zones sit at both ends; check the module width your label and scanner need and test-scan a print before a production run. Lower case and the full-ASCII pairs are not offered, and everything runs in your browser with no storage, uploads or network access.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* code39-core:start */
+var Code39Core = (function(){
+"use strict";
+var ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-. $/+%";
+var PATTERNS = [
+  0x034, 0x121, 0x061, 0x160, 0x031, 0x130, 0x070, 0x025, 0x124, 0x064,
+  0x109, 0x049, 0x148, 0x019, 0x118, 0x058, 0x00D, 0x10C, 0x04C, 0x01C,
+  0x103, 0x043, 0x142, 0x013, 0x112, 0x052, 0x007, 0x106, 0x046, 0x016,
+  0x181, 0x0C1, 0x1C0, 0x091, 0x190, 0x0D0, 0x085, 0x184, 0x0C4, 0x0A8,
+  0x0A2, 0x08A, 0x02A
+];
+var ASTERISK = 0x094;
+var QUIET_MODULES = 10;
+var RATIO = 3;
+var MAX_LENGTH = 40;
+var MODULE_MM = 0.25;
+var MESSAGES = {
+  empty: "Enter the text to encode.",
+  tooLong: "Keep the barcode text to 40 characters or fewer.",
+  asterisk: "The asterisk is the start and stop symbol, so it cannot appear in the data.",
+  charset: "Code 39 carries A-Z, 0-9, space and - . $ / + % only; upper-case the text or remove the other characters."
+};
+var DEFAULTS = { text: "VT-2026-001", checkDigit: true };
+function fail(message){ throw new Error(message); }
+function validate(text){
+  var raw = text == null ? "" : String(text);
+  if (raw.length === 0) fail(MESSAGES.empty);
+  if (raw.length > MAX_LENGTH) fail(MESSAGES.tooLong);
+  for (var i = 0; i < raw.length; i += 1){
+    var ch = raw.charAt(i);
+    if (ch === "*") fail(MESSAGES.asterisk);
+    if (ALPHABET.indexOf(ch) < 0) fail(MESSAGES.charset);
+  }
+  return raw;
+}
+function widths(code){
+  var out = [], i;
+  for (i = 8; i >= 0; i -= 1) out.push(((code >> i) & 1) ? RATIO : 1);
+  return out;
+}
+function symbolBits(code){
+  var w = widths(code), bits = "", i, j;
+  for (i = 0; i < w.length; i += 1){
+    for (j = 0; j < w[i]; j += 1) bits += (i % 2 === 0) ? "1" : "0";
+  }
+  return bits;
+}
+function round(value, places){
+  var p = Math.pow(10, places);
+  return Math.round(value * p + 1e-9) / p;
+}
+function plan(text, checkDigit){
+  var encoded = text, total = 0, i;
+  if (checkDigit){
+    for (i = 0; i < text.length; i += 1) total += ALPHABET.indexOf(text.charAt(i));
+    encoded = text + ALPHABET.charAt(total % 43);
+  }
+  var symbols = [symbolBits(ASTERISK)];
+  for (i = 0; i < encoded.length; i += 1) symbols.push(symbolBits(PATTERNS[ALPHABET.indexOf(encoded.charAt(i))]));
+  symbols.push(symbolBits(ASTERISK));
+  var bits = symbols.join("0");
+  var modules = QUIET_MODULES * 2 + bits.length;
+  return {
+    text: text,
+    encoded: encoded,
+    check: checkDigit ? encoded.charAt(encoded.length - 1) : null,
+    checkValue: checkDigit ? ALPHABET.indexOf(encoded.charAt(encoded.length - 1)) : null,
+    checkDigit: checkDigit,
+    characters: symbols.length,
+    bits: bits,
+    modules: modules,
+    widthMm: round(modules * MODULE_MM, 1)
+  };
+}
+function calculate(input){
+  var options = input || {};
+  var text = validate(options.text == null ? DEFAULTS.text : options.text);
+  var checkDigit = options.checkDigit == null ? DEFAULTS.checkDigit : !!options.checkDigit;
+  return plan(text, checkDigit);
+}
+return {
+  calculate: calculate,
+  ALPHABET: ALPHABET,
+  PATTERNS: PATTERNS,
+  ASTERISK: ASTERISK,
+  QUIET_MODULES: QUIET_MODULES,
+  RATIO: RATIO,
+  MAX_LENGTH: MAX_LENGTH,
+  MESSAGES: MESSAGES,
+  DEFAULTS: DEFAULTS
+};
+})();
+/* code39-core:end */
+(function(){
+"use strict";
+var els = {
+  text: document.getElementById("in-text"),
+  check: document.getElementById("in-check"),
+  hri: document.getElementById("in-hri"),
+  err: document.getElementById("err"),
+  out: document.getElementById("out")
+};
+function clear(node){ while (node.firstChild) node.removeChild(node.firstChild); }
+function svgRect(svg, x, width, height){
+  var node = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  node.setAttribute("x", String(x));
+  node.setAttribute("y", "0");
+  node.setAttribute("width", String(width));
+  node.setAttribute("height", String(height));
+  node.setAttribute("fill", "#000");
+  svg.appendChild(node);
+}
+function addRow(parent, label, text){
+  var row = document.createElement("div"); row.className = "row";
+  var key = document.createElement("span"); key.className = "k"; key.textContent = label;
+  var val = document.createElement("span"); val.className = "v"; val.textContent = text;
+  row.appendChild(key); row.appendChild(val); parent.appendChild(row);
+}
+function placeholder(message){
+  var span = document.createElement("span");
+  span.style.color = "var(--text-dim,#9aa3b2)"; span.textContent = message;
+  els.out.appendChild(span);
+}
+function render(result){
+  clear(els.out);
+  var block = document.createElement("div"); block.className = "bc";
+  var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 " + result.modules + " 70");
+  svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", "Code 39 barcode for " + result.encoded);
+  var background = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  background.setAttribute("x", "0"); background.setAttribute("y", "0");
+  background.setAttribute("width", String(result.modules)); background.setAttribute("height", "70");
+  background.setAttribute("fill", "#fff");
+  svg.appendChild(background);
+  var x = Code39Core.QUIET_MODULES;
+  for (var i = 0; i < result.bits.length; i += 1){
+    if (result.bits.charAt(i) === "1"){
+      var run = 1;
+      while (i + run < result.bits.length && result.bits.charAt(i + run) === "1") run += 1;
+      svgRect(svg, x, run, 70);
+      x += run; i += run - 1;
+    } else {
+      x += 1;
+    }
+  }
+  block.appendChild(svg);
+  if (els.hri.checked){
+    var caption = document.createElement("p"); caption.className = "bc-text";
+    caption.textContent = result.encoded;
+    block.appendChild(caption);
+  }
+  els.out.appendChild(block);
+  addRow(els.out, "Encoded text", result.encoded);
+  addRow(els.out, "Check character", result.check === null ? "not used"
+    : (result.check === " " ? "space" : result.check) + " (value " + result.checkValue + ")");
+  addRow(els.out, "Symbol characters", String(result.characters) + " including start and stop");
+  addRow(els.out, "Modules", String(result.modules));
+  addRow(els.out, "Width at 0.25 mm module", result.widthMm + " mm");
+}
+function run(){
+  var result;
+  try {
+    result = Code39Core.calculate({ text: els.text.value, checkDigit: els.check.checked });
+  } catch (error){
+    els.err.textContent = error.message; clear(els.out);
+    placeholder("Enter upper-case text to draw a barcode."); return;
+  }
+  els.err.textContent = ""; render(result);
+}
+els.text.addEventListener("input", run);
+els.check.addEventListener("change", run);
+els.hri.addEventListener("change", run);
+document.getElementById("barcode-form").addEventListener("submit", function(event){ event.preventDefault(); run(); });
+run();
+})();
+</script>
+</body>
+</html>
