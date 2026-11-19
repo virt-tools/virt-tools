@@ -269,7 +269,7 @@ const pageDirs = fs.readdirSync(path.join(root, 'frontend', 'tools'), { withFile
   .filter((entry) => entry.isDirectory()).length;
 assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageDirs,
   'every listed tool record has a page');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Developer').length, 51, 'Developer count');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Developer').length, 52, 'Developer count');
 const record = catalog.tools.find((tool) => tool.slug === 'editorconfig-resolver');
 assert.ok(record, 'catalog record present');
 assert.equal(record.name, 'EditorConfig Settings Resolver');

@@ -239418,6 +239418,478 @@
         }
       ],
       "listed": true
+    },
+    {
+      "slug": "makefile-build-order-planner",
+      "name": "Makefile Build Order Planner",
+      "description": "Work out the order make would build a goal in: paste a Makefile, name a target, and see every recipe in dependency order, the pattern rules that fill in, the prerequisites assumed to exist as files, and any cycle. Runs locally in your browser.",
+      "category": "Developer",
+      "legacyCategory": null,
+      "subcategory": "Analysis & validation",
+      "tags": [
+        "developer",
+        "make",
+        "makefile",
+        "gnu make",
+        "build order",
+        "dependency graph",
+        "dry run",
+        "analysis-validation"
+      ],
+      "aliases": [
+        "Makefile dry run",
+        "make build order",
+        "make dependency order",
+        "Makefile target order",
+        "make prerequisite order",
+        "Makefile dependency graph",
+        "make -n planner",
+        "make target chain",
+        "GNU make order planner"
+      ],
+      "icon": "🧰",
+      "added": "2026-11-19T07:05:00Z",
+      "risk": "low",
+      "maturity": "draft",
+      "reviewedAt": null,
+      "method": "The planner reads the part of GNU make that decides order: explicit rules written targets: prerequisites, pattern rules with one %, recipe lines that begin with a tab, an inline recipe after a semicolon, order-only prerequisites after a pipe, .PHONY, .DEFAULT_GOAL, and the variable operators =, :=, ::=, ?= and +=. Rule lines are expanded when they are read, which is when make expands them, so a target list or prerequisite list that uses a variable reassigned further down the file keeps the earlier value; recipe lines are expanded with the values the variables hold at the end of the file, because make expands them when the recipe runs. The goal is the name in the goal field, otherwise .DEFAULT_GOAL, otherwise the first rule whose target is neither special nor a pattern. The walk is depth first, left to right: each prerequisite and everything below it is placed before its dependent, every target appears once at its first completion, and order-only prerequisites are visited after the ordinary ones. A prerequisite with no rule of its own is assumed to exist as a file, since a browser cannot stat the filesystem, and is reported separately instead of being dropped. A target whose own rule names prerequisites but no recipe takes the recipe of the first matching pattern rule and keeps its own prerequisites, which is what make's implicit rule search does. The planner refuses an empty field, more than 30,000 characters, a recipe before the first rule, a line that is neither a rule, an assignment nor a tab-indented recipe, a pattern containing more than one %, a rule that mixes pattern and ordinary targets, a goal containing whitespace, a goal with no rule and no matching pattern, a file with no default target, more than 400 rule lines or 600 steps, and any cycle, which make would resolve by dropping a prerequisite. An undefined variable expands to nothing, as in make, and is listed; functions such as $(shell ...) and $(wildcard ...), conditionals, include, target-specific variables and suffix rules are reported as not modelled rather than guessed. Nothing is executed and no file is read from disk.",
+      "sources": [
+        {
+          "title": "GNU Make manual, section 4.2 \"Rule Syntax\" - the targets: prerequisites form, the tab-indented recipe and the inline recipe after a semicolon",
+          "url": "https://www.gnu.org/software/make/manual/html_node/Rule-Syntax.html"
+        },
+        {
+          "title": "GNU Make manual, section 4.6 \"Phony Targets\" - why a .PHONY prerequisite is run every time and why phoniness is not inherited",
+          "url": "https://www.gnu.org/software/make/manual/html_node/Phony-Targets.html"
+        },
+        {
+          "title": "GNU Make manual, section 10.8 \"Implicit Rule Search Algorithm\" - how a target with no recipe takes one from a pattern rule, and how a stem fills in the prerequisites",
+          "url": "https://www.gnu.org/software/make/manual/html_node/Implicit-Rule-Search.html"
+        }
+      ],
+      "testCases": [
+        {
+          "name": "A C program through an implicit rule",
+          "kind": "golden",
+          "input": {
+            "makefile": "CC := cc\nCFLAGS := -O2 -Wall\nOBJS := main.o util.o\nTARGET := app\n\n.PHONY: all clean\n\nall: $(TARGET)\n\n$(TARGET): $(OBJS)\n\t$(CC) $(CFLAGS) -o $@ $^\n\n%.o: %.c\n\t$(CC) $(CFLAGS) -c $< -o $@\n\nclean:\n\trm -f $(OBJS) $(TARGET)",
+            "goal": "all"
+          },
+          "expected": {
+            "steps": [
+              "main.o",
+              "util.o",
+              "app",
+              "all"
+            ],
+            "commands": 3,
+            "depth": 3,
+            "externals": [
+              "main.c",
+              "util.c"
+            ],
+            "headline": "4 steps"
+          }
+        },
+        {
+          "name": "A target that adds its own header prerequisite",
+          "kind": "golden",
+          "input": {
+            "makefile": "all: app\n\tcc -o app a.o b.o\napp: a.o b.o\n\tcc -o app a.o b.o\na.o: a.c common.h\nb.o: b.c common.h\n\tcc -c b.c -o b.o\n%.o: %.c\n\tcc -c $< -o $@",
+            "goal": "all"
+          },
+          "expected": {
+            "steps": [
+              "a.o",
+              "b.o",
+              "app",
+              "all"
+            ],
+            "commands": 4,
+            "depth": 3,
+            "externals": [
+              "a.c",
+              "common.h",
+              "b.c"
+            ],
+            "headline": "4 steps"
+          }
+        },
+        {
+          "name": "An order-only directory prerequisite",
+          "kind": "golden",
+          "input": {
+            "makefile": "PANDOC := pandoc\n\nout/report.pdf: report.md | out\n\t$(PANDOC) report.md -o $@\n\nout:\n\tmkdir -p out\n\n.PHONY: clean\nclean:\n\trm -rf out",
+            "goal": "out/report.pdf"
+          },
+          "expected": {
+            "steps": [
+              "out",
+              "out/report.pdf"
+            ],
+            "commands": 2,
+            "depth": 2,
+            "externals": [
+              "report.md"
+            ],
+            "headline": "2 steps"
+          }
+        },
+        {
+          "name": "A chain of phony release steps",
+          "kind": "golden",
+          "input": {
+            "makefile": "VERSION ?= 1.4.0\nNAME := widget\n\n.PHONY: test build release publish\n\ntest:\n\tgo test ./...\n\nbuild: test\n\tgo build -o bin/$(NAME) ./cmd/$(NAME)\n\nrelease: build\n\ttar czf $(NAME)-$(VERSION).tgz bin/$(NAME)\n\npublish: release\n\t@echo \"uploading $(NAME) $(VERSION)\"",
+            "goal": "publish"
+          },
+          "expected": {
+            "steps": [
+              "test",
+              "build",
+              "release",
+              "publish"
+            ],
+            "commands": 4,
+            "depth": 4,
+            "externals": [],
+            "headline": "4 steps"
+          }
+        },
+        {
+          "name": "A prerequisite frozen at read time",
+          "kind": "golden",
+          "input": {
+            "makefile": "OBJS = a.o\nall: $(OBJS)\n\techo $(OBJS)\nOBJS = b.o\na.o:\n\ttouch a\nb.o:\n\ttouch b",
+            "goal": "all"
+          },
+          "expected": {
+            "steps": [
+              "a.o",
+              "all"
+            ],
+            "commands": 2,
+            "depth": 2,
+            "externals": [],
+            "headline": "2 steps"
+          }
+        },
+        {
+          "name": "A recursive variable resolved at use",
+          "kind": "golden",
+          "input": {
+            "makefile": "A = $(B)\nB = hello\nall:\n\techo $(A)",
+            "goal": "all"
+          },
+          "expected": {
+            "steps": [
+              "all"
+            ],
+            "commands": 1,
+            "depth": 1,
+            "externals": [],
+            "headline": "1 step"
+          }
+        },
+        {
+          "name": "A conditional assignment keeps the first value",
+          "kind": "golden",
+          "input": {
+            "makefile": "C ?= one\nC ?= two\nall:\n\techo $(C)",
+            "goal": "all"
+          },
+          "expected": {
+            "steps": [
+              "all"
+            ],
+            "commands": 1,
+            "depth": 1,
+            "externals": [],
+            "headline": "1 step"
+          }
+        },
+        {
+          "name": "An appended variable joins with a space",
+          "kind": "golden",
+          "input": {
+            "makefile": "F = a\nF += b b\nall:\n\techo $(F)",
+            "goal": "all"
+          },
+          "expected": {
+            "steps": [
+              "all"
+            ],
+            "commands": 1,
+            "depth": 1,
+            "externals": [],
+            "headline": "1 step"
+          }
+        },
+        {
+          "name": "Two targets from one rule",
+          "kind": "golden",
+          "input": {
+            "makefile": "all: x.o y.o\n\techo link\nx.o y.o: common.h\n\ttouch $@",
+            "goal": "all"
+          },
+          "expected": {
+            "steps": [
+              "x.o",
+              "y.o",
+              "all"
+            ],
+            "commands": 3,
+            "depth": 2,
+            "externals": [
+              "common.h"
+            ],
+            "headline": "3 steps"
+          }
+        },
+        {
+          "name": "A pattern with a directory prefix",
+          "kind": "golden",
+          "input": {
+            "makefile": "build/%.o: src/%.c\n\tcc -c $< -o $@",
+            "goal": "build/x.o"
+          },
+          "expected": {
+            "steps": [
+              "build/x.o"
+            ],
+            "commands": 1,
+            "depth": 1,
+            "externals": [
+              "src/x.c"
+            ],
+            "headline": "1 step"
+          }
+        },
+        {
+          "name": "The default goal comes from the variable",
+          "kind": "boundary",
+          "input": {
+            "makefile": ".DEFAULT_GOAL := build\nall:\n\techo all\nbuild:\n\techo build",
+            "goal": ""
+          },
+          "expected": {
+            "steps": [
+              "build"
+            ],
+            "commands": 1,
+            "depth": 1,
+            "externals": [],
+            "headline": "1 step"
+          }
+        },
+        {
+          "name": "A simple variable freezes an unset reference",
+          "kind": "boundary",
+          "input": {
+            "makefile": "A := $(B)\nB = hello\nall:\n\techo $(A)|$(B)",
+            "goal": "all"
+          },
+          "expected": {
+            "steps": [
+              "all"
+            ],
+            "commands": 1,
+            "depth": 1,
+            "externals": [],
+            "headline": "1 step"
+          }
+        },
+        {
+          "name": "An inline recipe after the semicolon",
+          "kind": "boundary",
+          "input": {
+            "makefile": "all: ; echo inline",
+            "goal": "all"
+          },
+          "expected": {
+            "steps": [
+              "all"
+            ],
+            "commands": 1,
+            "depth": 1,
+            "externals": [],
+            "headline": "1 step"
+          }
+        },
+        {
+          "name": "A second rule merges prerequisites and replaces the recipe",
+          "kind": "boundary",
+          "input": {
+            "makefile": "all: a\n\techo one\nall: b\n\techo two\na:\n\ttouch a\nb:\n\ttouch b",
+            "goal": "all"
+          },
+          "expected": {
+            "steps": [
+              "a",
+              "b",
+              "all"
+            ],
+            "commands": 3,
+            "depth": 2,
+            "externals": [],
+            "headline": "3 steps"
+          }
+        },
+        {
+          "name": "A continued prerequisite list",
+          "kind": "boundary",
+          "input": {
+            "makefile": "OBJS = a.o \\\n       b.o\nall: $(OBJS)\n\techo done\na.o:\n\ttouch a\nb.o:\n\ttouch b",
+            "goal": "all"
+          },
+          "expected": {
+            "steps": [
+              "a.o",
+              "b.o",
+              "all"
+            ],
+            "commands": 3,
+            "depth": 2,
+            "externals": [],
+            "headline": "3 steps"
+          }
+        },
+        {
+          "name": "A goal that only groups prerequisites",
+          "kind": "boundary",
+          "input": {
+            "makefile": "all: build\nbuild:",
+            "goal": "all"
+          },
+          "expected": {
+            "steps": [
+              "build",
+              "all"
+            ],
+            "commands": 0,
+            "depth": 2,
+            "externals": [],
+            "headline": "2 steps"
+          }
+        },
+        {
+          "name": "A variable that refers to itself",
+          "kind": "boundary",
+          "input": {
+            "makefile": "A = $(A)\nall:\n\techo $(A)",
+            "goal": "all"
+          },
+          "expected": {
+            "steps": [
+              "all"
+            ],
+            "commands": 1,
+            "depth": 1,
+            "externals": [],
+            "headline": "1 step"
+          }
+        },
+        {
+          "name": "An order-only prerequisite is built but not listed as normal",
+          "kind": "boundary",
+          "input": {
+            "makefile": "x: a | b\n\tcp a x\na:\n\ttouch a\nb:\n\ttouch b",
+            "goal": "x"
+          },
+          "expected": {
+            "steps": [
+              "a",
+              "b",
+              "x"
+            ],
+            "commands": 3,
+            "depth": 2,
+            "externals": [],
+            "headline": "3 steps"
+          }
+        },
+        {
+          "name": "An empty field",
+          "kind": "validation",
+          "input": {
+            "makefile": "   \n\n",
+            "goal": "all"
+          },
+          "expectedError": "Paste a Makefile first."
+        },
+        {
+          "name": "A recipe before the first rule",
+          "kind": "validation",
+          "input": {
+            "makefile": "\techo hi\nall:\n\techo hi",
+            "goal": "all"
+          },
+          "expectedError": "Line 1: a recipe line starts before the first rule. make says \"recipe commences before first target\"."
+        },
+        {
+          "name": "A line with a missing separator",
+          "kind": "validation",
+          "input": {
+            "makefile": "all:\n\techo hi\n   echo bad",
+            "goal": "all"
+          },
+          "expectedError": "Line 3: missing separator. A rule needs a colon between targets and prerequisites, and every recipe line starts with a tab."
+        },
+        {
+          "name": "A pattern with two percent signs",
+          "kind": "validation",
+          "input": {
+            "makefile": "a%%.o: %.c\n\tcc",
+            "goal": "a"
+          },
+          "expectedError": "Line 1: the pattern a%%.o contains more than one %, which make rejects."
+        },
+        {
+          "name": "A rule mixing pattern and ordinary targets",
+          "kind": "validation",
+          "input": {
+            "makefile": "a %.o: b\n\tcc",
+            "goal": "a"
+          },
+          "expectedError": "Line 1: make refuses a rule that mixes pattern targets and ordinary targets."
+        },
+        {
+          "name": "Two goals in the goal field",
+          "kind": "validation",
+          "input": {
+            "makefile": "a:\n\techo",
+            "goal": "a b"
+          },
+          "expectedError": "Enter one goal, for example all."
+        },
+        {
+          "name": "A goal with no rule",
+          "kind": "validation",
+          "input": {
+            "makefile": "all:\n\techo hi",
+            "goal": "nope"
+          },
+          "expectedError": "No rule to make target 'nope'. It is not defined in this Makefile and no pattern rule matches it."
+        },
+        {
+          "name": "A Makefile without a default target",
+          "kind": "validation",
+          "input": {
+            "makefile": ".PHONY: all",
+            "goal": ""
+          },
+          "expectedError": "Name a goal: this Makefile has no default target and no .DEFAULT_GOAL."
+        },
+        {
+          "name": "A three-target cycle",
+          "kind": "validation",
+          "input": {
+            "makefile": "a: b\n\tx\nb: c\n\ty\nc: a\n\tz",
+            "goal": "a"
+          },
+          "expectedError": "Circular dependency: a -> b -> c -> a. make would drop one of these prerequisites with a warning; no build order exists for the file as written."
+        }
+      ],
+      "listed": true
     }
   ]
 }

@@ -248,9 +248,9 @@ for (const testCase of record.testCases) {
 // ---- The generated surfaces list the page and the catalog stays consistent.
 const toolsJs = fs.readFileSync(path.join(root, 'frontend/assets/tools.js'), 'utf8');
 assert.ok(toolsJs.includes(slug), 'tools.js lists the slug');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2141, 'public tools');
-assert.equal(catalog.tools.length, 2401, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Developer').length, 51,
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2142, 'public tools');
+assert.equal(catalog.tools.length, 2402, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Developer').length, 52,
   'Developer count');
 assert.equal(catalog.tools.filter((tool) => tool.slug === slug).length, 1, 'one record');
 
