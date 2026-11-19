@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Keyframe-Aligned Trim Planner — Virtual Tools</title>
+<meta name="description" content="Find the keyframes around an in and out point at a given frame rate and encoder interval, and see how many frames a stream copy must decode or re-encode.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:12px;margin:10px 0}
+label.f{font-size:13px;opacity:.85;display:block;margin-bottom:4px}
+.field{background:var(--bg,#14181f);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px}
+.field:focus-within{border-color:var(--accent,#6ea8fe);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#6ea8fe) 18%,transparent)}
+.field input,.field select{box-sizing:border-box;width:100%;min-width:0;background:transparent;color:var(--text,#e6e6e6);border:none;font-size:18px;font-family:ui-monospace,monospace;padding:2px 0;outline:none}
+.field input:focus,.field select:focus{box-shadow:none}
+.field .unit{font-size:11px;color:var(--text-dim,#9aa3b2);margin-top:4px}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:14px 0}
+.out .big{font-size:clamp(1.7rem,7vw,2.3rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:4px 0 6px;overflow-wrap:anywhere}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45}
+.out .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:14px}
+.out .row:last-child{border-bottom:none}
+.out .row .k{color:var(--text-dim,#9aa3b2)}
+.out .row .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right;overflow-wrap:anywhere}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.err{color:var(--bad,#f87171);font-size:13px;margin:6px 0;min-height:1.2em}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;margin:10px 0 0;line-height:1.5}
+.chart{margin:14px 0}
+.chart h2{font-size:1.05rem;margin:0 0 8px}
+.chart-scroll{overflow:auto;border:1px solid var(--border,#2a2f3a);border-radius:8px}
+.chart table{border-collapse:collapse;width:100%;min-width:0}
+.chart caption{text-align:left;color:var(--text-dim,#9aa3b2);font-size:12.5px;padding:8px 9px}
+.chart th,.chart td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--border,#2a2f3a);font-size:13.5px;white-space:nowrap}
+.chart th{position:sticky;top:0;background:var(--bg-elev,#171a21);color:var(--text,#e6e6e6);font-weight:600}
+.chart td{font-family:ui-monospace,monospace}
+.chart tr:last-child td{border-bottom:none}
+@media (max-width:420px){
+  .chart th,.chart td{padding:6px 7px;font-size:13px}
+  .chart th:nth-child(4),.chart td:nth-child(4){display:none}
+}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<h1>Keyframe-Aligned Trim Planner</h1>
+<p>See where the keyframes fall around an in and out point, and how much of a cut a stream copy can keep without re-encoding.</p>
+</div>
+<div class="panel">
+<form id="trim-form" novalidate>
+<div class="grid2">
+<div class="field"><label class="f" for="in-fps">Frame rate</label><select id="in-fps"><option value="23.976">23.976 fps</option><option value="24">24 fps</option><option value="25" selected>25 fps</option><option value="29.97">29.97 fps</option><option value="30">30 fps</option><option value="48">48 fps</option><option value="50">50 fps</option><option value="59.94">59.94 fps</option><option value="60">60 fps</option></select><div class="unit">rate of the source clip</div></div>
+<div class="field"><label class="f" for="in-interval">Keyframe interval</label><input type="text" id="in-interval" inputmode="decimal" autocomplete="off" spellcheck="false" value="2"><div class="unit">seconds, 0.1 to 60</div></div>
+<div class="field"><label class="f" for="in-in">In point</label><input type="text" id="in-in" inputmode="numeric" autocomplete="off" spellcheck="false" value="00:00:10:10"><div class="unit">HH:MM:SS:FF, or ;FF for drop-frame</div></div>
+<div class="field"><label class="f" for="in-out">Out point</label><input type="text" id="in-out" inputmode="numeric" autocomplete="off" spellcheck="false" value="00:00:11:24"><div class="unit">last frame kept, inclusive</div></div>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions"><button type="submit" id="run">Plan the cut</button></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"></div>
+<section class="chart" id="chart-wrap" hidden>
+<h2 id="chart-title">Keyframes near the in point</h2>
+<div class="chart-scroll">
+<table>
+<caption>Five keyframe positions around the in point, with their offset from it.</caption>
+<thead><tr><th scope="col">Keyframe</th><th scope="col">Frame</th><th scope="col">Offset from in (frames)</th><th scope="col">Offset (s)</th></tr></thead>
+<tbody id="chart-rows"></tbody>
+</table>
+</div>
+</section>
+<p class="note">A closed GOP starts with a keyframe and runs for the encoder's keyframe interval, so keyframes fall on whole multiples of the GOP length from the first frame of the file. A stream copy can only start on a keyframe: to keep the requested out point exactly, the copy has to run to the next keyframe and the two ends are decoded or re-encoded. The out point is treated as the last frame kept, so a 25 fps cut from 00:00:10:10 to 00:00:11:24 keeps forty frames. Keyframes inserted at scene cuts, open GOPs and encoders that vary the interval will move the real boundaries, so use this as the plan and check the file's keyframe list before a final lossless export. Use a semicolon before the frame count for drop-frame timecode at 29.97 or 59.94 fps; at other rates only the colon form is accepted. Nothing is uploaded, stored or fetched — the page runs entirely in your browser.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* ktp-core:start */
+var KtpCore = (function(){
+  "use strict";
+  var MIN_FPS = 1;
+  var MAX_FPS = 240;
+  var MIN_INTERVAL = 0.1;
+  var MAX_INTERVAL = 60;
+  var MAX_HOURS = 23;
+  var TABLE_ROWS = 5;
+  var TABLE_BEFORE = 2;
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function nominalFrames(fps){
+    return Math.round(fps);
+  }
+
+  function dropCount(nominal){
+    if (nominal === 30) return 2;
+    if (nominal === 60) return 4;
+    if (nominal === 120) return 6;
+    return 0;
+  }
+
+  function isDropRate(fps){
+    return Math.abs(fps - 29.97) < 0.005 || Math.abs(fps - 59.94) < 0.005 || Math.abs(fps - 119.88) < 0.005;
+  }
+
+  function parseFps(value){
+    var raw = String(value == null ? "" : value).trim();
+    if (!raw) fail("Frame rate is required.");
+    if (!/^[0-9]+(?:\.[0-9]+)?$/.test(raw)) fail("Frame rate must be a number between 1 and 240 fps.");
+    var fps = Number(raw);
+    if (!(fps >= MIN_FPS && fps <= MAX_FPS)) fail("Frame rate must be between 1 and 240 fps.");
+    return fps;
+  }
+
+  function parseInterval(value){
+    var raw = String(value == null ? "" : value).trim();
+    if (!raw) fail("Keyframe interval is required.");
+    if (!/^(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)$/.test(raw)) {
+      fail("Keyframe interval must be a number between 0.1 and 60 seconds.");
+    }
+    var interval = Number(raw);
+    if (!(interval >= MIN_INTERVAL && interval <= MAX_INTERVAL)) {
+      fail("Keyframe interval must be between 0.1 and 60 seconds.");
+    }
+    return interval;
+  }
+
+  function gopForInterval(interval, fps){
+    return Math.max(1, Math.round(interval * fps));
+  }
+
+  function parseTimecode(value, label, fps){
+    var raw = String(value == null ? "" : value).trim();
+    if (!raw) fail(label + " is required.");
+    var match = /^([0-9]{1,2}):([0-9]{2}):([0-9]{2})([:;])([0-9]{1,2})$/.exec(raw);
+    if (!match) fail(label + " must look like HH:MM:SS:FF.");
+    var hh = Number(match[1]);
+    var mm = Number(match[2]);
+    var ss = Number(match[3]);
+    var sep = match[4];
+    var ff = Number(match[5]);
+    if (hh > MAX_HOURS) fail("Timecode hours must be from 0 to 23.");
+    if (mm > 59 || ss > 59) fail(label + " must look like HH:MM:SS:FF.");
+    var nominal = nominalFrames(fps);
+    var drop = sep === ";";
+    if (drop && !isDropRate(fps)) fail("Drop-frame timecode needs 29.97 or 59.94 fps.");
+    if (ff >= nominal) fail(label + " frame must be less than " + nominal + " at " + fps + " fps.");
+    var totalMinutes = hh * 60 + mm;
+    if (drop && ss === 0 && totalMinutes % 10 !== 0 && ff < dropCount(nominal)) {
+      fail("That drop-frame timecode names a frame that does not exist.");
+    }
+    var frames = (hh * 3600 + mm * 60 + ss) * nominal + ff;
+    if (drop) frames -= dropCount(nominal) * (totalMinutes - Math.floor(totalMinutes / 10));
+    return { frames: frames, drop: drop, value: raw };
+  }
+
+  function pad2(value){
+    return (value < 10 ? "0" : "") + value;
+  }
+
+  function timecodeFromFrames(frames, fps, drop){
+    var nominal = nominalFrames(fps);
+    var total = Math.floor(frames);
+    if (drop){
+      var dropFrames = dropCount(nominal);
+      var framesPer10Minutes = nominal * 600 - dropFrames * 9;
+      var framesPerMinute = nominal * 60 - dropFrames;
+      var tens = Math.floor(total / framesPer10Minutes);
+      var remainder = total % framesPer10Minutes;
+      total += dropFrames * 9 * tens;
+      if (remainder > dropFrames) {
+        total += dropFrames * Math.floor((remainder - dropFrames) / framesPerMinute);
+      }
+    }
+    var ff = total % nominal;
+    var seconds = Math.floor(total / nominal);
+    var ss = seconds % 60;
+    var mm = Math.floor(seconds / 60) % 60;
+    var hh = Math.floor(seconds / 3600);
+    return pad2(hh) + ":" + pad2(mm) + ":" + pad2(ss) + (drop ? ";" : ":") + pad2(ff);
+  }
+
+  function analyse(options){
+    var opts = options || {};
+    var fps = parseFps(opts.fps == null ? 25 : opts.fps);
+    var interval = parseInterval(opts.interval == null ? 2 : opts.interval);
+    var inPoint = parseTimecode(opts.in == null ? "00:00:10:10" : opts.in, "In point", fps);
+    var outPoint = parseTimecode(opts.out == null ? "00:00:11:24" : opts.out, "Out point", fps);
+    if (inPoint.drop !== outPoint.drop) {
+      fail("Use the same timecode notation for the in and out points.");
+    }
+    if (outPoint.frames < inPoint.frames) fail("The out point must be at or after the in point.");
+
+    var gopFrames = gopForInterval(interval, fps);
+    var inFrame = inPoint.frames;
+    var outFrame = outPoint.frames;
+    var clipFrames = outFrame - inFrame + 1;
+    var startFrame = Math.floor(inFrame / gopFrames) * gopFrames;
+    var endFrame = Math.ceil((outFrame + 1) / gopFrames) * gopFrames;
+    var preroll = inFrame - startFrame;
+    var tail = endFrame - outFrame - 1;
+    var smartFrames = endFrame - startFrame;
+    var reencodeFrames = preroll + tail;
+    var keyframesInside = Math.floor(outFrame / gopFrames) - Math.ceil(inFrame / gopFrames) + 1;
+    if (keyframesInside < 0) keyframesInside = 0;
+
+    var firstRow = Math.max(0, Math.floor(inFrame / gopFrames) - TABLE_BEFORE);
+    var table = [];
+    for (var index = 0; index < TABLE_ROWS; index += 1) {
+      var frame = (firstRow + index) * gopFrames;
+      table.push({
+        frame: frame,
+        timecode: timecodeFromFrames(frame, fps, inPoint.drop),
+        offsetFrames: frame - inFrame,
+        offsetSeconds: (frame - inFrame) / fps
+      });
+    }
+
+    return {
+      fps: fps,
+      interval: interval,
+      dropFrame: inPoint.drop,
+      gopFrames: gopFrames,
+      gopExact: interval * fps,
+      effectiveInterval: gopFrames / fps,
+      inFrame: inFrame,
+      outFrame: outFrame,
+      clipFrames: clipFrames,
+      inTimecode: timecodeFromFrames(inFrame, fps, inPoint.drop),
+      outTimecode: timecodeFromFrames(outFrame, fps, inPoint.drop),
+      durationTimecode: timecodeFromFrames(clipFrames, fps, false),
+      keyframeBeforeFrame: startFrame,
+      keyframeBeforeTc: timecodeFromFrames(startFrame, fps, inPoint.drop),
+      preroll: preroll,
+      smartStartFrame: startFrame,
+      smartStartTc: timecodeFromFrames(startFrame, fps, inPoint.drop),
+      smartEndFrame: endFrame,
+      smartEndTc: timecodeFromFrames(endFrame, fps, inPoint.drop),
+      smartFrames: smartFrames,
+      keyframesInRange: smartFrames / gopFrames,
+      tail: tail,
+      reencodeFrames: reencodeFrames,
+      requestedShare: clipFrames / smartFrames,
+      keyframesInside: keyframesInside,
+      table: table
+    };
+  }
+
+  return {
+    analyse: analyse,
+    parseFps: parseFps,
+    parseInterval: parseInterval,
+    parseTimecode: parseTimecode,
+    timecodeFromFrames: timecodeFromFrames,
+    gopForInterval: gopForInterval,
+    nominalFrames: nominalFrames,
+    isDropRate: isDropRate,
+    minFps: MIN_FPS,
+    maxFps: MAX_FPS,
+    minInterval: MIN_INTERVAL,
+    maxInterval: MAX_INTERVAL,
+    maxHours: MAX_HOURS,
+    tableRows: TABLE_ROWS,
+    tableBefore: TABLE_BEFORE
+  };
+})();
+/* ktp-core:end */
+(function(){
+  "use strict";
+
+  var els = {
+    fps: document.getElementById("in-fps"),
+    interval: document.getElementById("in-interval"),
+    inp: document.getElementById("in-in"),
+    out: document.getElementById("in-out"),
+    err: document.getElementById("err"),
+    result: document.getElementById("out"),
+    rows: document.getElementById("chart-rows"),
+    chart: document.getElementById("chart-wrap")
+  };
+
+  function clear(node){
+    while (node.firstChild) node.removeChild(node.firstChild);
+  }
+  function placeholder(node, message){
+    var span = document.createElement("span");
+    span.style.color = "var(--text-dim,#9aa3b2)";
+    span.textContent = message;
+    node.appendChild(span);
+  }
+  function grouped(value){
+    return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  }
+  function addRow(parent, key, value){
+    var row = document.createElement("div");
+    row.className = "row";
+    var k = document.createElement("span");
+    k.className = "k";
+    k.textContent = key;
+    var v = document.createElement("span");
+    v.className = "v";
+    v.textContent = value;
+    row.appendChild(k);
+    row.appendChild(v);
+    parent.appendChild(row);
+  }
+  function pct(value){
+    return (value * 100).toFixed(1) + "%";
+  }
+  function render(result){
+    clear(els.result);
+
+    var big = document.createElement("div");
+    big.className = "big";
+    big.textContent = result.keyframeBeforeTc;
+    var sub = document.createElement("div");
+    sub.className = "sub";
+    sub.textContent = result.preroll === 0
+      ? "The in point is already a keyframe (frame " + grouped(result.inFrame) + ")."
+      : "The nearest keyframe at or before the in point — " + grouped(result.preroll) + " frames before it.";
+    els.result.appendChild(big);
+    els.result.appendChild(sub);
+
+    addRow(els.result, "Requested cut", result.inTimecode + " to " + result.outTimecode);
+    addRow(els.result, "Frames kept", grouped(result.clipFrames) + " (" + result.durationTimecode + ")");
+    addRow(els.result, "GOP length", grouped(result.gopFrames) + " frames (" + result.effectiveInterval.toFixed(3) + " s)");
+    addRow(els.result, "Smart-render range", result.smartStartTc + " to " + result.smartEndTc);
+    addRow(els.result, "Frames in range", grouped(result.smartFrames));
+    addRow(els.result, "Preroll before in", grouped(result.preroll) + " frames");
+    addRow(els.result, "Frames after out", grouped(result.tail) + " frames");
+    addRow(els.result, "Outside the cut", grouped(result.reencodeFrames) + " of " + grouped(result.smartFrames) + " (" + pct(1 - result.requestedShare) + ")");
+    addRow(els.result, "Keyframes inside cut", grouped(result.keyframesInside));
+
+    clear(els.rows);
+    result.table.forEach(function(row){
+      var tr = document.createElement("tr");
+      [row.timecode, grouped(row.frame), (row.offsetFrames > 0 ? "+" : "") + grouped(row.offsetFrames),
+        (row.offsetSeconds > 0 ? "+" : "") + row.offsetSeconds.toFixed(3)].forEach(function(value){
+        var cell = document.createElement("td");
+        cell.textContent = value;
+        tr.appendChild(cell);
+      });
+      els.rows.appendChild(tr);
+    });
+    els.chart.hidden = false;
+  }
+
+  function calculate(){
+    var result;
+    try {
+      result = KtpCore.analyse({
+        fps: els.fps.value,
+        interval: els.interval.value,
+        in: els.inp.value,
+        out: els.out.value
+      });
+    } catch (error) {
+      els.err.textContent = error.message;
+      clear(els.result);
+      placeholder(els.result, "Check the frame rate, interval and timecodes above.");
+      clear(els.rows);
+      els.chart.hidden = true;
+      return;
+    }
+    els.err.textContent = "";
+    render(result);
+  }
+
+  [els.fps, els.interval, els.inp, els.out].forEach(function(control){
+    control.addEventListener("input", calculate);
+    control.addEventListener("change", calculate);
+  });
+  document.getElementById("trim-form").addEventListener("submit", function(event){
+    event.preventDefault();
+    calculate();
+  });
+
+  calculate();
+})();
+</script>
+</body>
+</html>
