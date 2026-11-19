@@ -166,8 +166,8 @@ assert.ok(record.description.length > 80 && record.description.endsWith('browser
 assert.ok(record.testCases.length >= 20, 'the catalog carries the test cases');
 assert.equal(catalog.tools.filter((tool) => tool.slug === slug).length, 1, 'the slug is unique');
 assert.equal(catalog.tools.filter((tool) => tool.name === record.name).length, 1, 'the name is unique');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Time').length, 51, 'Time count');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2149, 'public tools');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Time').length, 52, 'Time count');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2150, 'public tools');
 
 // ---- Replay every case stored in the record.
 for (const item of record.testCases) {

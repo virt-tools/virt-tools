@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Swatch Internet Time Converter &mdash; Virtual Tools</title>
+<meta name="description" content="Convert a UTC date and time into Swatch Internet Time (.beat, BMT) and turn a .beat value back into the UTC instant, with the exact beat fraction, the BMT clock and a countdown to the next beat.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px 14px;margin:0}
+.field{display:flex;flex-direction:column;gap:6px;margin:0;min-width:0}
+.field label{font-size:13px;color:var(--text-dim,#9aa3b2)}
+.field input{box-sizing:border-box;width:100%;min-height:44px;padding:10px 12px;border-radius:8px;
+  border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);color:var(--text,#e6e6e6);
+  font:inherit;font-size:16px;outline:none}
+.field input:focus-visible{outline:2px solid var(--accent,#6ea8fe);outline-offset:1px}
+.hint{font-size:12px;color:var(--text-dim,#9aa3b2);margin:0;line-height:1.4}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:16px 0 0}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);
+  background:var(--accent,#6ea8fe);color:var(--on-accent,#fff);cursor:pointer;min-height:44px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.actions button.ghost{background:transparent;color:var(--accent,#6ea8fe)}
+.err{color:var(--bad,#f87171);font-size:13px;margin:12px 0 0;min-height:1.2em;line-height:1.5}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:18px 0 0}
+.out[hidden]{display:none}
+.big{font-size:clamp(1.35rem,5vw,1.9rem);line-height:1.25;margin:0;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.sub{color:var(--text-dim,#9aa3b2);font-size:13px;line-height:1.5;margin:8px 0 0}
+.facts{display:grid;gap:8px;margin:16px 0 0}
+.facts div{display:flex;justify-content:space-between;gap:12px;align-items:baseline;
+  border-bottom:1px solid var(--border,#2a2f3a);padding:0 0 8px}
+.facts div:last-child{border-bottom:none;padding-bottom:0}
+.facts span{font-size:13px;color:var(--text-dim,#9aa3b2)}
+.facts strong{font-variant-numeric:tabular-nums;font-size:15px;white-space:nowrap}
+table{display:table;width:100%;border-collapse:collapse;font-size:13px;margin:18px 0 0}
+caption{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-dim,#9aa3b2);text-align:left;padding:0 0 6px}
+th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--border,#2a2f3a)}
+thead th{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--text-dim,#9aa3b2);font-weight:600}
+td.num,th.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+tr:last-child td,tr:last-child th{border-bottom:none}
+.note{color:var(--text-dim,#9aa3b2);font-size:0.85rem;line-height:1.55;margin:18px 0 0}
+@media (max-width:560px){
+  .actions button{flex:1 1 auto}
+  th,td{padding:7px 5px}
+}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<h1>Swatch Internet Time Converter</h1>
+<p>Turn a UTC instant into .beat time and back &mdash; 1,000 beats a day on BMT, a fixed UTC+1 clock.</p>
+</div>
+<div class="panel">
+<form id="beat-form" novalidate>
+<div class="grid">
+<div class="field">
+<label for="in-utc">UTC date and time</label>
+<input type="datetime-local" id="in-utc" step="1" autocomplete="off" aria-describedby="utc-hint">
+<p class="hint" id="utc-hint">the instant you want to read as a .beat</p>
+</div>
+</div>
+<p class="err" id="err" role="alert" aria-live="polite"></p>
+<div class="actions">
+<button type="submit" id="run">Convert to .beat</button>
+<button type="button" class="ghost" id="now">Use now</button>
+</div>
+</form>
+<div class="out" id="out" hidden aria-live="polite" aria-atomic="true">
+<p class="big" id="headline"></p>
+<p class="sub" id="sub"></p>
+<div class="facts">
+<div><span>BMT date</span><strong id="fact-date"></strong></div>
+<div><span>BMT clock</span><strong id="fact-clock"></strong></div>
+<div><span>Exact beats</span><strong id="fact-exact"></strong></div>
+<div><span>Next beat</span><strong id="fact-next"></strong></div>
+</div>
+<table>
+<caption>Each BMT hour as a .beat</caption>
+<thead><tr><th scope="col">BMT</th><th scope="col" class="num">.beat</th><th scope="col" class="num">UTC</th></tr></thead>
+<tbody id="rows"></tbody>
+</table>
+</div>
+</div>
+<div class="panel">
+<form id="reverse-form" novalidate>
+<div class="grid">
+<div class="field">
+<label for="in-date">BMT date</label>
+<input type="date" id="in-date" autocomplete="off" aria-describedby="date-hint">
+<p class="hint" id="date-hint">UTC+1, so @000 is 23:00 UTC the day before</p>
+</div>
+<div class="field">
+<label for="in-beat">.beat value</label>
+<input type="text" id="in-beat" inputmode="decimal" autocomplete="off" value="@512" aria-describedby="beat-hint">
+<p class="hint" id="beat-hint">0 to 999.999, for example @512</p>
+</div>
+</div>
+<p class="err" id="err2" role="alert" aria-live="polite"></p>
+<div class="actions">
+<button type="submit" id="run2">Convert to UTC</button>
+</div>
+</form>
+<div class="out" id="out2" hidden aria-live="polite" aria-atomic="true">
+<p class="big" id="headline2"></p>
+<p class="sub" id="sub2"></p>
+</div>
+</div>
+<p class="note" id="method">Swatch Internet Time splits the mean solar day into 1,000 equal .beats instead of hours and minutes, so one .beat is 86.4 seconds &mdash; 1 minute 26.4 seconds &mdash; and an hour is 41&#8532; beats. The reading is taken from Biel Mean Time, the fixed UTC+1 offset Swatch chose, which never observes daylight saving; @000 is therefore 23:00 UTC, and the BMT day starts on the previous UTC date. A .beat names a time of day, not a date, so the second panel asks which BMT date to place it on. A watch shows whole beats; this page also reports the exact fraction, counts to the next beat, and shows fractions of a second to 0.1 s. It is the fixed-offset civil scale Swatch defined, not mean solar time measured at Biel, and it ignores leap seconds. Everything runs in your browser; nothing is sent or stored.</p>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* swatch-core:start */
+var SwatchCore = (function(){
+  "use strict";
+  var BEAT_MS = 86400;          // 86.4 seconds in milliseconds
+  var DAY_MS = 86400000;
+  var BMT_OFFSET_MS = 3600000; // Biel Mean Time is UTC+1, year round
+  var MESSAGES = {
+    emptyUtc: "Enter a UTC date and time.",
+    badUtc: "Write the UTC time as YYYY-MM-DD HH:MM, with optional seconds.",
+    utcRange: "Use a year between 1000 and 9999.",
+    emptyDate: "Enter the BMT date.",
+    badDate: "Write the BMT date as YYYY-MM-DD.",
+    emptyBeat: "Enter a .beat value.",
+    badBeat: "Write the .beat value as digits, with an optional @ and up to three decimals.",
+    beatRange: "A .beat value must be at least 0 and below 1,000."
+  };
+  var TIME_PATTERN = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?$/;
+  var DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function pad(value, width){
+    var text = String(value);
+    while (text.length < width) text = "0" + text;
+    return text;
+  }
+
+  function round(value, places){
+    var factor = Math.pow(10, places);
+    return Math.round(value * factor) / factor;
+  }
+
+  function trim(value, places){
+    var text = round(value, places).toFixed(places);
+    if (text.indexOf(".") > -1) text = text.replace(/0+$/, "").replace(/\.$/, "");
+    return text === "-0" ? "0" : text;
+  }
+
+  // Date.UTC normalises impossible dates (February 30 becomes March 2), so every
+  // component is read back to refuse a date the calendar does not have.
+  function realDate(y, mo, d, h, mi, s){
+    if (y < 1000 || y > 9999) return false;
+    var ms = Date.UTC(y, mo - 1, d, h, mi, s);
+    var check = new Date(ms);
+    return check.getUTCFullYear() === y && check.getUTCMonth() + 1 === mo &&
+      check.getUTCDate() === d && check.getUTCHours() === h &&
+      check.getUTCMinutes() === mi && check.getUTCSeconds() === s;
+  }
+
+  function parseUtc(value){
+    var text = String(value == null ? "" : value).trim();
+    if (text === "") fail(MESSAGES.emptyUtc);
+    var match = TIME_PATTERN.exec(text);
+    if (!match) fail(MESSAGES.badUtc);
+    var y = Number(match[1]);
+    var mo = Number(match[2]);
+    var d = Number(match[3]);
+    var h = Number(match[4]);
+    var mi = Number(match[5]);
+    var s = match[6] === undefined ? 0 : Number(match[6]);
+    if (y < 1000 || y > 9999) fail(MESSAGES.utcRange);
+    if (!realDate(y, mo, d, h, mi, s)) fail(MESSAGES.badUtc);
+    return Date.UTC(y, mo - 1, d, h, mi, s);
+  }
+
+  // Midnight of a BMT calendar date, expressed on the UTC epoch.
+  function parseBmtDate(value){
+    var text = String(value == null ? "" : value).trim();
+    if (text === "") fail(MESSAGES.emptyDate);
+    var match = DATE_PATTERN.exec(text);
+    if (!match) fail(MESSAGES.badDate);
+    var y = Number(match[1]);
+    var mo = Number(match[2]);
+    var d = Number(match[3]);
+    if (!realDate(y, mo, d, 0, 0, 0)) fail(MESSAGES.badDate);
+    return Date.UTC(y, mo - 1, d, 0, 0, 0);
+  }
+
+  function parseBeat(value){
+    var text = String(value == null ? "" : value).trim();
+    if (text === "") fail(MESSAGES.emptyBeat);
+    if (text.charAt(0) === "@") text = text.slice(1).trim();
+    if (!/^\d{1,4}(?:\.\d{1,3})?$/.test(text)) fail(MESSAGES.badBeat);
+    var beat = Number(text);
+    if (!isFinite(beat) || beat < 0 || beat >= 1000) fail(MESSAGES.beatRange);
+    return beat;
+  }
+
+  function formatDate(ms){
+    var date = new Date(ms);
+    return pad(date.getUTCFullYear(), 4) + "-" + pad(date.getUTCMonth() + 1, 2) + "-" +
+      pad(date.getUTCDate(), 2);
+  }
+
+  // HH:MM:SS, plus a tenth of a second when the instant is not on a whole second.
+  function formatClock(ms){
+    var rounded = Math.round(ms / 100) * 100;
+    var date = new Date(rounded);
+    var text = pad(date.getUTCHours(), 2) + ":" + pad(date.getUTCMinutes(), 2) + ":" +
+      pad(date.getUTCSeconds(), 2);
+    var tenth = date.getUTCMilliseconds() / 100;
+    if (tenth !== 0) text += "." + tenth;
+    return text;
+  }
+
+  function formatUtc(ms){
+    return formatDate(ms) + " " + formatClock(ms) + " UTC";
+  }
+
+  function formatBmt(ms){
+    return formatDate(ms + BMT_OFFSET_MS) + " " + formatClock(ms + BMT_OFFSET_MS) + " BMT";
+  }
+
+  function formatBeat(value){
+    return "@" + pad(Math.floor(value), 3);
+  }
+
+  // .beat of an instant: BMT clock time divided into 1,000 parts of 86.4 s.
+  function toBeat(utcMs){
+    var bmtMs = utcMs + BMT_OFFSET_MS;
+    var dayMs = ((bmtMs % DAY_MS) + DAY_MS) % DAY_MS;
+    var exact = dayMs / BEAT_MS;
+    var beat = Math.floor(exact);
+    if (beat > 999) beat = 999;
+    var toNext = BEAT_MS - (dayMs % BEAT_MS);
+    if (toNext >= BEAT_MS - 1e-9) toNext = BEAT_MS;
+    return {
+      utcMs: utcMs,
+      bmtMs: bmtMs,
+      dayMs: dayMs,
+      beat: beat,
+      exact: exact,
+      secondsToNext: toNext / 1000
+    };
+  }
+
+  // A .beat names a time of day, so the BMT date is part of the question.
+  function fromBeat(dateText, beatText){
+    var midnight = parseBmtDate(dateText);
+    var beat = parseBeat(beatText);
+    var utcMs = midnight - BMT_OFFSET_MS + Math.round(beat * BEAT_MS);
+    return { dateMs: midnight, beat: beat, utcMs: utcMs };
+  }
+
+  function solve(input){
+    var at = toBeat(parseUtc(input && input.utc));
+    return {
+      beat: at.beat,
+      exact: at.exact,
+      beatText: formatBeat(at.beat),
+      utcText: formatUtc(at.utcMs),
+      bmtDate: formatDate(at.bmtMs),
+      bmtTime: formatClock(at.bmtMs),
+      secondsToNext: at.secondsToNext,
+      nextBeat: (at.beat + 1) % 1000
+    };
+  }
+
+  function solveReverse(input){
+    var at = fromBeat(input && input.date, input && input.beat);
+    var utcDate = formatDate(at.utcMs);
+    return {
+      beat: at.beat,
+      beatText: formatBeat(at.beat),
+      exact: at.beat,
+      bmtDate: formatDate(at.dateMs),
+      bmtTime: formatClock(at.dateMs + Math.round(at.beat * BEAT_MS)),
+      utcDate: utcDate,
+      utcTime: formatClock(at.utcMs),
+      earlierUtcDate: utcDate !== formatDate(at.dateMs)
+    };
+  }
+
+  // The eight BMT hour marks, with the UTC hour they fall on.
+  function beatMarks(){
+    var rows = [];
+    for (var hour = 0; hour <= 21; hour += 3){
+      rows.push({
+        bmt: pad(hour, 2) + ":00",
+        beat: Math.floor(hour * 3600000 / BEAT_MS),
+        utc: pad(((hour - 1) % 24 + 24) % 24, 2) + ":00"
+      });
+    }
+    return rows;
+  }
+
+  return {
+    BEAT_MS: BEAT_MS,
+    DAY_MS: DAY_MS,
+    BMT_OFFSET_MS: BMT_OFFSET_MS,
+    MESSAGES: MESSAGES,
+    pad: pad,
+    round: round,
+    trim: trim,
+    parseUtc: parseUtc,
+    parseBmtDate: parseBmtDate,
+    parseBeat: parseBeat,
+    formatDate: formatDate,
+    formatClock: formatClock,
+    formatUtc: formatUtc,
+    formatBmt: formatBmt,
+    formatBeat: formatBeat,
+    toBeat: toBeat,
+    fromBeat: fromBeat,
+    solve: solve,
+    solveReverse: solveReverse,
+    beatMarks: beatMarks
+  };
+})();
+/* swatch-core:end */
+(function(){
+  "use strict";
+  var C = SwatchCore;
+  var els = {
+    form: document.getElementById("beat-form"),
+    utc: document.getElementById("in-utc"),
+    err: document.getElementById("err"),
+    out: document.getElementById("out"),
+    headline: document.getElementById("headline"),
+    sub: document.getElementById("sub"),
+    factDate: document.getElementById("fact-date"),
+    factClock: document.getElementById("fact-clock"),
+    factExact: document.getElementById("fact-exact"),
+    factNext: document.getElementById("fact-next"),
+    rows: document.getElementById("rows"),
+    now: document.getElementById("now"),
+    reverseForm: document.getElementById("reverse-form"),
+    date: document.getElementById("in-date"),
+    beat: document.getElementById("in-beat"),
+    err2: document.getElementById("err2"),
+    out2: document.getElementById("out2"),
+    headline2: document.getElementById("headline2"),
+    sub2: document.getElementById("sub2")
+  };
+
+  // datetime-local wants YYYY-MM-DDTHH:MM:SS in UTC here, not local time.
+  function utcFieldValue(ms){
+    var date = new Date(ms);
+    return C.formatDate(ms) + "T" + C.pad(date.getUTCHours(), 2) + ":" +
+      C.pad(date.getUTCMinutes(), 2) + ":" + C.pad(date.getUTCSeconds(), 2);
+  }
+
+  function renderMarks(){
+    var marks = C.beatMarks();
+    while (els.rows.firstChild) els.rows.removeChild(els.rows.firstChild);
+    for (var index = 0; index < marks.length; index += 1){
+      var row = document.createElement("tr");
+      var head = document.createElement("th");
+      head.setAttribute("scope", "row");
+      head.textContent = marks[index].bmt;
+      row.appendChild(head);
+      var beat = document.createElement("td");
+      beat.className = "num";
+      beat.textContent = C.formatBeat(marks[index].beat);
+      row.appendChild(beat);
+      var utc = document.createElement("td");
+      utc.className = "num";
+      utc.textContent = marks[index].utc;
+      row.appendChild(utc);
+      els.rows.appendChild(row);
+    }
+  }
+
+  function render(result){
+    els.headline.textContent = result.beatText;
+    els.sub.textContent = "Beat " + result.beat + " of 1,000 \u2014 " + result.utcText +
+      " reads " + result.bmtTime + " BMT.";
+    els.factDate.textContent = result.bmtDate;
+    els.factClock.textContent = result.bmtTime;
+    els.factExact.textContent = C.trim(result.exact, 3) + " / 1,000";
+    els.factNext.textContent = C.formatBeat(result.nextBeat) + " in " +
+      C.trim(result.secondsToNext, 1) + " s";
+  }
+
+  function calculate(){
+    var result;
+    try {
+      result = C.solve({ utc: els.utc.value });
+    } catch (error){
+      els.err.textContent = error.message;
+      els.out.hidden = true;
+      return;
+    }
+    els.err.textContent = "";
+    render(result);
+    els.out.hidden = false;
+  }
+
+  function renderReverse(result){
+    els.headline2.textContent = result.utcDate + " " + result.utcTime + " UTC";
+    els.sub2.textContent = result.beatText + " on BMT " + result.bmtDate + " \u2014 BMT " +
+      result.bmtTime + ", " + C.trim(result.exact, 3) + " beats after midnight." +
+      (result.earlierUtcDate
+        ? " The BMT day begins at 23:00 UTC on the date before, so this instant falls on the earlier UTC date."
+        : "");
+  }
+
+  function calculateReverse(){
+    var result;
+    try {
+      result = C.solveReverse({ date: els.date.value, beat: els.beat.value });
+    } catch (error){
+      els.err2.textContent = error.message;
+      els.out2.hidden = true;
+      return;
+    }
+    els.err2.textContent = "";
+    renderReverse(result);
+    els.out2.hidden = false;
+  }
+
+  els.form.addEventListener("submit", function(event){
+    event.preventDefault();
+    calculate();
+  });
+  els.now.addEventListener("click", function(){
+    els.utc.value = utcFieldValue(Date.now());
+    calculate();
+  });
+  els.reverseForm.addEventListener("submit", function(event){
+    event.preventDefault();
+    calculateReverse();
+  });
+  els.utc.addEventListener("input", function(){
+    els.err.textContent = "";
+  });
+  Array.prototype.forEach.call([els.date, els.beat], function(field){
+    field.addEventListener("input", function(){
+      els.err2.textContent = "";
+    });
+  });
+
+  renderMarks();
+  var now = Date.now();
+  els.utc.value = utcFieldValue(now);
+  els.date.value = C.formatDate(now + C.BMT_OFFSET_MS);
+  calculate();
+  calculateReverse();
+})();
+</script>
+</body>
+</html>
