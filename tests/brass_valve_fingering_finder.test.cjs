@@ -239,8 +239,8 @@ assert.equal(new Set(ids).size, ids.length, 'duplicate element ids: ' +
   ids.filter((id, index) => ids.indexOf(id) !== index).join(','));
 
 const publicCount = catalog.tools.filter((tool) => tool.listed).length;
-assert.equal(publicCount, 2152, 'public total');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Music').length, 51, 'Music count');
+assert.equal(publicCount, 2153, 'public total');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Music').length, 52, 'Music count');
 
 console.log(slug + ': 20 catalog cases, ' + fixture.vectors.length + ' reference vectors, ' +
   fixture.table.length + ' published rows, identities and page contracts passed');
