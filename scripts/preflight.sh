@@ -419,6 +419,7 @@ node tests/code39_barcode_generator.test.cjs
 node tests/brewhouse_water_planner.test.cjs
 node tests/swatch_internet_time_converter.test.cjs
 node tests/dori_pixel_density_planner.test.cjs
+node tests/map_sheet_layout_planner.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
