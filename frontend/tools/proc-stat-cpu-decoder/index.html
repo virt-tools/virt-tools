@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>proc/stat CPU Utilization Decoder &mdash; Virtual Tools</title>
+<meta name="description" content="Paste two /proc/stat samples and read per-CPU utilization: busy, user, system, I/O wait, steal and idle percentages, the sample window and the all-CPU average.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.field{display:flex;flex-direction:column;gap:6px;margin:0}
+textarea#stat{box-sizing:border-box;width:100%;min-height:190px;max-width:760px;padding:10px 12px;border-radius:8px;
+  border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);color:var(--text,#e6e6e6);
+  font-family:ui-monospace,monospace;font-size:14px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;
+  resize:vertical;outline:none}
+textarea#stat:focus-visible{outline:2px solid var(--accent,#6ea8fe);outline-offset:1px}
+textarea#stat::placeholder{color:var(--text-dim,#9aa3b2)}
+.hint{color:var(--text-dim,#9aa3b2);font-size:12.5px;margin:10px 0 0;line-height:1.5;max-width:760px}
+.hint code{font-family:ui-monospace,monospace;font-size:12px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:12px 0 0}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.err{color:var(--bad,#f87171);font-size:13px;margin:10px 0 0;min-height:1.2em;max-width:760px;line-height:1.45}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:16px 0 0}
+.out .label{text-align:center;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-dim,#9aa3b2)}
+.out .big{font-size:clamp(1.15rem,5.4vw,1.8rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:2px 0 4px;overflow-wrap:anywhere;line-height:1.35}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:6px 0 0;line-height:1.5;overflow-wrap:anywhere}
+.out .notes{margin:12px 0 0;padding:0;list-style:none;display:grid;gap:6px}
+.out .notes li{font-size:12.5px;line-height:1.45;color:var(--text-dim,#9aa3b2);padding-left:14px;position:relative;overflow-wrap:anywhere}
+.out .notes li::before{content:"!";position:absolute;left:0;color:var(--warn,#fbbf24);font-weight:700}
+.out .notes li.ok::before{content:"i";color:var(--accent,#6ea8fe)}
+.rows-title{color:var(--text-dim,#9aa3b2);font-size:12.5px;letter-spacing:.03em;margin:18px 0 0}
+.rows{display:table;width:100%;border-collapse:collapse;margin:6px 0 0;font-size:13.5px}
+.rows[hidden]{display:none}
+.rows th,.rows td{border-bottom:1px solid var(--border,#2a2f3a);padding:7px 8px;text-align:left;vertical-align:top}
+.rows thead th{color:var(--text-dim,#9aa3b2);font-weight:600;font-size:12px;letter-spacing:.03em}
+.rows tbody th{font-weight:600;font-family:ui-monospace,monospace;white-space:nowrap}
+.rows td{font-family:ui-monospace,monospace;text-align:right;white-space:nowrap}
+.rows tbody tr.all td{font-weight:700}
+.rows tbody tr.all th{font-weight:700}
+.note{color:var(--text-dim,#9aa3b2);font-size:12.5px;line-height:1.55;margin:18px 0 0;max-width:820px}
+@media (max-width:620px){
+  .actions button{flex:1 1 auto}
+  .rows{display:block;width:100%}
+  .rows thead{display:none}
+  .rows tbody{display:block}
+  .rows tbody tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:3px 10px;border-bottom:1px solid var(--border,#2a2f3a);padding:10px 0}
+  .rows tbody th,.rows tbody td{display:block;width:auto;border:0;padding:0;text-align:left;white-space:normal}
+  .rows tbody th{grid-column:1 / -1;font-size:14px}
+  .rows tbody td::before{content:attr(data-label) ":";color:var(--text-dim,#9aa3b2);margin-right:.45em;font-size:12px}
+}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<h1>proc/stat CPU Utilization Decoder</h1>
+<p>Paste two captures of /proc/stat and see how the time between them was spent on each CPU: busy, user, system, I/O wait, steal and idle, plus the all-CPU average and the length of the sample window.</p>
+</div>
+<div class="panel">
+<form id="stat-form" novalidate>
+<div class="field">
+<label for="stat">Two /proc/stat samples, one after the other</label>
+<textarea id="stat" rows="14" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="cpu  48000000 1200 16000000 192000000 240000 8000 3600000 20000 0 0&#10;cpu0 8000000 1200 3100000 48000000 60000 2000 900000 5000 0 0&#10;..."></textarea>
+</div>
+<p class="hint">Capture with <code>cat /proc/stat; sleep 2; cat /proc/stat</code>. Only the <code>cpu</code> and <code>cpuN</code> lines are read, so the intr, ctxt and btime lines can stay. The file is read as two samples: the first cpu line you paste starts the first, and the first repeat of a line starts the second.</p>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions">
+<button type="submit">Work out utilization</button>
+</div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"></div>
+<p class="rows-title" id="rows-title" hidden>Per-CPU time breakdown</p>
+<table class="rows" id="rows" aria-labelledby="rows-title" hidden>
+<thead><tr><th scope="col">CPU</th><th scope="col">Busy (%)</th><th scope="col">User (%)</th><th scope="col">System (%)</th><th scope="col">I/O wait (%)</th><th scope="col">Steal (%)</th><th scope="col">Idle (%)</th></tr></thead>
+<tbody id="rows-body"></tbody>
+</table>
+<p class="note" id="method">Two samples are required: the counters in /proc/stat are totals since boot, so only the difference between two reads says what the machine did in between. Blank lines, comments and every line that does not start with cpu followed by nothing or a CPU number are ignored. Each cpu line is read as four to ten whole-number counters in the documented order: user, nice, system, idle, iowait, irq, softirq, steal, guest and guest_nice. A counter that went backwards is clamped to zero, because the kernel may lower iowait, and the page says how many were clamped. For each CPU, total is the sum of the first eight counters, idle is the idle plus iowait difference, and busy is total minus idle; user, nice, system, irq, softirq and steal therefore add up to busy, and time waiting on I/O is counted as idle rather than busy. Guest time is reported under user and nice and is not added to the total a second time. Every share is that difference divided by the CPU's total difference, rounded half up to one decimal, and idle is the exact complement of busy so the two always add to 100. The sample window is the all-CPU difference divided by 100 ticks per second and by the number of CPUs, which assumes the usual USER_HZ of 100 and a CPU list that did not change between the reads; it is an estimate, not a clock reading. Without the aggregate cpu line the all-CPU row is the sum of the per-CPU differences; without cpuN lines no per-CPU row or window is shown. Everything runs in your browser on the text you paste: nothing is read from the host, sent, stored or uploaded, and nothing here is a diagnosis of the machine.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* procstat-core:start */
+var ProcStatCore = (function(){
+  "use strict";
+  var USER_HZ = 100;
+  var COLUMNS = ["user", "nice", "system", "idle", "iowait", "irq", "softirq", "steal", "guest", "guest_nice"];
+  var DEFAULT_SAMPLES = [
+    "cpu  32000000 4800 12400000 192000000 240000 8000 3600000 20000 0 0",
+    "cpu0 8000000 1200 3100000 48000000 60000 2000 900000 5000 0 0",
+    "cpu1 8000000 1200 3100000 48000000 60000 2000 900000 5000 0 0",
+    "cpu2 8000000 1200 3100000 48000000 60000 2000 900000 5000 0 0",
+    "cpu3 8000000 1200 3100000 48000000 60000 2000 900000 5000 0 0",
+    "ctxt 981273644",
+    "",
+    "cpu  32000305 4800 12400048 192000270 240128 8006 3600013 20030 0 0",
+    "cpu0 8000150 1200 3100020 48000020 60002 2002 900006 5000 0 0",
+    "cpu1 8000010 1200 3100004 48000180 60004 2001 900001 5000 0 0",
+    "cpu2 8000025 1200 3100010 48000040 60120 2001 900004 5000 0 0",
+    "cpu3 8000120 1200 3100014 48000030 60002 2002 900002 5030 0 0",
+    "ctxt 981292117"
+  ].join("\n");
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function clip(text){
+    var value = String(text);
+    return value.length > 32 ? value.slice(0, 32) + "..." : value;
+  }
+
+  function parseSamples(input){
+    var raw = String(input == null ? "" : input);
+    if (!raw.trim()) fail("Paste two captures of /proc/stat, one taken before the interval and one after it.");
+    var lines = raw.split(/\r?\n/);
+    var samples = [];
+    var current = null;
+    var lineNumbers = [];
+    for (var index = 0; index < lines.length; index += 1){
+      var line = lines[index];
+      var head = /^\s*(cpu[0-9]*)(?:\s+(.*?))?\s*$/.exec(line);
+      if (!head) continue;
+      var label = head[1];
+      var rest = head[2] || "";
+      if (!rest) fail("Line " + (index + 1) + " names " + label + " but has no counters after it.");
+      var tokens = rest.split(/\s+/);
+      var values = [];
+      for (var at = 0; at < tokens.length; at += 1){
+        if (!/^[0-9]+$/.test(tokens[at])){
+          fail("Line " + (index + 1) + " (" + label + ") has a counter that is not a whole number: \"" + clip(tokens[at]) + "\".");
+        }
+        values.push(parseInt(tokens[at], 10));
+      }
+      if (values.length < 4){
+        fail("Line " + (index + 1) + " (" + label + ") lists " + values.length + " counter"
+          + (values.length === 1 ? "" : "s") + "; /proc/stat prints at least user, nice, system and idle.");
+      }
+      if (values.length > 10){
+        fail("Line " + (index + 1) + " (" + label + ") lists " + values.length
+          + " counters; /proc/stat prints at most ten, from user through guest_nice.");
+      }
+      if (!current || Object.prototype.hasOwnProperty.call(current.labels, label)){
+        current = {labels: {}, order: []};
+        samples.push(current);
+        lineNumbers.push(index + 1);
+      }
+      current.labels[label] = values;
+      current.order.push(label);
+    }
+    if (!samples.length){
+      fail("No cpu lines were found. Paste the output of cat /proc/stat, including its cpu and cpuN lines.");
+    }
+    if (samples.length > 2){
+      fail("Three or more samples are present. Paste exactly two captures: one before the interval and one after it.");
+    }
+    return {samples: samples, firstLine: lineNumbers[0], secondLine: lineNumbers.length > 1 ? lineNumbers[1] : null};
+  }
+
+  function tenthsOf(part, whole){
+    var scaled = whole > 0 ? part * 1000 : 0;
+    var quotient = Math.floor(scaled / whole);
+    var rest = scaled - quotient * whole;
+    return quotient + (2 * rest >= whole ? 1 : 0);
+  }
+
+  function share(part, whole){
+    return tenthsOf(part, whole) / 10;
+  }
+
+  function valueAt(values, index){
+    return index < values.length ? values[index] : 0;
+  }
+
+  function difference(first, second, label){
+    var counters = [];
+    var clamped = 0;
+    for (var index = 0; index < 8; index += 1){
+      var delta = valueAt(second, index) - valueAt(first, index);
+      if (delta < 0){
+        delta = 0;
+        clamped += 1;
+      }
+      counters.push(delta);
+    }
+    var total = 0;
+    for (var sum = 0; sum < counters.length; sum += 1) total += counters[sum];
+    if (total <= 0){
+      fail("No CPU time passed between the two samples for " + label + ", so there is no utilization to work out.");
+    }
+    return {counters: counters, total: total, clamped: clamped};
+  }
+
+  function describe(label, diff){
+    var counters = diff.counters;
+    var idleAll = counters[3] + counters[4];
+    var busy = diff.total - idleAll;
+    var busyTenths = tenthsOf(busy, diff.total);
+    return {
+      label: label,
+      totalJiffies: diff.total,
+      busyPercent: busyTenths / 10,
+      idlePercent: (1000 - busyTenths) / 10,
+      userPercent: share(counters[0], diff.total),
+      nicePercent: share(counters[1], diff.total),
+      systemPercent: share(counters[2], diff.total),
+      iowaitPercent: share(counters[4], diff.total),
+      irqPercent: share(counters[5], diff.total),
+      softirqPercent: share(counters[6], diff.total),
+      stealPercent: share(counters[7], diff.total)
+    };
+  }
+
+  function sortCpus(labels){
+    return labels.slice().sort(function(left, right){
+      return parseInt(left.slice(3), 10) - parseInt(right.slice(3), 10);
+    });
+  }
+
+  function decode(input){
+    var parsed = parseSamples(input);
+    if (parsed.samples.length < 2){
+      fail("Only one sample is present. Paste a second capture taken a few seconds later, so there are two sets of cpu lines.");
+    }
+    var first = parsed.samples[0];
+    var second = parsed.samples[1];
+    for (var at = 0; at < first.order.length; at += 1){
+      var label = first.order[at];
+      if (!Object.prototype.hasOwnProperty.call(second.labels, label)){
+        fail(label + " appears in the first sample but not the second; paste two captures of the same machine.");
+      }
+    }
+    for (var back = 0; back < second.order.length; back += 1){
+      var extra = second.order[back];
+      if (!Object.prototype.hasOwnProperty.call(first.labels, extra)){
+        fail(extra + " appears in the second sample but not the first; paste two captures of the same machine.");
+      }
+    }
+
+    var clamped = 0;
+    var diffs = {};
+    var totalsByCpu = {};
+    var labels = first.order.slice();
+    for (var index = 0; index < labels.length; index += 1){
+      var diff = difference(first.labels[labels[index]], second.labels[labels[index]], labels[index]);
+      diffs[labels[index]] = diff;
+      clamped += diff.clamped;
+      if (labels[index] !== "cpu") totalsByCpu[labels[index]] = diff.total;
+    }
+
+    var cpuLabels = sortCpus(Object.keys(totalsByCpu));
+    var rows = [];
+    var aggregate;
+    if (Object.prototype.hasOwnProperty.call(diffs, "cpu")){
+      aggregate = describe("cpu", diffs.cpu);
+    } else if (cpuLabels.length){
+      var summed = [0, 0, 0, 0, 0, 0, 0, 0];
+      for (var cpu = 0; cpu < cpuLabels.length; cpu += 1){
+        for (var column = 0; column < 8; column += 1) summed[column] += diffs[cpuLabels[cpu]].counters[column];
+      }
+      var total = 0;
+      for (var part = 0; part < 8; part += 1) total += summed[part];
+      aggregate = describe("cpu", {counters: summed, total: total, clamped: 0});
+    } else {
+      aggregate = null;
+    }
+    for (var row = 0; row < cpuLabels.length; row += 1){
+      rows.push(describe(cpuLabels[row], diffs[cpuLabels[row]]));
+    }
+
+    var cpuCount = cpuLabels.length;
+    var windowSeconds = null;
+    if (cpuCount > 0 && aggregate){
+      windowSeconds = Math.round((aggregate.totalJiffies * 100) / (USER_HZ * cpuCount)) / 100;
+    }
+
+    var notes = [];
+    notes.push({text: "Busy is total minus idle and iowait, so time spent waiting on I/O counts as idle; user, nice, system, irq, softirq and steal make up busy.", info: true});
+    if (clamped > 0){
+      notes.push({text: clamped + " counter" + (clamped === 1 ? "" : "s") + " decreased between the samples, which the kernel allows for iowait, so "
+        + (clamped === 1 ? "it was" : "they were") + " clamped to zero and the shares stay within the sample", info: false});
+    }
+    var guestTotal = 0;
+    for (var walk = 0; walk < labels.length; walk += 1){
+      var pair = [first.labels[labels[walk]], second.labels[labels[walk]]];
+      guestTotal += Math.max(0, valueAt(pair[1], 8) - valueAt(pair[0], 8));
+      guestTotal += Math.max(0, valueAt(pair[1], 9) - valueAt(pair[0], 9));
+    }
+    if (guestTotal > 0){
+      notes.push({text: "Guest time is reported under user and nice and is not added to the total again, so the shares are of host CPU time.", info: true});
+    }
+    if (!Object.prototype.hasOwnProperty.call(diffs, "cpu")){
+      notes.push({text: "This paste has no aggregate cpu line, so the all-CPU row is the sum of the per-CPU differences.", info: true});
+    }
+    if (!cpuLabels.length){
+      notes.push({text: "This paste has only the aggregate cpu line, so there is no per-CPU breakdown and the window cannot be worked out.", info: true});
+    }
+
+    var headline;
+    if (aggregate){
+      headline = aggregate.busyPercent.toFixed(1) + " % busy across "
+        + (cpuCount ? cpuCount + " CPU" + (cpuCount === 1 ? "" : "s") : "all CPUs");
+    } else {
+      headline = "No cpu lines to compare";
+    }
+    var subline;
+    if (windowSeconds !== null){
+      subline = windowSeconds.toFixed(2) + " s window at USER_HZ = " + USER_HZ + " across "
+        + cpuCount + " CPU" + (cpuCount === 1 ? "" : "s");
+      var busiest = null;
+      for (var pick = 0; pick < rows.length; pick += 1){
+        if (!busiest || rows[pick].busyPercent > busiest.busyPercent) busiest = rows[pick];
+      }
+      if (busiest) subline += ", " + busiest.label + " busiest at " + busiest.busyPercent.toFixed(1) + " %";
+    } else {
+      subline = "Aggregate cpu line only, at USER_HZ = " + USER_HZ;
+    }
+
+    return {
+      headline: headline,
+      subline: subline,
+      busyPercent: aggregate ? aggregate.busyPercent : 0,
+      idlePercent: aggregate ? aggregate.idlePercent : 0,
+      iowaitPercent: aggregate ? aggregate.iowaitPercent : 0,
+      stealPercent: aggregate ? aggregate.stealPercent : 0,
+      windowSeconds: windowSeconds,
+      cpuCount: cpuCount,
+      clamped: clamped,
+      rows: rows,
+      aggregate: aggregate,
+      notes: notes,
+      noteText: notes.map(function(note){ return note.text; }).join(" ")
+    };
+  }
+
+  return {
+    USER_HZ: USER_HZ,
+    COLUMNS: COLUMNS,
+    DEFAULT_SAMPLES: DEFAULT_SAMPLES,
+    parseSamples: parseSamples,
+    decode: decode
+  };
+})();
+/* procstat-core:end */
+(function(){
+  "use strict";
+  var C = ProcStatCore;
+  var els = {
+    form: document.getElementById("stat-form"),
+    input: document.getElementById("stat"),
+    err: document.getElementById("err"),
+    out: document.getElementById("out"),
+    rowsTitle: document.getElementById("rows-title"),
+    table: document.getElementById("rows"),
+    body: document.getElementById("rows-body")
+  };
+  var HEADERS = ["Busy", "User", "System", "I/O wait", "Steal", "Idle"];
+
+  function line(text, className){
+    var node = document.createElement("div");
+    node.className = className || "sub";
+    node.textContent = text;
+    return node;
+  }
+
+  function placeholder(message){
+    els.out.textContent = "";
+    var node = line(message);
+    node.style.padding = "18px 0 6px";
+    els.out.appendChild(node);
+  }
+
+  function hideRows(){
+    els.body.textContent = "";
+    els.rowsTitle.hidden = true;
+    els.table.hidden = true;
+  }
+
+  function cells(row){
+    return [
+      row.busyPercent.toFixed(1),
+      row.userPercent.toFixed(1),
+      row.systemPercent.toFixed(1),
+      row.iowaitPercent.toFixed(1),
+      row.stealPercent.toFixed(1),
+      row.idlePercent.toFixed(1)
+    ];
+  }
+
+  function appendRow(row, isAll){
+    var tr = document.createElement("tr");
+    if (isAll) tr.className = "all";
+    var head = document.createElement("th");
+    head.scope = "row";
+    head.textContent = isAll ? "All CPUs" : row.label;
+    tr.appendChild(head);
+    var values = cells(row);
+    for (var at = 0; at < values.length; at += 1){
+      var cell = document.createElement("td");
+      cell.setAttribute("data-label", HEADERS[at]);
+      cell.textContent = values[at];
+      tr.appendChild(cell);
+    }
+    els.body.appendChild(tr);
+  }
+
+  function render(result){
+    els.out.textContent = "";
+    els.out.appendChild(line("CPU utilization", "label"));
+    els.out.appendChild(line(result.headline, "big"));
+    els.out.appendChild(line(result.subline));
+    if (result.notes.length){
+      var list = document.createElement("ul");
+      list.className = "notes";
+      result.notes.forEach(function(note){
+        var item = document.createElement("li");
+        item.textContent = note.text;
+        if (note.info) item.className = "ok";
+        list.appendChild(item);
+      });
+      els.out.appendChild(list);
+    }
+    hideRows();
+    for (var at = 0; at < result.rows.length; at += 1) appendRow(result.rows[at], false);
+    if (result.aggregate && result.rows.length !== 1) appendRow(result.aggregate, true);
+    if (result.rows.length || result.aggregate){
+      els.rowsTitle.hidden = false;
+      els.table.hidden = false;
+    }
+  }
+
+  function decode(announce){
+    var raw = els.input.value;
+    if (!String(raw).trim()){
+      hideRows();
+      els.err.textContent = announce ? "Paste two captures of /proc/stat, one taken before the interval and one after it." : "";
+      placeholder("Paste two /proc/stat captures to break the time down.");
+      return;
+    }
+    var result;
+    try {
+      result = C.decode(raw);
+    } catch (error){
+      hideRows();
+      els.err.textContent = announce ? error.message : "";
+      placeholder("Paste two /proc/stat captures to break the time down.");
+      return;
+    }
+    els.err.textContent = "";
+    render(result);
+  }
+
+  function fit(){
+    els.input.style.height = "auto";
+    els.input.style.height = Math.min(340, Math.max(190, els.input.scrollHeight + 2)) + "px";
+  }
+
+  els.form.addEventListener("submit", function(event){
+    event.preventDefault();
+    fit();
+    decode(true);
+  });
+  els.input.addEventListener("input", function(){ fit(); decode(false); });
+  els.input.addEventListener("change", fit);
+
+  els.input.value = C.DEFAULT_SAMPLES;
+  els.input.scrollTop = 0;
+  els.input.setSelectionRange(0, 0);
+  fit();
+  decode(false);
+})();
+</script>
+</body>
+</html>

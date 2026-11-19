@@ -321,9 +321,9 @@ assert.equal(new Set(record.tags).size, record.tags.length, 'tags are internally
 for (const tag of ['system', 'linux', 'memory', 'meminfo', 'procfs']) {
   assert.ok(record.tags.includes(tag), 'new tag present: ' + tag);
 }
-assert.equal(catalog.tools.length, 2399, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2139, 'public tools');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'System').length, 51, 'System count');
+assert.equal(catalog.tools.length, 2400, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2140, 'public tools');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'System').length, 52, 'System count');
 
 // ---- Page contract: shared assets, labelled controls, no storage or network.
 const markupIds = [...html.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1]);
