@@ -243,9 +243,9 @@ for (const testCase of record.testCases) {
 // ---- The generated surfaces list the page and the catalog stays consistent.
 const toolsJs = fs.readFileSync(path.join(root, 'frontend/assets/tools.js'), 'utf8');
 assert.ok(toolsJs.includes(slug), 'tools.js lists the slug');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2140, 'public tools');
-assert.equal(catalog.tools.length, 2400, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Sports & Outdoors').length, 51,
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2141, 'public tools');
+assert.equal(catalog.tools.length, 2401, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Sports & Outdoors').length, 52,
   'Sports & Outdoors count');
 
 // ---- The page contract.

@@ -408,6 +408,7 @@ node tests/emergency_food_supply_planner.test.cjs
 node tests/dns_message_decoder.test.cjs
 node tests/critical_distance_calculator.test.cjs
 node tests/proc_stat_cpu_decoder.test.cjs
+node tests/throwing_sector_marking_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
