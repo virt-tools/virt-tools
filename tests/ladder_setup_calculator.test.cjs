@@ -179,8 +179,8 @@ assert.ok(/@media \(max-width:360px\)/.test(html), 'small-screen rule missing');
 assert.ok(!/style="[^"]*width:\s*\d{3,}px/.test(html), 'fixed wide inline styles');
 
 const publicCount = catalog.tools.filter((tool) => tool.listed).length;
-assert.equal(publicCount, 2136, 'the catalog keeps growing: ' + publicCount);
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Safety & Emergency').length, 49,
+assert.equal(publicCount, 2137, 'the catalog keeps growing: ' + publicCount);
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Safety & Emergency').length, 50,
   'Safety & Emergency count');
 
 console.log('ladder-setup-calculator: 24 catalog cases, ' + fixture.vectors.length +
