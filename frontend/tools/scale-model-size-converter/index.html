@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Scale Model Size Converter — Virtual Tools</title>
+<meta name="description" content="Convert a real dimension to a scale-model size and back at common modelling scales such as 1:72 and 1:35, or work out the scale of a model from its real and model lengths. Runs locally in your browser.">
+<link rel="stylesheet" href="/assets/style.css">
+<link rel="stylesheet" href="/assets/tool-css/tool-form-3c8cf9e7.css">
+<style>
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.out .big{line-height:1.2}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:-4px 0 10px}
+.out .row{gap:12px}
+.out .row .v{text-align:right}
+.out .sect{font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--text-dim,#9aa3b2);margin:16px 0 2px;font-weight:600}
+.field .hint{font-size:11px;color:var(--text-dim,#9aa3b2);margin-top:4px;line-height:1.35}
+.err{min-height:1.2em}
+.warn{color:var(--warn,#fbbf24);font-size:13px;margin:8px 0 0}
+.note{color:var(--text-dim,#9aa3b2);font-size:0.85rem;margin-top:10px}
+tr.hl .k{font-weight:700}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<h1>Scale Model Size Converter</h1>
+<p>Convert a real length to the size of a scale model and back, or find the scale of a model you already have. Runs locally in your browser.</p>
+</div>
+<div class="panel">
+<form id="scale-form" novalidate>
+<div class="grid2">
+<div class="field"><label class="f" for="in-mode">What do you have?</label><select id="in-mode"><option value="real">Real size → model size</option><option value="model">Model size → real size</option><option value="scale">Both sizes → find the scale</option></select><div class="unit">picks the direction</div></div>
+<div class="field"><label class="f" for="in-unit">Length unit</label><select id="in-unit"><option value="mm">millimetres (mm)</option><option value="cm">centimetres (cm)</option><option value="m" selected>metres (m)</option><option value="in">inches (in)</option><option value="ft">feet (ft)</option></select><div class="unit">for every length</div></div>
+<div class="field" id="scale-field"><label class="f" for="in-scale">Model scale</label><select id="in-scale"><option value="12">1:12 — large scale</option><option value="24">1:24 — car model</option><option value="32">1:32 — farm toy</option><option value="35">1:35 — military model</option><option value="48">1:48 — aircraft</option><option value="72" selected>1:72 — aircraft and military</option><option value="76">1:76 — OO railway</option><option value="87">1:87 — HO railway</option><option value="144">1:144 — small aircraft</option><option value="350">1:350 — ship model</option><option value="custom">Custom scale</option></select><div class="unit">1:N means N real units per model unit</div></div>
+<div class="field" id="custom-field" hidden><label class="f" for="in-custom">Custom scale (1&nbsp;:&nbsp;N)</label><input type="text" id="in-custom" inputmode="decimal" autocomplete="off" placeholder="e.g. 87.1"><div class="unit">N from 1 to 10,000, decimals allowed</div></div>
+<div class="field" id="length-field"><label class="f" for="in-length" id="length-label">Real length</label><input type="text" id="in-length" inputmode="decimal" autocomplete="off" placeholder="e.g. 12"><div class="unit" id="length-unit">metres (m)</div></div>
+<div class="field" id="real-field" hidden><label class="f" for="in-real">Real length</label><input type="text" id="in-real" inputmode="decimal" autocomplete="off" placeholder="e.g. 120"><div class="unit" id="real-unit">metres (m)</div></div>
+<div class="field" id="model-field" hidden><label class="f" for="in-model">Model length</label><input type="text" id="in-model" inputmode="decimal" autocomplete="off" placeholder="e.g. 0.25"><div class="unit" id="model-unit">metres (m)</div></div>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions"><button type="submit">Convert</button></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"><span style="color:var(--text-dim,#9aa3b2)">Enter a length to convert.</span></div>
+<div class="warn" id="warn" role="status" aria-live="polite"></div>
+<p class="note">Model length = real length ÷ N, so a 12&nbsp;m object at 1:72 is 167&nbsp;mm long. Areas scale by N² and volumes and masses by N³: the same 1:72 model has 1/5,184 of the surface and 1/373,248 of the volume of the real object. The scale is only as good as the two lengths you give it, and a kit labelled 1:72 is often a little over- or undersized.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* scale-model-core:start */
+var ModelScaleCore = (function(){
+"use strict";
+var MM_PER = {mm: 1, cm: 10, m: 1000, in: 25.4, ft: 304.8};
+var UNITS = ["mm", "cm", "m", "in", "ft"];
+var SCALES = [12, 24, 32, 35, 48, 72, 76, 87, 144, 350];
+var MIN_MM = 0.01;
+var MAX_MM = 1000000;
+
+function round(x, n){
+  var p = Math.pow(10, n);
+  return Math.round(x * p) / p;
+}
+function number(text, label){
+  var s = String(text == null ? "" : text).trim();
+  if (!s) throw new Error(label + " is required.");
+  if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(s)) throw new Error(label + " must be a number.");
+  return Number(s);
+}
+function lengthMm(text, label, unit){
+  var v = number(text, label);
+  var mm = v * MM_PER[unit];
+  if (!(mm >= MIN_MM && mm <= MAX_MM)) throw new Error(label + " must be between 0.01 mm and 1,000,000 mm.");
+  return mm;
+}
+function scaleOf(text){
+  var v = number(text, "Scale");
+  if (!(v >= 1 && v <= 10000)) throw new Error("Scale must be a number from 1 to 10,000.");
+  return v;
+}
+
+function calculate(input){
+  input = input || {};
+  var mode = input.mode == null ? "real" : String(input.mode);
+  if (mode !== "real" && mode !== "model" && mode !== "scale") {
+    throw new Error("Mode must be real, model or scale.");
+  }
+  var unit = input.unit == null ? "mm" : String(input.unit);
+  if (UNITS.indexOf(unit) < 0) throw new Error("Unit must be mm, cm, m, in or ft.");
+
+  var realMm, modelMm, n;
+  if (mode === "real") {
+    n = scaleOf(input.scale);
+    realMm = lengthMm(input.length, "Length", unit);
+    modelMm = realMm / n;
+  } else if (mode === "model") {
+    n = scaleOf(input.scale);
+    modelMm = lengthMm(input.length, "Length", unit);
+    realMm = modelMm * n;
+  } else {
+    realMm = lengthMm(input.realLength, "Real length", unit);
+    modelMm = lengthMm(input.modelLength, "Model length", unit);
+    if (modelMm >= realMm) throw new Error("Model length must be smaller than the real length.");
+    n = realMm / modelMm;
+    if (n > 10000) throw new Error("The scale must be between 1:1 and 1:10,000.");
+  }
+
+  var table = [];
+  var i;
+  for (i = 0; i < SCALES.length; i++){
+    table.push({scale: SCALES[i], mm: round(realMm / SCALES[i], 6)});
+  }
+
+  var nearest = null;
+  if (mode === "scale") {
+    var best = SCALES[0];
+    var bestGap = Infinity;
+    for (i = 0; i < SCALES.length; i++){
+      var gap = Math.abs(n - SCALES[i]);
+      if (gap < bestGap && gap / n < 0.15) { bestGap = gap; best = SCALES[i]; }
+    }
+    nearest = bestGap === Infinity ? null : best;
+  }
+
+  return {
+    mode: mode,
+    unit: unit,
+    scaleN: round(n, 4),
+    realMm: round(realMm, 4),
+    modelMm: round(modelMm, 4),
+    areaFactor: round(n * n, 4),
+    volumeFactor: round(n * n * n, 4),
+    table: table,
+    nearestScale: nearest
+  };
+}
+
+return {calculate: calculate, round: round, MM_PER: MM_PER, UNITS: UNITS, SCALES: SCALES};
+})();
+/* scale-model-core:end */
+
+(function(){
+"use strict";
+var els = {
+  form: document.getElementById("scale-form"),
+  mode: document.getElementById("in-mode"),
+  unit: document.getElementById("in-unit"),
+  scale: document.getElementById("in-scale"),
+  custom: document.getElementById("in-custom"),
+  length: document.getElementById("in-length"),
+  lengthLabel: document.getElementById("length-label"),
+  lengthUnit: document.getElementById("length-unit"),
+  real: document.getElementById("in-real"),
+  realUnit: document.getElementById("real-unit"),
+  model: document.getElementById("in-model"),
+  modelUnit: document.getElementById("model-unit"),
+  scaleField: document.getElementById("scale-field"),
+  customField: document.getElementById("custom-field"),
+  lengthField: document.getElementById("length-field"),
+  realField: document.getElementById("real-field"),
+  modelField: document.getElementById("model-field"),
+  err: document.getElementById("err"),
+  out: document.getElementById("out"),
+  warn: document.getElementById("warn")
+};
+var UNIT_NAME = {mm: "millimetres (mm)", cm: "centimetres (cm)", m: "metres (m)", in: "inches (in)", ft: "feet (ft)"};
+
+function round(x, n){ return ModelScaleCore.round(x, n); }
+function decimalsFor(unit, value){
+  var v = Math.abs(value);
+  if (v >= 100) return unit === "mm" || unit === "cm" ? 1 : 2;
+  if (v >= 10) return 2;
+  if (v >= 1) return 3;
+  if (v >= 0.01) return 4;
+  if (v >= 0.0001) return 6;
+  return 8;
+}
+function fmtValue(value, unit){
+  var d = decimalsFor(unit, value);
+  return value.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: d});
+}
+function fmtLen(mm, unit){
+  return fmtValue(mm / ModelScaleCore.MM_PER[unit], unit) + " " + unit;
+}
+function fmtLenPair(mm, unit){
+  var other = unit === "mm" ? "in" : "mm";
+  return fmtLen(mm, unit) + " (" + fmtLen(mm, other) + ")";
+}
+function fmtAuto(mm){
+  if (mm >= 1000000) return fmtValue(mm / 1000000, "m") + " km";
+  if (mm >= 1000) return fmtValue(mm / 1000, "m") + " m";
+  return fmtValue(mm, "mm") + " mm";
+}
+function fmtRatio(x){
+  var value = x >= 100 ? Math.round(x) : Math.round(x * 100) / 100;
+  return "1:" + value.toLocaleString();
+}
+function row(key, value, cls){
+  var wrap = document.createElement("div");
+  wrap.className = "row" + (cls ? " " + cls : "");
+  var k = document.createElement("span");
+  k.className = "k";
+  k.textContent = key;
+  var v = document.createElement("span");
+  v.className = "v";
+  v.textContent = value;
+  wrap.appendChild(k);
+  wrap.appendChild(v);
+  return wrap;
+}
+function clear(node){
+  while (node.firstChild) node.removeChild(node.firstChild);
+}
+function placeholder(msg){
+  clear(els.out);
+  var span = document.createElement("span");
+  span.style.color = "var(--text-dim,#9aa3b2)";
+  span.textContent = msg;
+  els.out.appendChild(span);
+  els.warn.textContent = "";
+}
+function fieldValue(node){ return String(node.value || "").trim(); }
+
+function currentScale(){
+  return els.scale.value === "custom" ? fieldValue(els.custom) : els.scale.value;
+}
+
+function syncFields(){
+  var mode = els.mode.value;
+  var isScaleMode = mode === "scale";
+  els.scaleField.hidden = isScaleMode;
+  els.customField.hidden = isScaleMode || els.scale.value !== "custom";
+  els.lengthField.hidden = isScaleMode;
+  els.realField.hidden = !isScaleMode;
+  els.modelField.hidden = !isScaleMode;
+  els.lengthLabel.textContent = mode === "model" ? "Model length" : "Real length";
+  els.length.placeholder = mode === "model" ? "e.g. 15" : "e.g. 12";
+}
+
+function calculate(){
+  var mode = els.mode.value;
+  var unit = els.unit.value;
+  var missing = false;
+  if (mode === "scale") {
+    missing = !fieldValue(els.real) || !fieldValue(els.model);
+  } else {
+    missing = !fieldValue(els.length);
+  }
+  if (missing) {
+    els.err.textContent = "";
+    placeholder(mode === "scale" ? "Enter both the real and the model length." : "Enter a length to convert.");
+    return;
+  }
+
+  var result;
+  try {
+    result = ModelScaleCore.calculate({
+      mode: mode,
+      unit: unit,
+      scale: currentScale(),
+      length: fieldValue(els.length),
+      realLength: fieldValue(els.real),
+      modelLength: fieldValue(els.model)
+    });
+  } catch (error) {
+    els.err.textContent = error.message;
+    placeholder("Check the fields above.");
+    return;
+  }
+
+  els.err.textContent = "";
+  els.warn.textContent = "";
+  clear(els.out);
+
+  var big = document.createElement("div");
+  big.className = "big";
+  var sub = document.createElement("div");
+  sub.className = "sub";
+  var scaleLabel = "1:" + fmtValue(result.scaleN, "scale");
+
+  if (result.mode === "real") {
+    big.textContent = fmtAuto(result.modelMm);
+    sub.textContent = "model size at " + scaleLabel + " for a " + fmtAuto(result.realMm) + " real length";
+  } else if (result.mode === "model") {
+    big.textContent = fmtAuto(result.realMm);
+    sub.textContent = "real size for a " + fmtAuto(result.modelMm) + " model at " + scaleLabel;
+  } else {
+    big.textContent = scaleLabel;
+    sub.textContent = result.nearestScale == null
+      ? "scale of a " + fmtLen(result.modelMm, unit) + " model of a " + fmtLen(result.realMm, unit) + " object"
+      : "nearest common scale 1:" + result.nearestScale;
+  }
+  els.out.appendChild(big);
+  els.out.appendChild(sub);
+
+  els.out.appendChild(row("Real length", fmtLenPair(result.realMm, unit)));
+  els.out.appendChild(row("Model length", fmtLenPair(result.modelMm, unit)));
+  els.out.appendChild(row("Scale", scaleLabel));
+  els.out.appendChild(row("Area ratio", fmtRatio(result.areaFactor)));
+  els.out.appendChild(row("Volume ratio", fmtRatio(result.volumeFactor)));
+
+  var sect = document.createElement("div");
+  sect.className = "sect";
+  sect.textContent = "Model size at other scales";
+  els.out.appendChild(sect);
+
+  for (var i = 0; i < result.table.length; i++) {
+    var entry = result.table[i];
+    var cls = Math.abs(result.scaleN - entry.scale) < 0.05 ? "hl" : "";
+    els.out.appendChild(row("1:" + entry.scale, fmtAuto(entry.mm), cls));
+  }
+
+  var realUnitVal = result.realMm / ModelScaleCore.MM_PER[unit];
+  if (realUnitVal < 0.0001) {
+    els.warn.textContent = "The real length converts to less than a ten-thousandth of a " + unit + "; switch to a smaller unit for a readable answer.";
+  } else if (result.mode === "scale" && result.nearestScale == null) {
+    els.warn.textContent = "1:" + fmtValue(result.scaleN, "scale") + " is not one of the common kit scales; check that both lengths describe the same dimension and use the same unit.";
+  } else if (result.mode === "scale" && result.nearestScale !== Math.round(result.scaleN)) {
+    els.warn.textContent = "A scale of 1:" + fmtValue(result.scaleN, "scale") + " is not a standard kit scale; the closest common one is 1:" + result.nearestScale + ".";
+  }
+}
+
+els.mode.addEventListener("change", function(){
+  syncFields();
+  calculate();
+});
+els.scale.addEventListener("change", function(){
+  syncFields();
+  calculate();
+});
+els.unit.addEventListener("change", function(){
+  var from = ModelScaleCore.MM_PER[els.unit.dataset.prev || els.unit.value];
+  var to = ModelScaleCore.MM_PER[els.unit.value];
+  if (from && to && from !== to) {
+    [els.length, els.real, els.model].forEach(function(input){
+      var text = fieldValue(input);
+      if (!text || !/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(text)) return;
+      var converted = Number(text) * from / to;
+      input.value = String(round(converted, converted >= 100 ? 2 : 4));
+    });
+  }
+  els.unit.dataset.prev = els.unit.value;
+  els.lengthUnit.textContent = UNIT_NAME[els.unit.value];
+  els.realUnit.textContent = UNIT_NAME[els.unit.value];
+  els.modelUnit.textContent = UNIT_NAME[els.unit.value];
+  calculate();
+});
+els.form.addEventListener("submit", function(event){
+  event.preventDefault();
+  calculate();
+});
+[els.length, els.real, els.model, els.custom].forEach(function(input){
+  input.addEventListener("input", calculate);
+});
+
+els.unit.dataset.prev = els.unit.value;
+els.lengthUnit.textContent = UNIT_NAME[els.unit.value];
+els.realUnit.textContent = UNIT_NAME[els.unit.value];
+els.modelUnit.textContent = UNIT_NAME[els.unit.value];
+syncFields();
+calculate();
+})();
+</script>
+</body>
+</html>

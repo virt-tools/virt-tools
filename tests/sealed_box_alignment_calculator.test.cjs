@@ -255,7 +255,7 @@ assert.ok(html.includes('aria-describedby="qtc-help"') && html.includes('aria-de
   'the conditional fields keep their help text');
 
 const publicCount = catalog.tools.filter((tool) => tool.listed).length;
-assert.equal(publicCount, 2145, 'public total');
+assert.equal(publicCount, 2146, 'public total');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Audio').length, 52, 'Audio count');
 
 console.log('sealed-box-alignment-calculator: 19 catalog cases, ' + fixture.vectors.length +

@@ -413,6 +413,7 @@ node tests/makefile_build_order_planner.test.cjs
 node tests/oring_gland_fit_calculator.test.cjs
 node tests/wilkinson_power_divider_designer.test.cjs
 node tests/gas_compressibility_factor_calculator.test.cjs
+node tests/scale_model_size_converter.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
