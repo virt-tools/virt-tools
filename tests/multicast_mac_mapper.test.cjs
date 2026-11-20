@@ -261,7 +261,7 @@ assert.equal(new Set(record.tags).size, record.tags.length, 'tags are unique');
 assert.equal(new Set(record.aliases).size, record.aliases.length, 'aliases are unique');
 assert.ok(record.tags.includes('multicast'));
 assert.ok(record.aliases.includes('MAC to Multicast Group Lookup'));
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Networking').length, 52, 'Networking count');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Networking').length, 53, 'Networking count');
 assert.equal(catalog.tools.filter((tool) => tool.slug === slug).length, 1, 'one record');
 assert.equal(catalog.tools.filter((tool) => tool.name === record.name).length, 1, 'one name');
 assert.equal(catalog.tools.filter((tool) => (tool.tags || []).includes('multicast')).length, 1, 'one multicast tag');
