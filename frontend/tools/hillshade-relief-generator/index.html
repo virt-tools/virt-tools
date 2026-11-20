@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Hillshade Relief Generator &mdash; Virtual Tools</title>
+<meta name="description" content="Render a shaded-relief map from a pasted elevation grid: compute slope and aspect with a 3 by 3 window and light the surface from any sun azimuth and altitude.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.hs{max-width:1100px;margin:0 auto}
+.panel{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:16px 0}
+.panel h2{font-size:16px;margin:0 0 4px}
+.hint{font-size:13px;color:var(--text-dim,#9aa3b2);margin:0 0 12px;line-height:1.5}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:4px}
+.field{display:flex;flex-direction:column;gap:5px;min-width:0;margin:0}
+.field[hidden]{display:none}
+.field label{font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--text-dim,#9aa3b2)}
+.field input,.field select,.field textarea{box-sizing:border-box;width:100%;min-height:44px;padding:9px 11px;border-radius:8px;
+  border:1px solid var(--border,#2a2f3a);background:var(--bg,#0d1117);color:var(--text,#e6e6e6);font:inherit;font-size:15px;
+  line-height:1.35;outline:none;min-width:0}
+.field textarea{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px;line-height:1.6;
+  white-space:pre;overflow-wrap:normal;resize:vertical;min-height:120px}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent,#6ea8fe);
+  box-shadow:0 0 0 2px rgba(110,168,254,.28)}
+.field.wide{grid-column:1/-1}
+button{font:inherit;min-height:44px;padding:9px 16px;border-radius:8px;border:1px solid var(--border,#2a2f3a);
+  background:transparent;color:var(--text,#e6e6e6);cursor:pointer}
+button:hover{border-color:var(--text-dim,#9aa3b2)}
+button:focus{outline:2px solid var(--accent,#6ea8fe);outline-offset:2px}
+button.primary{border-color:var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;font-weight:600}
+button.primary:hover{filter:brightness(1.08)}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:16px 0 0}
+.status{color:var(--good,#4ade80);font-size:13px;min-height:1.2em}
+.err{color:var(--bad,#f87171);font-size:13px;margin:12px 0 0;min-height:1.2em;line-height:1.45}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:16px 0 0}
+.out[hidden]{display:none}
+.metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:0 0 14px}
+.metric{border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:8px 10px;min-width:0}
+.metric strong{display:block;font-family:ui-monospace,monospace;font-size:17px;font-weight:700;overflow-wrap:anywhere}
+.metric span{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--text-dim,#9aa3b2);
+  line-height:1.35;display:block;margin-top:2px}
+canvas{display:block;width:100%;max-width:520px;height:auto;image-rendering:pixelated;
+  border:1px solid var(--border,#2a2f3a);border-radius:8px;
+  background:repeating-linear-gradient(45deg,var(--bg,#0d1117) 0 6px,var(--border,#2a2f3a) 6px 12px)}
+.legend{font-size:12px;color:var(--text-dim,#9aa3b2);line-height:1.5;margin:8px 0 0;max-width:520px}
+.out h3{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim,#9aa3b2);margin:18px 0 8px}
+.out table{display:table;width:100%;border-collapse:collapse;margin:0}
+.out th,.out td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border,#2a2f3a);
+  font-size:14px;vertical-align:top}
+.out th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-dim,#9aa3b2);font-weight:600}
+.out tbody tr:last-child td{border-bottom:none}
+.out td:last-child{font-family:ui-monospace,monospace;white-space:nowrap}
+.warn{border:1px solid rgba(251,191,36,.45);border-radius:8px;background:rgba(251,191,36,.09);
+  padding:10px 12px;margin:0 0 14px;font-size:13px;line-height:1.5}
+.warn p{margin:0}
+.warn p + p{margin-top:6px}
+.note{font-size:13px;color:var(--text-dim,#9aa3b2);line-height:1.55;margin:14px 0 0}
+@media (max-width:900px){
+  .grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:540px){
+  .grid{grid-template-columns:minmax(0,1fr)}
+  .panel{padding:14px}
+  .out table,.out thead,.out tbody,.out tr,.out th,.out td{display:block}
+  .out thead{display:none}
+  .out tbody tr{border-bottom:1px solid var(--border,#2a2f3a);padding:8px 0}
+  .out tbody tr:last-child{border-bottom:none}
+  .out th,.out td{border:none;padding:0;font-size:13px}
+  .out th{font-size:11px;letter-spacing:.06em}
+  .out td{padding-top:2px;white-space:normal}
+  .field textarea{font-size:12px}
+}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="hs">
+<div class="tool-header">
+<h1>Hillshade Relief Generator</h1>
+<p>Paste an elevation grid and light it from a sun of your choosing: the page computes slope and aspect over a 3 by 3 window and draws a shaded-relief image, with the slope statistics and the ground area the grid covers.</p>
+</div>
+<div class="panel">
+<form id="form" novalidate>
+<h2>Elevation grid</h2>
+<p class="hint">One row per line, one elevation per column, in metres, separated by spaces, commas or semicolons. At least 3 rows and 3 columns, at most 64 of each. The outer rows and columns have no full 3 by 3 window, so they stay blank.</p>
+<div class="grid">
+<div class="field wide">
+<label for="grid">Elevations (m)</label>
+<textarea id="grid" rows="8" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="150 160 170&#10;155 168 178&#10;152 162 172"></textarea>
+</div>
+<div class="field">
+<label for="cellSize">Cell size (m)</label>
+<input id="cellSize" type="text" inputmode="decimal" autocomplete="off" value="30">
+</div>
+<div class="field">
+<label for="azimuth">Sun azimuth (deg)</label>
+<input id="azimuth" type="text" inputmode="numeric" autocomplete="off" value="315">
+</div>
+<div class="field">
+<label for="altitude">Sun altitude (deg)</label>
+<input id="altitude" type="text" inputmode="numeric" autocomplete="off" value="45">
+</div>
+<div class="field">
+<label for="zFactor">Vertical exaggeration</label>
+<input id="zFactor" type="text" inputmode="decimal" autocomplete="off" value="1">
+</div>
+</div>
+<div class="actions">
+<button type="submit" class="primary">Render relief</button>
+<button type="button" id="example">Load example</button>
+<span class="status" id="status" role="status" aria-live="polite"></span>
+</div>
+</form>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<section class="out" id="out" aria-live="polite" aria-atomic="false" hidden>
+<div id="figures"></div>
+<canvas id="relief" width="12" height="9" role="img" aria-label="Shaded relief of the elevation grid">Your browser will not draw the relief image, but the figures below are still computed.</canvas>
+<p class="legend">Dark is away from the sun, light faces it: 0 is fully shaded and 255 is fully lit. The hatched margin is the edge of the grid, where a full 3 by 3 window does not fit.</p>
+<h3>Figures</h3>
+<div id="details"></div>
+</section>
+<p class="note">A hillshade is an illumination model, not a terrain survey: it shows how the surface would be lit from a chosen sun position, and it inherits every error in the elevations you paste. Azimuth is measured clockwise from north, altitude from the horizon, and the vertical exaggeration multiplies each gradient before the slope is taken. Everything is computed in the browser: no storage, uploads or network access.</p>
+</div>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* hillshade-relief-core:start */
+var HillshadeReliefCore = (function(){
+  "use strict";
+
+  var MAX_SIZE = 64;
+  var MAX_ELEVATION = 20000;
+  var EXAMPLE_GRID = [
+    "192 196 200 204 207 208 208 205 201 196 193 190",
+    "190 196 203 209 214 216 215 211 204 197 191 187",
+    "189 198 208 217 223 226 224 218 208 197 189 183",
+    "188 200 213 224 231 233 231 222 209 196 186 179",
+    "187 202 216 227 232 234 230 220 205 191 180 173",
+    "184 201 215 224 226 225 220 209 195 181 170 164",
+    "180 196 210 215 214 210 203 192 179 166 158 154",
+    "174 189 201 202 198 191 183 173 161 151 145 144",
+    "167 180 189 188 181 173 165 156 147 139 135 136"
+  ].join("\n");
+  var DEFAULT_INPUT = {
+    grid: EXAMPLE_GRID,
+    cellSize: "30",
+    azimuth: "315",
+    altitude: "45",
+    zFactor: "1"
+  };
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function textOf(value){
+    if (value === null || value === undefined) return "";
+    if (typeof value === "number") return isFinite(value) ? String(value) : "";
+    if (typeof value !== "string") return "";
+    return value.trim();
+  }
+
+  function short(text){
+    return text.length > 24 ? text.slice(0, 21) + "..." : text;
+  }
+
+  function roundTo(value, places){
+    var factor = Math.pow(10, places);
+    return Math.round(value * factor) / factor;
+  }
+
+  function cellSizeOf(value){
+    var raw = textOf(value);
+    if (!/^[+-]?(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)$/.test(raw)) fail("Cell size must be a number of metres.");
+    var size = Number(raw);
+    if (!(size > 0) || size > 1000000) fail("Cell size must be greater than 0 and at most 1,000,000 metres.");
+    return size;
+  }
+
+  function angleOf(value, label, max, where){
+    var raw = textOf(value);
+    if (!/^[+-]?(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)$/.test(raw)) fail(label + " must be a number of degrees.");
+    var angle = Number(raw);
+    if (angle < 0 || angle > max) fail(label + " must be from 0 to " + max + " degrees " + where + ".");
+    return angle;
+  }
+
+  function zFactorOf(value){
+    var raw = textOf(value);
+    if (!/^[+-]?(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)$/.test(raw)) fail("Vertical exaggeration must be a number.");
+    var factor = Number(raw);
+    if (!(factor > 0) || factor > 100) fail("Vertical exaggeration must be greater than 0 and at most 100.");
+    return factor;
+  }
+
+  function parseGrid(value){
+    var raw = value === null || value === undefined ? "" : String(value);
+    var lines = raw.replace(/\r\n?/g, "\n").split("\n");
+    var rows = [];
+    for (var i = 0; i < lines.length; i += 1){
+      var line = lines[i].trim();
+      if (!line) continue;
+      rows.push(line.split(/[\s,;]+/));
+    }
+    if (!rows.length) fail("Paste an elevation grid of at least 3 rows and 3 columns.");
+    var cols = rows[0].length;
+    if (rows.length < 3 || cols < 3){
+      fail("The grid needs at least 3 rows and 3 columns; this one has " + rows.length + " row"
+        + (rows.length === 1 ? "" : "s") + " and " + cols + " column" + (cols === 1 ? "" : "s") + ".");
+    }
+    if (rows.length > MAX_SIZE || cols > MAX_SIZE){
+      fail("This renderer takes at most " + MAX_SIZE + " rows and " + MAX_SIZE + " columns; the grid has "
+        + rows.length + " rows and " + cols + " columns.");
+    }
+    var values = [];
+    for (var r = 0; r < rows.length; r += 1){
+      if (rows[r].length !== cols){
+        fail("Row " + (r + 1) + " has " + rows[r].length + " value" + (rows[r].length === 1 ? "" : "s")
+          + " but row 1 has " + cols + "; every row needs the same number of columns.");
+      }
+      var row = [];
+      for (var c = 0; c < cols; c += 1){
+        var cell = rows[r][c];
+        if (!/^[+-]?(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)$/.test(cell)){
+          fail("Row " + (r + 1) + ", column " + (c + 1) + " is \"" + short(cell) + "\", which is not an elevation number.");
+        }
+        var height = Number(cell);
+        if (Math.abs(height) > MAX_ELEVATION){
+          fail("Row " + (r + 1) + ", column " + (c + 1) + " is " + short(cell)
+            + ", beyond the -20,000 to 20,000 m range this renderer takes.");
+        }
+        row.push(height);
+      }
+      values.push(row);
+    }
+    return { cols: cols, rows: rows.length, values: values };
+  }
+
+  function analyze(input){
+    var data = input || {};
+    var parsed = parseGrid(data.grid === undefined ? DEFAULT_INPUT.grid : data.grid);
+    var cellSize = cellSizeOf(data.cellSize === undefined ? DEFAULT_INPUT.cellSize : data.cellSize);
+    var azimuth = angleOf(data.azimuth === undefined ? DEFAULT_INPUT.azimuth : data.azimuth,
+      "Sun azimuth", 360, "measured clockwise from north");
+    var altitude = angleOf(data.altitude === undefined ? DEFAULT_INPUT.altitude : data.altitude,
+      "Sun altitude", 90, "above the horizon");
+    var zFactor = zFactorOf(data.zFactor === undefined ? DEFAULT_INPUT.zFactor : data.zFactor);
+
+    var zenithRad = (90 - altitude) * Math.PI / 180;
+    var azimuthMath = 360 - azimuth + 90;
+    if (azimuthMath >= 360) azimuthMath -= 360;
+    var azimuthRad = azimuthMath * Math.PI / 180;
+
+    var cols = parsed.cols;
+    var rows = parsed.rows;
+    var values = parsed.values;
+    var minHeight = values[0][0];
+    var maxHeight = values[0][0];
+    var sumHeight = 0;
+    for (var r = 0; r < rows; r += 1){
+      for (var c = 0; c < cols; c += 1){
+        var height = values[r][c];
+        if (height < minHeight) minHeight = height;
+        if (height > maxHeight) maxHeight = height;
+        sumHeight += height;
+      }
+    }
+
+    var shades = new Array(cols * rows);
+    var slopeSum = 0;
+    var slopeMax = 0;
+    var shadeSum = 0;
+    var shadeMin = 255;
+    var shadeMax = 0;
+    var flatCells = 0;
+    var interior = (cols - 2) * (rows - 2);
+    var cosZenith = Math.cos(zenithRad);
+    var sinZenith = Math.sin(zenithRad);
+
+    for (var row = 0; row < rows; row += 1){
+      for (var col = 0; col < cols; col += 1){
+        var index = row * cols + col;
+        if (row === 0 || col === 0 || row === rows - 1 || col === cols - 1){
+          shades[index] = null;
+          continue;
+        }
+        var a = values[row - 1][col - 1];
+        var b = values[row - 1][col];
+        var cc = values[row - 1][col + 1];
+        var d = values[row][col - 1];
+        var f = values[row][col + 1];
+        var g = values[row + 1][col - 1];
+        var h = values[row + 1][col];
+        var i = values[row + 1][col + 1];
+        var dzdx = ((cc + 2 * f + i) - (a + 2 * d + g)) / (8 * cellSize);
+        var dzdy = ((g + 2 * h + i) - (a + 2 * b + cc)) / (8 * cellSize);
+        var slopeRad = Math.atan(zFactor * Math.sqrt(dzdx * dzdx + dzdy * dzdy));
+        var aspectRad;
+        if (dzdx !== 0){
+          aspectRad = Math.atan2(dzdy, -dzdx);
+          if (aspectRad < 0) aspectRad = 2 * Math.PI + aspectRad;
+        } else if (dzdy > 0){
+          aspectRad = Math.PI / 2;
+        } else if (dzdy < 0){
+          aspectRad = 2 * Math.PI - Math.PI / 2;
+        } else {
+          aspectRad = 0;
+          flatCells += 1;
+        }
+        var shade = 255 * (cosZenith * Math.cos(slopeRad)
+          + sinZenith * Math.sin(slopeRad) * Math.cos(azimuthRad - aspectRad));
+        if (!(shade > 0)) shade = 0;
+        if (shade > 255) shade = 255;
+        var slopeDeg = slopeRad * 180 / Math.PI;
+        var pixel = Math.round(shade);
+        shades[index] = pixel;
+        slopeSum += slopeDeg;
+        if (slopeDeg > slopeMax) slopeMax = slopeDeg;
+        shadeSum += shade;
+        if (pixel < shadeMin) shadeMin = pixel;
+        if (pixel > shadeMax) shadeMax = pixel;
+      }
+    }
+
+    var centerRow = Math.min(Math.max(Math.floor(rows / 2), 1), rows - 2);
+    var centerCol = Math.min(Math.max(Math.floor(cols / 2), 1), cols - 2);
+    var warnings = [];
+    var range = maxHeight - minHeight;
+    if (range === 0){
+      warnings.push("Every cell has the same elevation, so the surface is flat: the slope is 0 everywhere and the aspect is undefined.");
+    } else if (flatCells > 0){
+      warnings.push(flatCells + " interior cell" + (flatCells === 1 ? " is" : "s are")
+        + " locally flat, where both gradients are zero; the aspect is undefined there and the tone depends only on the sun altitude.");
+    }
+    if (slopeMax >= 89.99){
+      warnings.push("A slope this steep is almost a cliff in the model: check the cell size and the vertical exaggeration before reading the image.");
+    }
+
+    return {
+      grid: { cols: cols, rows: rows, cells: cols * rows, interior: interior },
+      cellSize: cellSize,
+      sun: { azimuth: azimuth, altitude: altitude, zFactor: zFactor },
+      elevation: { min: minHeight, max: maxHeight, range: range, mean: roundTo(sumHeight / (cols * rows), 2) },
+      slope: { meanDeg: roundTo(slopeSum / interior, 2), maxDeg: roundTo(slopeMax, 2), flatCells: flatCells },
+      shade: { mean: roundTo(shadeSum / interior, 1), min: shadeMin, max: shadeMax,
+        center: shades[centerRow * cols + centerCol] },
+      areaKm2: roundTo((cols - 1) * cellSize * (rows - 1) * cellSize / 1000000, 6),
+      shades: shades,
+      warnings: warnings
+    };
+  }
+
+  return {
+    analyze: analyze,
+    DEFAULT_INPUT: DEFAULT_INPUT,
+    MAX_SIZE: MAX_SIZE,
+    MAX_ELEVATION: MAX_ELEVATION
+  };
+})();
+/* hillshade-relief-core:end */
+(function(){
+  "use strict";
+
+  var $ = function(id){ return document.getElementById(id); };
+
+  function el(tag, attrs, text){
+    var node = document.createElement(tag);
+    if (attrs) Object.keys(attrs).forEach(function(key){
+      if (key === "class") node.className = attrs[key];
+      else node.setAttribute(key, attrs[key]);
+    });
+    if (text !== undefined && text !== null) node.textContent = text;
+    return node;
+  }
+
+  function setStatus(message, kind){
+    var node = $("status");
+    node.textContent = message || "";
+    node.className = "status " + (kind || "");
+  }
+
+  function setError(message){
+    $("err").textContent = message || "";
+  }
+
+  function trim(value, places){
+    return value.toFixed(places).replace(/\.0+$/, "").replace(/(\.[0-9]*?)0+$/, "$1");
+  }
+
+  function metres(value){
+    return trim(value, 1) + " m";
+  }
+
+  function area(value){
+    if (value >= 1) return trim(value, 2) + " km2";
+    if (value >= 0.001) return trim(value * 100, 2) + " ha";
+    if (value >= 0.000001) return trim(value * 1000000, 0) + " m2";
+    return value.toExponential(2) + " km2";
+  }
+
+  function metric(label, value){
+    var box = el("div", { "class": "metric" });
+    box.appendChild(el("strong", {}, value));
+    box.appendChild(el("span", {}, label));
+    return box;
+  }
+
+  function row(label, value){
+    var item = el("tr");
+    item.appendChild(el("th", { scope: "row" }, label));
+    item.appendChild(el("td", {}, value));
+    return item;
+  }
+
+  function draw(result){
+    var canvas = $("relief");
+    canvas.width = result.grid.cols;
+    canvas.height = result.grid.rows;
+    canvas.setAttribute("aria-label", "Shaded relief of " + result.grid.cols + " by " + result.grid.rows
+      + " cells, lit from azimuth " + trim(result.sun.azimuth, 1) + " degrees at altitude "
+      + trim(result.sun.altitude, 1) + " degrees");
+    var context = canvas.getContext ? canvas.getContext("2d") : null;
+    if (!context) return false;
+    var image = context.createImageData(result.grid.cols, result.grid.rows);
+    for (var index = 0; index < result.shades.length; index += 1){
+      var shade = result.shades[index];
+      var at = index * 4;
+      if (shade === null){
+        image.data[at] = 0;
+        image.data[at + 1] = 0;
+        image.data[at + 2] = 0;
+        image.data[at + 3] = 0;
+        continue;
+      }
+      image.data[at] = shade;
+      image.data[at + 1] = shade;
+      image.data[at + 2] = shade;
+      image.data[at + 3] = 255;
+    }
+    context.putImageData(image, 0, 0);
+    return true;
+  }
+
+  function render(result){
+    var figures = $("figures");
+    figures.replaceChildren();
+    if (result.warnings.length){
+      var warn = el("div", { "class": "warn" });
+      result.warnings.forEach(function(message){ warn.appendChild(el("p", {}, message)); });
+      figures.appendChild(warn);
+    }
+    var metrics = el("div", { "class": "metrics" });
+    metrics.appendChild(metric("Grid", result.grid.cols + " x " + result.grid.rows));
+    metrics.appendChild(metric("Interior cells", String(result.grid.interior)));
+    metrics.appendChild(metric("Relief", metres(result.elevation.range)));
+    metrics.appendChild(metric("Mean slope", trim(result.slope.meanDeg, 1) + " deg"));
+    metrics.appendChild(metric("Steepest slope", trim(result.slope.maxDeg, 1) + " deg"));
+    metrics.appendChild(metric("Area covered", area(result.areaKm2)));
+    figures.appendChild(metrics);
+
+    var table = el("table");
+    var head = el("thead");
+    var headRow = el("tr");
+    headRow.appendChild(el("th", { scope: "col" }, "Measure"));
+    headRow.appendChild(el("th", { scope: "col" }, "Value"));
+    head.appendChild(headRow);
+    table.appendChild(head);
+    var body = el("tbody");
+    body.appendChild(row("Elevation", metres(result.elevation.min) + " to " + metres(result.elevation.max)));
+    body.appendChild(row("Mean elevation", metres(result.elevation.mean)));
+    body.appendChild(row("Mean slope", trim(result.slope.meanDeg, 1) + " deg"));
+    body.appendChild(row("Steepest slope", trim(result.slope.maxDeg, 1) + " deg"));
+    body.appendChild(row("Mean shade", Math.round(result.shade.mean) + " of 255"));
+    body.appendChild(row("Shade range", result.shade.min + " to " + result.shade.max));
+    body.appendChild(row("Sun", trim(result.sun.azimuth, 1) + " deg, altitude " + trim(result.sun.altitude, 1) + " deg"));
+    body.appendChild(row("Cell size", metres(result.cellSize)));
+    body.appendChild(row("Vertical exaggeration", trim(result.sun.zFactor, 2)));
+    body.appendChild(row("Area covered", area(result.areaKm2)));
+    table.appendChild(body);
+
+    var details = $("details");
+    details.replaceChildren();
+    details.appendChild(table);
+  }
+
+  function readForm(){
+    return {
+      grid: $("grid").value,
+      cellSize: $("cellSize").value,
+      azimuth: $("azimuth").value,
+      altitude: $("altitude").value,
+      zFactor: $("zFactor").value
+    };
+  }
+
+  function fit(){
+    var box = $("grid");
+    box.style.height = "auto";
+    box.style.height = Math.min(320, Math.max(120, box.scrollHeight + 2)) + "px";
+    box.scrollTop = 0;
+  }
+
+  function build(){
+    setError("");
+    var result;
+    try {
+      result = HillshadeReliefCore.analyze(readForm());
+    } catch (error){
+      setError(error.message);
+      setStatus("");
+      $("out").hidden = true;
+      return null;
+    }
+    render(result);
+    if (!draw(result)) setError("This browser cannot draw the relief image, but the figures below are still computed.");
+    $("out").hidden = false;
+    setStatus("Rendered " + result.grid.cols + " by " + result.grid.rows + " cells from "
+      + result.grid.interior + " interior " + (result.grid.interior === 1 ? "window" : "windows") + ".", "ok");
+    return result;
+  }
+
+  function reset(){
+    var data = HillshadeReliefCore.DEFAULT_INPUT;
+    $("grid").value = data.grid;
+    $("cellSize").value = data.cellSize;
+    $("azimuth").value = data.azimuth;
+    $("altitude").value = data.altitude;
+    $("zFactor").value = data.zFactor;
+    fit();
+    build();
+  }
+
+  $("form").addEventListener("submit", function(event){ event.preventDefault(); build(); });
+  $("example").addEventListener("click", reset);
+  $("grid").addEventListener("input", function(){ setStatus(""); fit(); });
+  $("grid").addEventListener("scroll", function(){ $("grid").scrollTop = 0; });
+  ["cellSize", "azimuth", "altitude", "zFactor"].forEach(function(id){
+    $(id).addEventListener("input", function(){ setStatus(""); });
+  });
+  document.addEventListener("keydown", function(event){
+    var target = event.target;
+    if (!target || !target.tagName) return;
+    if (event.key !== "Enter") return;
+    if (target.tagName.toLowerCase() === "textarea"){
+      if (!event.ctrlKey && !event.metaKey) return;
+    } else if (target.tagName.toLowerCase() !== "input"){
+      return;
+    }
+    event.preventDefault();
+    build();
+  });
+
+  reset();
+})();
+</script>
+</body>
+</html>
