@@ -119,8 +119,8 @@ assert.ok(run({ target: 800, check: 38 }).warnings.some((w) => /more than 60 °C
 assert.equal(run().warnings.length, 0, 'the default fit is plausible');
 
 // ---- Catalog record: counts, cases and metadata.
-assert.equal(catalog.tools.length, 2427, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2166, 'public tools');
+assert.equal(catalog.tools.length, 2428, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2167, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Oil, Gas & Marine Engineering').length, 53,
   'Oil, Gas & Marine Engineering count');
 assert.equal(record.category, 'Oil, Gas & Marine Engineering');
