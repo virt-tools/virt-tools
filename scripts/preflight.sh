@@ -436,6 +436,7 @@ node tests/typography_unit_converter.test.cjs
 node tests/time_clock_rounding_calculator.test.cjs
 node tests/high_altitude_baking_adjuster.test.cjs
 node tests/register_bit_field_packer.test.cjs
+node tests/haproxy_config_builder.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"

@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>HAProxy Config Builder &mdash; Virtual Tools</title>
+<meta name="description" content="Build a HAProxy frontend, backends and routing rules from weighted servers and health checks, and see the traffic split and failover time the file produces.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.hp{max-width:1100px;margin:0 auto}
+.panel{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:16px 0}
+.panel h2{font-size:16px;margin:0 0 4px}
+.hint{font-size:13px;color:var(--text-dim,#9aa3b2);margin:0 0 12px;line-height:1.5}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.field{display:flex;flex-direction:column;gap:5px;min-width:0;margin:0}
+.field[hidden]{display:none}
+.field label{font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--text-dim,#9aa3b2)}
+.field input,.field select{box-sizing:border-box;width:100%;min-height:44px;padding:9px 11px;border-radius:8px;border:1px solid var(--border,#2a2f3a);
+  background:var(--bg,#0d1117);color:var(--text,#e6e6e6);font:inherit;font-size:15px;line-height:1.3;outline:none;min-width:0}
+.field input:focus,.field select:focus{border-color:var(--accent,#6ea8fe);box-shadow:0 0 0 2px rgba(110,168,254,.28)}
+.backend{border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:12px;margin:12px 0}
+.backend-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:0 0 10px}
+.backend-head h3{font-size:15px;margin:0}
+.srv{border-top:1px solid var(--border,#2a2f3a);padding:10px 0}
+.srv-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) 84px 84px 100px;gap:8px}
+.srv-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px}
+.chk{display:flex;align-items:center;gap:8px;font-size:13px;line-height:1.4}
+.chk input{width:20px;height:20px;margin:0;accent-color:var(--accent,#6ea8fe)}
+.rule{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr) minmax(0,1fr) 44px;gap:8px;align-items:end;border-top:1px solid var(--border,#2a2f3a);padding:10px 0}
+.rule:first-child{border-top:none;padding-top:0}
+button{font:inherit;min-height:44px;padding:9px 16px;border-radius:8px;border:1px solid var(--border,#2a2f3a);
+  background:transparent;color:var(--text,#e6e6e6);cursor:pointer}
+button:hover{border-color:var(--text-dim,#9aa3b2)}
+button:focus{outline:2px solid var(--accent,#6ea8fe);outline-offset:2px}
+button.primary{border-color:var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;font-weight:600}
+button.primary:hover{filter:brightness(1.08)}
+button.remove{min-height:40px;padding:6px 12px;color:var(--text-dim,#9aa3b2);font-size:13px}
+button.remove:hover{color:var(--bad,#f87171);border-color:var(--bad,#f87171)}
+button.add-server{min-height:40px;padding:6px 12px;border-style:dashed;color:var(--text-dim,#9aa3b2);font-size:13px;margin-top:10px}
+button.add-server:hover{color:var(--text,#e6e6e6);border-color:var(--text-dim,#9aa3b2)}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:16px 0 0}
+.status{color:var(--good,#4ade80);font-size:13px;min-height:1.2em}
+.err{color:var(--bad,#f87171);font-size:13px;margin:12px 0 0;min-height:1.2em;line-height:1.45}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:16px 0 0}
+.out h3{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim,#9aa3b2);margin:16px 0 8px}
+.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:0}
+.metric{border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:8px 10px;min-width:0}
+.metric strong{display:block;font-family:ui-monospace,monospace;font-size:17px;font-weight:700;overflow-wrap:anywhere}
+.metric span{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--text-dim,#9aa3b2);line-height:1.35;display:block;margin-top:2px}
+.out table{display:table;width:100%;border-collapse:collapse;margin:0}
+.out caption{text-align:left;font-size:12px;color:var(--text-dim,#9aa3b2);padding:0 0 6px;line-height:1.45}
+.out th,.out td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border,#2a2f3a);font-size:14px;vertical-align:top}
+.out th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-dim,#9aa3b2);font-weight:600}
+.out tbody tr:last-child td{border-bottom:none}
+.out td.num{text-align:right;font-family:ui-monospace,monospace;white-space:nowrap}
+.out pre{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--bg,#0d1117);border:1px solid var(--border,#2a2f3a);border-radius:8px;
+  padding:12px;margin:0;font:13px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;min-height:90px}
+.warn{border:1px solid rgba(251,191,36,.45);border-radius:8px;background:rgba(251,191,36,.09);padding:10px 12px;margin:14px 0 0;font-size:13px;line-height:1.5}
+.warn p{margin:0}
+.warn p + p{margin-top:6px}
+.note{font-size:13px;color:var(--text-dim,#9aa3b2);line-height:1.55;margin:14px 0 0}
+@media (max-width:860px){
+  .grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:620px){
+  .grid{grid-template-columns:minmax(0,1fr)}
+  .srv-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .rule{grid-template-columns:minmax(0,1fr);align-items:stretch}
+  .rule button.remove{justify-self:start}
+  .out table,.out thead,.out tbody,.out tr,.out td{display:block}
+  .out thead{display:none}
+  .out caption{display:block;width:100%;white-space:normal}
+  .out tr{border-bottom:1px solid var(--border,#2a2f3a);padding:8px 0}
+  .out tbody tr:last-child{border-bottom:none}
+  .out td{border:none;padding:2px 0;text-align:left}
+  .out td.num{text-align:left}
+  .out td[data-label]::before{content:attr(data-label) ": ";margin-right:.4em;color:var(--text-dim,#9aa3b2);font-size:12px}
+}
+@media (max-width:420px){
+  .out pre{font-size:12px}
+}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<h1>HAProxy Config Builder</h1>
+<p>Describe a frontend, its backends and the weighted servers behind them, and get a <code>haproxy.cfg</code> fragment together with the traffic split and health-check failover time it will produce.</p>
+</div>
+<div class="panel">
+<form id="form" novalidate>
+<h2>Frontend</h2>
+<p class="hint">The first backend below is the default. Routing rules send matching requests to another backend before that fallback applies.</p>
+<div class="grid">
+<div class="field">
+<label for="mode">Mode</label>
+<select id="mode">
+<option value="http" selected>http</option>
+<option value="tcp">tcp</option>
+</select>
+</div>
+<div class="field">
+<label for="bindAddress">Bind address (optional)</label>
+<input id="bindAddress" type="text" inputmode="text" autocomplete="off" spellcheck="false" placeholder="all addresses">
+</div>
+<div class="field">
+<label for="bindPort">Bind port</label>
+<input id="bindPort" type="text" inputmode="numeric" autocomplete="off" value="80">
+</div>
+</div>
+</form>
+</div>
+<div class="panel">
+<h2>Backends and servers</h2>
+<p class="hint">Weight is relative: servers share traffic in proportion to their weight, as the manual describes. A weight of 0 keeps a server out of new traffic but leaves it available for persistent connections.</p>
+<div id="backends"></div>
+<div class="actions">
+<button type="button" id="addBackend">Add backend</button>
+</div>
+</div>
+<div class="panel">
+<h2>Health checks</h2>
+<p class="hint">HAProxy probes each checked server every interval and marks it down after <code>fall</code> consecutive failures, up again after <code>rise</code> successes. These values apply to every checked server; the defaults are the manual's.</p>
+<form id="checks" novalidate>
+<div class="grid">
+<div class="field">
+<label for="interMs">Interval (ms)</label>
+<input id="interMs" type="text" inputmode="numeric" autocomplete="off" value="2000">
+</div>
+<div class="field">
+<label for="fall">Fall (failures)</label>
+<input id="fall" type="text" inputmode="numeric" autocomplete="off" value="3">
+</div>
+<div class="field">
+<label for="rise">Rise (successes)</label>
+<input id="rise" type="text" inputmode="numeric" autocomplete="off" value="2">
+</div>
+</div>
+</form>
+</div>
+<div class="panel">
+<h2>Routing rules</h2>
+<p class="hint">Rules are evaluated in order and the first match wins, so a later rule that matches the same value can never be reached. Content matches need http mode; <code>src</code> works in both.</p>
+<div id="rules"></div>
+<div class="actions">
+<button type="button" id="addRule">Add rule</button>
+</div>
+</div>
+<div class="panel">
+<form id="build" novalidate>
+<div class="actions">
+<button type="submit" class="primary">Build config</button>
+<button type="button" id="copy">Copy config</button>
+<button type="button" id="reset">Reset example</button>
+<span class="status" id="status" role="status" aria-live="polite"></span>
+</div>
+</form>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<section class="out" id="out" aria-live="polite" aria-atomic="false"></section>
+<p class="note">The output is text for you to review, not a validated deployment: it has not been parsed by HAProxy. It does not model TLS termination, cookies or stick tables, DNS service discovery, ACL samples beyond these four, or connection persistence. Run <code>haproxy -c -f haproxy.cfg</code> before loading the file. Everything is computed in the browser: no storage, uploads or network access.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* haproxy-config-core:start */
+var HaproxyConfigCore = (function(){
+  "use strict";
+
+  var MAX_BACKENDS = 4;
+  var MAX_SERVERS = 8;
+  var MAX_RULES = 6;
+  var BALANCES = ["roundrobin", "static-rr", "leastconn", "source", "uri", "hdr"];
+  var HTTP_ONLY_BALANCES = ["uri", "hdr"];
+  var WEIGHTED_BALANCES = ["roundrobin", "static-rr"];
+  var MATCHES = ["path_beg", "path_end", "hdr_host", "src"];
+  var CONTENT_MATCHES = ["path_beg", "path_end", "hdr_host"];
+  var CRITERIA = { path_beg: "path_beg", path_end: "path_end", hdr_host: "hdr(host)", src: "src" };
+
+  var DEFAULT_INPUT = {
+    mode: "http",
+    bindAddress: "",
+    bindPort: "80",
+    interMs: "2000",
+    fall: "3",
+    rise: "2",
+    backends: [
+      {
+        name: "app",
+        balance: "roundrobin",
+        hdr: "Host",
+        servers: [
+          { name: "app1", address: "10.0.0.11", port: "8080", weight: "3", maxconn: "200", check: true },
+          { name: "app2", address: "10.0.0.12", port: "8080", weight: "2", maxconn: "200", check: true },
+          { name: "app3", address: "10.0.0.13", port: "8080", weight: "1", maxconn: "200", check: true }
+        ]
+      },
+      {
+        name: "api",
+        balance: "leastconn",
+        hdr: "Host",
+        servers: [
+          { name: "api1", address: "10.0.0.21", port: "9000", weight: "1", maxconn: "500", check: true }
+        ]
+      }
+    ],
+    rules: [
+      { match: "path_beg", value: "/api/", backend: "api" }
+    ]
+  };
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function textOf(value){
+    if (value === null || value === undefined) return "";
+    if (typeof value === "number" || typeof value === "boolean") return String(value).trim();
+    if (typeof value !== "string") return "";
+    return value.trim();
+  }
+
+  function choice(value, allowed, message){
+    var text = textOf(value).toLowerCase();
+    if (allowed.indexOf(text) < 0) fail(message);
+    return text;
+  }
+
+  function whole(value, min, max, fallback, message){
+    var raw = textOf(value);
+    if (raw === ""){
+      if (fallback === null) fail(message);
+      return fallback;
+    }
+    if (!/^[0-9]{1,7}$/.test(raw)) fail(message);
+    var number = Number(raw);
+    if (number < min || number > max) fail(message);
+    return number;
+  }
+
+  function nameOf(value, label){
+    var raw = textOf(value);
+    if (!raw) fail(label + " needs a name.");
+    if (!/^[A-Za-z][A-Za-z0-9_.-]{0,31}$/.test(raw)){
+      fail(label + " name \"" + raw + "\" may use only letters, digits, dot, dash and underscore, and must start with a letter.");
+    }
+    return raw;
+  }
+
+  function isIpv4(raw){
+    var parts = raw.split(".");
+    if (parts.length !== 4) return false;
+    for (var i = 0; i < 4; i += 1){
+      if (!/^(?:0|[1-9][0-9]{0,2})$/.test(parts[i])) return false;
+      if (Number(parts[i]) > 255) return false;
+    }
+    return true;
+  }
+
+  function looksNumeric(raw){
+    return /^[0-9.]+$/.test(raw);
+  }
+
+  function isHostname(raw){
+    if (!raw || raw.length > 253) return false;
+    var labels = raw.split(".");
+    for (var i = 0; i < labels.length; i += 1){
+      if (!/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/.test(labels[i])) return false;
+    }
+    return true;
+  }
+
+  function bindAddressOf(value){
+    var raw = textOf(value);
+    if (!raw) return "";
+    if (raw === "*") return "*";
+    if (/^\[[0-9A-Fa-f:.]+\]$/.test(raw)) return raw;
+    if (isIpv4(raw)) return raw;
+    if (!looksNumeric(raw) && isHostname(raw)) return raw;
+    fail("The bind address must be an IPv4 address, a host name or a bracketed IPv6 address, or left blank.");
+  }
+
+  function addressOf(value, who){
+    var raw = textOf(value);
+    if (!raw) fail(who + " needs an address such as 10.0.0.11 or app.internal.");
+    if (/^\[[0-9A-Fa-f:.]+\]$/.test(raw)) return raw;
+    if (isIpv4(raw)) return raw;
+    if (!looksNumeric(raw) && isHostname(raw)) return raw;
+    fail(who + " address \"" + raw + "\" is not an IPv4 address, a host name or a bracketed IPv6 address.");
+  }
+
+  function ruleValueOf(match, value, number){
+    var label = "Routing rule " + number;
+    var raw = textOf(value);
+    if (!raw) fail(label + " needs a match value.");
+    if (match === "path_beg" || match === "path_end"){
+      if (raw.charAt(0) !== "/" || /[\s{}#\\]/.test(raw)) fail(label + " needs a path that starts with / and contains no spaces.");
+      return raw;
+    }
+    if (match === "hdr_host"){
+      if (!/^[A-Za-z0-9.*?_:-]{1,253}$/.test(raw)) fail(label + " needs a host name such as api.example.com.");
+      return raw;
+    }
+    var parts = raw.split("/");
+    if (parts.length > 2 || !isIpv4(parts[0])) fail(label + " needs an IPv4 address or CIDR block such as 10.0.0.0/8.");
+    if (parts.length === 2 && (!/^[0-9]{1,2}$/.test(parts[1]) || Number(parts[1]) > 32)){
+      fail(label + " needs an IPv4 address or CIDR block such as 10.0.0.0/8.");
+    }
+    return raw;
+  }
+
+  function splitShares(servers, weightTotal){
+    var remainders = [];
+    var allocated = 0;
+    servers.forEach(function(server, index){
+      var exact = server.weight * 1000;
+      server.per1000 = Math.floor(exact / weightTotal);
+      server.share = Math.round(server.weight * 1000 / weightTotal) / 10;
+      allocated += server.per1000;
+      remainders.push({ index: index, rest: exact - server.per1000 * weightTotal });
+    });
+    remainders.sort(function(a, b){ return b.rest - a.rest || a.index - b.index; });
+    var left = 1000 - allocated;
+    for (var i = 0; i < left; i += 1) servers[remainders[i].index].per1000 += 1;
+    return servers;
+  }
+
+  function analyze(input){
+    var source = input || {};
+    var mode = choice(source.mode, ["http", "tcp"], "Mode must be http or tcp.");
+    var bindAddress = bindAddressOf(source.bindAddress);
+    var bindPort = whole(source.bindPort, 1, 65535, null, "The bind port must be a whole number from 1 to 65535.");
+    var inter = whole(source.interMs, 1, 60000, 2000, "The check interval must be a whole number of milliseconds from 1 to 60000.");
+    var fall = whole(source.fall, 1, 100, 3, "fall must be a whole number from 1 to 100.");
+    var rise = whole(source.rise, 1, 100, 2, "rise must be a whole number from 1 to 100.");
+
+    var backendInputs = Array.isArray(source.backends) ? source.backends : [];
+    if (!backendInputs.length) fail("Add at least one backend.");
+    if (backendInputs.length > MAX_BACKENDS) fail("This planner handles up to " + MAX_BACKENDS + " backends.");
+
+    var seenBackends = {};
+    var backends = backendInputs.map(function(entry, index){
+      var item = entry || {};
+      var name = nameOf(item.name, "Backend " + (index + 1));
+      if (Object.prototype.hasOwnProperty.call(seenBackends, name)) fail("Backend name \"" + name + "\" is used twice.");
+      seenBackends[name] = true;
+
+      var balance = choice(item.balance, BALANCES, "Backend \"" + name + "\" needs a balance algorithm from roundrobin, static-rr, leastconn, source, uri or hdr.");
+      if (mode === "tcp" && HTTP_ONLY_BALANCES.indexOf(balance) >= 0){
+        fail(balance + " balancing is HTTP-only, so backend \"" + name + "\" needs http mode.");
+      }
+      var hdr = "";
+      if (balance === "hdr"){
+        hdr = textOf(item.hdr);
+        if (!hdr) fail("hdr balancing needs a header name such as Host.");
+        if (!/^[A-Za-z0-9-]{1,32}$/.test(hdr)) fail("The hdr header name may use only letters, digits and dashes.");
+      }
+
+      var serverInputs = Array.isArray(item.servers) ? item.servers : [];
+      if (!serverInputs.length) fail("Backend \"" + name + "\" needs at least one server.");
+      if (serverInputs.length > MAX_SERVERS) fail("Backend \"" + name + "\" has more than " + MAX_SERVERS + " servers.");
+
+      var seenNames = {};
+      var seenEndpoints = {};
+      var weightTotal = 0;
+      var cap = 0;
+      var limited = 0;
+      var servers = serverInputs.map(function(raw, position){
+        var entryServer = raw || {};
+        var positionLabel = "Server " + (position + 1) + " in backend \"" + name + "\"";
+        var serverName = nameOf(entryServer.name, positionLabel);
+        var who = "Server \"" + serverName + "\"";
+        if (Object.prototype.hasOwnProperty.call(seenNames, serverName)){
+          fail("Backend \"" + name + "\" lists server name \"" + serverName + "\" twice.");
+        }
+        seenNames[serverName] = true;
+        var address = addressOf(entryServer.address, who);
+        var port = whole(entryServer.port, 1, 65535, null, who + " port must be a whole number from 1 to 65535.");
+        var endpoint = address + ":" + port;
+        if (Object.prototype.hasOwnProperty.call(seenEndpoints, endpoint)){
+          fail("Backend \"" + name + "\" lists " + endpoint + " twice.");
+        }
+        seenEndpoints[endpoint] = true;
+        var weight = whole(entryServer.weight, 0, 256, 1, who + " weight must be a whole number from 0 to 256.");
+        var maxconn = textOf(entryServer.maxconn) === "" ? null
+          : whole(entryServer.maxconn, 1, 1000000, null, who + " maxconn must be a whole number from 1 to 1000000, or left blank.");
+        var check = entryServer.check === true || textOf(entryServer.check) === "true";
+        weightTotal += weight;
+        if (maxconn !== null){
+          cap += maxconn;
+          limited += 1;
+        }
+        return { name: serverName, address: address, port: port, weight: weight, maxconn: maxconn, check: check };
+      });
+
+      if (weightTotal === 0) fail("Backend \"" + name + "\" has every server at weight 0, so new traffic would go nowhere.");
+      splitShares(servers, weightTotal);
+
+      return {
+        name: name,
+        balance: balance,
+        hdr: hdr,
+        servers: servers,
+        weightTotal: weightTotal,
+        detectionMs: inter * fall,
+        recoveryMs: inter * rise,
+        connectionCap: limited ? cap : null,
+        limitedServers: limited
+      };
+    });
+
+    var ruleInputs = Array.isArray(source.rules) ? source.rules : [];
+    if (ruleInputs.length > MAX_RULES) fail("This planner handles up to " + MAX_RULES + " routing rules.");
+    var seenRules = {};
+    var rules = ruleInputs.map(function(entry, index){
+      var item = entry || {};
+      var number = index + 1;
+      var match = choice(item.match, MATCHES, "Routing rule " + number + " needs a match type.");
+      if (mode === "tcp" && CONTENT_MATCHES.indexOf(match) >= 0){
+        fail("Routing rule " + number + " uses " + match + ", which reads request content that tcp mode does not parse.");
+      }
+      var value = ruleValueOf(match, item.value, number);
+      var backend = textOf(item.backend);
+      if (!backend) fail("Routing rule " + number + " needs a target backend.");
+      if (!Object.prototype.hasOwnProperty.call(seenBackends, backend)){
+        fail("Routing rule " + number + " targets backend \"" + backend + "\", which does not exist.");
+      }
+      var key = match + " " + value;
+      if (Object.prototype.hasOwnProperty.call(seenRules, key)){
+        fail("Routing rule " + number + " repeats rule " + seenRules[key] + "'s match and value, so it can never be reached.");
+      }
+      seenRules[key] = number;
+      return { number: number, match: match, value: value, backend: backend, acl: "is_" + match + "_" + number };
+    });
+
+    var lines = [];
+    lines.push("# Generated by virt.tools HAProxy Config Builder");
+    lines.push("# Review the file, then check it locally with: haproxy -c -f haproxy.cfg");
+    lines.push("");
+    lines.push("defaults");
+    lines.push("    mode " + mode);
+    lines.push("    timeout connect 5s");
+    lines.push("    timeout client  30s");
+    lines.push("    timeout server  30s");
+    lines.push("");
+    lines.push("frontend fe_main");
+    lines.push("    bind " + (bindAddress ? bindAddress : "") + ":" + bindPort);
+    rules.forEach(function(rule){
+      lines.push("    acl " + rule.acl + " " + CRITERIA[rule.match] + " " + (rule.match === "hdr_host" ? "-i " : "") + rule.value);
+    });
+    if (rules.length) lines.push("");
+    rules.forEach(function(rule){
+      lines.push("    use_backend " + rule.backend + " if " + rule.acl);
+    });
+    lines.push("    default_backend " + backends[0].name);
+    backends.forEach(function(backend){
+      lines.push("");
+      lines.push("backend " + backend.name);
+      lines.push("    balance " + (backend.balance === "hdr" ? "hdr(" + backend.hdr + ")" : backend.balance));
+      backend.servers.forEach(function(server){
+        var line = "    server " + server.name + " " + server.address + ":" + server.port + " weight " + server.weight;
+        if (server.maxconn !== null) line += " maxconn " + server.maxconn;
+        if (server.check) line += " check inter " + inter + "ms fall " + fall + " rise " + rise;
+        lines.push(line);
+      });
+    });
+
+    var warnings = [];
+    backends.forEach(function(backend){
+      if (WEIGHTED_BALANCES.indexOf(backend.balance) < 0){
+        warnings.push("Backend \"" + backend.name + "\" uses " + backend.balance + " balancing, which does not follow the server weights, so the split above is only a weight reference.");
+      }
+      if (backend.servers.length === 1){
+        warnings.push("Backend \"" + backend.name + "\" has a single server, so it has no failover.");
+      }
+      if (backend.connectionCap === null){
+        warnings.push("Backend \"" + backend.name + "\" sets no maxconn, so its connection ceiling comes from the global maxconn and the operating system, not from this file.");
+      }
+      backend.servers.forEach(function(server){
+        if (server.weight === 0){
+          warnings.push("Server \"" + server.name + "\" has weight 0: it takes no new traffic but still accepts persistent connections.");
+        }
+        if (server.weight > 100){
+          warnings.push("Server \"" + server.name + "\" has weight " + server.weight + "; the manual suggests staying between 10 and 100 so weights can rise and fall later.");
+        }
+        if (!server.check){
+          warnings.push("Server \"" + server.name + "\" has no health check, so it stays in rotation when it fails.");
+        }
+      });
+    });
+    rules.forEach(function(rule){
+      if (rule.backend === backends[0].name){
+        warnings.push("Routing rule " + rule.number + " names the default backend, so that use_backend line changes nothing.");
+      }
+    });
+
+    var slowest = backends.reduce(function(best, backend){
+      return backend.detectionMs > best.detectionMs ? backend : best;
+    }, backends[0]);
+    var capTotal = 0;
+    var capSet = false;
+    backends.forEach(function(backend){
+      if (backend.connectionCap !== null){
+        capTotal += backend.connectionCap;
+        capSet = true;
+      }
+    });
+
+    return {
+      mode: mode,
+      bind: (bindAddress ? bindAddress : "") + ":" + bindPort,
+      defaultBackend: backends[0].name,
+      backends: backends,
+      rules: rules,
+      totals: {
+        backends: backends.length,
+        servers: backends.reduce(function(sum, backend){ return sum + backend.servers.length; }, 0),
+        weightTotal: backends.reduce(function(sum, backend){ return sum + backend.weightTotal; }, 0),
+        failoverMs: slowest.detectionMs,
+        failoverBackend: slowest.name,
+        recoveryMs: slowest.recoveryMs,
+        connectionCap: capSet ? capTotal : null
+      },
+      warnings: warnings,
+      config: lines.join("\n") + "\n"
+    };
+  }
+
+  return { analyze: analyze, DEFAULT_INPUT: DEFAULT_INPUT, MAX_BACKENDS: MAX_BACKENDS, MAX_SERVERS: MAX_SERVERS, MAX_RULES: MAX_RULES };
+})();
+/* haproxy-config-core:end */
+(function(){
+  "use strict";
+
+  var $ = function(id){ return document.getElementById(id); };
+
+  function el(tag, attrs, text){
+    var node = document.createElement(tag);
+    if (attrs) Object.keys(attrs).forEach(function(key){
+      if (key === "class") node.className = attrs[key];
+      else node.setAttribute(key, attrs[key]);
+    });
+    if (text !== undefined && text !== null) node.textContent = text;
+    return node;
+  }
+
+  function field(labelText, id, control){
+    var wrap = el("div", { "class": "field" });
+    wrap.appendChild(el("label", { "for": id }, labelText));
+    control.id = id;
+    wrap.appendChild(control);
+    return wrap;
+  }
+
+  function input(key, type, value, label, extra){
+    var node = el("input", {
+      type: type === "number" ? "text" : type,
+      inputmode: type === "number" ? "numeric" : "text",
+      autocomplete: "off",
+      spellcheck: "false",
+      "data-key": key
+    });
+    if (value !== undefined && value !== null) node.value = value;
+    if (label) node.setAttribute("aria-label", label);
+    if (extra) Object.keys(extra).forEach(function(name){ node.setAttribute(name, extra[name]); });
+    return node;
+  }
+
+  function select(key, options, value, label){
+    var node = el("select", { "data-key": key });
+    options.forEach(function(option){
+      var entry = el("option", { value: option[0] }, option[1]);
+      if (option[0] === value) entry.selected = true;
+      node.appendChild(entry);
+    });
+    if (label) node.setAttribute("aria-label", label);
+    return node;
+  }
+
+  var BALANCE_OPTIONS = [
+    ["roundrobin", "roundrobin (weighted)"],
+    ["static-rr", "static-rr (weighted)"],
+    ["leastconn", "leastconn"],
+    ["source", "source (IP hash)"],
+    ["uri", "uri (path hash, http)"],
+    ["hdr", "hdr (header hash, http)"]
+  ];
+  var MATCH_OPTIONS = [
+    ["path_beg", "Path begins"],
+    ["path_end", "Path ends"],
+    ["hdr_host", "Host header"],
+    ["src", "Source address"]
+  ];
+  var counters = { backend: 0, server: 0, rule: 0 };
+
+  function setStatus(message, kind){
+    var node = $("status");
+    node.textContent = message || "";
+    node.className = "status " + (kind || "");
+  }
+
+  function setError(message){
+    var node = $("err");
+    node.textContent = message || "";
+  }
+
+  function serverCount(backend){
+    return backend.querySelectorAll(".srv").length;
+  }
+
+  function addServer(backend, data){
+    if (serverCount(backend) >= HaproxyConfigCore.MAX_SERVERS){
+      setError("A backend takes at most " + HaproxyConfigCore.MAX_SERVERS + " servers here.");
+      return null;
+    }
+    var item = data || {};
+    counters.server += 1;
+    var id = "srv" + counters.server;
+    var row = el("div", { "class": "srv", "data-id": id });
+    var fields = el("div", { "class": "srv-fields" });
+    fields.appendChild(field("Name", id + "-name" , input("name", "text", item.name || "", "Server name")));
+    fields.appendChild(field("Address", id + "-address", input("address", "text", item.address || "", "Server address")));
+    fields.appendChild(field("Port", id + "-port", input("port", "number", item.port === undefined ? "8080" : item.port, "Server port")));
+    fields.appendChild(field("Weight", id + "-weight", input("weight", "number", item.weight === undefined ? "1" : item.weight, "Server weight, 0 to 256")));
+    fields.appendChild(field("Max conn", id + "-maxconn", input("maxconn", "number", item.maxconn === undefined ? "" : item.maxconn, "Server maxconn, optional")));
+    row.appendChild(fields);
+
+    var foot = el("div", { "class": "srv-foot" });
+    var checkWrap = el("label", { "class": "chk" });
+    var check = input("check", "checkbox");
+    check.checked = item.check === undefined ? true : Boolean(item.check);
+    checkWrap.appendChild(check);
+    checkWrap.appendChild(document.createTextNode("Health check this server"));
+    foot.appendChild(checkWrap);
+    var remove = el("button", { type: "button", "class": "remove" }, "Remove server");
+    remove.addEventListener("click", function(){
+      var container = row.parentNode;
+      row.remove();
+      renumberServers(container);
+      setStatus("");
+    });
+    foot.appendChild(remove);
+    row.appendChild(foot);
+
+    backend.querySelector(".servers").appendChild(row);
+    renumberServers(backend.querySelector(".servers"));
+    return row;
+  }
+
+  function renumberServers(container){
+    Array.prototype.forEach.call(container.querySelectorAll(".srv"), function(row, index){
+      row.querySelectorAll("[data-key]").forEach(function(control){
+        var key = control.getAttribute("data-key");
+        var label = { name: "Server name", address: "Server address", port: "Server port",
+          weight: "Server " + (index + 1) + " weight, 0 to 256", maxconn: "Server " + (index + 1) + " maxconn, optional",
+          check: "Health check server " + (index + 1) }[key];
+        if (label) control.setAttribute("aria-label", label);
+      });
+    });
+  }
+
+  function addBackend(data){
+    var container = $("backends");
+    if (container.querySelectorAll(".backend").length >= HaproxyConfigCore.MAX_BACKENDS){
+      setError("This planner handles up to " + HaproxyConfigCore.MAX_BACKENDS + " backends.");
+      return null;
+    }
+    var item = data || {};
+    counters.backend += 1;
+    var id = "backend" + counters.backend;
+    var card = el("section", { "class": "backend", "data-id": id });
+    var head = el("div", { "class": "backend-head" });
+    var title = el("h3", {}, "Backend " + (container.querySelectorAll(".backend").length + 1));
+    var remove = el("button", { type: "button", "class": "remove" }, "Remove backend");
+    remove.addEventListener("click", function(){
+      if (container.querySelectorAll(".backend").length === 1){
+        setError("Keep at least one backend.");
+        return;
+      }
+      card.remove();
+      renumberBackends();
+      syncRuleBackends();
+      setStatus("");
+      setError("");
+    });
+    head.appendChild(title);
+    head.appendChild(remove);
+    card.appendChild(head);
+
+    var grid = el("div", { "class": "grid" });
+    grid.appendChild(field("Name", id + "-name", input("name", "text", item.name || "", "Backend name")));
+    grid.appendChild(field("Balance", id + "-balance", select("balance", BALANCE_OPTIONS, item.balance || "roundrobin", "Balance algorithm")));
+    var hdrField = field("Header for hdr()", id + "-hdr", input("hdr", "text", item.hdr || "Host", "Header name for hdr balancing"));
+    hdrField.setAttribute("data-role", "hdr");
+    grid.appendChild(hdrField);
+    card.appendChild(grid);
+
+    var hdrToggle = function(){
+      var balance = card.querySelector('[data-key="balance"]').value;
+      hdrField.hidden = balance !== "hdr";
+    };
+    card.querySelector('[data-key="balance"]').addEventListener("change", hdrToggle);
+
+    var servers = el("div", { "class": "servers" });
+    card.appendChild(servers);
+    var add = el("button", { type: "button", "class": "add-server" }, "Add server");
+    add.addEventListener("click", function(){ addServer(card); setStatus(""); });
+    card.appendChild(add);
+
+    container.appendChild(card);
+    var list = Array.isArray(item.servers) ? item.servers : [{ name: "", address: "", port: "8080", weight: "1", maxconn: "", check: true }];
+    list.forEach(function(server){ addServer(card, server); });
+    hdrToggle();
+    renumberBackends();
+    syncRuleBackends();
+    return card;
+  }
+
+  function renumberBackends(){
+    Array.prototype.forEach.call(document.querySelectorAll(".backend"), function(card, index){
+      card.querySelector("h3").textContent = "Backend " + (index + 1);
+      card.querySelectorAll('[data-key="name"]')[0].setAttribute("aria-label", "Backend " + (index + 1) + " name");
+    });
+  }
+
+  function addRule(data){
+    var container = $("rules");
+    if (container.querySelectorAll(".rule").length >= HaproxyConfigCore.MAX_RULES){
+      setError("This planner handles up to " + HaproxyConfigCore.MAX_RULES + " routing rules.");
+      return null;
+    }
+    var item = data || {};
+    counters.rule += 1;
+    var id = "rule" + counters.rule;
+    var row = el("div", { "class": "rule", "data-id": id });
+    row.appendChild(field("Match", id + "-match", select("match", MATCH_OPTIONS, item.match || "path_beg", "Rule match type")));
+    row.appendChild(field("Value", id + "-value", input("value", "text", item.value || "", "Rule match value")));
+    var target = el("select", { "data-key": "backend" });
+    target.setAttribute("aria-label", "Rule target backend");
+    var wrap = el("div", { "class": "field" });
+    wrap.appendChild(el("label", { "for": id + "-backend" }, "Backend"));
+    target.id = id + "-backend";
+    wrap.appendChild(target);
+    row.appendChild(wrap);
+    var remove = el("button", { type: "button", "class": "remove" }, "Remove rule");
+    remove.style.alignSelf = "end";
+    remove.addEventListener("click", function(){ row.remove(); setStatus(""); });
+    row.appendChild(remove);
+    container.appendChild(row);
+    syncRuleBackends();
+    return row;
+  }
+
+  function backendNames(){
+    var names = [];
+    Array.prototype.forEach.call(document.querySelectorAll('.backend [data-key="name"]'), function(node){
+      var value = node.value.trim();
+      if (value) names.push(value);
+    });
+    return names;
+  }
+
+  function syncRuleBackends(){
+    var names = backendNames();
+    Array.prototype.forEach.call(document.querySelectorAll('.rule [data-key="backend"]'), function(node){
+      var previous = node.value;
+      while (node.firstChild) node.removeChild(node.firstChild);
+      names.forEach(function(name){
+        node.appendChild(el("option", { value: name }, name));
+      });
+      if (names.indexOf(previous) >= 0) node.value = previous;
+    });
+  }
+
+  function readForm(){
+    var backends = [];
+    Array.prototype.forEach.call(document.querySelectorAll(".backend"), function(card){
+      var servers = [];
+      Array.prototype.forEach.call(card.querySelectorAll(".srv"), function(row){
+        var get = function(key){ return row.querySelector('[data-key="' + key + '"]'); };
+        servers.push({
+          name: get("name").value,
+          address: get("address").value,
+          port: get("port").value,
+          weight: get("weight").value,
+          maxconn: get("maxconn").value,
+          check: get("check").checked
+        });
+      });
+      backends.push({
+        name: card.querySelector('[data-key="name"]').value,
+        balance: card.querySelector('[data-key="balance"]').value,
+        hdr: card.querySelector('[data-key="hdr"]').value,
+        servers: servers
+      });
+    });
+    var rules = [];
+    Array.prototype.forEach.call(document.querySelectorAll(".rule"), function(row){
+      rules.push({
+        match: row.querySelector('[data-key="match"]').value,
+        value: row.querySelector('[data-key="value"]').value,
+        backend: row.querySelector('[data-key="backend"]').value
+      });
+    });
+    return {
+      mode: $("mode").value,
+      bindAddress: $("bindAddress").value,
+      bindPort: $("bindPort").value,
+      interMs: $("interMs").value,
+      fall: $("fall").value,
+      rise: $("rise").value,
+      backends: backends,
+      rules: rules
+    };
+  }
+
+  function percent(value){
+    return (value % 1 === 0 ? String(value) : value.toFixed(1)) + "%";
+  }
+
+  function duration(ms){
+    if (ms < 1000) return ms + " ms";
+    var seconds = ms / 1000;
+    return (seconds % 1 === 0 ? String(seconds) : seconds.toFixed(1)) + " s";
+  }
+
+  function metric(label, value){
+    var box = el("div", { "class": "metric" });
+    box.appendChild(el("strong", {}, value));
+    box.appendChild(el("span", {}, label));
+    return box;
+  }
+
+  function render(result){
+    var out = $("out");
+    while (out.firstChild) out.removeChild(out.firstChild);
+
+    var metrics = el("div", { "class": "metrics" });
+    metrics.appendChild(metric("Backends", String(result.totals.backends)));
+    metrics.appendChild(metric("Servers", String(result.totals.servers)));
+    metrics.appendChild(metric("Failover, slowest", duration(result.totals.failoverMs)));
+    metrics.appendChild(metric("Connection cap", result.totals.connectionCap === null ? "not set" : String(result.totals.connectionCap)));
+    out.appendChild(metrics);
+
+    if (result.warnings.length){
+      var warn = el("div", { "class": "warn" });
+      result.warnings.forEach(function(message){ warn.appendChild(el("p", {}, message)); });
+      out.appendChild(warn);
+    }
+
+    var table = el("table");
+    table.appendChild(el("caption", {}, "Traffic split by weight, and the failover time of each backend. Per-1,000 is rounded so the rows total 1,000."));
+    var thead = el("thead");
+    var headRow = el("tr");
+    ["Backend", "Server", "Weight", "Share", "Per 1,000", "Max conn", "Failover"].forEach(function(label){
+      headRow.appendChild(el("th", { scope: "col" }, label));
+    });
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+    var tbody = el("tbody");
+    result.backends.forEach(function(backend){
+      backend.servers.forEach(function(server){
+        var row = el("tr");
+        var cells = [
+          [backend.name, false],
+          [server.name, false],
+          [String(server.weight), true],
+          [percent(server.share), true],
+          [String(server.per1000), true],
+          [server.maxconn === null ? "-" : String(server.maxconn), true],
+          [server.check ? duration(backend.detectionMs) : "off", true]
+        ];
+        cells.forEach(function(cell, index){
+          var td = el("td", { "data-label": ["Backend", "Server", "Weight", "Share", "Per 1,000", "Max conn", "Failover"][index] }, cell[0]);
+          if (cell[1]) td.className = "num";
+          row.appendChild(td);
+        });
+        tbody.appendChild(row);
+      });
+    });
+    table.appendChild(tbody);
+    out.appendChild(table);
+
+    out.appendChild(el("h3", {}, "haproxy.cfg"));
+    var pre = el("pre", { tabindex: "0", "aria-label": "Generated HAProxy configuration" }, result.config);
+    out.appendChild(pre);
+  }
+
+  function build(){
+    setError("");
+    try {
+      var result = HaproxyConfigCore.analyze(readForm());
+      render(result);
+      setStatus("Built a config for " + result.totals.backends + " backend" + (result.totals.backends === 1 ? "" : "s")
+        + " and " + result.totals.servers + " server" + (result.totals.servers === 1 ? "" : "s") + ".", "ok");
+      return result;
+    } catch (error){
+      setError(error.message);
+      setStatus("");
+      $("out").replaceChildren();
+      return null;
+    }
+  }
+
+  function reset(){
+    $("backends").replaceChildren();
+    $("rules").replaceChildren();
+    counters = { backend: 0, server: 0, rule: 0 };
+    var data = HaproxyConfigCore.DEFAULT_INPUT;
+    $("mode").value = data.mode;
+    $("bindAddress").value = data.bindAddress;
+    $("bindPort").value = data.bindPort;
+    $("interMs").value = data.interMs;
+    $("fall").value = data.fall;
+    $("rise").value = data.rise;
+    data.backends.forEach(function(backend){ addBackend(backend); });
+    data.rules.forEach(function(rule){ addRule(rule); });
+    syncRuleBackends();
+    setError("");
+    build();
+  }
+
+  $("form").addEventListener("submit", function(event){ event.preventDefault(); });
+  $("checks").addEventListener("submit", function(event){ event.preventDefault(); });
+  $("build").addEventListener("submit", function(event){ event.preventDefault(); build(); });
+  $("addBackend").addEventListener("click", function(){ addBackend(); setError(""); setStatus(""); });
+  $("addRule").addEventListener("click", function(){ addRule(); syncRuleBackends(); setError(""); setStatus(""); });
+  $("reset").addEventListener("click", reset);
+  $("copy").addEventListener("click", function(){
+    var result = build();
+    if (!result) return;
+    if (!navigator.clipboard || !navigator.clipboard.writeText){
+      setStatus("Clipboard unavailable; select the config and copy it manually.", "error");
+      return;
+    }
+    navigator.clipboard.writeText(result.config).then(function(){
+      setStatus("Config copied to the clipboard.", "ok");
+    }, function(){
+      setStatus("Clipboard unavailable; select the config and copy it manually.", "error");
+    });
+  });
+  $("backends").addEventListener("input", function(event){
+    if (event.target && event.target.getAttribute("data-key") === "name") syncRuleBackends();
+  });
+  $("mode").addEventListener("change", function(){ setStatus(""); });
+  document.addEventListener("keydown", function(event){
+    var target = event.target;
+    if (event.key !== "Enter" || !target || !target.tagName) return;
+    var tag = target.tagName.toLowerCase();
+    if (tag !== "input" && tag !== "select") return;
+    if (target.type === "checkbox") return;
+    event.preventDefault();
+    build();
+  });
+
+  reset();
+})();
+</script>
+</body>
+</html>
