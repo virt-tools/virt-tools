@@ -422,6 +422,7 @@ node tests/dori_pixel_density_planner.test.cjs
 node tests/map_sheet_layout_planner.test.cjs
 node tests/wind_pipe_tuning_calculator.test.cjs
 node tests/keyframe_trim_planner.test.cjs
+node tests/referrer_policy_simulator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
