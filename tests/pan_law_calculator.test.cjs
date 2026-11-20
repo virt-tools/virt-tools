@@ -259,8 +259,8 @@ assert.equal(new Set(record.tags).size, record.tags.length, 'tags are internally
 for (const tag of ['audio', 'panning', 'pan-law', 'mixing', 'stereo', 'gain-staging', 'mono-compatibility']) {
   assert.ok(record.tags.includes(tag), 'new tag present: ' + tag);
 }
-assert.equal(catalog.tools.length, 2431, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2170, 'public tools');
+assert.equal(catalog.tools.length, 2432, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2171, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Audio').length, 53, 'audio records');
 
 // ---- Page contract: shared assets, labelled controls, no storage or network.
