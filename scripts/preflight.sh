@@ -430,6 +430,7 @@ node tests/tennis_court_marking_calculator.test.cjs
 node tests/github_actions_expression_evaluator.test.cjs
 node tests/worm_gear_calculator.test.cjs
 node tests/directional_coupler_calculator.test.cjs
+node tests/fuel_oil_viscosity_temperature_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"

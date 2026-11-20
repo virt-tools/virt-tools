@@ -138,10 +138,10 @@ refuses({}, 'Choose API gravity, specific gravity or density.');
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
 const pageDirs = fs.readdirSync(path.join(root, 'frontend', 'tools'), { withFileTypes: true })
   .filter((entry) => entry.isDirectory()).length;
-assert.equal(catalog.tools.length, 2422, 'catalog records');
+assert.equal(catalog.tools.length, 2423, 'catalog records');
 assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageDirs,
   'every listed tool record has a page');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2161, 'public tools');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2162, 'public tools');
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record missing');
 assert.equal(record.name, 'API Gravity Converter');
@@ -167,7 +167,7 @@ assert.equal(record.testCases.filter((testCase) => testCase.kind === 'validation
   'validation cases');
 assert.equal(catalog.tools.filter((tool) => tool.slug === slug).length, 1, 'slug unique');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Oil, Gas & Marine Engineering').length,
-  52, 'Oil, Gas & Marine Engineering count');
+  53, 'Oil, Gas & Marine Engineering count');
 for (const other of catalog.tools) {
   if (other.slug === slug) continue;
   assert.ok(!record.aliases.map((alias) => alias.toLowerCase()).includes(other.name.toLowerCase()),
