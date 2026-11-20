@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>GitHub Actions Expression Evaluator &mdash; Virtual Tools</title>
+<meta name="description" content="Evaluate a GitHub Actions ${{ }} expression against your own contexts: the value, its type and whether a step's if: condition runs, using GitHub's loose equality and object filter rules.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.field{display:flex;flex-direction:column;gap:6px;margin:0}
+textarea.code,select.sel{box-sizing:border-box;width:100%;min-height:46px;padding:10px 12px;border-radius:8px;
+  border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);color:var(--text,#e6e6e6);
+  font:inherit;font-size:15px;line-height:1.5;outline:none;max-width:none}
+textarea.code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;resize:vertical;min-height:96px}
+select.sel{appearance:none;-webkit-appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--text-dim,#9aa3b2) 50%),linear-gradient(135deg,var(--text-dim,#9aa3b2) 50%,transparent 50%);
+  background-position:calc(100% - 18px) 20px,calc(100% - 13px) 20px;background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:34px}
+textarea:focus-visible,select:focus-visible{outline:2px solid var(--accent,#6ea8fe);outline-offset:1px;box-shadow:none}
+.hint{color:var(--text-dim,#9aa3b2);font-size:12.5px;margin:10px 0 0;line-height:1.45}
+.examples{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 0}
+.examples button{font:inherit;font-size:13px;padding:8px 12px;min-height:44px;border-radius:8px;cursor:pointer;
+  border:1px solid var(--border,#2a2f3a);background:transparent;color:var(--text,#e6e6e6)}
+.examples button:hover{border-color:var(--accent,#6ea8fe);color:var(--accent,#6ea8fe)}
+.examples button:focus-visible{outline:2px solid var(--accent,#6ea8fe);outline-offset:2px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:16px 0 0}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:46px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.err{color:var(--bad,#f87171);font-size:13px;margin:10px 0 0;min-height:1.2em;line-height:1.5}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:16px 0 0;overflow-wrap:anywhere}
+.out .label{text-align:center;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-dim,#9aa3b2)}
+.out .big{font-size:clamp(1.2rem,6vw,1.75rem);font-weight:800;text-align:center;padding:2px 0 4px;line-height:1.3}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:6px 0 0;line-height:1.5}
+.rows{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:8px 14px;margin:16px 0 0;font-size:13.5px}
+.rows dt{color:var(--text-dim,#9aa3b2)}
+.rows dd{margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere;white-space:pre-wrap}
+.note{color:var(--text-dim,#9aa3b2);font-size:12.5px;line-height:1.55;margin:18px 0 0}
+.tool-sources li,.tool-sources a{overflow-wrap:anywhere}
+@media (max-width:640px){.grid{grid-template-columns:minmax(0,1fr)}.rows{grid-template-columns:minmax(0,1fr);gap:2px}
+  .rows dd{margin-bottom:8px}.actions button{flex:1 1 auto}}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<h1>GitHub Actions Expression Evaluator</h1>
+<p>Evaluate a <code>${{ }}&nbsp;</code> expression from a workflow <code>if:</code>, <code>env:</code> or <code>runs-on:</code> against your own contexts, and see the value and whether the step would run.</p>
+</div>
+
+<div class="panel">
+<form id="expr-form" novalidate>
+<div class="field">
+<label for="expression">Expression</label>
+<textarea class="code" id="expression" rows="3" spellcheck="false" autocomplete="off" autocapitalize="off" aria-describedby="expr-hint"></textarea>
+</div>
+<p class="hint" id="expr-hint">Paste it with or without the <code>${{ }}</code> wrapper. Strings use single quotes; the language has no arithmetic operators.</p>
+<div class="examples" role="group" aria-label="Example expressions">
+<button type="button" data-example="labels">Pull request labels</button>
+<button type="button" data-example="matrix">Matrix value</button>
+<button type="button" data-example="branch">Branch prefix</button>
+</div>
+<div class="grid" style="margin-top:14px">
+<div class="field">
+<label for="status">Earlier steps in the job</label>
+<select class="sel" id="status">
+<option value="success" selected>Succeeded</option>
+<option value="failure">Failed</option>
+<option value="cancelled">Cancelled</option>
+</select>
+</div>
+<div class="field">
+<label for="wrapper">Expression returns</label>
+<select class="sel" id="wrapper">
+<option value="if" selected>An if: condition</option>
+<option value="value">A plain value</option>
+</select>
+</div>
+</div>
+<div class="field" style="margin-top:14px">
+<label for="contexts">Contexts (JSON)</label>
+<textarea class="code" id="contexts" rows="11" spellcheck="false" autocomplete="off" autocapitalize="off" aria-describedby="ctx-hint"></textarea>
+</div>
+<p class="hint" id="ctx-hint">Each key is a context; one you leave out evaluates to <code>null</code>. The JSON is read in this browser and never sent anywhere.</p>
+<p class="err" id="err" role="alert" aria-live="polite"></p>
+<div class="actions">
+<button type="submit">Evaluate</button>
+</div>
+</form>
+</div>
+
+<div class="out" id="out" aria-live="polite" aria-atomic="true"></div>
+
+<p class="note">This follows the expression language as GitHub documents and implements it: literals, the operator table, loose equality with its coercion table, the built-in functions and object filters. Comparison ignores case for strings, <code>&amp;&amp;</code> and <code>||</code> return one of their operands rather than a boolean, a missing property is <code>null</code>, and <code>*</code> collects a property or the items of a collection into an array. An <code>if:</code> condition runs when its value is truthy and, unless the expression calls <code>success()</code>, <code>failure()</code>, <code>cancelled()</code> or <code>always()</code>, when the job is still succeeding, which is the implicit <code>success()</code> check. <code>hashFiles()</code> needs the workflow workspace and is refused, and <code>secrets</code> is never available inside an expression. The page uses your browsers own JSON parser for the contexts and evaluates everything locally: nothing is stored and nothing is sent.</p>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* github-actions-expression-core:start */
+var GhaExpressionCore = (function(){
+  "use strict";
+  var MAX_EXPRESSION = 2000;
+  var MAX_CONTEXTS = 20000;
+  var MAX_DEPTH = 60;
+  var STANDARD_CONTEXTS = ["github", "env", "vars", "job", "matrix", "steps", "needs", "inputs", "runner", "strategy"];
+  var STATUS_FUNCTIONS = { success: true, failure: true, cancelled: true, always: true };
+
+  function FilteredArray(items){
+    this.items = items || [];
+  }
+
+  function kindOf(value){
+    if (value === null || value === undefined) { return "null"; }
+    if (value instanceof FilteredArray) { return "array"; }
+    if (Array.isArray(value)) { return "array"; }
+    var type = typeof value;
+    if (type === "boolean" || type === "number" || type === "string") { return type; }
+    return "object";
+  }
+
+  function isPrimitive(value){
+    var kind = kindOf(value);
+    return kind === "null" || kind === "boolean" || kind === "number" || kind === "string";
+  }
+
+  function numberText(value){
+    if (value === 0) { return "0"; }
+    if (value !== value) { return "NaN"; }
+    if (value === Infinity) { return "Infinity"; }
+    if (value === -Infinity) { return "-Infinity"; }
+    return String(+value.toFixed(15));
+  }
+
+  function coerceString(value){
+    switch (kindOf(value)){
+      case "null": return "";
+      case "boolean": return value ? "true" : "false";
+      case "number": return numberText(value);
+      case "string": return value;
+      case "array": return "Array";
+      default: return "Object";
+    }
+  }
+
+  function toNumber(value){
+    switch (kindOf(value)){
+      case "null": return 0;
+      case "boolean": return value ? 1 : 0;
+      case "number": return value;
+      case "string": return value.trim() === "" ? 0 : Number(value);
+      default: return NaN;
+    }
+  }
+
+  function falsy(value){
+    switch (kindOf(value)){
+      case "null": return true;
+      case "boolean": return !value;
+      case "number": return value === 0 || value !== value;
+      case "string": return value.length === 0;
+      default: return false;
+    }
+  }
+
+  function truthy(value){
+    return !falsy(value);
+  }
+
+  // GitHub ignores case when comparing strings, except for the dotless i.
+  function upperSpecial(text){
+    var parts = text.split("\u0131");
+    for (var i = 0; i < parts.length; i += 1){ parts[i] = parts[i].toUpperCase(); }
+    return parts.join("\u0131");
+  }
+
+  function coerceTypes(left, right){
+    if (kindOf(left) === kindOf(right)) { return [left, right]; }
+    var leftKind = kindOf(left);
+    var rightKind = kindOf(right);
+    if (leftKind === "number" && rightKind === "string") { return [left, toNumber(right)]; }
+    if (leftKind === "string" && rightKind === "number") { return [toNumber(left), right]; }
+    if (leftKind === "null" || leftKind === "boolean") { return coerceTypes(toNumber(left), right); }
+    if (rightKind === "null" || rightKind === "boolean") { return coerceTypes(left, toNumber(right)); }
+    return [left, right];
+  }
+
+  function looseEquals(left, right){
+    var pair = coerceTypes(left, right);
+    var leftKind = kindOf(pair[0]);
+    if (leftKind !== kindOf(pair[1])) { return false; }
+    switch (leftKind){
+      case "null": return true;
+      case "number":
+        if (pair[0] !== pair[0] || pair[1] !== pair[1]) { return false; }
+        return pair[0] === pair[1];
+      case "string": return upperSpecial(pair[0]) === upperSpecial(pair[1]);
+      case "boolean": return pair[0] === pair[1];
+      default: return pair[0] === pair[1];
+    }
+  }
+
+  function looseGreater(left, right){
+    var pair = coerceTypes(left, right);
+    var leftKind = kindOf(pair[0]);
+    if (leftKind !== kindOf(pair[1])) { return false; }
+    if (leftKind === "number"){
+      if (pair[0] !== pair[0] || pair[1] !== pair[1]) { return false; }
+      return pair[0] > pair[1];
+    }
+    if (leftKind === "string") { return upperSpecial(pair[0]) > upperSpecial(pair[1]); }
+    if (leftKind === "boolean") { return pair[0] && !pair[1]; }
+    return false;
+  }
+
+  function looseLess(left, right){
+    var pair = coerceTypes(left, right);
+    var leftKind = kindOf(pair[0]);
+    if (leftKind !== kindOf(pair[1])) { return false; }
+    if (leftKind === "number"){
+      if (pair[0] !== pair[0] || pair[1] !== pair[1]) { return false; }
+      return pair[0] < pair[1];
+    }
+    if (leftKind === "string") { return upperSpecial(pair[0]) < upperSpecial(pair[1]); }
+    if (leftKind === "boolean") { return !pair[0] && pair[1]; }
+    return false;
+  }
+
+  function hasKey(object, key){
+    var lowered = key.toLowerCase();
+    for (var name in object){
+      if (Object.prototype.hasOwnProperty.call(object, name) && name.toLowerCase() === lowered){ return name; }
+    }
+    return null;
+  }
+
+  function readMember(object, key){
+    if (kindOf(object) === "object"){
+      var actual = hasKey(object, key);
+      return actual === null ? null : object[actual];
+    }
+    return null;
+  }
+
+  function makeIndex(value, star){
+    var idx = { star: !!star, str: undefined, int: undefined };
+    if (star || !isPrimitive(value)) { return idx; }
+    idx.str = coerceString(value);
+    var number = toNumber(value);
+    if (number === number && number !== Infinity && number !== -Infinity && number >= 0){
+      idx.int = Math.floor(number);
+    }
+    return idx;
+  }
+
+  function accessFiltered(filtered, idx){
+    var result = [];
+    for (var i = 0; i < filtered.items.length; i += 1){
+      var item = filtered.items[i];
+      var kind = kindOf(item);
+      if (kind === "object"){
+        if (idx.star){
+          for (var name in item){
+            if (Object.prototype.hasOwnProperty.call(item, name)){ result.push(item[name]); }
+          }
+        } else if (idx.str !== undefined){
+          var actual = hasKey(item, idx.str);
+          if (actual !== null){ result.push(item[actual]); }
+        }
+      } else if (kind === "array"){
+        if (idx.star){ result.push.apply(result, item); }
+        else if (idx.int !== undefined && idx.int < item.length){ result.push(item[idx.int]); }
+      }
+    }
+    return new FilteredArray(result);
+  }
+
+  function access(value, idx){
+    var kind = kindOf(value);
+    if (kind === "array"){
+      var items = value instanceof FilteredArray ? value.items : value;
+      if (value instanceof FilteredArray){ return accessFiltered(value, idx); }
+      if (idx.star){ return new FilteredArray(items.slice()); }
+      if (idx.int !== undefined && idx.int < items.length){ return items[idx.int]; }
+      return null;
+    }
+    if (kind === "object"){
+      if (idx.star){
+        var values = [];
+        for (var name in value){
+          if (Object.prototype.hasOwnProperty.call(value, name)){ values.push(value[name]); }
+        }
+        return new FilteredArray(values);
+      }
+      return idx.str === undefined ? null : readMember(value, idx.str);
+    }
+    return idx.star ? new FilteredArray([]) : null;
+  }
+
+  function plain(value){
+    if (value instanceof FilteredArray){ return value.items.map(plain); }
+    if (Array.isArray(value)){ return value.map(plain); }
+    if (value !== null && typeof value === "object"){
+      var copy = {};
+      for (var name in value){
+        if (Object.prototype.hasOwnProperty.call(value, name)){ copy[name] = plain(value[name]); }
+      }
+      return copy;
+    }
+    return value;
+  }
+
+  function display(value){
+    var kind = kindOf(value);
+    if (kind === "number"){ return numberText(value); }
+    if (kind === "string"){ return JSON.stringify(value); }
+    if (kind === "boolean"){ return value ? "true" : "false"; }
+    if (kind === "null"){ return "null"; }
+    return JSON.stringify(plain(value), null, 2);
+  }
+
+  function typeName(value){
+    return { string: "String", number: "Number", boolean: "Boolean", null: "Null", array: "Array", object: "Object" }[kindOf(value)];
+  }
+
+  /* ---- lexer ---- */
+  var BOUNDARY = "()[],.!><=&|";
+  var KEYWORDS = { true: true, false: false, "null": null, NaN: NaN, Infinity: Infinity };
+
+  function lex(source){
+    var tokens = [];
+    var index = 0;
+    var previous = "";
+    function isBoundary(ch){ return BOUNDARY.indexOf(ch) > -1 || /\s/.test(ch); }
+    function push(type, value, text){
+      tokens.push({ type: type, value: value, text: text || String(value) });
+      previous = type;
+    }
+    while (index < source.length){
+      var ch = source[index];
+      if (ch === " " || ch === "\t" || ch === "\r" || ch === "\n"){ index += 1; continue; }
+      if (ch === "(" ){ push("(", "("); index += 1; continue; }
+      if (ch === ")" ){ push(")", ")"); index += 1; continue; }
+      if (ch === "[" ){ push("[", "["); index += 1; continue; }
+      if (ch === "]" ){ push("]", "]"); index += 1; continue; }
+      if (ch === "," ){ push(",", ","); index += 1; continue; }
+      if (ch === "*" ){ push("*", "*"); index += 1; continue; }
+      if (ch === "!"){
+        if (source[index + 1] === "="){ push("!=", "!="); index += 2; } else { push("!", "!"); index += 1; }
+        continue;
+      }
+      if (ch === "="){
+        if (source[index + 1] !== "="){
+          throw new Error("Use == to compare values: “=” on its own is not an operator (position " + (index + 1) + ").");
+        }
+        push("==", "=="); index += 2; continue;
+      }
+      if (ch === "<"){
+        if (source[index + 1] === "="){ push("<=", "<="); index += 2; } else { push("<", "<"); index += 1; }
+        continue;
+      }
+      if (ch === ">"){
+        if (source[index + 1] === "="){ push(">=", ">="); index += 2; } else { push(">", ">"); index += 1; }
+        continue;
+      }
+      if (ch === "&"){
+        if (source[index + 1] !== "&"){ throw new Error("Use && for “and” (position " + (index + 1) + ")."); }
+        push("&&", "&&"); index += 2; continue;
+      }
+      if (ch === "|"){
+        if (source[index + 1] !== "|"){ throw new Error("Use || for “or” (position " + (index + 1) + ")."); }
+        push("||", "||"); index += 2; continue;
+      }
+      if (ch === "."){
+        if (previous === "ident" || previous === ")" || previous === "]" || previous === "*"){
+          push(".", "."); index += 1; continue;
+        }
+        index = number(index);
+        continue;
+      }
+      if (ch === "'"){
+        var text = "";
+        index += 1;
+        while (true){
+          if (index >= source.length){
+            throw new Error("The string is missing its closing single quote.");
+          }
+          if (source[index] === "'" && source[index + 1] === "'"){ text += "'"; index += 2; continue; }
+          if (source[index] === "'"){ index += 1; break; }
+          text += source[index];
+          index += 1;
+        }
+        push("string", text, text);
+        continue;
+      }
+      if (ch === "\""){
+        throw new Error("Strings use single quotes: write 'text' instead of \"text\".");
+      }
+      if (ch === "+" || ch === "-"){
+        if (!/[0-9.]/.test(source[index + 1] || "")){
+          throw new Error("GitHub Actions expressions have no arithmetic operators: compute the number before the workflow, or return text with format().");
+        }
+        index = number(index);
+        continue;
+      }
+      if (/[0-9]/.test(ch)){ index = number(index); continue; }
+      if (/[A-Za-z_]/.test(ch)){
+        var start = index;
+        index += 1;
+        while (index < source.length && !isBoundary(source[index])){ index += 1; }
+        var word = source.slice(start, index);
+        if (!/^[A-Za-z_][A-Za-z0-9_-]*$/.test(word)){
+          throw new Error("“" + word + "” is not a name an expression can use.");
+        }
+        if (previous !== "." && Object.prototype.hasOwnProperty.call(KEYWORDS, word)){
+          var literal = KEYWORDS[word];
+          push("literal", literal, word);
+        } else {
+          push("ident", word, word);
+        }
+        continue;
+      }
+      throw new Error("Unexpected character “" + ch + "” at position " + (index + 1) + ".");
+    }
+    tokens.push({ type: "eof", value: null, text: "" });
+    return tokens;
+
+    function number(from){
+      var start = from;
+      var at = from;
+      if (source[at] === "+" || source[at] === "-"){ at += 1; }
+      while (at < source.length){
+        var ch = source[at];
+        if (ch === "." || !(BOUNDARY.indexOf(ch) > -1 || /\s/.test(ch))){ at += 1; continue; }
+        break;
+      }
+      var text = source.slice(start, at);
+      var value = Number(text);
+      if (value !== value && text.indexOf("NaN") !== 0){
+        throw new Error("“" + text + "” is not a number.");
+      }
+      push("number", value, text);
+      return at;
+    }
+  }
+
+  /* ---- parser ---- */
+  function parse(tokens, contextNames){
+    var at = 0;
+    var depth = 0;
+    function peek(){ return tokens[at]; }
+    function take(){ return tokens[at++]; }
+    function match(type){
+      if (tokens[at].type === type){ at += 1; return true; }
+      return false;
+    }
+    function expect(type, what){
+      if (tokens[at].type !== type){
+        var found = tokens[at].type === "eof" ? "the end of the expression" : "“" + tokens[at].text + "”";
+        throw new Error("Expected " + what + " but found " + found + ".");
+      }
+      return take();
+    }
+    function enter(){
+      depth += 1;
+      if (depth > MAX_DEPTH){ throw new Error("The expression is nested too deeply."); }
+    }
+    function leave(){ depth -= 1; }
+
+    function expression(){
+      enter();
+      try { return logicalOr(); } finally { leave(); }
+    }
+    function logicalOr(){
+      var left = logicalAnd();
+      if (peek().type !== "||"){ return left; }
+      var args = [left];
+      while (match("||")){ args.push(logicalAnd()); }
+      return { kind: "logical", op: "||", args: args };
+    }
+    function logicalAnd(){
+      var left = equality();
+      if (peek().type !== "&&"){ return left; }
+      var args = [left];
+      while (match("&&")){ args.push(equality()); }
+      return { kind: "logical", op: "&&", args: args };
+    }
+    function equality(){
+      var left = comparison();
+      while (peek().type === "==" || peek().type === "!="){
+        var op = take().type;
+        left = { kind: "binary", op: op, left: left, right: comparison() };
+      }
+      return left;
+    }
+    function comparison(){
+      var left = unary();
+      while (peek().type === "<" || peek().type === "<=" || peek().type === ">" || peek().type === ">="){
+        var op = take().type;
+        left = { kind: "binary", op: op, left: left, right: unary() };
+      }
+      return left;
+    }
+    function unary(){
+      if (match("!")){ enter(); try { return { kind: "not", value: unary() }; } finally { leave(); } }
+      return postfix();
+    }
+    function postfix(){
+      var node = call();
+      while (true){
+        if (match(".")){
+          if (match("*")){ node = { kind: "index", object: node, star: true }; continue; }
+          var property = expect("ident", "a property name after “.”");
+          node = { kind: "index", object: node, star: false, index: { kind: "literal", value: property.text } };
+          continue;
+        }
+        if (match("[")){
+          if (match("*")){
+            expect("]", "“]”");
+            node = { kind: "index", object: node, star: true };
+            continue;
+          }
+          var key = expression();
+          expect("]", "“]”");
+          node = { kind: "index", object: node, star: false, index: key };
+          continue;
+        }
+        return node;
+      }
+    }
+    function call(){
+      if (peek().type !== "ident"){ return primary(); }
+      var name = take();
+      if (!match("(")){
+        var lowered = name.text.toLowerCase();
+        if (contextNames.indexOf(lowered) < 0){
+          throw new Error("“" + name.text + "” is not a context here. Add it to the contexts JSON, or use " + STANDARD_CONTEXTS.slice(0, 4).join(", ") + " and the rest of the documented contexts.");
+        }
+        return { kind: "context", name: lowered };
+      }
+      var args = [];
+      if (!match(")")){
+        do { args.push(expression()); } while (match(","));
+        expect(")", "“)” to close the arguments");
+      }
+      var key = name.text.toLowerCase();
+      var limits = { contains: [2, 2], startswith: [2, 2], endswith: [2, 2], format: [1, 255], join: [1, 2],
+        tojson: [1, 1], fromjson: [1, 1], case: [3, 255], success: [0, 0], failure: [0, 0],
+        cancelled: [0, 0], always: [0, 0] };
+      if (!Object.prototype.hasOwnProperty.call(limits, key)){
+        if (key === "hashfiles"){
+          throw new Error("hashFiles() needs the files of the workflow workspace, so this page cannot evaluate it.");
+        }
+        throw new Error("“" + name.text + "” is not one of the expression functions.");
+      }
+      var limit = limits[key];
+      if (key === "case"){
+        if (args.length % 2 === 0){
+          throw new Error("case() takes predicate and value pairs followed by a default, so it needs an odd number of arguments.");
+        }
+        if (args.length < 3){
+          throw new Error("case() needs at least one predicate, its value and a default.");
+        }
+      } else if (args.length < limit[0] || args.length > limit[1]){
+        var wanted = limit[0] === limit[1] ? String(limit[0]) : limit[0] + " to " + limit[1];
+        throw new Error(name.text + "() takes " + wanted + " argument" + (limit[1] === 1 ? "" : "s") + ".");
+      }
+      return { kind: "call", name: key, args: args };
+    }
+    function primary(){
+      var token = peek();
+      if (token.type === "number" || token.type === "string" || token.type === "literal"){
+        take();
+        return { kind: "literal", value: token.value };
+      }
+      if (match("(")){
+        var inner = expression();
+        expect(")", "“)”");
+        return inner;
+      }
+      if (token.type === "eof"){
+        throw new Error("The expression ends where a value is expected.");
+      }
+      throw new Error("Unexpected “" + token.text + "”.");
+    }
+
+    var tree = expression();
+    if (peek().type !== "eof"){
+      throw new Error("Unexpected “" + peek().text + "” after the end of the expression.");
+    }
+    return tree;
+  }
+
+  function usesStatusFunction(node){
+    if (!node || typeof node !== "object"){ return false; }
+    if (node.kind === "call" && STATUS_FUNCTIONS[node.name] === true){ return true; }
+    if (node.kind === "call"){ return node.args.some(usesStatusFunction); }
+    if (node.kind === "logical"){ return node.args.some(usesStatusFunction); }
+    if (node.kind === "binary"){ return usesStatusFunction(node.left) || usesStatusFunction(node.right); }
+    if (node.kind === "not"){ return usesStatusFunction(node.value); }
+    if (node.kind === "index"){ return usesStatusFunction(node.object) || (node.index ? usesStatusFunction(node.index) : false); }
+    return false;
+  }
+
+  function evaluateTree(node, contexts, state){
+    switch (node.kind){
+      case "literal": return node.value;
+      case "context":
+        return hasOwn(contexts, node.name) ? contexts[hasOwn(contexts, node.name)] : null;
+      case "index": {
+        var object = evaluateTree(node.object, contexts, state);
+        if (node.star){ return access(object, makeIndex(null, true)); }
+        return access(object, makeIndex(evaluateTree(node.index, contexts, state), false));
+      }
+      case "not": return !truthy(evaluateTree(node.value, contexts, state));
+      case "binary": {
+        var left = evaluateTree(node.left, contexts, state);
+        var right = evaluateTree(node.right, contexts, state);
+        if (node.op === "=="){ return looseEquals(left, right); }
+        if (node.op === "!="){ return !looseEquals(left, right); }
+        if (node.op === ">"){ return looseGreater(left, right); }
+        if (node.op === ">="){ return looseEquals(left, right) || looseGreater(left, right); }
+        if (node.op === "<"){ return looseLess(left, right); }
+        return looseEquals(left, right) || looseLess(left, right);
+      }
+      case "logical": {
+        var result = null;
+        for (var i = 0; i < node.args.length; i += 1){
+          result = evaluateTree(node.args[i], contexts, state);
+          if (node.op === "&&" && falsy(result)){ break; }
+          if (node.op === "||" && truthy(result)){ break; }
+        }
+        return result;
+      }
+      case "call": return callFunction(node, contexts, state);
+      default: throw new Error("The expression could not be evaluated.");
+    }
+  }
+
+  function hasOwn(object, key){
+    var actual = hasKey(object, key);
+    return actual === null ? false : actual;
+  }
+
+  function callFunction(node, contexts, state){
+    var args = node.args.map(function(arg){ return evaluateTree(arg, contexts, state); });
+    switch (node.name){
+      case "success": return state.status === "success";
+      case "failure": return state.status === "failure";
+      case "cancelled": return state.status === "cancelled";
+      case "always": return true;
+      case "contains": {
+        var search = args[0];
+        if (isPrimitive(search)){
+          if (!isPrimitive(args[1])){ return false; }
+          return coerceString(search).toLowerCase().indexOf(coerceString(args[1]).toLowerCase()) > -1;
+        }
+        if (kindOf(search) === "array"){
+          var items = search instanceof FilteredArray ? search.items : search;
+          for (var i = 0; i < items.length; i += 1){
+            if (looseEquals(args[1], items[i])){ return true; }
+          }
+        }
+        return false;
+      }
+      case "startswith":
+      case "endswith": {
+        if (!isPrimitive(args[0]) || !isPrimitive(args[1])){ return false; }
+        var haystack = upperSpecial(coerceString(args[0]));
+        var needle = upperSpecial(coerceString(args[1]));
+        return node.name === "startswith" ? haystack.lastIndexOf(needle, 0) === 0 : haystack.length >= needle.length && haystack.slice(haystack.length - needle.length) === needle;
+      }
+      case "format": return formatText(coerceString(args[0]), args.slice(1));
+      case "join": {
+        if (isPrimitive(args[0])){ return coerceString(args[0]); }
+        if (kindOf(args[0]) === "array"){
+          var separator = args.length > 1 && isPrimitive(args[1]) ? coerceString(args[1]) : ",";
+          var list = args[0] instanceof FilteredArray ? args[0].items : args[0];
+          return list.map(coerceString).join(separator);
+        }
+        return "";
+      }
+      case "tojson": return JSON.stringify(plain(args[0]), null, 2);
+      case "fromjson": {
+        var text = coerceString(args[0]);
+        if (text.trim() === ""){ throw new Error("fromJSON() needs a JSON value, but the string is empty."); }
+        try { return JSON.parse(text); }
+        catch (error){ throw new Error("fromJSON() could not parse that string as JSON."); }
+      }
+      case "case": {
+        for (var p = 0; p < args.length - 1; p += 2){
+          if (kindOf(args[p]) !== "boolean"){
+            throw new Error("case() needs each predicate to evaluate to true or false; argument " + (p + 1) + " is " + typeName(args[p]) + ".");
+          }
+          if (args[p]){ return args[p + 1]; }
+        }
+        return args[args.length - 1];
+      }
+      default: throw new Error("“" + node.name + "” is not one of the expression functions.");
+    }
+  }
+
+  function formatText(template, values){
+    var result = "";
+    var index = 0;
+    while (index < template.length){
+      var character = template[index];
+      if (character === "{" && template[index + 1] === "{"){
+        result += "{";
+        index += 2;
+        continue;
+      }
+      if (character === "}" && template[index + 1] === "}"){
+        result += "}";
+        index += 2;
+        continue;
+      }
+      if (character === "}"){
+        throw new Error("format() has a single “}” inside its string; write “}}” for a literal brace.");
+      }
+      if (character === "{"){
+        var close = template.indexOf("}", index + 1);
+        if (close < 0){ throw new Error("format() has a “{” without a matching “}”."); }
+        var slot = template.slice(index + 1, close);
+        var digits = (slot.match(/^[0-9]+/) || [""])[0];
+        if (!digits){ throw new Error("format() needs a number inside each “{…}” placeholder."); }
+        var position = Number(digits);
+        if (position >= values.length){
+          throw new Error("format() refers to {" + position + "}, but " + (values.length === 1 ? "only one value was" : "only " + values.length + " values were") + " supplied.");
+        }
+        result += coerceString(values[position]);
+        index = close + 1;
+        continue;
+      }
+      result += character;
+      index += 1;
+    }
+    return result;
+  }
+
+  function stripWrapper(text){
+    var trimmed = text.trim();
+    if (trimmed.indexOf("${{") === 0 && trimmed.slice(-2) === "}}"){
+      return trimmed.slice(3, -2).trim();
+    }
+    return trimmed;
+  }
+
+  function parseContexts(text){
+    if (text.length > MAX_CONTEXTS){
+      throw new Error("The contexts JSON is longer than " + MAX_CONTEXTS.toLocaleString("en") + " characters.");
+    }
+    var parsed;
+    try { parsed = JSON.parse(text); }
+    catch (error){ throw new Error("The contexts are not valid JSON: " + error.message + "."); }
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)){
+      throw new Error("The contexts must be a JSON object whose keys are context names, such as {\"github\": {\"ref\": \"refs/heads/main\"}}.");
+    }
+    for (var name in parsed){
+      if (!Object.prototype.hasOwnProperty.call(parsed, name)){ continue; }
+      var value = parsed[name];
+      if (value === null || typeof value !== "object" || Array.isArray(value)){
+        throw new Error("The “" + name + "” context must be a JSON object, because every context holds named values.");
+      }
+    }
+    return parsed;
+  }
+
+  function calculate(input){
+    if (!input || typeof input !== "object"){ throw new Error("Nothing to evaluate."); }
+    var source = stripWrapper(String(input.expression === undefined ? "" : input.expression));
+    if (source === ""){ throw new Error("Enter an expression to evaluate."); }
+    if (source.length > MAX_EXPRESSION){
+      throw new Error("The expression is longer than " + MAX_EXPRESSION.toLocaleString("en") + " characters.");
+    }
+    var status = String(input.status || "success");
+    if (status !== "success" && status !== "failure" && status !== "cancelled"){
+      throw new Error("Choose whether earlier steps succeeded, failed or were cancelled.");
+    }
+    var mode = String(input.wrapper || "if");
+    if (mode !== "if" && mode !== "value"){
+      throw new Error("Choose whether the expression is an if: condition or a plain value.");
+    }
+    var contexts = parseContexts(String(input.contexts === undefined ? "{}" : input.contexts));
+    var names = STANDARD_CONTEXTS.slice();
+    for (var key in contexts){
+      if (Object.prototype.hasOwnProperty.call(contexts, key) && names.indexOf(key.toLowerCase()) < 0){
+        names.push(key.toLowerCase());
+      }
+    }
+    var tree = parse(lex(source), names);
+    var state = { status: status };
+    var value = evaluateTree(tree, contexts, state);
+    var hasStatus = usesStatusFunction(tree);
+    var isTrue = truthy(value);
+    var runs = isTrue && (hasStatus || mode === "value" || status === "success");
+    var summary;
+    if (mode === "value"){
+      summary = isTrue
+        ? "The expression returns a value; in an if: this would count as true."
+        : "The expression returns a falsy value; in an if: this would count as false.";
+    } else if (!isTrue){
+      summary = "The value is falsy, so the step or job is skipped whatever the earlier steps did.";
+    } else if (hasStatus){
+      summary = "The value is true and the expression calls a status function, so its own status check decides instead of the implicit success().";
+    } else if (status === "success"){
+      summary = "The value is true and earlier steps succeeded. GitHub also adds an implicit success() check to an if: that has no status function.";
+    } else {
+      summary = "The value is true, but the expression has no status function, so the implicit success() check skips it while earlier steps have not succeeded.";
+    }
+    return {
+      value: plain(value),
+      type: typeName(value),
+      displayText: display(value),
+      truthy: isTrue,
+      runs: runs,
+      hasStatusFunction: hasStatus,
+      mode: mode,
+      headline: mode === "value" ? (isTrue ? "Truthy value" : "Falsy value") : (runs ? "Runs" : "Skips"),
+      summary: summary,
+      contextNames: names
+    };
+  }
+
+  return {
+    MAX_EXPRESSION: MAX_EXPRESSION,
+    MAX_CONTEXTS: MAX_CONTEXTS,
+    STANDARD_CONTEXTS: STANDARD_CONTEXTS,
+    calculate: calculate,
+    stripWrapper: stripWrapper,
+    numberText: numberText
+  };
+})();
+/* github-actions-expression-core:end */
+(function(){
+  "use strict";
+  var C = GhaExpressionCore;
+  var els = {
+    form: document.getElementById("expr-form"),
+    expression: document.getElementById("expression"),
+    contexts: document.getElementById("contexts"),
+    status: document.getElementById("status"),
+    wrapper: document.getElementById("wrapper"),
+    err: document.getElementById("err"),
+    out: document.getElementById("out")
+  };
+
+  var DEFAULT_CONTEXTS = [
+    "{",
+    "  \"github\": {",
+    "    \"ref\": \"refs/heads/main\",",
+    "    \"ref_name\": \"main\",",
+    "    \"event_name\": \"pull_request\",",
+    "    \"actor\": \"octocat\",",
+    "    \"repository\": \"octo-org/octo-repo\",",
+    "    \"event\": {",
+    "      \"pull_request\": {",
+    "        \"draft\": false,",
+    "        \"labels\": [{ \"name\": \"bug\" }, { \"name\": \"deploy\" }]",
+    "      }",
+    "    }",
+    "  },",
+    "  \"env\": { \"DEPLOY_ENV\": \"staging\" },",
+    "  \"vars\": { \"REGION\": \"eu-west-1\" },",
+    "  \"job\": { \"status\": \"success\" },",
+    "  \"matrix\": { \"node\": 20, \"os\": \"ubuntu-latest\" },",
+    "  \"steps\": { \"build\": { \"outputs\": { \"version\": \"1.4.2\" }, \"conclusion\": \"success\" } },",
+    "  \"needs\": { \"build\": { \"outputs\": { \"version\": \"1.4.2\" }, \"result\": \"success\" } }",
+    "}"
+  ].join("\n");
+
+  var EXAMPLES = {
+    labels: "github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'deploy') && !github.event.pull_request.draft",
+    matrix: "matrix.os == 'ubuntu-latest' && matrix.node >= 20 && startsWith(github.ref, 'refs/heads/')",
+    branch: "format('deploying {0} to {1}', needs.build.outputs.version, env.DEPLOY_ENV) == 'deploying 1.4.2 to staging'"
+  };
+
+  function row(label, value){
+    var dt = document.createElement("dt");
+    dt.textContent = label;
+    var dd = document.createElement("dd");
+    dd.textContent = value;
+    return [dt, dd];
+  }
+
+  function placeholder(message){
+    els.out.textContent = "";
+    var node = document.createElement("p");
+    node.className = "sub";
+    node.style.padding = "18px 0 6px";
+    node.textContent = message;
+    els.out.appendChild(node);
+  }
+
+  function render(result){
+    els.out.textContent = "";
+    var label = document.createElement("div");
+    label.className = "label";
+    label.textContent = result.mode === "value" ? "Evaluated value" : "Step decision";
+    var big = document.createElement("div");
+    big.className = "big";
+    big.textContent = result.headline;
+    var sub = document.createElement("p");
+    sub.className = "sub";
+    sub.textContent = result.summary;
+    els.out.appendChild(label);
+    els.out.appendChild(big);
+    els.out.appendChild(sub);
+
+    var list = document.createElement("dl");
+    list.className = "rows";
+    row("Value", result.displayText).forEach(function(node){ list.appendChild(node); });
+    row("Type", result.type).forEach(function(node){ list.appendChild(node); });
+    row("Status check", result.hasStatusFunction ? "A status function in the expression" : "Implicit success()")
+      .forEach(function(node){ list.appendChild(node); });
+    els.out.appendChild(list);
+  }
+
+  function run(announce){
+    var result;
+    try {
+      result = C.calculate({
+        expression: els.expression.value,
+        contexts: els.contexts.value,
+        status: els.status.value,
+        wrapper: els.wrapper.value
+      });
+    } catch (error){
+      if (announce){ els.err.textContent = error.message; }
+      else { els.err.textContent = ""; }
+      placeholder("Fix the expression or the contexts to see a result.");
+      return;
+    }
+    els.err.textContent = "";
+    render(result);
+  }
+
+  els.form.addEventListener("submit", function(event){
+    event.preventDefault();
+    run(true);
+  });
+  [els.status, els.wrapper].forEach(function(control){
+    control.addEventListener("change", function(){ run(true); });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll("[data-example]"), function(button){
+    button.addEventListener("click", function(){
+      var key = button.getAttribute("data-example");
+      if (EXAMPLES[key]){ els.expression.value = EXAMPLES[key]; }
+      run(true);
+      els.expression.focus();
+    });
+  });
+
+  if (!els.expression.value){ els.expression.value = EXAMPLES.labels; }
+  els.contexts.value = DEFAULT_CONTEXTS;
+  run(false);
+})();
+</script>
+</body>
+</html>
