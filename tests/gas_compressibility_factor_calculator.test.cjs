@@ -42,8 +42,8 @@ assert.equal(record.testCases.length, 19);
 assert.equal(record.testCases.filter((item) => item.kind === 'golden').length, 5);
 assert.equal(record.testCases.filter((item) => item.kind === 'boundary').length, 6);
 assert.equal(record.testCases.filter((item) => item.kind === 'validation').length, 8);
-assert.equal(catalog.tools.length, 2420, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2159, 'public tools');
+assert.equal(catalog.tools.length, 2421, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2160, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Oil, Gas & Marine Engineering').length, 52,
   'Oil, Gas & Marine Engineering count');
 // No other record claims this slug, name, alias or distinctive tag.

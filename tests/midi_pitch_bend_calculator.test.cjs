@@ -220,7 +220,7 @@ for (const tool of catalog.tools) {
   }
 }
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Music').length, 52, 'Music count');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2159, 'public tools');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2160, 'public tools');
 
 // ---- Replay every case stored in the record.
 for (const item of record.testCases) {
