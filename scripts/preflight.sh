@@ -440,6 +440,7 @@ node tests/haproxy_config_builder.test.cjs
 node tests/hillshade_relief_generator.test.cjs
 node tests/trombone_slide_position_finder.test.cjs
 node tests/motion_blur_length_calculator.test.cjs
+node tests/emergency_shelter_space_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"

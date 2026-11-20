@@ -206,9 +206,9 @@ assert.ok(record.method.includes('browser'), 'method documents local execution')
 assert.ok(record.guidance.length > 200, 'guidance covers the limits');
 assert.equal(record.testCases.filter((testCase) => testCase.kind === 'golden').length, 10, 'ten golden cases');
 assert.equal(record.testCases.filter((testCase) => testCase.kind === 'validation').length, 13, 'thirteen validation cases');
-assert.equal(catalog.tools.length, 2432, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2171, 'public tools');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Safety & Emergency').length, 50,
+assert.equal(catalog.tools.length, 2433, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2172, 'public tools');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Safety & Emergency').length, 51,
   'Safety & Emergency count');
 for (const other of catalog.tools) {
   if (other.slug === record.slug) continue;
