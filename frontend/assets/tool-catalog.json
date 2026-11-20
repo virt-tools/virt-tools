@@ -247175,6 +247175,444 @@
         }
       ],
       "listed": true
+    },
+    {
+      "slug": "inotify-watch-limit-planner",
+      "name": "inotify Watch Limit Planner",
+      "description": "Size the inotify limits for a file-watching service: watches per directory tree, per process and per user, a queue target for the drain interval, and a sysctl snippet that never lowers the limits you enter. Runs entirely in your browser.",
+      "category": "System",
+      "legacyCategory": null,
+      "subcategory": "Planning",
+      "tags": [
+        "system",
+        "estimation-calculation",
+        "inotify",
+        "sysctl",
+        "inotify-watch",
+        "max-user-watches",
+        "max-queued-events",
+        "file-watching",
+        "linux-kernel",
+        "resource-limits"
+      ],
+      "aliases": [
+        "inotify Watch Limit Planner",
+        "inotify watch limit planner",
+        "inotify Limits Calculator",
+        "inotify limits calculator",
+        "max_user_watches Calculator",
+        "max_user_watches calculator",
+        "File Watch Limit Planner",
+        "file watch limit planner"
+      ],
+      "icon": "👁",
+      "added": "2026-11-20T03:59:00Z",
+      "risk": "low",
+      "maturity": "draft",
+      "reviewedAt": null,
+      "guidance": "A sizing aid, not a kernel rule: a watch on a directory covers that directory's entries only, so count every subdirectory, and remember that the watch and instance limits are per real user ID and shared with every other program the user runs.",
+      "method": "inotify holds one watch per watched path: a directory watch reports events for entries in that directory, so a recursive watcher needs one watch per directory plus one per file it watches individually. Watches and instances are counted per real user ID, and fs.inotify.max_user_watches bounds the watch total, with inotify_add_watch failing with ENOSPC once it is reached; fs.inotify.max_user_instances bounds instance creation, and because a queue belongs to an instance every watching process needs one of its own. The planner multiplies directories plus individually watched files by the number of processes of one user, adds the entered headroom percentage, and rounds the watch target up to a whole watch. The queue target is the peak rate per instance times the longest drain interval, plus headroom, rounded up to a whole event; fs.inotify.max_queued_events caps an instance's queue at creation time and events beyond it are dropped with an IN_Q_OVERFLOW event delivered instead. The instances figure is shown as a floor because the limit is shared with other programs in the session. The sysctl snippet is built only when all three current limits are entered, and each value is the larger of the current and the target, so applying it can never lower a limit. Headroom, the drain interval and the peak rate are planning assumptions supplied by the user rather than kernel defaults. Everything runs in the browser with no storage, uploads or network access.",
+      "sources": [
+        {
+          "title": "inotify(7) - Linux manual page: watches, instances and the /proc/sys/fs/inotify limits",
+          "url": "https://man7.org/linux/man-pages/man7/inotify.7.html"
+        },
+        {
+          "title": "inotify_add_watch(2) - Linux manual page: ENOSPC when the per-user watch limit is reached",
+          "url": "https://man7.org/linux/man-pages/man2/inotify_add_watch.2.html"
+        }
+      ],
+      "testCases": [
+        {
+          "kind": "golden",
+          "name": "The page defaults",
+          "input": {
+            "directories": "2400",
+            "files": "0",
+            "processes": "2",
+            "rate": "400",
+            "drain": "2",
+            "headroom": "20"
+          },
+          "expected": {
+            "watchesPerProcess": 2400,
+            "watchesPerUser": 4800,
+            "watchesTarget": 5760,
+            "queueRaw": 800,
+            "queueTarget": 960,
+            "instancesNeeded": 2,
+            "headline": "5,760 watches per user",
+            "summary": "2,400 directories + 0 individually watched files = 2,400 watches per process; 2 processes = 4,800 watches per user, and 20% headroom takes the target to 5,760.",
+            "queueSummary": "800 events between drains at 400 events/s over 2 s; with 20% headroom the queue target is 960 events per instance."
+          }
+        },
+        {
+          "kind": "golden",
+          "name": "Limits entered and comfortably above the target",
+          "input": {
+            "directories": "2400",
+            "files": "0",
+            "processes": "2",
+            "rate": "400",
+            "drain": "2",
+            "headroom": "20",
+            "currentWatches": "8192",
+            "currentInstances": "128",
+            "currentQueue": "16384"
+          },
+          "expected": {
+            "watchesTarget": 5760,
+            "statuses": "sufficient,sufficient,sufficient",
+            "capacity": "At 8,192 watches and 2 processes, each process can watch up to 4,096 directories (1,696 spare beyond the 2,400 you listed).",
+            "snippet": "# /etc/sysctl.d/60-inotify.conf\nfs.inotify.max_user_watches = 8192\nfs.inotify.max_user_instances = 128\nfs.inotify.max_queued_events = 16384"
+          }
+        },
+        {
+          "kind": "golden",
+          "name": "Limits at the raw count but under the headroom target",
+          "input": {
+            "directories": "2400",
+            "files": "0",
+            "processes": "2",
+            "rate": "400",
+            "drain": "2",
+            "headroom": "20",
+            "currentWatches": "4800",
+            "currentInstances": "2",
+            "currentQueue": "800"
+          },
+          "expected": {
+            "statuses": "below-target,sufficient,below-target",
+            "capacity": "At 4,800 watches and 2 processes, each process can watch up to 2,400 directories (exactly the 2,400 you listed).",
+            "snippet": "# /etc/sysctl.d/60-inotify.conf\nfs.inotify.max_user_watches = 5760\nfs.inotify.max_user_instances = 2\nfs.inotify.max_queued_events = 960"
+          }
+        },
+        {
+          "kind": "golden",
+          "name": "Limits below the raw count",
+          "input": {
+            "directories": "2400",
+            "files": "100",
+            "processes": "3",
+            "rate": "400",
+            "drain": "2",
+            "headroom": "20",
+            "currentWatches": "5000",
+            "currentInstances": "1",
+            "currentQueue": "500"
+          },
+          "expected": {
+            "watchesPerUser": 7500,
+            "watchesTarget": 9000,
+            "statuses": "too-low,too-low,too-low",
+            "capacity": "At 5,000 watches and 3 processes, each process can watch up to 1,566 directories; the 2,400 you listed do not fit."
+          }
+        },
+        {
+          "kind": "golden",
+          "name": "One directory, no event load",
+          "input": {
+            "directories": "1",
+            "files": "0",
+            "processes": "1",
+            "rate": "0",
+            "drain": "1",
+            "headroom": "0"
+          },
+          "expected": {
+            "watchesTarget": 1,
+            "queueTarget": 0,
+            "headline": "1 watch per user",
+            "summary": "1 directory + 0 individually watched files = 1 watch per process; 1 process = 1 watch per user, and 0% headroom takes the target to 1.",
+            "queueSummary": "No queue growth is added when the peak rate is 0; the queue target stays at 0 events."
+          }
+        },
+        {
+          "kind": "golden",
+          "name": "A large tree with no headroom",
+          "input": {
+            "directories": "100000",
+            "files": "500",
+            "processes": "4",
+            "rate": "250",
+            "drain": "10",
+            "headroom": "0"
+          },
+          "expected": {
+            "watchesPerUser": 402000,
+            "watchesTarget": 402000,
+            "queueRaw": 2500,
+            "queueTarget": 2500,
+            "instancesNeeded": 4
+          }
+        },
+        {
+          "kind": "golden",
+          "name": "Fractional rate and drain interval round up",
+          "input": {
+            "directories": "1200",
+            "files": "0",
+            "processes": "1",
+            "rate": "1.5",
+            "drain": "0.5",
+            "headroom": "10"
+          },
+          "expected": {
+            "queueRaw": 0.75,
+            "queueTarget": 1,
+            "watchesTarget": 1320,
+            "queueSummary": "0.75 events between drains at 1.5 events/s over 0.5 s; with 10% headroom the queue target is 1 event per instance."
+          }
+        },
+        {
+          "kind": "golden",
+          "name": "Full headroom doubles the target",
+          "input": {
+            "directories": "500",
+            "files": "0",
+            "processes": "2",
+            "rate": "100",
+            "drain": "3",
+            "headroom": "100"
+          },
+          "expected": {
+            "watchesPerUser": 1000,
+            "watchesTarget": 2000,
+            "queueTarget": 600,
+            "summary": "500 directories + 0 individually watched files = 500 watches per process; 2 processes = 1,000 watches per user, and 100% headroom takes the target to 2,000."
+          }
+        },
+        {
+          "kind": "boundary",
+          "name": "No directories and no files",
+          "input": {
+            "directories": "0",
+            "files": "0",
+            "processes": "4",
+            "rate": "10",
+            "drain": "0.5",
+            "headroom": "50"
+          },
+          "expected": {
+            "watchesPerUser": 0,
+            "watchesTarget": 0,
+            "instancesNeeded": 4
+          }
+        },
+        {
+          "kind": "boundary",
+          "name": "A single process",
+          "input": {
+            "directories": "8192",
+            "files": "0",
+            "processes": "1",
+            "rate": "2000",
+            "drain": "1",
+            "headroom": "20"
+          },
+          "expected": {
+            "watchesPerUser": 8192,
+            "watchesTarget": 9831,
+            "instancesNeeded": 1
+          }
+        },
+        {
+          "kind": "boundary",
+          "name": "Zero headroom",
+          "input": {
+            "directories": "1000",
+            "files": "0",
+            "processes": "1",
+            "rate": "50",
+            "drain": "1",
+            "headroom": "0"
+          },
+          "expected": {
+            "watchesTarget": 1000,
+            "queueTarget": 50
+          }
+        },
+        {
+          "kind": "boundary",
+          "name": "Maximum headroom",
+          "input": {
+            "directories": "1000",
+            "files": "0",
+            "processes": "1",
+            "rate": "50",
+            "drain": "1",
+            "headroom": "1000"
+          },
+          "expected": {
+            "watchesTarget": 11000,
+            "queueTarget": 550
+          }
+        },
+        {
+          "kind": "boundary",
+          "name": "Shortest drain interval",
+          "input": {
+            "directories": "100",
+            "files": "0",
+            "processes": "1",
+            "rate": "1000",
+            "drain": "0.1",
+            "headroom": "0"
+          },
+          "expected": {
+            "queueRaw": 100,
+            "queueTarget": 100
+          }
+        },
+        {
+          "kind": "boundary",
+          "name": "Longest drain interval",
+          "input": {
+            "directories": "100",
+            "files": "0",
+            "processes": "1",
+            "rate": "1000",
+            "drain": "3600",
+            "headroom": "0"
+          },
+          "expected": {
+            "queueRaw": 3600000,
+            "queueTarget": 3600000
+          }
+        },
+        {
+          "kind": "validation",
+          "name": "No directory count",
+          "input": {
+            "directories": "",
+            "files": "0",
+            "processes": "2",
+            "rate": "400",
+            "drain": "2",
+            "headroom": "20"
+          },
+          "expectedError": "Enter the number of directories, such as 2400."
+        },
+        {
+          "kind": "validation",
+          "name": "Directory count as text",
+          "input": {
+            "directories": "two thousand",
+            "files": "0",
+            "processes": "2",
+            "rate": "400",
+            "drain": "2",
+            "headroom": "20"
+          },
+          "expectedError": "Enter the number of directories as a whole number, such as 2400."
+        },
+        {
+          "kind": "validation",
+          "name": "Negative directory count",
+          "input": {
+            "directories": "-4",
+            "files": "0",
+            "processes": "2",
+            "rate": "400",
+            "drain": "2",
+            "headroom": "20"
+          },
+          "expectedError": "Enter the number of directories as a whole number, such as 2400."
+        },
+        {
+          "kind": "validation",
+          "name": "Directory count above the ceiling",
+          "input": {
+            "directories": "5000001",
+            "files": "0",
+            "processes": "2",
+            "rate": "400",
+            "drain": "2",
+            "headroom": "20"
+          },
+          "expectedError": "Directories must be between 0 and 5,000,000."
+        },
+        {
+          "kind": "validation",
+          "name": "No file count",
+          "input": {
+            "directories": "2400",
+            "files": "",
+            "processes": "2",
+            "rate": "400",
+            "drain": "2",
+            "headroom": "20"
+          },
+          "expectedError": "Enter the number of files, such as 0."
+        },
+        {
+          "kind": "validation",
+          "name": "Zero processes",
+          "input": {
+            "directories": "2400",
+            "files": "0",
+            "processes": "0",
+            "rate": "400",
+            "drain": "2",
+            "headroom": "20"
+          },
+          "expectedError": "Processes must be between 1 and 4,096."
+        },
+        {
+          "kind": "validation",
+          "name": "Event rate as text",
+          "input": {
+            "directories": "2400",
+            "files": "0",
+            "processes": "2",
+            "rate": "bursty",
+            "drain": "2",
+            "headroom": "20"
+          },
+          "expectedError": "Enter the peak event rate as a number, such as 400."
+        },
+        {
+          "kind": "validation",
+          "name": "Drain interval below a tenth of a second",
+          "input": {
+            "directories": "2400",
+            "files": "0",
+            "processes": "2",
+            "rate": "400",
+            "drain": "0",
+            "headroom": "20"
+          },
+          "expectedError": "The drain interval must be between 0.1 and 3,600 seconds."
+        },
+        {
+          "kind": "validation",
+          "name": "Headroom above the ceiling",
+          "input": {
+            "directories": "2400",
+            "files": "0",
+            "processes": "2",
+            "rate": "400",
+            "drain": "2",
+            "headroom": "1001"
+          },
+          "expectedError": "Headroom must be between 0 and 1,000 percent."
+        },
+        {
+          "kind": "validation",
+          "name": "A current limit that is not a number",
+          "input": {
+            "directories": "2400",
+            "files": "0",
+            "processes": "2",
+            "rate": "400",
+            "drain": "2",
+            "headroom": "20",
+            "currentWatches": "12k"
+          },
+          "expectedError": "max_user_watches must be a whole number, or left empty."
+        }
+      ],
+      "listed": true
     }
   ]
 }

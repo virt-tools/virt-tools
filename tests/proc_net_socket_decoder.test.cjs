@@ -199,8 +199,8 @@ refuses('0100007F:0000\n0100007F:0000', 'tcp', 'Paste one row to decode a single
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
 const pageDirs = fs.readdirSync(path.join(root, 'frontend', 'tools'), { withFileTypes: true })
   .filter((entry) => entry.isDirectory()).length;
-assert.equal(catalog.tools.length, 2417, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2157, 'public tools');
+assert.equal(catalog.tools.length, 2418, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2158, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageDirs,
   'every listed tool record has a page');
 const record = catalog.tools.find((tool) => tool.slug === slug);
@@ -229,7 +229,7 @@ assert.equal(record.testCases.filter((testCase) => testCase.kind === 'golden').l
 assert.equal(record.testCases.filter((testCase) => testCase.kind === 'boundary').length, 6, 'boundary cases');
 assert.equal(record.testCases.filter((testCase) => testCase.kind === 'validation').length, 6, 'validation cases');
 assert.equal(catalog.tools.filter((tool) => tool.slug === slug).length, 1, 'slug unique');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'System').length, 52, 'System count');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'System').length, 53, 'System count');
 for (const other of catalog.tools) {
   if (other.slug === slug) continue;
   assert.notEqual(other.name, record.name, `name collides with ${other.slug}`);

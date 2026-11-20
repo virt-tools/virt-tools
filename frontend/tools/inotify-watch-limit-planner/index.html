@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>inotify Watch Limit Planner &mdash; Virtual Tools</title>
+<meta name="description" content="Size fs.inotify.max_user_watches, max_user_instances and max_queued_events for a file-watching service: watches per directory tree, per process and per user, with headroom and a sysctl snippet.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.field{display:flex;flex-direction:column;gap:6px;margin:0}
+input.num{box-sizing:border-box;width:100%;min-height:46px;padding:10px 12px;border-radius:8px;
+  border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);color:var(--text,#e6e6e6);
+  font:inherit;font-size:16px;line-height:1.3;outline:none;max-width:none;font-family:ui-monospace,monospace}
+input:focus-visible{outline:2px solid var(--accent,#6ea8fe);outline-offset:1px;box-shadow:none}
+input::placeholder{color:var(--text-dim,#9aa3b2)}
+.hint{color:var(--text-dim,#9aa3b2);font-size:12.5px;margin:10px 0 0;line-height:1.45}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:12px 0 0}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button.secondary{background:transparent;color:var(--text,#e6e6e6);border-color:var(--border,#2a2f3a)}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.err{color:var(--bad,#f87171);font-size:13px;margin:10px 0 0;min-height:1.2em}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:16px 0 0}
+.out .label{text-align:center;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-dim,#9aa3b2)}
+.out .big{font-size:clamp(1.2rem,6vw,1.9rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:2px 0 4px;overflow-wrap:anywhere;line-height:1.3}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:6px 0 0;line-height:1.45;overflow-wrap:anywhere}
+.ref{display:table;width:100%;border-collapse:collapse;margin:18px 0 0;font-size:13.5px}
+.ref caption{caption-side:top;text-align:left;color:var(--text-dim,#9aa3b2);font-size:12.5px;padding:0 0 6px}
+.ref th,.ref td{border-bottom:1px solid var(--border,#2a2f3a);padding:7px 8px;text-align:left;vertical-align:top}
+.ref thead th{color:var(--text-dim,#9aa3b2);font-weight:600;font-size:12px;letter-spacing:.03em}
+.ref thead th.num,.ref td.num{text-align:right}
+.ref tbody th{font-weight:500}
+.ref td.num{font-family:ui-monospace,monospace;white-space:nowrap}
+.badge{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
+.badge.ok{background:rgba(74,222,128,.14);color:var(--ok,#4ade80)}
+.badge.below{background:rgba(234,179,8,.16);color:#eab308}
+.badge.low{background:rgba(248,113,113,.16);color:var(--bad,#f87171)}
+.badge.none{background:rgba(148,163,184,.14);color:var(--text-dim,#9aa3b2)}
+pre.snippet{margin:14px 0 0;padding:14px;border-radius:8px;background:#0d1117;border:1px solid var(--border,#2a2f3a);
+  color:#d7dde7;font:13px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;overflow-x:auto;white-space:pre}
+.snippet-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0 0}
+.snippet-actions .hint{margin:0}
+.note{color:var(--text-dim,#9aa3b2);font-size:12.5px;line-height:1.55;margin:18px 0 0}
+@media (max-width:760px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:640px){.grid{grid-template-columns:minmax(0,1fr)}.actions button{flex:1 1 auto}}
+@media (max-width:520px){.ref th,.ref td{padding:6px 4px;font-size:12px}.ref thead th{font-size:11px}}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<h1>inotify Watch Limit Planner</h1>
+<p>Work out how many inotify watches a directory tree needs, and what <code>fs.inotify.max_user_watches</code>, <code>max_user_instances</code> and <code>max_queued_events</code> should be for the services that watch it.</p>
+</div>
+
+<div class="panel">
+<form id="iw-form" novalidate>
+<h2 style="font-size:1rem;margin:0 0 12px">Watch tree</h2>
+<div class="grid">
+<div class="field">
+<label for="directories">Directories in the tree</label>
+<input class="num" id="directories" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" value="2400" placeholder="2400" aria-describedby="directories-hint">
+</div>
+<div class="field">
+<label for="files">Files watched individually</label>
+<input class="num" id="files" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" value="0" placeholder="0" aria-describedby="files-hint">
+</div>
+<div class="field">
+<label for="processes">Processes with their own instance</label>
+<input class="num" id="processes" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" value="2" placeholder="2" aria-describedby="processes-hint">
+</div>
+</div>
+<p class="hint" id="directories-hint">Count every subdirectory, not just the roots: a directory watch covers entries in that directory only. <code>find . -type d | wc -l</code> counts a tree.</p>
+<div class="grid" style="margin-top:12px">
+<div class="field">
+<label for="rate">Peak events per second (one instance)</label>
+<input class="num" id="rate" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="400" placeholder="400" aria-describedby="rate-hint">
+</div>
+<div class="field">
+<label for="drain">Longest gap between queue reads (s)</label>
+<input class="num" id="drain" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="2" placeholder="2" aria-describedby="drain-hint">
+</div>
+<div class="field">
+<label for="headroom">Headroom (%)</label>
+<input class="num" id="headroom" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="20" placeholder="20" aria-describedby="headroom-hint">
+</div>
+</div>
+<p class="hint" id="rate-hint">The busiest rate one watching process sees, and how long it may leave events queued before draining them. Both feed the queue target; leave the rate at 0 to skip queue sizing.</p>
+<p class="err" id="err" role="alert" aria-live="polite"></p>
+<div class="actions">
+<button type="submit">Plan limits</button>
+</div>
+</form>
+</div>
+
+<div class="panel">
+<h2 style="font-size:1rem;margin:0 0 12px">Your current limits <span style="font-weight:400;font-size:.85rem;color:var(--text-dim,#9aa3b2)">optional</span></h2>
+<div class="grid">
+<div class="field">
+<label for="current-watches">fs.inotify.max_user_watches</label>
+<input class="num" id="current-watches" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="8192">
+</div>
+<div class="field">
+<label for="current-instances">fs.inotify.max_user_instances</label>
+<input class="num" id="current-instances" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="128">
+</div>
+<div class="field">
+<label for="current-queue">fs.inotify.max_queued_events</label>
+<input class="num" id="current-queue" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="16384">
+</div>
+</div>
+<p class="hint">Read them with <code>sysctl fs.inotify.max_user_watches fs.inotify.max_user_instances fs.inotify.max_queued_events</code>. Empty fields are treated as unknown; enter all three to get a sysctl snippet.</p>
+</div>
+
+<div class="out" id="out" aria-live="polite" aria-atomic="true"></div>
+
+<table class="ref" id="plan-table">
+<caption>What the numbers mean</caption>
+<thead>
+<tr><th scope="col">Measure</th><th scope="col" class="num">Value</th></tr>
+</thead>
+<tbody>
+<tr><th scope="row">Watches per process</th><td class="num" id="detail-per-process"></td></tr>
+<tr><th scope="row">Watches per user</th><td class="num" id="detail-per-user"></td></tr>
+<tr><th scope="row">Target max_user_watches</th><td class="num" id="detail-watches-target"></td></tr>
+<tr><th scope="row">Instances needed</th><td class="num" id="detail-instances"></td></tr>
+<tr><th scope="row">Events before a drain</th><td class="num" id="detail-queue-raw"></td></tr>
+<tr><th scope="row">Target max_queued_events</th><td class="num" id="detail-queue-target"></td></tr>
+</tbody>
+</table>
+
+<table class="ref" id="compare-table">
+<caption>Compared with the limits you entered</caption>
+<thead>
+<tr><th scope="col">Limit</th><th scope="col" class="num">Needed</th><th scope="col" class="num">Target</th><th scope="col" class="num">Current</th><th scope="col">Verdict</th></tr>
+</thead>
+<tbody id="compare-body"></tbody>
+</table>
+
+<div id="snippet-panel" hidden>
+<pre class="snippet" id="snippet" aria-label="sysctl configuration snippet"></pre>
+<div class="snippet-actions">
+<button class="secondary" id="copy-snippet" type="button">Copy snippet</button>
+<span class="hint" id="copy-status" role="status" aria-live="polite"></span>
+</div>
+</div>
+
+<p class="note">inotify reports file system events to a process that holds an inotify instance. A watch belongs to one path: a watch on a directory reports events for entries inside that directory, and every subdirectory needs its own watch, so a recursive watcher on a tree holds one watch per directory plus one per file it watches individually. Watches are counted per real user ID, so two services running as the same user add up; <code>fs.inotify.max_user_watches</code> bounds that total, and when it is exhausted <code>inotify_add_watch</code> fails with ENOSPC. <code>fs.inotify.max_user_instances</code> bounds how many instances one user may create, and since a queue belongs to an instance each watching process needs one. <code>fs.inotify.max_queued_events</code> caps the events waiting in an instance's queue at creation time; beyond it events are dropped, though the kernel always delivers an IN_Q_OVERFLOW event so the reader can tell it lost some. The targets here are planning figures: watches are multiplied across the processes of one user, your headroom percentage is added, and both targets are rounded up to the next whole watch or event. Queue sizing treats the peak rate as lasting for the whole drain interval, which is the worst case you supply. The instances figure is a floor, not a recommendation: <code>max_user_instances</code> is shared with every other program in the same session, so leave room above it. None of this is kernel policy &mdash; the limits exist to bound kernel memory, every watch holds kernel memory until it is removed, and a limit should be raised only as far as the tree and its growth need. The snippet keeps the larger of each value you enter, so it never lowers a limit. Everything is calculated in your browser; nothing is sent or stored.</p>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* inotify-limits-core:start */
+var InotifyLimitsCore = (function(){
+  "use strict";
+  var MAX_TREE = 5000000;
+  var MAX_PROCESSES = 4096;
+  var MAX_RATE = 1000000;
+  var MAX_DRAIN = 3600;
+  var MAX_HEADROOM = 1000;
+  var MAX_LIMIT = 2147483647;
+  var NUMBER_PATTERN = /^(?:\d+(?:\.\d+)?|\.\d+)$/;
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function parseInteger(raw, spec){
+    var text = String(raw == null ? "" : raw).trim();
+    if (!text) fail("Enter the " + spec.label + ", such as " + spec.example + ".");
+    if (!/^\d+$/.test(text)) fail("Enter the " + spec.label + " as a whole number, such as " + spec.example + ".");
+    var value = Number(text);
+    if (!isFinite(value)) fail("Enter the " + spec.label + " as a whole number, such as " + spec.example + ".");
+    if (value < spec.min || value > spec.max) fail(spec.range);
+    return value;
+  }
+
+  function parseDecimal(raw, spec){
+    var text = String(raw == null ? "" : raw).trim();
+    if (!text) fail("Enter the " + spec.label + ", such as " + spec.example + ".");
+    if (!NUMBER_PATTERN.test(text)) fail("Enter the " + spec.label + " as a number, such as " + spec.example + ".");
+    var value = Number(text);
+    if (!isFinite(value)) fail("Enter the " + spec.label + " as a number, such as " + spec.example + ".");
+    if (value < spec.min || value > spec.max) fail(spec.range);
+    return value;
+  }
+
+  function parseOptionalLimit(raw, name){
+    var text = String(raw == null ? "" : raw).trim();
+    if (!text) return null;
+    if (!/^\d+$/.test(text)) fail(name + " must be a whole number, or left empty.");
+    var value = Number(text);
+    if (!isFinite(value) || value < 1 || value > MAX_LIMIT) fail(name + " must be between 1 and " + MAX_LIMIT + ", or left empty.");
+    return value;
+  }
+
+  function group(value){
+    var text = String(Math.round(value));
+    var out = "";
+    for (var i = 0; i < text.length; i += 1){
+      var fromEnd = text.length - i;
+      out += text.charAt(i);
+      if (fromEnd > 1 && fromEnd % 3 === 1) out += ",";
+    }
+    return out;
+  }
+
+  function roundUp(value){
+    if (!isFinite(value) || value <= 0) return 0;
+    // Absorb binary floating-point dust so 1200 × 1.1 does not become 1321.
+    return Math.ceil(value - 1e-9);
+  }
+
+  function plural(count, one, many){
+    return group(count) + " " + (count === 1 ? one : many);
+  }
+
+  function formatNumber(value){
+    var rounded = Math.round(value * 100) / 100;
+    var parts = String(rounded).split(".");
+    var whole = group(Number(parts[0]));
+    return parts.length > 1 ? whole + "." + parts[1] : whole;
+  }
+
+  function plan(input){
+    var directories = parseInteger(input.directories, {
+      label: "number of directories", example: "2400",
+      min: 0, max: MAX_TREE,
+      range: "Directories must be between 0 and " + group(MAX_TREE) + "."
+    });
+    var files = parseInteger(input.files, {
+      label: "number of files", example: "0",
+      min: 0, max: MAX_TREE,
+      range: "Files must be between 0 and " + group(MAX_TREE) + "."
+    });
+    var processes = parseInteger(input.processes, {
+      label: "number of processes", example: "2",
+      min: 1, max: MAX_PROCESSES,
+      range: "Processes must be between 1 and " + group(MAX_PROCESSES) + "."
+    });
+    var rate = parseDecimal(input.rate, {
+      label: "peak event rate", example: "400",
+      min: 0, max: MAX_RATE,
+      range: "The event rate must be between 0 and " + group(MAX_RATE) + " events per second."
+    });
+    var drain = parseDecimal(input.drain, {
+      label: "drain interval", example: "2",
+      min: 0.1, max: MAX_DRAIN,
+      range: "The drain interval must be between 0.1 and " + group(MAX_DRAIN) + " seconds."
+    });
+    var headroom = parseDecimal(input.headroom, {
+      label: "headroom", example: "20",
+      min: 0, max: MAX_HEADROOM,
+      range: "Headroom must be between 0 and " + group(MAX_HEADROOM) + " percent."
+    });
+    var factor = 1 + headroom / 100;
+    var watchesPerProcess = directories + files;
+    var watchesPerUser = watchesPerProcess * processes;
+    var queueRaw = rate * drain;
+    var result = {
+      directories: directories,
+      files: files,
+      processes: processes,
+      rate: rate,
+      drainSeconds: drain,
+      headroom: headroom,
+      watchesPerProcess: watchesPerProcess,
+      watchesPerUser: watchesPerUser,
+      watchesTarget: roundUp(watchesPerUser * factor),
+      queueRaw: queueRaw,
+      queueTarget: roundUp(queueRaw * factor),
+      instancesNeeded: processes
+    };
+    result.headline = plural(result.watchesTarget, "watch", "watches") + " per user";
+    result.summary = plural(directories, "directory", "directories") + " + " + plural(files, "individually watched file", "individually watched files") +
+      " = " + plural(watchesPerProcess, "watch", "watches") + " per process; " + plural(processes, "process", "processes") +
+      " = " + plural(watchesPerUser, "watch", "watches") + " per user, and " + formatPercent(headroom) +
+      " headroom takes the target to " + group(result.watchesTarget) + ".";
+    result.queueSummary = rate > 0
+      ? formatNumber(queueRaw) + " " + (queueRaw === 1 ? "event" : "events") + " between drains at " +
+        formatNumber(rate) + " events/s over " + formatSeconds(drain) + "; with " + formatPercent(headroom) +
+        " headroom the queue target is " + plural(result.queueTarget, "event", "events") + " per instance."
+      : "No queue growth is added when the peak rate is 0; the queue target stays at 0 events.";
+    return result;
+  }
+
+  function formatPercent(value){
+    return (Math.round(value * 100) / 100) + "%";
+  }
+
+  function formatSeconds(value){
+    return (Math.round(value * 100) / 100) + " s";
+  }
+
+  function statusFor(current, needed, target){
+    if (current === null) return "not-entered";
+    if (current < needed) return "too-low";
+    if (current < target) return "below-target";
+    return "sufficient";
+  }
+
+  function compare(input, result){
+    var watches = parseOptionalLimit(input.currentWatches, "max_user_watches");
+    var instances = parseOptionalLimit(input.currentInstances, "max_user_instances");
+    var queue = parseOptionalLimit(input.currentQueue, "max_queued_events");
+    var rows = [
+      {
+        key: "watches",
+        label: "max_user_watches",
+        needed: result.watchesPerUser,
+        target: result.watchesTarget,
+        current: watches,
+        status: statusFor(watches, result.watchesPerUser, result.watchesTarget)
+      },
+      {
+        key: "instances",
+        label: "max_user_instances",
+        needed: result.instancesNeeded,
+        target: result.instancesNeeded,
+        current: instances,
+        status: statusFor(instances, result.instancesNeeded, result.instancesNeeded)
+      },
+      {
+        key: "queue",
+        label: "max_queued_events",
+        needed: Math.ceil(result.queueRaw),
+        target: result.queueTarget,
+        current: queue,
+        status: statusFor(queue, Math.ceil(result.queueRaw), result.queueTarget)
+      }
+    ];
+    return { rows: rows, watches: watches, instances: instances, queue: queue };
+  }
+
+  function capacity(result, watches){
+    if (watches === null) return "";
+    var perProcess = Math.floor(watches / result.processes);
+    var directories = Math.max(0, perProcess - result.files);
+    var tail = directories > result.directories
+      ? " (" + group(directories - result.directories) + " spare beyond the " + group(result.directories) + " you listed)."
+      : directories === result.directories
+        ? " (exactly the " + group(result.directories) + " you listed)."
+        : "; the " + group(result.directories) + " you listed do not fit.";
+    return "At " + group(watches) + " watches and " + plural(result.processes, "process", "processes") +
+      ", each process can watch up to " + group(directories) + " directories" + tail;
+  }
+
+  function snippet(comparison, result){
+    if (comparison.watches === null || comparison.instances === null || comparison.queue === null) return null;
+    var lines = [
+      "# /etc/sysctl.d/60-inotify.conf",
+      "fs.inotify.max_user_watches = " + Math.max(comparison.watches, result.watchesTarget),
+      "fs.inotify.max_user_instances = " + Math.max(comparison.instances, result.instancesNeeded),
+      "fs.inotify.max_queued_events = " + Math.max(comparison.queue, result.queueTarget)
+    ];
+    return lines.join("\n");
+  }
+
+  function calculate(input){
+    var result = plan(input);
+    var comparison = compare(input, result);
+    result.rows = comparison.rows;
+    result.capacity = capacity(result, comparison.watches);
+    result.snippet = snippet(comparison, result);
+    return result;
+  }
+
+  return {
+    MAX_TREE: MAX_TREE,
+    MAX_PROCESSES: MAX_PROCESSES,
+    MAX_RATE: MAX_RATE,
+    MAX_DRAIN: MAX_DRAIN,
+    MAX_HEADROOM: MAX_HEADROOM,
+    MAX_LIMIT: MAX_LIMIT,
+    group: group,
+    roundUp: roundUp,
+    plan: plan,
+    compare: compare,
+    calculate: calculate,
+    snippet: snippet,
+    statusFor: statusFor,
+    capacity: capacity
+  };
+})();
+/* inotify-limits-core:end */
+(function(){
+  "use strict";
+  var C = InotifyLimitsCore;
+  var els = {
+    form: document.getElementById("iw-form"),
+    directories: document.getElementById("directories"),
+    files: document.getElementById("files"),
+    processes: document.getElementById("processes"),
+    rate: document.getElementById("rate"),
+    drain: document.getElementById("drain"),
+    headroom: document.getElementById("headroom"),
+    currentWatches: document.getElementById("current-watches"),
+    currentInstances: document.getElementById("current-instances"),
+    currentQueue: document.getElementById("current-queue"),
+    err: document.getElementById("err"),
+    out: document.getElementById("out"),
+    perProcess: document.getElementById("detail-per-process"),
+    perUser: document.getElementById("detail-per-user"),
+    watchesTarget: document.getElementById("detail-watches-target"),
+    instances: document.getElementById("detail-instances"),
+    queueRaw: document.getElementById("detail-queue-raw"),
+    queueTarget: document.getElementById("detail-queue-target"),
+    compareBody: document.getElementById("compare-body"),
+    snippetPanel: document.getElementById("snippet-panel"),
+    snippet: document.getElementById("snippet"),
+    copy: document.getElementById("copy-snippet"),
+    copyStatus: document.getElementById("copy-status")
+  };
+
+  var VERDICTS = {
+    "sufficient": { text: "Sufficient", className: "ok" },
+    "below-target": { text: "Below target", className: "below" },
+    "too-low": { text: "Too low", className: "low" },
+    "not-entered": { text: "Not entered", className: "none" }
+  };
+
+  function line(text, className){
+    var node = document.createElement("div");
+    node.className = className || "sub";
+    node.textContent = text;
+    return node;
+  }
+
+  function clearDetails(){
+    [els.perProcess, els.perUser, els.watchesTarget, els.instances, els.queueRaw, els.queueTarget].forEach(function(node){
+      node.textContent = "";
+    });
+    els.compareBody.textContent = "";
+    els.snippetPanel.hidden = true;
+    els.copyStatus.textContent = "";
+  }
+
+  function placeholder(message){
+    els.out.textContent = "";
+    var node = line(message);
+    node.style.padding = "18px 0 6px";
+    els.out.appendChild(node);
+  }
+
+  function render(result){
+    els.out.textContent = "";
+    els.out.appendChild(line("Target max_user_watches", "label"));
+    els.out.appendChild(line(result.headline, "big"));
+    els.out.appendChild(line(result.summary));
+    els.out.appendChild(line(result.queueSummary));
+
+    els.perProcess.textContent = C.group(result.watchesPerProcess);
+    els.perUser.textContent = C.group(result.watchesPerUser);
+    els.watchesTarget.textContent = C.group(result.watchesTarget);
+    els.instances.textContent = C.group(result.instancesNeeded);
+    els.queueRaw.textContent = C.group(Math.ceil(result.queueRaw));
+    els.queueTarget.textContent = C.group(result.queueTarget);
+
+    els.compareBody.textContent = "";
+    result.rows.forEach(function(row){
+      var tr = document.createElement("tr");
+      var head = document.createElement("th");
+      head.scope = "row";
+      head.textContent = row.label;
+      tr.appendChild(head);
+      [C.group(row.needed), C.group(row.target), row.current === null ? "—" : C.group(row.current)].forEach(function(text){
+        var cell = document.createElement("td");
+        cell.className = "num";
+        cell.textContent = text;
+        tr.appendChild(cell);
+      });
+      var verdict = document.createElement("td");
+      var badge = document.createElement("span");
+      var view = VERDICTS[row.status];
+      badge.className = "badge " + view.className;
+      badge.textContent = view.text;
+      verdict.appendChild(badge);
+      tr.appendChild(verdict);
+      els.compareBody.appendChild(tr);
+    });
+
+    if (result.snippet){
+      els.snippet.textContent = result.snippet + "\n";
+      els.snippetPanel.hidden = false;
+    } else {
+      els.snippetPanel.hidden = true;
+    }
+  }
+
+  function calculateWith(announce){
+    var input = {
+      directories: els.directories.value,
+      files: els.files.value,
+      processes: els.processes.value,
+      rate: els.rate.value,
+      drain: els.drain.value,
+      headroom: els.headroom.value,
+      currentWatches: els.currentWatches.value,
+      currentInstances: els.currentInstances.value,
+      currentQueue: els.currentQueue.value
+    };
+    var result;
+    try {
+      result = C.calculate(input);
+    } catch (error){
+      if (announce) els.err.textContent = error.message;
+      else els.err.textContent = "";
+      clearDetails();
+      placeholder("Enter the tree and the watchers to size the limits.");
+      return;
+    }
+    els.err.textContent = "";
+    render(result);
+  }
+
+  els.form.addEventListener("submit", function(event){
+    event.preventDefault();
+    calculateWith(true);
+  });
+  [els.directories, els.files, els.processes, els.rate, els.drain, els.headroom,
+    els.currentWatches, els.currentInstances, els.currentQueue].forEach(function(input){
+    input.addEventListener("input", function(){ calculateWith(false); });
+    input.addEventListener("change", function(){ calculateWith(false); });
+  });
+
+  els.copy.addEventListener("click", function(){
+    var text = els.snippet.textContent;
+    if (!text) return;
+    function done(ok){
+      els.copyStatus.textContent = ok ? "Copied to the clipboard." : "Select the snippet and copy it manually.";
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(function(){ done(true); }, function(){ done(false); });
+    } else {
+      done(false);
+    }
+  });
+
+  calculateWith(false);
+})();
+</script>
+</body>
+</html>

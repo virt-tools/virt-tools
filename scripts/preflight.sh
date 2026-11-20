@@ -425,6 +425,7 @@ node tests/keyframe_trim_planner.test.cjs
 node tests/referrer_policy_simulator.test.cjs
 node tests/tcp_header_decoder.test.cjs
 node tests/frequency_weighting_calculator.test.cjs
+node tests/inotify_watch_limit_planner.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"
