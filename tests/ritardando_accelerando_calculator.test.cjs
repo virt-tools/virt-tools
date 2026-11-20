@@ -225,9 +225,9 @@ assert.equal(kinds('edge'), 2, 'two edge cases');
 assert.equal(kinds('validation'), 8, 'eight validation cases');
 const occurrences = catalog.tools.filter((tool) => tool.slug === slug).length;
 assert.equal(occurrences, 1, 'slug is unique');
-assert.equal(catalog.tools.length, 2430, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2169, 'public tools');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Music').length, 52, 'Music count');
+assert.equal(catalog.tools.length, 2431, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2170, 'public tools');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Music').length, 53, 'Music count');
 for (const other of catalog.tools) {
   if (other.slug === slug) continue;
   assert.ok(!(other.aliases || []).some((alias) => alias.toLowerCase() === record.name.toLowerCase()),

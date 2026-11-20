@@ -199,7 +199,7 @@ const pageDirs = fs.readdirSync(path.join(root, 'frontend', 'tools'), { withFile
   .filter((entry) => entry.isDirectory()).length;
 assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageDirs,
   'every listed tool record has a page');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2169, 'public tools');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2170, 'public tools');
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record missing');
 assert.equal(record.name, 'Song Key Fit Planner');
@@ -222,7 +222,7 @@ assert.equal(new Set(record.tags).size, record.tags.length, 'tags unique');
 assert.ok(record.description.length > 80, 'description present');
 assert.ok(record.testCases.length >= 12, `expected at least 12 cases, found ${record.testCases.length}`);
 assert.equal(catalog.tools.filter((tool) => tool.slug === slug).length, 1, 'slug unique');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Music').length, 52, 'music category count');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Music').length, 53, 'music category count');
 for (const other of catalog.tools) {
   if (other.slug === slug) continue;
   assert.ok(!record.aliases.map((alias) => alias.toLowerCase()).includes(other.name.toLowerCase()),

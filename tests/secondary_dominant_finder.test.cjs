@@ -313,7 +313,7 @@ for (const source of entry.sources) {
 assert.match(entry.guidance, /natural minor/, 'guidance names the stated scale');
 assert.match(entry.method, /double sharps/, 'method names the spelling limit');
 assert.ok(entry.testCases.length >= 26, 'at least twenty-six catalog cases');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Music').length, 52, 'Music count');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Music').length, 53, 'Music count');
 let goldenCases = 0;
 let validationCases = 0;
 for (const testCase of entry.testCases) {
