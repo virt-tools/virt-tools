@@ -322,7 +322,7 @@ for (const tag of ['system', 'linux', 'memory', 'meminfo', 'procfs']) {
   assert.ok(record.tags.includes(tag), 'new tag present: ' + tag);
 }
 assert.equal(catalog.tools.length, 2418, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2158, 'public tools');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2157, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'System').length, 53, 'System count');
 
 // ---- Page contract: shared assets, labelled controls, no storage or network.

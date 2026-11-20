@@ -314,7 +314,9 @@
 
   function favoritesSet() {
     var value = readJSON(FAVORITES_KEY, []);
-    return new Set(Array.isArray(value) ? value.filter(function (item) { return typeof item === "string"; }) : []);
+    var favorites = new Set(Array.isArray(value) ? value.filter(function (item) { return typeof item === "string"; }) : []);
+    if (favorites.delete("passphrase-generator")) favorites.add("diceware-passphrase");
+    return favorites;
   }
 
   function isFavorite(slug) { return favoritesSet().has(slug); }

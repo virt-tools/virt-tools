@@ -72,6 +72,14 @@ try {
   await home.locator("#saved-filter").click();
   assert.equal(await home.locator("#saved-filter").getAttribute("aria-pressed"), "false");
 
+  await home.evaluate(() => localStorage.setItem("vt-favorites", JSON.stringify(["passphrase-generator"])));
+  await home.locator("#saved-filter").click();
+  const savedDiceware = home.locator('#tool-catalog [data-slug="diceware-passphrase"]');
+  await savedDiceware.locator(".catalog-star").click();
+  assert.equal(await home.locator("#tool-catalog .catalog-row").count(), 0);
+  assert.deepEqual(await home.evaluate(() => JSON.parse(localStorage.getItem("vt-favorites"))), []);
+  await home.locator("#saved-filter").click();
+
   await home.locator("#tool-search").fill("JSON formatter");
   await home.waitForFunction(() => document.querySelectorAll("#tool-catalog .catalog-row").length > 0);
   await home.locator("#tool-search").fill("");

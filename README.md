@@ -90,6 +90,10 @@ them directly. Generation applies `data/tool-curation.json`, so unlisted and red
 source routes cannot be republished accidentally. The canonical record may be
 retained with `listed: false` for review history.
 
+When a retired tool had translated pages, list their locale codes under its slug
+in `redirect_locales`. Its old directory and `index.html` URLs will redirect
+to the replacement in each language.
+
 Keep tools client-side. If you need a JS library, vendor it under
 `frontend/vendor/` rather than loading from a CDN, to preserve privacy.
 

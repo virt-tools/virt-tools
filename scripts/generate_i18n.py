@@ -382,6 +382,9 @@ def main(argv: list[str]) -> int:
 
     manifest: dict[str, dict] = {}
     if not bundles_only:
+        curation_path = data_dir / "tool-curation.json"
+        curation = i18n_lib.load_json(curation_path) if curation_path.is_file() else {}
+        retired_locales = curation.get("redirect_locales", {})
         for entry in registry["locales"]:
             code = entry["code"]
             path = entry.get("path", "")
@@ -394,6 +397,11 @@ def main(argv: list[str]) -> int:
                 continue
             locale_root.mkdir(parents=True, exist_ok=True)
             (locale_root / "index.html").write_text(homepage, encoding="utf-8")
+            # An incremental build may still contain the retired tool's translated HTML.
+            for page in (locale_root / "tools").glob("*/index.html"):
+                slug = page.parent.name
+                if slug not in tool_documents and code in retired_locales.get(slug, ()):
+                    page.unlink()
             messages = state["catalog"].get("messages", {})
             pages = {
                 "": {
