@@ -281,7 +281,7 @@ const pageDirs = fs.readdirSync(path.join(root, 'frontend', 'tools'), { withFile
   .filter((entry) => entry.isDirectory()).length;
 assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageDirs,
   'every listed tool record has a page');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2199, 'public tools');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2200, 'public tools');
 assert.ok(catalog.tools.some((tool) => tool.slug === slug), 'the new record is present');
 const entry = catalog.tools.find((tool) => tool.slug === slug);
 assert.equal(entry.name, 'Wi-Fi Data Rate Calculator');
