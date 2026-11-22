@@ -250,8 +250,8 @@ const pageDirs = fs.readdirSync(path.join(root, 'frontend', 'tools'), { withFile
   .filter((entry) => entry.isDirectory()).length;
 assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageDirs,
   'every listed tool record has a page');
-assert.equal(catalog.tools.length, 2433, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2172, 'public tools');
+assert.equal(catalog.tools.length, 2434, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2173, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Encoding').length, 53,
   'Encoding count');
 const record = catalog.tools.find((tool) => tool.slug === slug);
