@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Motorola S-Record Inspector &mdash; Virtual Tools</title>
+<meta name="description" content="Check a Motorola S-record (SREC, S19, S28, S37) file record by record: every checksum is verified, the address width of each record is resolved, and the result reports the byte count, address range, gaps, record-count and entry point.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.field{display:flex;flex-direction:column;gap:6px;margin:0;min-width:0}
+.field label{font-size:13px;color:var(--text-dim,#9aa3b2)}
+.field textarea{box-sizing:border-box;width:100%;min-height:180px;padding:10px 12px;border-radius:8px;
+  border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);color:var(--text,#e6e6e6);
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;line-height:1.5;resize:vertical;
+  outline:none;overflow-wrap:anywhere;white-space:pre-wrap;tab-size:4}
+.field textarea:focus,.field textarea:focus-visible{outline:2px solid var(--accent,#6ea8fe);outline-offset:1px}
+.field textarea::placeholder{color:var(--text-dim,#9aa3b2)}
+.hint{font-size:.82rem;line-height:1.4;margin:10px 0 0;color:var(--text-dim,#9aa3b2)}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0 0}
+.actions button{font:inherit;font-size:13.5px;font-weight:600;padding:10px 22px;border-radius:8px;
+  border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:var(--on-accent,#0b1017);
+  cursor:pointer;min-height:44px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus,.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.actions button.ghost{background:transparent;color:var(--accent,#6ea8fe)}
+.err{color:var(--bad,#f87171);font-size:13px;margin:10px 0 0;min-height:1.2em}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:16px 0 0}
+.out .label{text-align:center;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-dim,#9aa3b2)}
+.out .big{font-size:clamp(1.3rem,6vw,1.9rem);font-weight:800;text-align:center;padding:2px 0 4px;line-height:1.3;overflow-wrap:anywhere}
+.out .big.bad{color:var(--bad,#f87171)}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:4px 0 0;line-height:1.45;overflow-wrap:anywhere}
+.rows{margin:16px 0 0;display:flex;flex-direction:column;gap:8px}
+.rows .row{display:flex;justify-content:space-between;align-items:baseline;gap:14px;border-top:1px solid var(--border,#2a2f3a);padding:8px 0 0}
+.rows .k{font-size:13px;color:var(--text-dim,#9aa3b2)}
+.rows .v{font-family:ui-monospace,monospace;font-size:14px;text-align:right;overflow-wrap:anywhere}
+.problems{margin:18px 0 0}
+.problems h2{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim,#9aa3b2);margin:0 0 8px}
+.problems ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.problems li{font-size:13.5px;line-height:1.45;border-left:2px solid var(--bad,#f87171);padding:2px 0 2px 10px;overflow-wrap:anywhere}
+.problems li .where{font-family:ui-monospace,monospace;color:var(--text-dim,#9aa3b2);margin-right:6px}
+.note{font-size:.88rem;line-height:1.55;color:var(--text-dim,#9aa3b2);margin:16px 0 0}
+.note code{font-family:ui-monospace,monospace;font-size:.92em}
+[hidden]{display:none !important}
+@media (max-width:560px){
+  .actions button{flex:1 1 auto}
+  .rows .row{flex-direction:column;align-items:flex-start;gap:2px}
+  .rows .v{text-align:left}
+}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<h1>Motorola S-Record Inspector</h1>
+<p>Paste an S-record file and check it record by record: checksums, address widths, the record count, gaps, overlaps and the entry point.</p>
+</div>
+<div class="panel">
+<form id="srec-form" novalidate>
+<div class="field">
+<label for="srec-text">S-record lines</label>
+<textarea id="srec-text" name="srec" rows="8" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="S00600004844521B&#10;S1130000285F245F2212226A000424290008237C2A&#10;S9030000FC"></textarea>
+</div>
+<p class="hint">One record per line, each starting with <code>S</code> and a type digit. Blank lines are ignored; spaces and comments are not part of the format.</p>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions">
+<button type="submit">Inspect</button>
+<button type="button" class="ghost" id="example">Load example</button>
+<button type="button" class="ghost" id="clear">Clear</button>
+</div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"></div>
+<p class="note">Each line is a record: <code>S</code>, a type digit, <code>CC</code> the byte count, then the address, the data and <code>SS</code> the checksum. The byte count is the number of bytes after it &mdash; address plus data plus the checksum byte &mdash; so a 16-byte S1 record carries <code>13</code>. The checksum is the one's complement of the low byte of the sum of the byte count, the address bytes and the data, so a correct record adds up to <code>FF</code>. <code>S0</code> is a header, usually holding a module name; <code>S1</code>, <code>S2</code> and <code>S3</code> carry data at a 2, 3 or 4-byte address; <code>S5</code> and <code>S6</code> state how many data records precede them; <code>S7</code>, <code>S8</code> and <code>S9</code> end the file and may name the start address. <code>S4</code> is not defined. Everything is checked in your browser; nothing is uploaded or stored.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* srecord-core:start */
+var SRecordCore = (function(){
+  "use strict";
+  var MAX_CHARACTERS = 1000000;
+  var MAX_RECORDS = 50000;
+  var MAX_ERRORS = 200;
+  var ADDRESS_LIMIT = 4294967296;
+  var WIDTHS = {0: 2, 1: 2, 2: 3, 3: 4, 5: 2, 6: 3, 7: 4, 8: 3, 9: 2};
+  var TYPE_NAMES = {
+    0: "header",
+    1: "data, 16-bit address",
+    2: "data, 24-bit address",
+    3: "data, 32-bit address",
+    5: "16-bit record count",
+    6: "24-bit record count",
+    7: "termination, 32-bit start address",
+    8: "termination, 24-bit start address",
+    9: "termination, 16-bit start address"
+  };
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function pad(value, width){
+    var text = value.toString(16).toUpperCase();
+    while (text.length < width) text = "0" + text;
+    return text;
+  }
+
+  function hexValue(value){
+    return "0x" + pad(value, value > 0xFFFF ? 8 : 4);
+  }
+
+  function headerText(bytes){
+    var text = "";
+    for (var index = 0; index < bytes.length; index += 1){
+      var code = bytes[index];
+      if (code === 0) continue;
+      text += code >= 0x20 && code <= 0x7E ? String.fromCharCode(code) : "\u00b7";
+    }
+    return text.trim();
+  }
+
+  function inspect(input){
+    var source = input === null || input === undefined ? "" : String(input);
+    if (source.length > MAX_CHARACTERS){
+      fail("The text is longer than 1,000,000 characters; inspect a smaller file.");
+    }
+    var lines = source.replace(/\r\n?/g, "\n").split("\n");
+    var errors = [];
+    var errorCount = 0;
+    var errorLines = [];
+    var addresses = new Set();
+    var records = 0;
+    var dataRecords = 0;
+    var dataBytes = 0;
+    var overlapBytes = 0;
+    var countRecords = 0;
+    var declaredCount = null;
+    var termination = null;
+    var startAddress = null;
+    var header = null;
+    var mix = {};
+    var closed = false;
+
+    function problem(line, message){
+      errorCount += 1;
+      errorLines.push(line);
+      if (errors.length < MAX_ERRORS) errors.push({line: line, message: message});
+    }
+
+    for (var index = 0; index < lines.length; index += 1){
+      var lineNumber = index + 1;
+      var raw = lines[index].trim();
+      if (!raw) continue;
+      records += 1;
+      if (records > MAX_RECORDS){
+        fail("The file has more than 50,000 records; inspect a smaller file.");
+      }
+      var leader = raw.charAt(0);
+      if (leader !== "S" && leader !== "s"){
+        problem(lineNumber, "A record must start with the letter S.");
+        continue;
+      }
+      var digit = raw.charAt(1);
+      if (raw.length < 2 || !/[0-9]/.test(digit)){
+        problem(lineNumber, "The character after S must be a record type digit from 0 to 9.");
+        continue;
+      }
+      var type = digit.charCodeAt(0) - 48;
+      mix[type] = (mix[type] || 0) + 1;
+      if (!Object.prototype.hasOwnProperty.call(WIDTHS, type)){
+        problem(lineNumber, "Record type S" + digit + " is not defined; the types run S0 to S3 and S5 to S9.");
+        continue;
+      }
+      var rest = raw.slice(2);
+      if (/[^0-9A-Fa-f]/.test(rest)){
+        problem(lineNumber, "The record contains a character that is not a hexadecimal digit.");
+        continue;
+      }
+      if (rest.length % 2 !== 0){
+        problem(lineNumber, "The record has an odd number of hexadecimal digits.");
+        continue;
+      }
+      if (rest.length < 2){
+        problem(lineNumber, "The record is too short to hold the two-digit byte count.");
+        continue;
+      }
+      var count = parseInt(rest.slice(0, 2), 16);
+      if (rest.length !== 2 + count * 2){
+        problem(lineNumber, "The byte count says " + count + " bytes, so the record needs " +
+          (2 + count * 2) + " characters after its type and it carries " + rest.length + ".");
+        continue;
+      }
+      var width = WIDTHS[type];
+      if (count < width + 1){
+        problem(lineNumber, "A byte count of " + count + " leaves no room for the " + width +
+          "-byte address and the checksum byte.");
+        continue;
+      }
+      var bytes = [];
+      for (var offset = 0; offset < rest.length; offset += 2){
+        bytes.push(parseInt(rest.slice(offset, offset + 2), 16));
+      }
+      var sum = 0;
+      for (var cursor = 0; cursor < bytes.length; cursor += 1) sum = (sum + bytes[cursor]) & 0xFF;
+      if (sum !== 0xFF){
+        var given = bytes[bytes.length - 1];
+        var wanted = 0xFF - ((sum - given) & 0xFF);
+        problem(lineNumber, "The checksum is 0x" + pad(given, 2) + " but the record's bytes need 0x" +
+          pad(wanted, 2) + ".");
+        continue;
+      }
+      var address = 0;
+      for (var field = 1; field <= width; field += 1) address = address * 256 + bytes[field];
+      var payload = bytes.slice(1 + width, bytes.length - 1);
+
+      if (type === 0){
+        if (header === null && payload.length) header = headerText(payload);
+        continue;
+      }
+      if (type === 1 || type === 2 || type === 3){
+        if (closed) problem(lineNumber, "A data record follows the termination record.");
+        dataRecords += 1;
+        dataBytes += payload.length;
+        var past = false;
+        for (var step = 0; step < payload.length; step += 1){
+          var absolute = address + step;
+          if (absolute >= ADDRESS_LIMIT){
+            if (!past) problem(lineNumber, "The data record runs past the 32-bit address space at " +
+              hexValue(address) + ".");
+            past = true;
+            continue;
+          }
+          if (addresses.has(absolute)) overlapBytes += 1;
+          else addresses.add(absolute);
+        }
+        continue;
+      }
+      if (type === 5 || type === 6){
+        if (payload.length){
+          problem(lineNumber, "A count record carries the number of data records and no data bytes.");
+          continue;
+        }
+        countRecords += 1;
+        if (declaredCount === null) declaredCount = address;
+        if (address !== dataRecords){
+          problem(lineNumber, "The count record says " + address + " data records precede it and the file carries " +
+            dataRecords + " so far.");
+        }
+        continue;
+      }
+      if (closed){
+        problem(lineNumber, "The file already ended on an earlier termination record.");
+        continue;
+      }
+      closed = true;
+      termination = type;
+      startAddress = address;
+      if (payload.length){
+        problem(lineNumber, "A termination record carries a start address and no data bytes.");
+      }
+    }
+
+    if (!closed) problem(null, "The file has no termination record (S7, S8 or S9).");
+    if (dataRecords === 0) problem(null, "The file carries no data records.");
+
+    var sorted = Array.from(addresses).sort(function(a, b){ return a - b; });
+    var segments = 0;
+    var holes = 0;
+    var largestGap = 0;
+    for (var at = 0; at < sorted.length; at += 1){
+      if (at === 0 || sorted[at] !== sorted[at - 1] + 1){
+        segments += 1;
+        if (at > 0){
+          var gap = sorted[at] - sorted[at - 1] - 1;
+          holes += gap;
+          if (gap > largestGap) largestGap = gap;
+        }
+      }
+    }
+    var first = sorted.length ? sorted[0] : null;
+    var last = sorted.length ? sorted[sorted.length - 1] : null;
+    var mixText = Object.keys(mix).map(function(key){ return Number(key); })
+      .sort(function(a, b){ return a - b; })
+      .map(function(key){ return "S" + key + " " + mix[key]; })
+      .join(" \u00b7 ");
+
+    return {
+      records: records,
+      dataRecords: dataRecords,
+      dataBytes: dataBytes,
+      uniqueBytes: sorted.length,
+      overlapBytes: overlapBytes,
+      segments: segments,
+      holes: holes,
+      largestGap: largestGap,
+      spanBytes: sorted.length ? last - first + 1 : 0,
+      addressStart: first === null ? null : hexValue(first),
+      addressEnd: last === null ? null : hexValue(last),
+      startAddress: startAddress === null ? null : hexValue(startAddress),
+      termination: termination === null ? null : "S" + termination,
+      header: header || null,
+      countRecords: countRecords,
+      declaredCount: declaredCount,
+      mix: mixText,
+      errors: errors,
+      errorLines: errorLines,
+      errorCount: errorCount,
+      valid: errorCount === 0
+    };
+  }
+
+  function compute(options){
+    var settings = options || {};
+    var text = settings.text;
+    if (text === null || text === undefined || String(text).trim() === ""){
+      fail("Paste S-record lines to inspect.");
+    }
+    return inspect(text);
+  }
+
+  return {
+    MAX_CHARACTERS: MAX_CHARACTERS,
+    MAX_RECORDS: MAX_RECORDS,
+    ADDRESS_LIMIT: ADDRESS_LIMIT,
+    WIDTHS: WIDTHS,
+    TYPE_NAMES: TYPE_NAMES,
+    hexValue: hexValue,
+    inspect: inspect,
+    compute: compute
+  };
+})();
+/* srecord-core:end */
+(function(){
+  "use strict";
+  var C = SRecordCore;
+  var EXAMPLE = [
+    "S00600004844521B",
+    "S1130000285F245F2212226A000424290008237C2A",
+    "S11300100002000800082629001853812341001813",
+    "S113002041E900084E42234300182342000824A952",
+    "S107003000144ED492",
+    "S5030004F8",
+    "S9030000FC"
+  ].join("\n");
+  var els = {
+    form: document.getElementById("srec-form"),
+    text: document.getElementById("srec-text"),
+    example: document.getElementById("example"),
+    clear: document.getElementById("clear"),
+    err: document.getElementById("err"),
+    out: document.getElementById("out")
+  };
+
+  function row(key, value){
+    var line = document.createElement("div");
+    line.className = "row";
+    var name = document.createElement("span");
+    name.className = "k";
+    name.textContent = key;
+    var figure = document.createElement("span");
+    figure.className = "v";
+    figure.textContent = value;
+    line.appendChild(name);
+    line.appendChild(figure);
+    return line;
+  }
+
+  function plural(count, one, many){
+    return count + " " + (count === 1 ? one : many);
+  }
+
+  function placeholder(message){
+    els.out.textContent = "";
+    var span = document.createElement("div");
+    span.className = "sub";
+    span.style.padding = "18px 0 6px";
+    span.textContent = message;
+    els.out.appendChild(span);
+  }
+
+  function render(result){
+    els.out.textContent = "";
+    var label = document.createElement("div");
+    label.className = "label";
+    label.textContent = "Result";
+    var big = document.createElement("div");
+    big.className = "big" + (result.valid ? "" : " bad");
+    big.textContent = result.valid ? "Valid image" : plural(result.errorCount, "problem", "problems");
+    var sub = document.createElement("div");
+    sub.className = "sub";
+    if (!result.valid){
+      sub.textContent = "Fix the records listed below and inspect again.";
+    } else if (result.uniqueBytes === 0){
+      sub.textContent = "The records are well formed but carry no data bytes.";
+    } else if (result.segments === 1){
+      sub.textContent = plural(result.uniqueBytes, "byte", "bytes") + " in one block from " +
+        result.addressStart + " to " + result.addressEnd;
+    } else {
+      sub.textContent = plural(result.uniqueBytes, "byte", "bytes") + " in " +
+        plural(result.segments, "block", "blocks") + " from " + result.addressStart + " to " + result.addressEnd;
+    }
+    els.out.appendChild(label);
+    els.out.appendChild(big);
+    els.out.appendChild(sub);
+
+    var rows = document.createElement("div");
+    rows.className = "rows";
+    rows.appendChild(row("Records", String(result.records)));
+    rows.appendChild(row("Data records", String(result.dataRecords)));
+    rows.appendChild(row("Data bytes", String(result.dataBytes)));
+    rows.appendChild(row("Distinct addresses", String(result.uniqueBytes)));
+    rows.appendChild(row("Overlapping bytes", result.overlapBytes ? String(result.overlapBytes) : "none"));
+    rows.appendChild(row("Address range", result.addressStart === null
+      ? "none"
+      : result.addressStart + " to " + result.addressEnd));
+    rows.appendChild(row("Contiguous blocks", String(result.segments)));
+    rows.appendChild(row("Gaps inside the range", result.holes
+      ? plural(result.holes, "byte", "bytes") + " (largest " + result.largestGap + ")"
+      : "none"));
+    rows.appendChild(row("Start address", result.startAddress === null
+      ? "none"
+      : result.startAddress + " (" + result.termination + ")"));
+    rows.appendChild(row("Header", result.header === null ? "none" : result.header));
+    if (result.countRecords){
+      rows.appendChild(row("Record count", result.declaredCount + " declared, " + result.dataRecords + " present"));
+    }
+    rows.appendChild(row("Record mix", result.mix));
+    els.out.appendChild(rows);
+
+    if (!result.valid){
+      var block = document.createElement("div");
+      block.className = "problems";
+      var heading = document.createElement("h2");
+      heading.textContent = "Problems";
+      block.appendChild(heading);
+      var list = document.createElement("ul");
+      var shown = Math.min(result.errors.length, 20);
+      for (var i = 0; i < shown; i += 1){
+        var item = document.createElement("li");
+        var where = document.createElement("span");
+        where.className = "where";
+        where.textContent = result.errors[i].line === null ? "File" : "Line " + result.errors[i].line;
+        item.appendChild(where);
+        item.appendChild(document.createTextNode(result.errors[i].message));
+        list.appendChild(item);
+      }
+      if (result.errorCount > shown){
+        var more = document.createElement("li");
+        more.textContent = "and " + plural(result.errorCount - shown, "more problem", "more problems") + ".";
+        list.appendChild(more);
+      }
+      block.appendChild(list);
+      els.out.appendChild(block);
+    }
+  }
+
+  function run(){
+    var result;
+    try {
+      result = C.compute({text: els.text.value});
+    } catch (error){
+      els.err.textContent = error.message;
+      placeholder("Paste S-record lines to inspect.");
+      return;
+    }
+    els.err.textContent = "";
+    render(result);
+  }
+
+  els.form.addEventListener("submit", function(event){
+    event.preventDefault();
+    run();
+  });
+  els.example.addEventListener("click", function(){
+    els.text.value = EXAMPLE;
+    els.err.textContent = "";
+    run();
+    els.text.focus();
+  });
+  els.clear.addEventListener("click", function(){
+    els.text.value = "";
+    els.err.textContent = "";
+    placeholder("Paste S-record lines to inspect.");
+    els.text.focus();
+  });
+  placeholder("Paste S-record lines to inspect.");
+})();
+</script>
+</body>
+</html>
