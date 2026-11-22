@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Growing Degree Day Accumulator — Virtual Tools</title>
+<meta name="description" content="Accumulate growing degree days from a season of daily highs and lows, cap heat at an upper cutoff, and forecast the days left before a crop reaches its target.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.calc{max-width:900px;margin:0 auto}
+.settings{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:12px}
+.field{min-width:0}
+.field.wide{grid-column:1/-1}
+.field label{display:block;font-size:.8rem;font-weight:700;margin-bottom:5px}
+.field input,.field select,.field textarea{box-sizing:border-box;width:100%;min-height:44px;padding:9px 10px;border:1px solid var(--border);border-radius:7px;background:var(--bg);color:var(--text);font:inherit}
+.field textarea{min-height:170px;resize:vertical;font-family:ui-monospace,monospace;font-size:13px;line-height:1.5}
+.field input:focus,.field select:focus,.field textarea:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.hint{display:block;margin-top:4px;color:var(--text-muted);font-size:.74rem;line-height:1.35}
+.actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:15px}
+button{min-height:44px;padding:8px 15px;border:1px solid var(--border);border-radius:7px;background:var(--bg);color:var(--text);font:inherit;font-weight:700;cursor:pointer}
+button.primary{border-color:var(--accent);background:var(--accent);color:#07111f}
+button:hover{filter:brightness(1.08)}
+.error{min-height:1.3em;margin:10px 0 0;color:var(--bad,#f87171);font-size:.86rem}
+.results{margin-top:18px;padding-top:16px;border-top:1px solid var(--border)}
+.summary{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.summary strong{font-size:1.6rem;font-family:ui-monospace,monospace;line-height:1.15}
+.summary span{color:var(--text-muted);font-size:.84rem}
+.ledger{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:0 22px;margin-top:6px}
+.ledger .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:7px 0;border-bottom:1px solid var(--border);font-size:.9rem}
+.ledger .row .k{color:var(--text-muted)}
+.ledger .row .v{font-family:ui-monospace,monospace;font-weight:700;text-align:right;white-space:nowrap}
+.target{margin-top:18px}
+.target h2{font-size:1rem;margin:0 0 6px}
+.target p{margin:0;color:var(--text-muted);font-size:.85rem;line-height:1.5}
+.table-wrap{margin-top:18px;overflow-x:auto;border:1px solid var(--border);border-radius:8px}
+table.days{width:100%;border-collapse:collapse;font-size:.86rem;min-width:420px}
+table.days caption{caption-side:top;text-align:left;padding:9px 12px;font-weight:700;font-size:.9rem;border-bottom:1px solid var(--border)}
+table.days th,table.days td{padding:6px 12px;text-align:right;border-bottom:1px solid var(--border);font-family:ui-monospace,monospace}
+table.days th:first-child,table.days td:first-child{text-align:left}
+table.days thead th{color:var(--text-muted);font-size:.75rem;text-transform:uppercase;letter-spacing:.04em;font-family:inherit}
+table.days tbody tr:last-child td{border-bottom:0}
+.warn{color:var(--warn,#f0b429);font-size:.82rem;margin:12px 0 0;line-height:1.45}
+.note{color:var(--text-muted);font-size:.85rem;line-height:1.55;margin-top:16px}
+@media (max-width:420px){.summary strong{font-size:1.4rem}}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<h1>Growing Degree Day Accumulator</h1>
+<p>Paste a season of daily highs and lows to add up growing degree days, cap heat above an upper cutoff, and forecast how many days are left before the crop reaches a target.</p>
+</div>
+<div class="panel calc">
+<form id="gdd-form" novalidate>
+<div class="settings">
+<div class="field wide"><label for="days">Daily temperatures</label><textarea id="days" spellcheck="false" aria-describedby="days-hint">22, 9
+24, 11
+19, 6
+17, 4
+21, 8
+25, 12
+27, 14
+23, 13
+20, 9
+18, 5
+16, 3
+19, 7
+22, 10
+26, 13
+31, 17
+33, 20
+29, 18
+24, 14
+21, 10
+20, 8
+23, 11
+25, 13
+27, 15
+24, 12</textarea><span class="hint" id="days-hint">one day per line: high, low in the selected unit; blank lines are ignored</span></div>
+<div class="field"><label for="unit">Temperature unit</label><select id="unit" aria-describedby="unit-hint"><option value="c" selected>°C</option><option value="f">°F</option></select><span class="hint" id="unit-hint">switching converts the table, base and cutoff</span></div>
+<div class="field"><label for="base">Base temperature</label><input id="base" type="text" inputmode="decimal" autocomplete="off" value="10" aria-describedby="base-hint"><span class="hint" id="base-hint">the crop's development threshold; below it nothing is counted</span></div>
+<div class="field"><label for="cutoff">Upper cutoff (optional)</label><input id="cutoff" type="text" inputmode="decimal" autocomplete="off" value="30" aria-describedby="cutoff-hint"><span class="hint" id="cutoff-hint">highs above this count as the cutoff; leave blank for no cutoff</span></div>
+<div class="field"><label for="target">Target GDD (optional)</label><input id="target" type="text" inputmode="decimal" autocomplete="off" value="800" aria-describedby="target-hint"><span class="hint" id="target-hint">degree-days to reach; leave blank to only accumulate</span></div>
+</div>
+<div id="error" class="error" role="alert"></div>
+<div class="actions"><button class="primary" type="submit">Accumulate</button><button type="button" id="reset">Reset</button></div>
+</form>
+<section id="results" class="results" aria-label="Degree-day totals" hidden>
+<div aria-live="polite" aria-atomic="true">
+<div class="summary"><strong id="summary">—</strong><span id="summary-sub">—</span></div>
+</div>
+<div class="ledger" id="rows"></div>
+<div class="target" id="target-block" hidden>
+<h2 id="target-title">To reach the target</h2>
+<p id="target-text">—</p>
+</div>
+<p class="warn" id="warn" hidden></p>
+<div class="table-wrap">
+<table class="days">
+<caption>Day by day</caption>
+<thead><tr><th scope="col">Day</th><th scope="col">High</th><th scope="col">Low</th><th scope="col">Used</th><th scope="col">GDD</th></tr></thead>
+<tbody id="table-body"></tbody>
+</table>
+</div>
+</section>
+<p class="note">Each day contributes the daily mean minus the base temperature, and never less than zero: the mean is (high + low) / 2, a low below the base is raised to the base, and a high above the upper cutoff is lowered to the cutoff. The daily values are added into a season total. The average per day is the total divided by the number of days, and the projection to a target divides the shortfall by that average and rounds up. These are heat units, not a growth model: a crop's response to heat, moisture stress, day length and cultivar is not simulated, the cutoff is applied to the daily high only, and a short series makes the forecast rough. Up to 400 days and 20,000 characters are read, temperatures must lie within -80 to 60 °C (or -112 to 140 °F), and the cutoff must sit above the base. Everything runs in your browser with no storage, uploads or network access.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* gdd-core:start */
+var GrowingDegreeCore = (function(){
+  "use strict";
+  var MAX_CHARS = 20000;
+  var MAX_DAYS = 400;
+  var NUMBER_RE = /^[-+]?(?:\d+(?:\.\d*)?|\.\d+)$/;
+  var UNITS = {
+    c: {label: "°C", degree: "°C·d", tempMin: -80, tempMax: 60, baseMin: -20, baseMax: 40},
+    f: {label: "°F", degree: "°F·d", tempMin: -112, tempMax: 140, baseMin: -4, baseMax: 104}
+  };
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function unitKey(value){
+    var unit = String(value == null ? "" : value).trim().toLowerCase();
+    if (!UNITS[unit]) fail("Choose a temperature unit.");
+    return unit;
+  }
+
+  function formatNumber(value){
+    var rounded = Math.round(value * 10) / 10;
+    if (rounded === 0) rounded = 0;
+    return String(rounded);
+  }
+
+  function field(value, label, min, max, unitLabel, optional){
+    var raw = String(value == null ? "" : value).trim();
+    if (!raw){
+      if (optional) return null;
+      fail(label + " is required.");
+    }
+    if (!NUMBER_RE.test(raw)) fail(label + " must be a number.");
+    var parsed = Number(raw);
+    if (!isFinite(parsed)) fail(label + " must be a number.");
+    if (parsed < min || parsed > max) fail(label + " must be from " + min + " to " + max + " " + unitLabel + ".");
+    return parsed;
+  }
+
+  function parseSeries(text, unit){
+    var spec = UNITS[unit];
+    var raw = String(text == null ? "" : text);
+    if (raw.length > MAX_CHARS) fail("Enter no more than 20,000 characters of temperatures.");
+    var lines = raw.split(/\r?\n/);
+    var rows = [];
+    for (var index = 0; index < lines.length; index++){
+      var line = lines[index].trim();
+      if (!line) continue;
+      var where = "Row " + (index + 1) + ": ";
+      var tokens = line.split(/[\s,]+/).filter(Boolean);
+      if (tokens.length !== 2) fail(where + "enter a high and a low temperature, for example 21, 7.");
+      var high = temperature(tokens[0], where, spec);
+      var low = temperature(tokens[1], where, spec);
+      if (high < low) fail(where + "the high (" + tokens[0] + ") is below the low (" + tokens[1] + ").");
+      rows.push({high: high, low: low});
+      if (rows.length > MAX_DAYS) fail("Enter no more than 400 days.");
+    }
+    if (!rows.length) fail("Enter at least one day of high and low temperatures.");
+    return rows;
+  }
+
+  function temperature(token, where, spec){
+    if (!NUMBER_RE.test(token)) fail(where + "temperatures must be numbers.");
+    var value = Number(token);
+    if (!isFinite(value)) fail(where + "temperatures must be numbers.");
+    if (value < spec.tempMin || value > spec.tempMax){
+      fail(where + "temperatures must be from " + spec.tempMin + " to " + spec.tempMax + " " + spec.label + ".");
+    }
+    return value;
+  }
+
+  function convertValue(value, from, to){
+    if (from === to) return value;
+    return from === "c" ? value * 9 / 5 + 32 : (value - 32) * 5 / 9;
+  }
+
+  function convertNumberText(text, from, to){
+    var raw = String(text == null ? "" : text).trim();
+    if (!raw || !NUMBER_RE.test(raw)) return String(text == null ? "" : text);
+    return formatNumber(convertValue(Number(raw), from, to));
+  }
+
+  function convertSeriesText(text, from, to){
+    if (from === to) return String(text == null ? "" : text);
+    var lines = String(text == null ? "" : text).split(/\r?\n/);
+    var output = [];
+    for (var index = 0; index < lines.length; index++){
+      var line = lines[index];
+      if (!line.trim()){
+        output.push(line);
+        continue;
+      }
+      var tokens = line.trim().split(/[\s,]+/).filter(Boolean);
+      if (tokens.length !== 2 || !NUMBER_RE.test(tokens[0]) || !NUMBER_RE.test(tokens[1])) return null;
+      output.push(formatNumber(convertValue(Number(tokens[0]), from, to)) + ", " + formatNumber(convertValue(Number(tokens[1]), from, to)));
+    }
+    return output.join("\n");
+  }
+
+  function analyze(input){
+    var options = input || {};
+    var unit = unitKey(options.unit);
+    var spec = UNITS[unit];
+    var rows = parseSeries(options.days, unit);
+    var base = field(options.base, "Base temperature", spec.baseMin, spec.baseMax, spec.label, false);
+    var cutoff = field(options.cutoff, "Upper cutoff", spec.baseMin, spec.tempMax, spec.label, true);
+    if (cutoff !== null && cutoff <= base) fail("The upper cutoff must be above the base temperature.");
+    var target = field(options.target, "Target GDD", 0, 100000, "degree-days", true);
+    if (target !== null && target <= 0) fail("The target must be greater than zero.");
+
+    var total = 0;
+    var growing = 0;
+    var capped = 0;
+    var floored = 0;
+    var best = null;
+    var worst = null;
+    var bestIndex = 0;
+    var worstIndex = 0;
+    var running = 0;
+    var reachedDay = null;
+    var daily = [];
+    for (var index = 0; index < rows.length; index++){
+      var row = rows[index];
+      var usedHigh = cutoff === null ? row.high : Math.min(row.high, cutoff);
+      var usedLow = Math.max(row.low, base);
+      var gddValue = Math.max(0, (usedHigh + usedLow) / 2 - base);
+      if (cutoff !== null && row.high > cutoff) capped += 1;
+      if (row.low < base) floored += 1;
+      if (gddValue > 0) growing += 1;
+      total += gddValue;
+      running += gddValue;
+      if (best === null || gddValue > best){ best = gddValue; bestIndex = index; }
+      if (worst === null || gddValue < worst){ worst = gddValue; worstIndex = index; }
+      if (target !== null && reachedDay === null && running >= target) reachedDay = index + 1;
+      daily.push({day: index + 1, high: row.high, low: row.low, usedHigh: usedHigh, usedLow: usedLow, gdd: gddValue});
+    }
+    var mean = total / rows.length;
+    var projection = null;
+    if (target !== null){
+      var remaining = Math.max(0, target - total);
+      projection = {
+        value: target,
+        remaining: remaining,
+        reached: total >= target,
+        reachedDay: reachedDay,
+        daysNeeded: total >= target ? 0 : (mean > 0 ? Math.ceil(remaining / mean) : null)
+      };
+    }
+    return {
+      unit: unit,
+      unitLabel: spec.label,
+      degreeLabel: spec.degree,
+      base: base,
+      cutoff: cutoff,
+      days: rows.length,
+      totalGdd: total,
+      growingDays: growing,
+      zeroDays: rows.length - growing,
+      meanPerDay: mean,
+      bestDay: best,
+      bestDayNumber: bestIndex + 1,
+      worstDay: worst,
+      worstDayNumber: worstIndex + 1,
+      cappedDays: capped,
+      flooredLows: floored,
+      daily: daily,
+      target: projection
+    };
+  }
+
+  return {
+    analyze: analyze,
+    parseSeries: parseSeries,
+    convertValue: convertValue,
+    convertSeriesText: convertSeriesText,
+    convertNumberText: convertNumberText,
+    UNITS: UNITS,
+    MAX_CHARS: MAX_CHARS,
+    MAX_DAYS: MAX_DAYS
+  };
+})();
+/* gdd-core:end */
+(function(){
+  "use strict";
+  var form = document.getElementById("gdd-form");
+  var daysNode = document.getElementById("days");
+  var unitNode = document.getElementById("unit");
+  var baseNode = document.getElementById("base");
+  var cutoffNode = document.getElementById("cutoff");
+  var targetNode = document.getElementById("target");
+  var errorNode = document.getElementById("error");
+  var results = document.getElementById("results");
+  var currentUnit = unitNode.value;
+
+  var DEFAULTS = {
+    days: daysNode.value,
+    unit: "c",
+    base: "10",
+    cutoff: "30",
+    target: "800"
+  };
+
+  function thousands(value){
+    return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  }
+
+  function quantity(value, digits){
+    return thousands(value.toFixed(digits));
+  }
+
+  function row(label, value){
+    var wrapper = document.createElement("div");
+    wrapper.className = "row";
+    var key = document.createElement("span");
+    key.className = "k";
+    key.textContent = label;
+    var val = document.createElement("span");
+    val.className = "v";
+    val.textContent = value;
+    wrapper.appendChild(key);
+    wrapper.appendChild(val);
+    return wrapper;
+  }
+
+  function cell(text){
+    var node = document.createElement("td");
+    node.textContent = text;
+    return node;
+  }
+
+  function render(result){
+    var degree = result.degreeLabel;
+    document.getElementById("summary").textContent = quantity(result.totalGdd, 1) + " " + degree;
+    document.getElementById("summary-sub").textContent =
+      quantity(result.days, 0) + (result.days === 1 ? " day" : " days") + " · " +
+      quantity(result.meanPerDay, 1) + " " + degree + " per day" +
+      (result.cutoff === null ? " · no cutoff" : " · cutoff " + quantity(result.cutoff, 1) + " " + result.unitLabel);
+
+    var rows = document.getElementById("rows");
+    rows.replaceChildren();
+    rows.appendChild(row("Base temperature", quantity(result.base, 1) + " " + result.unitLabel));
+    rows.appendChild(row("Growing days", thousands(result.growingDays) + " of " + thousands(result.days)));
+    rows.appendChild(row("Days at zero", thousands(result.zeroDays)));
+    rows.appendChild(row("Highs at the cutoff", result.cutoff === null ? "—" : thousands(result.cappedDays)));
+    rows.appendChild(row("Lows raised to base", thousands(result.flooredLows)));
+    rows.appendChild(row("Warmest day", quantity(result.bestDay, 1) + " " + degree + " (day " + result.bestDayNumber + ")"));
+    rows.appendChild(row("Coolest day", quantity(result.worstDay, 1) + " " + degree + " (day " + result.worstDayNumber + ")"));
+    rows.appendChild(row("Mean per day", quantity(result.meanPerDay, 1) + " " + degree));
+
+    var targetBlock = document.getElementById("target-block");
+    if (result.target){
+      targetBlock.hidden = false;
+      document.getElementById("target-title").textContent = "To reach " + quantity(result.target.value, 0) + " " + degree;
+      var text;
+      if (result.target.reached){
+        text = "The target was passed on day " + result.target.reachedDay + " of the series, " +
+          quantity(result.totalGdd - result.target.value, 1) + " " + degree + " above it by the last day.";
+      } else if (result.target.daysNeeded === null){
+        text = "The series adds no heat above the base, so the target is not reachable at this rate.";
+      } else {
+        text = quantity(result.target.remaining, 1) + " " + degree + " remain, about " +
+          thousands(result.target.daysNeeded) + (result.target.daysNeeded === 1 ? " more day" : " more days") +
+          " at the series average.";
+      }
+      document.getElementById("target-text").textContent = text;
+    } else {
+      targetBlock.hidden = true;
+    }
+
+    var warn = document.getElementById("warn");
+    if (result.days < 7 && result.target){
+      warn.hidden = false;
+      warn.textContent = "The forecast uses the average of only " + result.days +
+        (result.days === 1 ? " day" : " days") + "; a longer series gives a steadier rate.";
+    } else {
+      warn.hidden = true;
+      warn.textContent = "";
+    }
+
+    var body = document.getElementById("table-body");
+    body.replaceChildren();
+    for (var index = 0; index < result.daily.length; index++){
+      var entry = result.daily[index];
+      var tr = document.createElement("tr");
+      tr.appendChild(cell(String(entry.day)));
+      tr.appendChild(cell(quantity(entry.high, 1)));
+      tr.appendChild(cell(quantity(entry.low, 1)));
+      tr.appendChild(cell(quantity(entry.usedHigh, 1) + " / " + quantity(entry.usedLow, 1)));
+      tr.appendChild(cell(quantity(entry.gdd, 1)));
+      body.appendChild(tr);
+    }
+    results.hidden = false;
+  }
+
+  function calculate(){
+    try {
+      var result = GrowingDegreeCore.analyze({
+        days: daysNode.value,
+        unit: unitNode.value,
+        base: baseNode.value,
+        cutoff: cutoffNode.value,
+        target: targetNode.value
+      });
+      errorNode.textContent = "";
+      render(result);
+    } catch (error){
+      errorNode.textContent = error.message;
+      results.hidden = true;
+    }
+  }
+
+  function reset(){
+    daysNode.value = DEFAULTS.days;
+    unitNode.value = DEFAULTS.unit;
+    currentUnit = DEFAULTS.unit;
+    baseNode.value = DEFAULTS.base;
+    cutoffNode.value = DEFAULTS.cutoff;
+    targetNode.value = DEFAULTS.target;
+    calculate();
+  }
+
+  function changeUnit(){
+    var next = unitNode.value;
+    if (next === currentUnit) return;
+    var converted = GrowingDegreeCore.convertSeriesText(daysNode.value, currentUnit, next);
+    if (converted === null){
+      unitNode.value = currentUnit;
+      errorNode.textContent = "Every row needs a readable high and a low before the units can be converted.";
+      return;
+    }
+    daysNode.value = converted;
+    baseNode.value = GrowingDegreeCore.convertNumberText(baseNode.value, currentUnit, next);
+    cutoffNode.value = GrowingDegreeCore.convertNumberText(cutoffNode.value, currentUnit, next);
+    currentUnit = next;
+    calculate();
+  }
+
+  form.addEventListener("submit", function(event){ event.preventDefault(); calculate(); });
+  daysNode.addEventListener("change", calculate);
+  baseNode.addEventListener("change", calculate);
+  cutoffNode.addEventListener("change", calculate);
+  targetNode.addEventListener("change", calculate);
+  unitNode.addEventListener("change", changeUnit);
+  document.getElementById("reset").addEventListener("click", reset);
+  calculate();
+})();
+</script>
+</body>
+</html>

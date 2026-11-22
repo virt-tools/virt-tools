@@ -458,6 +458,7 @@ node tests/iscsi_name_builder.test.cjs
 node tests/albers_equal_area_conic.test.cjs
 node tests/solfege_converter.test.cjs
 node tests/teleprompter_scroll_planner.test.cjs
+node tests/growing_degree_day_accumulator.test.cjs
 
 python3 -m unittest discover -s tests -p 'test_*.py'
 
