@@ -214,8 +214,8 @@ const ids = Array.from(html.matchAll(/\bid="([^"]+)"/g), (match) => match[1]);
 assert.equal(new Set(ids).size, ids.length, 'duplicate element ids: ' +
   ids.filter((id, index) => ids.indexOf(id) !== index).join(','));
 
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2189, 'public total');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Video').length, 53, 'Video count');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2190, 'public total');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Video').length, 54, 'Video count');
 
 console.log(slug + ': 18 catalog cases, ' + fixture.vectors.length + ' reference vectors, published ratios, ' +
   'cycle identities and page contracts passed');
