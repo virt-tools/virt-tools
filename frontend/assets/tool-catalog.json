@@ -268431,6 +268431,505 @@
         }
       ],
       "listed": true
+    },
+    {
+      "slug": "dirty-page-writeback-planner",
+      "name": "Dirty Page Writeback Planner",
+      "description": "Plan Linux dirty-page writeback: turn RAM, vm.dirty_background_ratio, vm.dirty_ratio and the flusher intervals into the two threshold sizes, the data each wake writes, and how long a sustained write rate takes to reach the hard throttle. Runs entirely in your browser.",
+      "category": "System",
+      "legacyCategory": null,
+      "subcategory": "Planning",
+      "tags": [
+        "system",
+        "linux",
+        "memory",
+        "writeback",
+        "sysctl",
+        "storage",
+        "planning"
+      ],
+      "aliases": [
+        "Dirty Page Writeback Planner",
+        "dirty page writeback planner",
+        "vm.dirty_ratio Planner",
+        "vm.dirty_ratio planner",
+        "Dirty Page Threshold Calculator",
+        "dirty page threshold calculator",
+        "Linux Writeback Planner",
+        "linux writeback planner",
+        "dirty_background_ratio Calculator",
+        "dirty_background_ratio calculator",
+        "Page Cache Writeback Calculator",
+        "page cache writeback calculator"
+      ],
+      "icon": "💽",
+      "added": "2026-11-22T17:44:00Z",
+      "risk": "low",
+      "maturity": "draft",
+      "reviewedAt": null,
+      "method": "The two dirty limits come from vm.dirty_background_ratio, the percentage of available memory at which the kernel's background flusher threads start writeback, and vm.dirty_ratio, the percentage at which a process generating disk writes starts writing pages out itself and blocks until the dirty set drains. The kernel measures both against free plus reclaimable pages, which is not total RAM; the page multiplies the RAM entered by each ratio and rounds half up to a whole MiB, so every threshold reads as an upper bound and moves with the RAM figure rather than with the memory free at that instant. A background ratio at or above the hard ratio is refused, because the hard limit would be reached first and the background threshold would never fire. The headroom is the hard threshold minus the background threshold. The flusher wakes every vm.dirty_writeback_centisecs hundredths of a second, so a steady write rate deposits that rate times the wake interval per wake, and vm.dirty_expire_centisecs sets the age at which dirty pages are written out on the next wake. Dividing the background threshold by the write rate gives the age of the oldest dirty data when that threshold is reached, which the page compares with the expiry so a steady stream that ages pages out before reaching the threshold says so. Dirty data only accumulates when the sustained write rate exceeds the device's write throughput: the excess is the growth rate, and the time to each threshold is that threshold divided by the excess, so a workload the device can retire never reaches either limit and both time fields are null. Rates accept decimals, a decimal comma, exponent notation, a unicode minus and surrounding spaces; RAM is whole MiB from 128 to 16,777,216, the ratios whole percent, and the two intervals whole centisecs, and blank, non-numeric or out-of-range values are refused rather than clamped. The model assumes a constant dirty rate, a constant device throughput and no other writers, and it does not model writeback congestion, cgroup v2 dirty limits, zswap, per-bdi limits or the kernel's own page accounting, so the times are a planning bound rather than a measurement. Nothing is probed, stored or sent.",
+      "sources": [
+        {
+          "title": "Documentation for /proc/sys/vm/ — dirty_background_ratio, dirty_ratio, dirty_expire_centisecs and dirty_writeback_centisecs, with their units and the ratio/bytes alternative",
+          "url": "https://docs.kernel.org/admin-guide/sysctl/vm.html"
+        },
+        {
+          "title": "sysctl(8) — setting kernel parameters at runtime with variable=value and -p, the names under /proc/sys/",
+          "url": "https://man7.org/linux/man-pages/man8/sysctl.8.html"
+        }
+      ],
+      "testCases": [
+        {
+          "name": "golden: 16 GiB with the stock 10 % / 20 % ratios leaves 1,639 MiB of headroom",
+          "kind": "golden",
+          "input": {},
+          "expected": {
+            "backgroundMib": 1638,
+            "dirtyMib": 3277,
+            "headroomMib": 1639,
+            "wakeMib": 200.0,
+            "excessMibPerSec": 0.0,
+            "ageAtBackgroundSeconds": 40.95,
+            "timeToBackgroundSeconds": null,
+            "timeToThrottleSeconds": null,
+            "status": "keeps-up"
+          }
+        },
+        {
+          "name": "golden: a 2 GiB guest gets 205 MiB and 410 MiB thresholds",
+          "kind": "golden",
+          "input": {
+            "ramMib": "2048",
+            "backgroundPercent": "10",
+            "dirtyPercent": "20",
+            "writeRate": "20",
+            "deviceRate": "400",
+            "wakeCs": "500",
+            "expireCs": "3000"
+          },
+          "expected": {
+            "backgroundMib": 205,
+            "dirtyMib": 410,
+            "headroomMib": 205,
+            "wakeMib": 100.0,
+            "excessMibPerSec": 0.0,
+            "ageAtBackgroundSeconds": 10.25,
+            "timeToBackgroundSeconds": null,
+            "timeToThrottleSeconds": null,
+            "status": "keeps-up"
+          }
+        },
+        {
+          "name": "golden: 100 MiB/s of writes on a 60 MiB/s disk throttles after 40.95 s",
+          "kind": "golden",
+          "input": {
+            "ramMib": "8192",
+            "backgroundPercent": "10",
+            "dirtyPercent": "20",
+            "writeRate": "100",
+            "deviceRate": "60",
+            "wakeCs": "500",
+            "expireCs": "3000"
+          },
+          "expected": {
+            "backgroundMib": 819,
+            "dirtyMib": 1638,
+            "headroomMib": 819,
+            "wakeMib": 500.0,
+            "excessMibPerSec": 40.0,
+            "ageAtBackgroundSeconds": 8.19,
+            "timeToBackgroundSeconds": 20.48,
+            "timeToThrottleSeconds": 40.95,
+            "status": "throttles"
+          }
+        },
+        {
+          "name": "golden: a 64 GiB host at 5 % / 15 % starts flush at 3,277 MiB",
+          "kind": "golden",
+          "input": {
+            "ramMib": "65536",
+            "backgroundPercent": "5",
+            "dirtyPercent": "15",
+            "writeRate": "500",
+            "deviceRate": "2000",
+            "wakeCs": "500",
+            "expireCs": "3000"
+          },
+          "expected": {
+            "backgroundMib": 3277,
+            "dirtyMib": 9830,
+            "headroomMib": 6553,
+            "wakeMib": 2500.0,
+            "excessMibPerSec": 0.0,
+            "ageAtBackgroundSeconds": 6.55,
+            "timeToBackgroundSeconds": null,
+            "timeToThrottleSeconds": null,
+            "status": "keeps-up"
+          }
+        },
+        {
+          "name": "golden: 5 % / 50 % on 32 GiB puts 14,746 MiB between the thresholds",
+          "kind": "golden",
+          "input": {
+            "ramMib": "32768",
+            "backgroundPercent": "5",
+            "dirtyPercent": "50",
+            "writeRate": "10",
+            "deviceRate": "50",
+            "wakeCs": "500",
+            "expireCs": "3000"
+          },
+          "expected": {
+            "backgroundMib": 1638,
+            "dirtyMib": 16384,
+            "headroomMib": 14746,
+            "wakeMib": 50.0,
+            "excessMibPerSec": 0.0,
+            "ageAtBackgroundSeconds": 163.8,
+            "timeToBackgroundSeconds": null,
+            "timeToThrottleSeconds": null,
+            "status": "keeps-up"
+          }
+        },
+        {
+          "name": "golden: a write-free planner reports no age and no time to throttle",
+          "kind": "golden",
+          "input": {
+            "ramMib": "8192",
+            "backgroundPercent": "10",
+            "dirtyPercent": "20",
+            "writeRate": "0",
+            "deviceRate": "100",
+            "wakeCs": "500",
+            "expireCs": "3000"
+          },
+          "expected": {
+            "backgroundMib": 819,
+            "dirtyMib": 1638,
+            "headroomMib": 819,
+            "wakeMib": 0.0,
+            "excessMibPerSec": 0.0,
+            "ageAtBackgroundSeconds": null,
+            "timeToBackgroundSeconds": null,
+            "timeToThrottleSeconds": null,
+            "status": "keeps-up"
+          }
+        },
+        {
+          "name": "golden: 64 TiB scales both thresholds to whole MiB",
+          "kind": "golden",
+          "input": {
+            "ramMib": "16777216",
+            "backgroundPercent": "10",
+            "dirtyPercent": "20",
+            "writeRate": "1000",
+            "deviceRate": "5000",
+            "wakeCs": "500",
+            "expireCs": "3000"
+          },
+          "expected": {
+            "backgroundMib": 1677722,
+            "dirtyMib": 3355443,
+            "headroomMib": 1677721,
+            "wakeMib": 5000.0,
+            "excessMibPerSec": 0.0,
+            "ageAtBackgroundSeconds": 1677.72,
+            "timeToBackgroundSeconds": null,
+            "timeToThrottleSeconds": null,
+            "status": "keeps-up"
+          }
+        },
+        {
+          "name": "golden: a 900 MiB/s writer on a 100 MiB/s disk hits the hard limit in 8.19 s",
+          "kind": "golden",
+          "input": {
+            "ramMib": "32768",
+            "backgroundPercent": "10",
+            "dirtyPercent": "20",
+            "writeRate": "900",
+            "deviceRate": "100",
+            "wakeCs": "500",
+            "expireCs": "3000"
+          },
+          "expected": {
+            "backgroundMib": 3277,
+            "dirtyMib": 6554,
+            "headroomMib": 3277,
+            "wakeMib": 4500.0,
+            "excessMibPerSec": 800.0,
+            "ageAtBackgroundSeconds": 3.64,
+            "timeToBackgroundSeconds": 4.1,
+            "timeToThrottleSeconds": 8.19,
+            "status": "throttles"
+          }
+        },
+        {
+          "name": "golden: a 1-centisecond wake adds 10 MiB per wake at 1,000 MiB/s",
+          "kind": "golden",
+          "input": {
+            "ramMib": "1024",
+            "backgroundPercent": "10",
+            "dirtyPercent": "20",
+            "writeRate": "1000",
+            "deviceRate": "2000",
+            "wakeCs": "1",
+            "expireCs": "1"
+          },
+          "expected": {
+            "backgroundMib": 102,
+            "dirtyMib": 205,
+            "headroomMib": 103,
+            "wakeMib": 10.0,
+            "excessMibPerSec": 0.0,
+            "ageAtBackgroundSeconds": 0.1,
+            "timeToBackgroundSeconds": null,
+            "timeToThrottleSeconds": null,
+            "status": "keeps-up"
+          }
+        },
+        {
+          "name": "golden: writes exactly at the device rate keep up with no backlog",
+          "kind": "golden",
+          "input": {
+            "ramMib": "4096",
+            "backgroundPercent": "10",
+            "dirtyPercent": "20",
+            "writeRate": "100",
+            "deviceRate": "100",
+            "wakeCs": "500",
+            "expireCs": "3000"
+          },
+          "expected": {
+            "backgroundMib": 410,
+            "dirtyMib": 819,
+            "headroomMib": 409,
+            "wakeMib": 500.0,
+            "excessMibPerSec": 0.0,
+            "ageAtBackgroundSeconds": 4.1,
+            "timeToBackgroundSeconds": null,
+            "timeToThrottleSeconds": null,
+            "status": "keeps-up"
+          }
+        },
+        {
+          "name": "boundary: the smallest RAM and the lowest ratios accepted",
+          "kind": "boundary",
+          "input": {
+            "ramMib": "128",
+            "backgroundPercent": "1",
+            "dirtyPercent": "2",
+            "writeRate": "0.5",
+            "deviceRate": "1",
+            "wakeCs": "500",
+            "expireCs": "3000"
+          },
+          "expected": {
+            "backgroundMib": 1,
+            "dirtyMib": 3,
+            "headroomMib": 2,
+            "wakeMib": 2.5,
+            "excessMibPerSec": 0.0,
+            "ageAtBackgroundSeconds": 2.0,
+            "timeToBackgroundSeconds": null,
+            "timeToThrottleSeconds": null,
+            "status": "keeps-up"
+          }
+        },
+        {
+          "name": "boundary: the longest flusher interval writes 1,200 MiB per wake",
+          "kind": "boundary",
+          "input": {
+            "ramMib": "8192",
+            "backgroundPercent": "10",
+            "dirtyPercent": "20",
+            "writeRate": "2",
+            "deviceRate": "1",
+            "wakeCs": "60000",
+            "expireCs": "600000"
+          },
+          "expected": {
+            "backgroundMib": 819,
+            "dirtyMib": 1638,
+            "headroomMib": 819,
+            "wakeMib": 1200.0,
+            "excessMibPerSec": 1.0,
+            "ageAtBackgroundSeconds": 409.5,
+            "timeToBackgroundSeconds": 819.0,
+            "timeToThrottleSeconds": 1638.0,
+            "status": "throttles"
+          }
+        },
+        {
+          "name": "boundary: both rates at the 1,000,000 MiB/s ceiling",
+          "kind": "boundary",
+          "input": {
+            "ramMib": "16384",
+            "backgroundPercent": "10",
+            "dirtyPercent": "20",
+            "writeRate": "1000000",
+            "deviceRate": "1000000",
+            "wakeCs": "500",
+            "expireCs": "3000"
+          },
+          "expected": {
+            "backgroundMib": 1638,
+            "dirtyMib": 3277,
+            "headroomMib": 1639,
+            "wakeMib": 5000000.0,
+            "excessMibPerSec": 0.0,
+            "ageAtBackgroundSeconds": 0.0,
+            "timeToBackgroundSeconds": null,
+            "timeToThrottleSeconds": null,
+            "status": "keeps-up"
+          }
+        },
+        {
+          "name": "boundary: 100 % dirty_ratio on the smallest RAM",
+          "kind": "boundary",
+          "input": {
+            "ramMib": "128",
+            "backgroundPercent": "1",
+            "dirtyPercent": "100",
+            "writeRate": "0",
+            "deviceRate": "1000000",
+            "wakeCs": "1",
+            "expireCs": "1"
+          },
+          "expected": {
+            "backgroundMib": 1,
+            "dirtyMib": 128,
+            "headroomMib": 127,
+            "wakeMib": 0.0,
+            "excessMibPerSec": 0.0,
+            "ageAtBackgroundSeconds": null,
+            "timeToBackgroundSeconds": null,
+            "timeToThrottleSeconds": null,
+            "status": "keeps-up"
+          }
+        },
+        {
+          "name": "validation: a blank RAM is refused",
+          "kind": "validation",
+          "input": {
+            "ramMib": ""
+          },
+          "expectedError": "Enter the total RAM."
+        },
+        {
+          "name": "validation: a unit suffix in the RAM field is refused",
+          "kind": "validation",
+          "input": {
+            "ramMib": "16 GiB"
+          },
+          "expectedError": "must be a whole number"
+        },
+        {
+          "name": "validation: zero RAM is below the range",
+          "kind": "validation",
+          "input": {
+            "ramMib": "0"
+          },
+          "expectedError": "between 128 and 16,777,216 MiB"
+        },
+        {
+          "name": "validation: a blank background ratio is refused",
+          "kind": "validation",
+          "input": {
+            "backgroundPercent": ""
+          },
+          "expectedError": "Enter vm.dirty_background_ratio."
+        },
+        {
+          "name": "validation: a zero background ratio is below the range",
+          "kind": "validation",
+          "input": {
+            "backgroundPercent": "0"
+          },
+          "expectedError": "between 1 and 99 percent"
+        },
+        {
+          "name": "validation: a 100 % background ratio is above the range",
+          "kind": "validation",
+          "input": {
+            "backgroundPercent": "100"
+          },
+          "expectedError": "between 1 and 99 percent"
+        },
+        {
+          "name": "validation: equal background and hard ratios are refused",
+          "kind": "validation",
+          "input": {
+            "backgroundPercent": "20",
+            "dirtyPercent": "20"
+          },
+          "expectedError": "must be below vm.dirty_ratio"
+        },
+        {
+          "name": "validation: a zero hard ratio is below the range",
+          "kind": "validation",
+          "input": {
+            "dirtyPercent": "0"
+          },
+          "expectedError": "between 1 and 100 percent"
+        },
+        {
+          "name": "validation: a 101 % hard ratio is above the range",
+          "kind": "validation",
+          "input": {
+            "dirtyPercent": "101"
+          },
+          "expectedError": "between 1 and 100 percent"
+        },
+        {
+          "name": "validation: a blank write rate is refused",
+          "kind": "validation",
+          "input": {
+            "writeRate": ""
+          },
+          "expectedError": "Enter the sustained write rate."
+        },
+        {
+          "name": "validation: a negative write rate is refused",
+          "kind": "validation",
+          "input": {
+            "writeRate": "-1"
+          },
+          "expectedError": "between 0 and 1,000,000 MiB/s"
+        },
+        {
+          "name": "validation: a zero device throughput is refused",
+          "kind": "validation",
+          "input": {
+            "deviceRate": "0"
+          },
+          "expectedError": "between 1 and 1,000,000 MiB/s"
+        },
+        {
+          "name": "validation: a blank flusher interval is refused",
+          "kind": "validation",
+          "input": {
+            "wakeCs": ""
+          },
+          "expectedError": "Enter the flusher wake interval."
+        },
+        {
+          "name": "validation: a fractional flusher interval is refused",
+          "kind": "validation",
+          "input": {
+            "wakeCs": "2.5"
+          },
+          "expectedError": "must be a whole number"
+        },
+        {
+          "name": "validation: a 600,001-centisecond expiry is above the range",
+          "kind": "validation",
+          "input": {
+            "expireCs": "600001"
+          },
+          "expectedError": "between 1 and 600,000 centisecs"
+        }
+      ],
+      "listed": true
     }
   ]
 }

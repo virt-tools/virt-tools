@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Dirty Page Writeback Planner — Virtual Tools</title>
+<meta name="description" content="Plan Linux dirty-page writeback: turn RAM, vm.dirty_background_ratio, vm.dirty_ratio and the flusher intervals into the two threshold sizes, the data each wake writes, and how long a sustained write rate takes to reach the hard throttle. Runs locally.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+[hidden]{display:none!important}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;margin:4px 0 6px}
+.field label{display:block;font-size:13px;font-weight:650;margin:0 0 5px;color:var(--text-dim,#9aa3b2);overflow-wrap:anywhere}
+.field input{box-sizing:border-box;width:100%;min-height:44px;padding:9px 11px;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg,#14181f);color:var(--text,#e6e6e6);font:inherit;font-variant-numeric:tabular-nums}
+.field input:focus{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:650;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button.secondary{background:transparent;color:var(--accent,#6ea8fe)}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.err{color:var(--bad,#f87171);font-size:14px;margin:10px 0 0;min-height:1.3em}
+.empty{color:var(--text-dim,#9aa3b2);margin:16px 0}
+.verdict{display:inline-block;padding:5px 13px;border-radius:999px;font-size:13px;font-weight:750;letter-spacing:.02em;border:1px solid var(--border,#2a2f3a)}
+.verdict[data-state="keeps-up"]{border-color:#2f9e64;background:rgba(47,158,100,.14);color:#5fd394}
+.verdict[data-state="throttles"]{border-color:#c79a2b;background:rgba(199,154,43,.14);color:#e3bd63}
+.big{font-size:clamp(2rem,7vw,2.8rem);font-weight:800;font-variant-numeric:tabular-nums;text-align:center;padding:10px 0 0;overflow-wrap:anywhere}
+.big small{display:block;font-size:.34em;font-weight:650;color:var(--text-dim,#9aa3b2);margin-top:2px}
+.summary{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13.5px;margin:6px 0 16px;line-height:1.5}
+table{width:100%;display:table;border-collapse:collapse;margin:0 0 14px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border,#2a2f3a);font-size:13.5px;vertical-align:top;overflow-wrap:anywhere}
+th{font-weight:600;color:var(--text-dim,#9aa3b2);width:52%}
+td{font-family:ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.warnings{list-style:none;padding:0;margin:0 0 14px}
+.warnings li{font-size:13.5px;line-height:1.55;padding:10px 12px;border-left:3px solid #c79a2b;background:var(--bg-elev,#171a21);border-radius:0 8px 8px 0;margin:0 0 8px}
+.advice{font-size:13.5px;line-height:1.6;margin:0;padding:12px 14px;border-left:3px solid var(--accent,#6ea8fe);background:var(--bg-elev,#171a21);border-radius:0 8px 8px 0}
+.note{font-size:13px;color:var(--text-dim,#9aa3b2);line-height:1.55;margin:14px 0 0}
+.note code{background:var(--bg-elev-2,#1e222b);padding:1px 5px;border-radius:4px}
+@media(max-width:480px){.grid{grid-template-columns:1fr;gap:10px}.actions button{flex:1 1 140px}table,tbody,tr{display:block}th{width:100%;display:block;border-bottom:0;padding-bottom:0}td{display:block;padding-top:2px}th,td{padding:6px 6px 2px}}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<h1>Dirty Page Writeback Planner</h1>
+<p>Turn RAM, <code>vm.dirty_background_ratio</code>, <code>vm.dirty_ratio</code> and the flusher intervals into the two dirty-page thresholds, the data each wake writes, and how long a sustained write rate takes to reach the hard throttle.</p>
+</div>
+<div class="panel">
+<form id="plan-form" novalidate>
+<div class="grid">
+<div class="field"><label for="ram">Total RAM (MiB)</label><input id="ram" type="number" inputmode="numeric" min="128" max="16777216" step="1" value="16384"></div>
+<div class="field"><label for="background">dirty_background_ratio (%)</label><input id="background" type="number" inputmode="numeric" min="1" max="99" step="1" value="10"></div>
+<div class="field"><label for="dirty">dirty_ratio (%)</label><input id="dirty" type="number" inputmode="numeric" min="1" max="100" step="1" value="20"></div>
+<div class="field"><label for="rate">Sustained write rate (MiB/s)</label><input id="rate" type="number" inputmode="decimal" min="0" max="1000000" step="any" value="40"></div>
+<div class="field"><label for="device">Device write throughput (MiB/s)</label><input id="device" type="number" inputmode="decimal" min="1" max="1000000" step="any" value="250"></div>
+<div class="field"><label for="wake">Flusher wake interval (centisecs)</label><input id="wake" type="number" inputmode="numeric" min="1" max="60000" step="1" value="500"></div>
+<div class="field"><label for="expire">Dirty expiry age (centisecs)</label><input id="expire" type="number" inputmode="numeric" min="1" max="600000" step="1" value="3000"></div>
+</div>
+<div class="actions">
+<button type="submit" id="plan">Plan thresholds</button>
+<button type="button" class="secondary" id="reset">Reset</button>
+</div>
+</form>
+<p class="err" id="error" role="alert" aria-live="polite"></p>
+<p class="empty" id="empty">Choose Plan thresholds to see both dirty-page limits and the write rate that reaches them.</p>
+<section id="result" hidden>
+<div style="text-align:center"><span class="verdict" id="verdict" data-state="keeps-up">Device keeps up</span></div>
+<div class="big" id="headline">0<small>hard throttle</small></div>
+<p class="summary" id="summary" role="status" aria-live="polite"></p>
+<table>
+<tbody id="rows"></tbody>
+</table>
+<ul class="warnings" id="warnings"></ul>
+<p class="advice" id="advice"></p>
+</section>
+<p class="note">Linux starts background writeback of dirty pages at one percentage of available memory and makes the writing process start writeback itself at a higher one. The ratios set those two limits; <code>vm.dirty_background_bytes</code> and <code>vm.dirty_bytes</code> set the same limits directly. Thresholds here are RAM × ratio rounded to whole MiB, so they are an upper bound — the kernel measures against free plus reclaimable pages, not total RAM. The model assumes a constant write rate and device throughput; it does not model writeback congestion, cgroup v2 dirty limits or per-device limits. Planning estimates only; every number stays in your browser.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* dpw-core:start */
+var DirtyWritebackCore = (function(){
+  "use strict";
+  var DEFAULTS = {
+    ramMib: 16384,
+    backgroundPercent: 10,
+    dirtyPercent: 20,
+    writeRate: 40,
+    deviceRate: 250,
+    wakeCs: 500,
+    expireCs: 3000
+  };
+  var LABELS = {
+    "keeps-up": "Device keeps up",
+    throttles: "Writers throttle"
+  };
+
+  function fail(message){ throw new Error(message); }
+  function group(value){
+    return String(value).replace(/\B(?=(?:\d{3})+(?!\d))/g, ",");
+  }
+  function pick(value, fallback){
+    if (value === undefined || value === null) return fallback;
+    return value;
+  }
+  function roundHalf(value, places){
+    var factor = Math.pow(10, places);
+    var scaled = value * factor;
+    var rounded = scaled >= 0 ? Math.floor(scaled + 0.5) : -Math.floor(-scaled + 0.5);
+    return Object.is(rounded / factor, -0) ? 0 : rounded / factor;
+  }
+  function whole(value, label, min, max, unit, missing){
+    var bound = " between " + group(min) + " and " + group(max) + " " + unit + ".";
+    var message = label + " must be a whole number" + bound;
+    if (typeof value === "number"){
+      if (!Number.isInteger(value) || value < min || value > max) fail(message);
+      return value;
+    }
+    var text = String(value).trim();
+    if (text === "") fail(missing);
+    if (!/^\d{1,15}$/.test(text)) fail(message);
+    var number = Number(text);
+    if (number < min || number > max) fail(message);
+    return number;
+  }
+  function decimal(value, label, min, max, unit, missing){
+    var bound = " between " + group(min) + " and " + group(max) + " " + unit + ".";
+    var message = label + " must be a number" + bound;
+    var number;
+    if (typeof value === "number"){
+      if (!Number.isFinite(value)) fail(message);
+      number = value;
+    } else {
+      var text = String(value).trim().replace(/\u2212/g, "-").replace(/,/g, ".");
+      if (text === "") fail(missing);
+      if (!/^-?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(text)) fail(label + " must be read as a number.");
+      number = Number(text);
+      if (!Number.isFinite(number)) fail(message);
+    }
+    if (number < min || number > max) fail(message);
+    return number;
+  }
+
+  function plan(input){
+    var data = input || {};
+    var ram = whole(pick(data.ramMib, DEFAULTS.ramMib), "Total RAM", 128, 16777216, "MiB", "Enter the total RAM.");
+    var background = whole(pick(data.backgroundPercent, DEFAULTS.backgroundPercent), "vm.dirty_background_ratio", 1, 99, "percent", "Enter vm.dirty_background_ratio.");
+    var dirty = whole(pick(data.dirtyPercent, DEFAULTS.dirtyPercent), "vm.dirty_ratio", 1, 100, "percent", "Enter vm.dirty_ratio.");
+    var writeRate = decimal(pick(data.writeRate, DEFAULTS.writeRate), "Sustained write rate", 0, 1000000, "MiB/s", "Enter the sustained write rate.");
+    var deviceRate = decimal(pick(data.deviceRate, DEFAULTS.deviceRate), "Device write throughput", 1, 1000000, "MiB/s", "Enter the device write throughput.");
+    var wakeCs = whole(pick(data.wakeCs, DEFAULTS.wakeCs), "Flusher wake interval", 1, 60000, "centisecs", "Enter the flusher wake interval.");
+    var expireCs = whole(pick(data.expireCs, DEFAULTS.expireCs), "Dirty expiry age", 1, 600000, "centisecs", "Enter the dirty expiry age.");
+
+    if (background >= dirty){
+      fail("vm.dirty_background_ratio must be below vm.dirty_ratio.");
+    }
+
+    var backgroundMib = Math.floor((ram * background + 50) / 100);
+    var dirtyMib = Math.floor((ram * dirty + 50) / 100);
+    if (backgroundMib < 1){
+      fail("That RAM and vm.dirty_background_ratio give a threshold below 1 MiB.");
+    }
+    var headroomMib = dirtyMib - backgroundMib;
+
+    var wakeSeconds = wakeCs / 100;
+    var expireSeconds = expireCs / 100;
+    var rateCenti = Math.round(writeRate * 100);
+    var deviceCenti = Math.round(deviceRate * 100);
+    var wakeMib = Math.floor((rateCenti * wakeCs + 50) / 100) / 100;
+    var excessCenti = rateCenti - deviceCenti;
+    var keepsUp = excessCenti <= 0;
+    function hundredths(numerator, denominator){
+      return Math.floor((2 * numerator + denominator) / (2 * denominator));
+    }
+    var ageAtBackground = writeRate > 0 ? hundredths(backgroundMib * 10000, rateCenti) / 100 : null;
+    var timeToBackground = keepsUp ? null : hundredths(backgroundMib * 10000, excessCenti) / 100;
+    var timeToThrottle = keepsUp ? null : hundredths(dirtyMib * 10000, excessCenti) / 100;
+
+    var warnings = [];
+    if (!keepsUp){
+      warnings.push("Sustained writes exceed the device's write throughput, so dirty pages accumulate until the hard throttle blocks the writer.");
+    }
+
+    var status = keepsUp ? "keeps-up" : "throttles";
+    return {
+      ramMib: ram,
+      backgroundPercent: background,
+      dirtyPercent: dirty,
+      writeRateMibPerSec: roundHalf(rateCenti / 100, 2),
+      deviceRateMibPerSec: roundHalf(deviceCenti / 100, 2),
+      wakeCs: wakeCs,
+      expireCs: expireCs,
+      wakeSeconds: roundHalf(wakeSeconds, 2),
+      expireSeconds: roundHalf(expireSeconds, 2),
+      backgroundMib: backgroundMib,
+      dirtyMib: dirtyMib,
+      headroomMib: headroomMib,
+      wakeMib: roundHalf(wakeMib, 2),
+      excessMibPerSec: roundHalf(Math.max(0, excessCenti) / 100, 2),
+      ageAtBackgroundSeconds: ageAtBackground === null ? null : roundHalf(ageAtBackground, 2),
+      timeToBackgroundSeconds: timeToBackground === null ? null : roundHalf(timeToBackground, 2),
+      timeToThrottleSeconds: timeToThrottle === null ? null : roundHalf(timeToThrottle, 2),
+      status: status,
+      statusLabel: LABELS[status],
+      warnings: warnings
+    };
+  }
+
+  return {
+    DEFAULTS: DEFAULTS,
+    LABELS: LABELS,
+    plan: plan
+  };
+}());
+/* dpw-core:end */
+(function(){
+  "use strict";
+  var form = document.getElementById("plan-form");
+  var error = document.getElementById("error");
+  var empty = document.getElementById("empty");
+  var result = document.getElementById("result");
+  var rows = document.getElementById("rows");
+  var verdict = document.getElementById("verdict");
+  var headline = document.getElementById("headline");
+  var summary = document.getElementById("summary");
+  var warnings = document.getElementById("warnings");
+  var advice = document.getElementById("advice");
+  var fields = ["ram", "background", "dirty", "rate", "device", "wake", "expire"];
+
+  function number(value){
+    return new Intl.NumberFormat("en-US").format(value);
+  }
+  function size(mib){
+    if (mib >= 1024){
+      var gib = mib / 1024;
+      return gib.toFixed(2) + " GiB (" + number(mib) + " MiB)";
+    }
+    return number(mib) + " MiB";
+  }
+  function compactSize(mib){
+    if (mib >= 1024) return (mib / 1024).toFixed(2) + " GiB";
+    return number(mib) + " MiB";
+  }
+  function perSecond(value){
+    var text = value >= 100 ? number(Math.round(value)) : (Math.round(value * 10) / 10).toString();
+    return text + " MiB/s";
+  }
+  function duration(seconds){
+    if (seconds === null) return "Not reached — the device keeps up";
+    if (seconds === 0) return "Under 0.01 s";
+    if (seconds < 0.1) return "Under 0.1 s";
+    if (seconds < 60) return (Math.round(seconds * 10) / 10).toFixed(1) + " s";
+    if (seconds < 3600){
+      var minutes = Math.floor(seconds / 60);
+      var rest = Math.round(seconds - minutes * 60);
+      if (rest === 60){ minutes += 1; rest = 0; }
+      return minutes + " min " + rest + " s";
+    }
+    return (Math.round(seconds / 360) / 10).toFixed(1) + " h";
+  }
+  function field(id){ return document.getElementById(id); }
+  function read(){
+    return {
+      ramMib: field("ram").value,
+      backgroundPercent: field("background").value,
+      dirtyPercent: field("dirty").value,
+      writeRate: field("rate").value,
+      deviceRate: field("device").value,
+      wakeCs: field("wake").value,
+      expireCs: field("expire").value
+    };
+  }
+  function row(label, value){
+    var tr = document.createElement("tr");
+    var th = document.createElement("th");
+    th.scope = "row";
+    th.textContent = label;
+    var td = document.createElement("td");
+    td.textContent = value;
+    tr.appendChild(th);
+    tr.appendChild(td);
+    rows.appendChild(tr);
+  }
+  function adviceFor(plan){
+    if (plan.status === "throttles"){
+      return "Writes add " + perSecond(plan.excessMibPerSec) + " more than the device retires, so the dirty set grows at that rate. It passes the " + compactSize(plan.backgroundMib) + " background threshold after " + duration(plan.timeToBackgroundSeconds) + " and hits the " + compactSize(plan.dirtyMib) + " hard limit after " + duration(plan.timeToThrottleSeconds) + ", where the writing process has to write pages out itself and stalls until the set drains. Raising vm.dirty_ratio only postpones that stall and makes it longer.";
+    }
+    return "Dirty pages drain as fast as this workload creates them: " + perSecond(plan.writeRateMibPerSec) + " of writes against " + perSecond(plan.deviceRateMibPerSec) + " of device throughput keeps the dirty set under the " + compactSize(plan.backgroundMib) + " background threshold, and each " + plan.wakeSeconds + " s wake retires about " + compactSize(plan.wakeMib) + ".";
+  }
+  function render(plan){
+    verdict.textContent = plan.statusLabel;
+    verdict.setAttribute("data-state", plan.status);
+    headline.textContent = compactSize(plan.dirtyMib);
+    var caption = document.createElement("small");
+    caption.textContent = "hard throttle at " + plan.dirtyPercent + " % of RAM";
+    headline.appendChild(caption);
+    summary.textContent = number(plan.ramMib) + " MiB RAM · background " + plan.backgroundPercent + " % / hard " + plan.dirtyPercent + " % · writes " + perSecond(plan.writeRateMibPerSec) + ", device " + perSecond(plan.deviceRateMibPerSec);
+    rows.textContent = "";
+    row("Background flush starts at", size(plan.backgroundMib));
+    row("Hard throttle at", size(plan.dirtyMib));
+    row("Reclaim headroom between them", size(plan.headroomMib));
+    row("Dirty data added per flusher wake", compactSize(plan.wakeMib) + " every " + plan.wakeSeconds + " s");
+    row("Oldest dirty data at the background threshold",
+      plan.ageAtBackgroundSeconds === null ? "No writes to age" :
+      duration(plan.ageAtBackgroundSeconds) + (plan.ageAtBackgroundSeconds > plan.expireSeconds ? " — past the " + plan.expireSeconds + " s expiry" : " — inside the " + plan.expireSeconds + " s expiry"));
+    row("Time to the background threshold", duration(plan.timeToBackgroundSeconds));
+    row("Time to the hard throttle", duration(plan.timeToThrottleSeconds));
+    warnings.textContent = "";
+    plan.warnings.forEach(function(text){
+      var item = document.createElement("li");
+      item.textContent = text;
+      warnings.appendChild(item);
+    });
+    advice.textContent = adviceFor(plan);
+    empty.hidden = true;
+    result.hidden = false;
+  }
+  function run(){
+    try {
+      var plan = DirtyWritebackCore.plan(read());
+      error.textContent = "";
+      render(plan);
+    } catch (problem) {
+      error.textContent = problem.message;
+      result.hidden = true;
+      empty.hidden = false;
+      warnings.textContent = "";
+    }
+  }
+  form.addEventListener("submit", function(event){
+    event.preventDefault();
+    run();
+  });
+  document.getElementById("reset").addEventListener("click", function(){
+    var values = DirtyWritebackCore.DEFAULTS;
+    field("ram").value = values.ramMib;
+    field("background").value = values.backgroundPercent;
+    field("dirty").value = values.dirtyPercent;
+    field("rate").value = values.writeRate;
+    field("device").value = values.deviceRate;
+    field("wake").value = values.wakeCs;
+    field("expire").value = values.expireCs;
+    error.textContent = "";
+    run();
+    field("ram").focus();
+  });
+  fields.forEach(function(id){
+    field(id).addEventListener("input", function(){
+      if (error.textContent) error.textContent = "";
+    });
+  });
+}());
+</script>
+</body>
+</html>

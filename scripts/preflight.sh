@@ -462,6 +462,7 @@ node tests/growing_degree_day_accumulator.test.cjs
 node tests/webauthn_authenticator_data.test.cjs
 node tests/reverse_dns_zone_builder.test.cjs
 node tests/mic_preamp_gain_planner.test.cjs
+node tests/dirty_page_writeback_planner.test.cjs
 
 python3 -m unittest discover -s tests -p 'test_*.py'
 
