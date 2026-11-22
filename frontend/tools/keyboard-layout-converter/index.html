@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Keyboard Layout Converter &mdash; Virtual Tools</title>
+<meta name="description" content="Fix text typed in the wrong keyboard layout: convert between US QWERTY, Dvorak and Colemak by physical key position, with the characters that have no key left alone.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
+.field{display:flex;flex-direction:column;gap:6px;margin:0}
+.field label{font-size:13px;color:var(--text-dim,#9aa3b2)}
+select#source,select#target,textarea#text{box-sizing:border-box;width:100%;min-height:46px;padding:10px 12px;border-radius:8px;
+  border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);color:var(--text,#e6e6e6);
+  font:inherit;font-size:16px;line-height:1.4;outline:none}
+textarea#text{min-height:104px;resize:vertical;font-family:ui-monospace,monospace;font-size:15px}
+select#source:focus-visible,select#target:focus-visible,textarea#text:focus-visible{outline:2px solid var(--accent,#6ea8fe);outline-offset:1px}
+textarea#text::placeholder{color:var(--text-dim,#9aa3b2)}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:12px 0 0}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:46px}
+.actions button:hover:not(:disabled){filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.actions button.ghost{background:transparent;color:var(--accent,#6ea8fe)}
+.err{color:var(--bad,#f87171);font-size:13px;margin:10px 0 0;min-height:1.2em}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:14px 16px;margin:16px 0 0}
+.out .label{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-dim,#9aa3b2);margin:0 0 6px}
+.out .text{font-family:ui-monospace,monospace;font-size:17px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;margin:0;min-height:1.5em}
+.out .sub{color:var(--text-dim,#9aa3b2);font-size:13px;margin:8px 0 0;line-height:1.45;overflow-wrap:anywhere}
+details{margin:14px 0 0;font-size:14px}
+summary{cursor:pointer;color:var(--text-dim,#9aa3b2);min-height:32px;padding:4px 0}
+summary:focus-visible{outline:2px solid var(--accent,#6ea8fe);outline-offset:2px}
+details pre{font-family:ui-monospace,monospace;font-size:13px;line-height:1.5;white-space:pre;overflow-x:auto;
+  background:var(--bg-elev-2,#1e222b);border-radius:8px;padding:10px 12px;margin:6px 0 0}
+@media (max-width:560px){
+  .grid{grid-template-columns:minmax(0,1fr)}
+  .actions button{flex:1 1 auto}
+}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<h1>Keyboard Layout Converter</h1>
+<p>Retype text that came out in the wrong keyboard layout. Each character is traced back to the physical key that produced it, and the same key is read on another layout.</p>
+</div>
+<div class="panel">
+<form id="layout-form" novalidate>
+<div class="grid">
+<div class="field">
+<label for="source">The text came out as</label>
+<select id="source">
+<option value="dvorak" selected>Dvorak (US)</option>
+<option value="qwerty">QWERTY (US)</option>
+<option value="colemak">Colemak</option>
+</select>
+</div>
+<div class="field">
+<label for="target">I meant to type on</label>
+<select id="target">
+<option value="qwerty" selected>QWERTY (US)</option>
+<option value="dvorak">Dvorak (US)</option>
+<option value="colemak">Colemak</option>
+</select>
+</div>
+</div>
+<div class="field" style="margin-top:12px">
+<label for="text">Text</label>
+<textarea id="text" rows="4" spellcheck="false" autocomplete="off" placeholder="d.nnr">d.nnr</textarea>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions">
+<button type="submit">Convert</button>
+<button type="button" class="ghost" id="swap">Swap layouts</button>
+<button type="button" class="ghost" id="clear">Clear</button>
+</div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"></div>
+<details>
+<summary>Keys of the chosen layouts</summary>
+<pre id="legend"></pre>
+</details>
+<p class="note">A key sends the same electrical code whatever is printed on it, so switching layouts remaps by position, not by letter: on Dvorak the QWERTY <code>H</code> key types <code>d</code> and the <code>E</code> key types <code>.</code>, which is why <code>d.nnr</code> reads back as <code>hello</code>. Digits and punctuation move with their keys too. Spaces and line breaks pass through unchanged, and a character that the first layout cannot type at all (an accent, a currency sign, an emoji) is left as it is and counted. Only the ANSI US layouts QWERTY, Dvorak and Colemak are covered, and only the unshifted and shifted levels, so AltGr characters are not remapped. Everything runs in your browser; nothing is stored and nothing is sent.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* layout-core:start */
+var KeyboardLayoutCore = (function(){
+  "use strict";
+  var KEYS = ["TLDE"];
+  var index;
+  for (index = 1; index <= 12; index += 1) KEYS.push("AE" + (index < 10 ? "0" + index : index));
+  for (index = 1; index <= 12; index += 1) KEYS.push("AD" + (index < 10 ? "0" + index : index));
+  KEYS.push("BKSL");
+  for (index = 1; index <= 11; index += 1) KEYS.push("AC" + (index < 10 ? "0" + index : index));
+  for (index = 1; index <= 10; index += 1) KEYS.push("AB" + (index < 10 ? "0" + index : index));
+
+  var LAYOUTS = [
+    {
+      id: "qwerty",
+      label: "QWERTY (US)",
+      base:  "`1234567890-=qwertyuiop[]\\asdfghjkl;'zxcvbnm,./",
+      shift: "~!@#$%^&*()_+QWERTYUIOP{}|ASDFGHJKL:\"ZXCVBNM<>?",
+      rows: ["`1234567890-=", "qwertyuiop[]\\", "asdfghjkl;'", "zxcvbnm,./"],
+      shiftRows: ["~!@#$%^&*()_+", "QWERTYUIOP{}|", "ASDFGHJKL:\"", "ZXCVBNM<>?"]
+    },
+    {
+      id: "dvorak",
+      label: "Dvorak (US)",
+      base:  "`1234567890[]',.pyfgcrl/=\\aoeuidhtns-;qjkxbmwvz",
+      shift: "~!@#$%^&*(){}\"<>PYFGCRL?+|AOEUIDHTNS_:QJKXBMWVZ",
+      rows: ["`1234567890[]", "',.pyfgcrl/=\\", "aoeuidhtns-", ";qjkxbmwvz"],
+      shiftRows: ["~!@#$%^&*(){}", "\"<>PYFGCRL?+|", "AOEUIDHTNS_", ":QJKXBMWVZ"]
+    },
+    {
+      id: "colemak",
+      label: "Colemak",
+      base:  "`1234567890-=qwfpgjluy;[]\\arstdhneio'zxcvbkm,./",
+      shift: "~!@#$%^&*()_+QWFPGJLUY:{}|ARSTDHNEIO\"ZXCVBKM<>?",
+      rows: ["`1234567890-=", "qwfpgjluy;[]\\", "arstdhneio'", "zxcvbkm,./"],
+      shiftRows: ["~!@#$%^&*()_+", "QWFPGJLUY:{}|", "ARSTDHNEIO\"", "ZXCVBKM<>?"]
+    }
+  ];
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function layoutOf(id){
+    var raw = String(id == null ? "" : id).trim().toLowerCase();
+    for (var i = 0; i < LAYOUTS.length; i += 1){
+      if (LAYOUTS[i].id === raw) return LAYOUTS[i];
+    }
+    return null;
+  }
+
+  function checkTables(){
+    for (var i = 0; i < LAYOUTS.length; i += 1){
+      var layout = LAYOUTS[i];
+      if (layout.base.length !== KEYS.length || layout.shift.length !== KEYS.length){
+        fail("Layout " + layout.id + " does not cover every key.");
+      }
+    }
+  }
+  checkTables();
+
+  var REVERSE = {};
+  function reverseOf(layout){
+    var cached = REVERSE[layout.id];
+    if (cached) return cached;
+    var map = {};
+    for (var position = 0; position < KEYS.length; position += 1){
+      var base = layout.base[position];
+      var shift = layout.shift[position];
+      if (!Object.prototype.hasOwnProperty.call(map, base)) map[base] = {position: position, level: 0};
+      if (!Object.prototype.hasOwnProperty.call(map, shift)) map[shift] = {position: position, level: 1};
+    }
+    REVERSE[layout.id] = map;
+    return map;
+  }
+
+  function characterAt(layout, position, level){
+    if (position < 0 || position >= KEYS.length) fail("No such key: " + position + ".");
+    return level === 1 ? layout.shift[position] : layout.base[position];
+  }
+
+  function isBlank(character){
+    return /^[\s\u00a0]$/.test(character);
+  }
+
+  function convert(input){
+    var data = input || {};
+    var source = layoutOf(data.source);
+    if (!source) fail("Choose the layout the text came out as.");
+    var target = layoutOf(data.target);
+    if (!target) fail("Choose the layout you meant to type on.");
+    var text = data.text == null ? "" : String(data.text);
+    var sourceMap = reverseOf(source);
+    var output = "";
+    var mapped = 0;
+    var untouched = 0;
+    var leftovers = [];
+    var characters = Array.from(text);
+    for (var i = 0; i < characters.length; i += 1){
+      var character = characters[i];
+      var hit = sourceMap[character];
+      if (hit){
+        output += characterAt(target, hit.position, hit.level);
+        mapped += 1;
+      } else {
+        output += character;
+        if (!isBlank(character)){
+          untouched += 1;
+          if (leftovers.indexOf(character) === -1) leftovers.push(character);
+        }
+      }
+    }
+    leftovers.sort();
+    return {
+      output: output,
+      mapped: mapped,
+      untouched: untouched,
+      unsupported: leftovers
+    };
+  }
+
+  return {
+    KEYS: KEYS,
+    LAYOUTS: LAYOUTS,
+    layoutOf: layoutOf,
+    reverseOf: reverseOf,
+    characterAt: characterAt,
+    convert: convert
+  };
+})();
+/* layout-core:end */
+(function(){
+  "use strict";
+  var C = KeyboardLayoutCore;
+  var els = {
+    form: document.getElementById("layout-form"),
+    source: document.getElementById("source"),
+    target: document.getElementById("target"),
+    text: document.getElementById("text"),
+    swap: document.getElementById("swap"),
+    clear: document.getElementById("clear"),
+    err: document.getElementById("err"),
+    out: document.getElementById("out"),
+    legend: document.getElementById("legend")
+  };
+
+  function legend(){
+    var source = C.layoutOf(els.source.value);
+    var target = C.layoutOf(els.target.value);
+    if (!source || !target){ els.legend.textContent = ""; return; }
+    var lines = [];
+    lines.push(source.label + " (as typed)");
+    for (var i = 0; i < source.rows.length; i += 1) lines.push("  " + source.rows[i] + "    " + source.shiftRows[i]);
+    lines.push("");
+    lines.push(target.label + " (as intended)");
+    for (var j = 0; j < target.rows.length; j += 1) lines.push("  " + target.rows[j] + "    " + target.shiftRows[j]);
+    els.legend.textContent = lines.join("\n");
+  }
+
+  var lastResult = null;
+
+  function render(result){
+    lastResult = result;
+    els.out.textContent = "";
+    var label = document.createElement("p");
+    label.className = "label";
+    label.textContent = "Result";
+    var text = document.createElement("p");
+    text.className = "text";
+    text.textContent = result.output === "" ? "(nothing)" : result.output;
+    var sub = document.createElement("p");
+    sub.className = "sub";
+    var parts = [];
+    parts.push(result.mapped === 1 ? "1 character remapped" : result.mapped + " characters remapped");
+    if (result.untouched > 0){
+      parts.push(result.untouched === 1 ? "1 left as typed" : result.untouched + " left as typed");
+    }
+    sub.textContent = parts.join(" \u00b7 ");
+    if (result.unsupported.length){
+      sub.textContent += " \u2014 not on the first layout: " + result.unsupported.join(" ");
+    }
+    els.out.appendChild(label);
+    els.out.appendChild(text);
+    els.out.appendChild(sub);
+  }
+
+  function placeholder(message){
+    els.out.textContent = "";
+    var sub = document.createElement("p");
+    sub.className = "sub";
+    sub.style.margin = "6px 0";
+    sub.textContent = message;
+    els.out.appendChild(sub);
+  }
+
+  function run(announce){
+    legend();
+    var raw = els.text.value;
+    if (!raw){
+      els.err.textContent = announce ? "Enter the text to convert." : "";
+      placeholder("Type the text that came out in the wrong layout.");
+      return;
+    }
+    var result;
+    try {
+      result = C.convert({ text: raw, source: els.source.value, target: els.target.value });
+    } catch (error){
+      els.err.textContent = error.message;
+      placeholder("Choose both layouts to see the conversion.");
+      return;
+    }
+    els.err.textContent = "";
+    render(result);
+  }
+
+  els.form.addEventListener("submit", function(event){
+    event.preventDefault();
+    run(true);
+  });
+  els.text.addEventListener("input", function(){ run(false); });
+  els.source.addEventListener("change", function(){ run(false); });
+  els.target.addEventListener("change", function(){ run(false); });
+  els.swap.addEventListener("click", function(){
+    var source = els.source.value;
+    els.source.value = els.target.value;
+    els.target.value = source;
+    if (lastResult) els.text.value = lastResult.output;
+    run(false);
+    els.text.focus();
+  });
+  els.clear.addEventListener("click", function(){
+    els.text.value = "";
+    run(false);
+    els.text.focus();
+  });
+
+  run(false);
+})();
+</script>
+</body>
+</html>
