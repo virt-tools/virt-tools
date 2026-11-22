@@ -247,8 +247,8 @@ assert.equal(record.sources.length, 1);
 assert.equal(record.sources[0].url, 'https://docs.github.com/en/actions/reference/workflows-and-actions/expressions');
 assert.ok(record.method.length > 1200, 'the method explains the language');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Developer').length, 53, 'Developer count');
-assert.equal(catalog.tools.length, 2434, 'catalog total');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2173, 'public total');
+assert.equal(catalog.tools.length, 2435, 'catalog total');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2174, 'public total');
 
 const kinds = record.testCases.reduce((acc, item) => {
   acc[item.kind] = (acc[item.kind] || 0) + 1;

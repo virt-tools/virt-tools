@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>ICMP Message Decoder &mdash; Virtual Tools</title>
+<meta name="description" content="Decode an ICMP message from its hex bytes: the type and code with the IANA name, a verified one's-complement checksum, the rest-of-header field for echo, redirect, parameter problem, timestamp and router discovery, and the original IPv4 datagram quoted inside an error message.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.field{display:flex;flex-direction:column;gap:6px;margin:0}
+textarea#hex{box-sizing:border-box;width:100%;min-height:104px;max-width:760px;padding:10px 12px;border-radius:8px;
+  border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);color:var(--text,#e6e6e6);
+  font-family:ui-monospace,monospace;font-size:15px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;
+  resize:vertical;outline:none}
+textarea#hex:focus-visible{outline:2px solid var(--accent,#6ea8fe);outline-offset:1px}
+textarea#hex::placeholder{color:var(--text-dim,#9aa3b2)}
+.hint{color:var(--text-dim,#9aa3b2);font-size:12.5px;margin:10px 0 0;line-height:1.45;max-width:760px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:12px 0 0}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.err{color:var(--bad,#f87171);font-size:13px;margin:10px 0 0;min-height:1.2em}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:16px 0 0}
+.out .label{text-align:center;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-dim,#9aa3b2)}
+.out .big{font-size:clamp(1.05rem,4.8vw,1.6rem);font-weight:800;text-align:center;padding:2px 0 4px;overflow-wrap:anywhere;line-height:1.35}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:6px 0 0;line-height:1.45;overflow-wrap:anywhere}
+.out .notes{margin:12px 0 0;padding:0;list-style:none;display:grid;gap:6px}
+.out .notes li{font-size:12.5px;line-height:1.45;color:var(--text-dim,#9aa3b2);padding-left:14px;position:relative;overflow-wrap:anywhere}
+.out .notes li::before{content:"!";position:absolute;left:0;color:var(--warn,#fbbf24);font-weight:700}
+.out .notes li.ok::before{content:"i";color:var(--accent,#6ea8fe)}
+.wrap{overflow-x:auto;margin:18px 0 0}
+.ref{display:table;width:100%;border-collapse:collapse;font-size:13.5px}
+.ref caption{caption-side:top;text-align:left;color:var(--text-dim,#9aa3b2);font-size:12.5px;padding:0 0 6px}
+.ref th,.ref td{border-bottom:1px solid var(--border,#2a2f3a);padding:7px 8px;text-align:left;vertical-align:top}
+.ref thead th{color:var(--text-dim,#9aa3b2);font-weight:600;font-size:12px;letter-spacing:.03em}
+.ref tbody th{font-weight:500;width:38%}
+.ref td{font-family:ui-monospace,monospace;overflow-wrap:anywhere}
+.note{color:var(--text-dim,#9aa3b2);font-size:12.5px;line-height:1.55;margin:18px 0 0;max-width:820px}
+@media (max-width:560px){
+  .actions button{flex:1 1 auto}
+  .ref th,.ref td{padding:6px 5px;font-size:12.5px}
+  .wrap{overflow-x:visible}
+  #fields-table tbody tr,#embedded-table tbody tr{display:block;padding:8px 0;border-bottom:1px solid var(--border,#2a2f3a)}
+  #fields-table th,#fields-table td,#embedded-table th,#embedded-table td{display:block;width:auto;border:0;padding:0}
+  #fields-table tbody th,#embedded-table tbody th{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--text-dim,#9aa3b2);margin:0 0 3px}
+}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<h1>ICMP Message Decoder</h1>
+<p>Paste the hex bytes of an ICMP message and read the type and code with the IANA name, a verified checksum, the rest-of-header field for echo, redirect, parameter problem, timestamp and router discovery, and the original IPv4 datagram that an error message quotes.</p>
+</div>
+<div class="panel">
+<form id="message-form" novalidate>
+<div class="field">
+<label for="hex">Message bytes (hex)</label>
+<textarea id="hex" rows="5" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="00 00 4f 6a 00 01 00 0b 61 62 63 64 65 66 67 68"></textarea>
+</div>
+<p class="hint">Eight bytes or more. Spaces, colons, commas, 0x prefixes and dump offset labels are ignored, so a capture line, a tcpdump -x line or a hex dump pastes straight in. A complete IPv4 packet whose protocol field is 1 is unwrapped before decoding.</p>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions">
+<button type="submit">Decode</button>
+</div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"></div>
+<div class="wrap">
+<table class="ref" id="fields-table">
+<caption>The decoded message</caption>
+<tbody id="fields"></tbody>
+</table>
+</div>
+<div class="wrap">
+<table class="ref" id="embedded-table">
+<caption>The original datagram quoted inside the error message</caption>
+<tbody id="embedded"></tbody>
+</table>
+</div>
+<div class="wrap">
+<table class="ref" id="router-table">
+<caption>Routers advertised by this message</caption>
+<thead><tr><th scope="col">Router address</th><th scope="col">Preference level</th></tr></thead>
+<tbody id="routers"></tbody>
+</table>
+</div>
+<p class="note" id="method">Fields are read at the offsets RFC 792 gives them: type, code, a 16-bit checksum, then four bytes whose meaning depends on the type. The checksum is the 16-bit one's complement of the one's complement sum of the message starting at the type, with the checksum field zeroed and a final odd octet padded with a zero, so a message carrying the right value sums to 0xFFFF. The rest-of-header field is decoded where a standard defines it: echo and information messages carry an identifier and sequence number, a fragmentation-needed message carries the next-hop MTU (RFC 1191), redirect carries a gateway address, parameter problem carries a byte pointer, timestamp carries three millisecond counters, address mask carries a mask, and router advertisement carries a count, entry size, lifetime and a list of addresses with signed preference levels (RFC 1256). Destination unreachable, source quench, redirect, time exceeded and parameter problem quote the original datagram's IPv4 header and the first 64 bits of its data (RFC 792), so that inner header is parsed and the quoted length is compared with the original total length. Type and code names come from the IANA ICMP parameters registry; a name marked Deprecated is the registry's own wording. ICMPv6 is a different protocol with its own registry and a pseudo-header checksum, so an IPv6 packet is refused rather than decoded. Everything runs in your browser; nothing is sent anywhere.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* icmp-message-core:start */
+var ICMPMessageCore = (function(){
+  "use strict";
+  var TYPES = {
+    0:["Echo Reply","RFC 792"],1:["Unassigned",""],2:["Unassigned",""],3:["Destination Unreachable","RFC 792"],
+    4:["Source Quench (Deprecated)","RFC 792; RFC 6633"],5:["Redirect","RFC 792"],6:["Alternate Host Address (Deprecated)","RFC 6918"],
+    7:["Unassigned",""],8:["Echo","RFC 792"],9:["Router Advertisement","RFC 1256"],10:["Router Solicitation","RFC 1256"],
+    11:["Time Exceeded","RFC 792"],12:["Parameter Problem","RFC 792"],13:["Timestamp","RFC 792"],14:["Timestamp Reply","RFC 792"],
+    15:["Information Request (Deprecated)","RFC 792; RFC 6918"],16:["Information Reply (Deprecated)","RFC 792; RFC 6918"],
+    17:["Address Mask Request (Deprecated)","RFC 950; RFC 6918"],18:["Address Mask Reply (Deprecated)","RFC 950; RFC 6918"],
+    19:["Reserved (for Security)",""],30:["Traceroute (Deprecated)","RFC 1393; RFC 6918"],
+    31:["Datagram Conversion Error (Deprecated)","RFC 1475; RFC 6918"],32:["Mobile Host Redirect (Deprecated)","RFC 6918"],
+    33:["IPv6 Where-Are-You (Deprecated)","RFC 6918"],34:["IPv6 I-Am-Here (Deprecated)","RFC 6918"],
+    35:["Mobile Registration Request (Deprecated)","RFC 6918"],36:["Mobile Registration Reply (Deprecated)","RFC 6918"],
+    37:["Domain Name Request (Deprecated)","RFC 1788; RFC 6918"],38:["Domain Name Reply (Deprecated)","RFC 1788; RFC 6918"],
+    39:["SKIP (Deprecated)","RFC 6918"],40:["Photuris","RFC 2521"],
+    41:["ICMP messages utilized by experimental mobility protocols such as Seamoby","RFC 4065"],
+    42:["Extended Echo Request","RFC 8335"],43:["Extended Echo Reply","RFC 8335"],
+    253:["RFC3692-style Experiment 1","RFC 4727"],254:["RFC3692-style Experiment 2","RFC 4727"],255:["Reserved",""]
+  };
+  var RANGES = [[20,29,"Reserved (for Robustness Experiment)"],[44,252,"Unassigned"]];
+  var CODES = {
+    0:{"0":"No Code"},
+    3:{"0":"Net Unreachable","1":"Host Unreachable","2":"Protocol Unreachable","3":"Port Unreachable",
+      "4":"Fragmentation Needed and Don't Fragment was Set","5":"Source Route Failed",
+      "6":"Destination Network Unknown","7":"Destination Host Unknown","8":"Source Host Isolated",
+      "9":"Communication with Destination Network is Administratively Prohibited",
+      "10":"Communication with Destination Host is Administratively Prohibited",
+      "11":"Destination Network Unreachable for Type of Service",
+      "12":"Destination Host Unreachable for Type of Service",
+      "13":"Communication Administratively Prohibited","14":"Host Precedence Violation","15":"Precedence cutoff in effect"},
+    4:{"0":"No Code"},
+    5:{"0":"Redirect Datagram for the Network (or subnet)","1":"Redirect Datagram for the Host",
+      "2":"Redirect Datagram for the Type of Service and Network","3":"Redirect Datagram for the Type of Service and Host"},
+    6:{"0":"Alternate Address for Host"},
+    8:{"0":"No Code"},
+    9:{"0":"Normal router advertisement","16":"Does not route common traffic"},
+    10:{"0":"No Code"},
+    11:{"0":"Time to Live exceeded in Transit","1":"Fragment Reassembly Time Exceeded"},
+    12:{"0":"Pointer indicates the error","1":"Missing a Required Option","2":"Bad Length"},
+    13:{"0":"No Code"},14:{"0":"No Code"},15:{"0":"No Code"},16:{"0":"No Code"},17:{"0":"No Code"},18:{"0":"No Code"},
+    40:{"0":"Bad SPI","1":"Authentication Failed","2":"Decompression Failed","3":"Decryption Failed",
+      "4":"Need Authentication","5":"Need Authorization"},
+    42:{"0":"No Error"},
+    43:{"0":"No Error","1":"Malformed Query","2":"No Such Interface","3":"No Such Table Entry","4":"Multiple Interfaces Satisfy Query"}
+  };
+  var QUOTING = {3:true,4:true,5:true,11:true,12:true};
+  var MAX_BYTES = 65535;
+  var DEFAULT_HEX = "00 00 39 15 1c 46 00 01 61 62 63 64 65 66 67 68 69 6a 6b 6c 6d 6e 6f 70 71 72 73 74 75 76 77 61 62 63 64 65 66 67 68 69";
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function isHex(text){
+    return /^[0-9a-f]+$/i.test(text);
+  }
+
+  function byteHex(value){
+    var text = value.toString(16);
+    while (text.length < 2) text = "0" + text;
+    return text;
+  }
+
+  function pad4(value){
+    var text = value.toString(16);
+    while (text.length < 4) text = "0" + text;
+    return text;
+  }
+
+  function wordHex(value){
+    return "0x" + pad4(value);
+  }
+
+  function hexBytes(bytes, from, to){
+    var parts = [];
+    for (var at = from; at < to && at < bytes.length; at += 1) parts.push(byteHex(bytes[at]));
+    return parts.join(" ");
+  }
+
+  function plural(count, one, many){
+    return count + " " + (count === 1 ? one : many);
+  }
+
+  function parseBytes(input){
+    var value = input;
+    if (value && typeof value === "object" && !Array.isArray(value)) value = value.hex;
+    var raw = String(value == null ? "" : value);
+    if (!raw.trim()) fail("Paste the hex bytes of an ICMP message, such as 08 00 4d 5a 00 01 00 01.");
+    var tokens = raw.trim().split(/[\s,;|]+/);
+    var bytes = [];
+    for (var index = 0; index < tokens.length; index += 1){
+      var token = tokens[index];
+      if (!token) continue;
+      if (token.charAt(token.length - 1) === ":"){
+        var label = token.slice(0, -1).replace(/^0x/i, "");
+        if (!isHex(label)) fail("The offset label \"" + token + "\" is not hex.");
+        continue;
+      }
+      var groups = token.split(":");
+      for (var part = 0; part < groups.length; part += 1){
+        var body = groups[part].replace(/^0x/i, "");
+        if (!body || !isHex(body)) fail("\"" + groups[part] + "\" is not a hex byte.");
+        if (body.length % 2) fail("\"" + groups[part] + "\" has an odd number of hex digits.");
+        for (var at = 0; at < body.length; at += 2){
+          bytes.push(parseInt(body.slice(at, at + 2), 16));
+        }
+      }
+      if (bytes.length > MAX_BYTES) fail("Paste at most 65,535 bytes, the largest IPv4 packet.");
+    }
+    if (!bytes.length) fail("Paste the hex bytes of an ICMP message, such as 08 00 4d 5a 00 01 00 01.");
+    return bytes;
+  }
+
+  function word(bytes, at){
+    return (bytes[at] << 8) | bytes[at + 1];
+  }
+
+  function dword(bytes, at){
+    return ((bytes[at] << 24) | (bytes[at + 1] << 16) | (bytes[at + 2] << 8) | bytes[at + 3]) >>> 0;
+  }
+
+  function ipv4(bytes, at){
+    return bytes[at] + "." + bytes[at + 1] + "." + bytes[at + 2] + "." + bytes[at + 3];
+  }
+
+  function sum16(bytes){
+    var total = 0;
+    for (var at = 0; at + 1 < bytes.length; at += 2) total += (bytes[at] << 8) | bytes[at + 1];
+    if (bytes.length % 2) total += bytes[bytes.length - 1] << 8;
+    while (total > 0xffff) total = (total & 0xffff) + (total >>> 16);
+    return total;
+  }
+
+  function checksum(bytes){
+    return (~sum16(bytes)) & 0xffff;
+  }
+
+  function typeInfo(type){
+    if (TYPES[type]) return { name: TYPES[type][0], reference: TYPES[type][1] };
+    for (var index = 0; index < RANGES.length; index += 1){
+      if (type >= RANGES[index][0] && type <= RANGES[index][1]){
+        return { name: RANGES[index][2], reference: "" };
+      }
+    }
+    return { name: "Unassigned", reference: "" };
+  }
+
+  function codeInfo(type, code){
+    var map = CODES[type];
+    if (map && map[String(code)] !== undefined) return map[String(code)];
+    return map ? "Unassigned" : "Not specified";
+  }
+
+  function ipv4HeaderAt(bytes){
+    if (bytes.length < 20) return null;
+    if ((bytes[0] >> 4) !== 4) return null;
+    var headerLength = (bytes[0] & 15) * 4;
+    if (headerLength < 20 || headerLength > bytes.length) return null;
+    var totalLength = word(bytes, 2);
+    if (totalLength < headerLength || totalLength > bytes.length) return null;
+    return { headerLength: headerLength, totalLength: totalLength, protocol: bytes[9] };
+  }
+
+  function looksLikeIPv4(bytes){
+    var header = ipv4HeaderAt(bytes);
+    return !!(header && header.protocol === 1);
+  }
+
+  function msText(value){
+    var hours = Math.floor(value / 3600000);
+    var minutes = Math.floor((value % 3600000) / 60000);
+    var seconds = Math.floor((value % 60000) / 1000);
+    var millis = value % 1000;
+    var hh = hours < 10 ? "0" + hours : String(hours);
+    var mm = minutes < 10 ? "0" + minutes : String(minutes);
+    var ss = seconds < 10 ? "0" + seconds : String(seconds);
+    var mmm = millis < 10 ? "00" + millis : (millis < 100 ? "0" + millis : String(millis));
+    return value + " ms (" + hh + ":" + mm + ":" + ss + "." + mmm + " from midnight UTC)";
+  }
+
+  function parseEmbedded(message, from, notes){
+    var available = message.length - from;
+    if (available <= 0){ notes.push({ text: "No original datagram follows, although RFC 792 has an error message quote its IP header and 64 bits of data.", ok: false }); return { truncated: true, quotedBytes: 0 }; }
+    if (available < 20){
+      notes.push({ text: "Only " + plural(available, "byte", "bytes") + " of the original datagram " + (available === 1 ? "follows" : "follow") + ", so its 20-byte IPv4 header is incomplete.", ok: false });
+      return { truncated: true, quotedBytes: available };
+    }
+    var version = message[from] >> 4;
+    var headerLength = (message[from] & 15) * 4;
+    if (version !== 4 || headerLength < 20 || headerLength > available){
+      notes.push({ text: "The quoted datagram does not begin with a complete IPv4 header: version " + version + ", header length " + headerLength + " bytes, " + available + " bytes quoted.", ok: false });
+      return { truncated: true, quotedBytes: available };
+    }
+    var totalLength = word(message, from + 2);
+    var protocol = message[from + 9];
+    var dataBytes = available - headerLength;
+    var protocolNames = { 1: "ICMP", 2: "IGMP", 6: "TCP", 17: "UDP", 41: "IPv6", 47: "GRE", 50: "ESP", 51: "AH", 58: "ICMPv6", 89: "OSPF" };
+    var embedded = {
+      truncated: false,
+      version: version,
+      headerLength: headerLength,
+      totalLength: totalLength,
+      protocol: protocol,
+      protocolName: protocolNames[protocol] || "protocol " + protocol,
+      source: ipv4(message, from + 12),
+      destination: ipv4(message, from + 16),
+      quotedBytes: available,
+      dataBytes: dataBytes,
+      sourcePort: null,
+      destinationPort: null,
+      complete: dataBytes >= 8
+    };
+    if (dataBytes >= 4 && (protocol === 6 || protocol === 17)){
+      embedded.sourcePort = word(message, from + headerLength);
+      embedded.destinationPort = word(message, from + headerLength + 2);
+    }
+    if (!embedded.complete){
+      notes.push({ text: "Only " + plural(dataBytes, "data byte", "data bytes") + " of the original datagram " + (dataBytes === 1 ? "was" : "were") + " quoted; RFC 792 asks for 8, so a source or destination port cannot be read.", ok: false });
+    }
+    if (totalLength > available){
+      notes.push({ text: "The original datagram was " + plural(totalLength, "byte", "bytes") + " long, but an ICMP error quotes its header and the first 64 bits of data, so the " + available + " quoted bytes are shorter by design.", ok: true });
+    }
+    return embedded;
+  }
+
+  function decode(input){
+    var parsed = parseBytes(input);
+    if (parsed.length < 8) fail("An ICMP message is at least 8 bytes; " + parsed.length + " were pasted.");
+    if ((parsed[0] >> 4) === 6 && parsed.length >= 40){
+      fail("These bytes begin with an IPv6 header. ICMPv6 has its own type registry and a pseudo-header checksum, and this page decodes ICMP for IPv4 only.");
+    }
+    var headerOffset = 0;
+    var trailing = 0;
+    var message = parsed;
+    var outer = ipv4HeaderAt(parsed);
+    if (outer){
+      if (outer.protocol !== 1){
+        fail("These bytes begin with an IPv4 packet whose protocol field is " + outer.protocol + ", not 1 (ICMP). Paste the ICMP message itself or a packet that carries one.");
+      }
+      if (outer.totalLength < outer.headerLength + 8){
+        fail("The IPv4 total-length field leaves fewer than 8 bytes for an ICMP message, so there is nothing to decode.");
+      }
+      headerOffset = outer.headerLength;
+      trailing = parsed.length - outer.totalLength;
+      message = parsed.slice(headerOffset, outer.totalLength);
+    }
+    if (message.length < 8) fail("Only " + plural(message.length, "byte", "bytes") + " of ICMP follow the IPv4 header; a message is at least 8 bytes.");
+    var type = message[0];
+    var code = message[1];
+    var stored = word(message, 2);
+    var info = typeInfo(type);
+    var codeName = codeInfo(type, code);
+    var messageLength = message.length;
+    var notes = [];
+    var sum = sum16(message);
+    var valid = sum === 0xffff;
+    var zeroed = message.slice(0);
+    zeroed[2] = 0;
+    zeroed[3] = 0;
+    var expected = checksum(zeroed);
+    if (valid){
+      notes.push({ text: "The checksum verifies over the " + plural(messageLength, "byte", "bytes") + " decoded.", ok: true });
+    } else {
+      notes.push({ text: "The checksum does not verify: the stored value is " + wordHex(stored) + " and " + wordHex(expected) + " would make the message sum to 0xFFFF. A paste cut short of the whole message cannot verify, because the sum covers every byte.", ok: false });
+    }
+    if (headerOffset) notes.push({ text: "The paste begins with an IPv4 header whose protocol field is 1, so its " + headerOffset + " bytes were skipped and the ICMP message starts there.", ok: true });
+    if (trailing > 0) notes.push({ text: "The IPv4 total-length field says " + plural(messageLength + headerOffset, "byte", "bytes") + "; the last " + plural(trailing, "pasted byte lies", "pasted bytes lie") + " outside the packet.", ok: false });
+
+    var rows = [];
+    var result = {
+      type: type, typeName: info.name, typeReference: info.reference,
+      code: code, codeName: codeName,
+      typeText: info.name + " (" + type + ")",
+      codeText: codeName + " (" + code + ")",
+      checksum: stored, checksumExpected: expected, checksumValid: valid,
+      checksumText: wordHex(stored) + (valid ? " (verified)" : " (mismatch; " + wordHex(expected) + " expected)"),
+      headerOffset: headerOffset,
+      messageLength: messageLength,
+      byteLength: messageLength,
+      identifier: null, sequence: null, mtu: null, gateway: null, pointer: null,
+      mask: null, originate: null, receive: null, transmit: null,
+      numAddrs: null, entrySize: null, lifetime: null,
+      routers: [], spi: null,
+      payloadLength: 0,
+      embedded: null,
+      rows: rows,
+      notes: notes
+    };
+
+    var kind = "raw";
+    if (type === 0 || type === 8 || type === 15 || type === 16){
+      kind = "echo";
+      result.identifier = word(message, 4);
+      result.sequence = word(message, 6);
+      result.payloadLength = Math.max(0, messageLength - 8);
+      if (result.payloadLength) notes.push({ text: "The " + plural(result.payloadLength, "data byte", "data bytes") + " after the header " + (result.payloadLength === 1 ? "is returned" : "are returned") + " unchanged in a reply.", ok: true });
+    } else if (type === 42 || type === 43){
+      kind = "extended-echo";
+      result.identifier = word(message, 4);
+      result.sequence = word(message, 6);
+      result.payloadLength = Math.max(0, messageLength - 8);
+      notes.push({ text: "RFC 8335 adds an interface identifier, an interface name and an extension structure after the sequence number; those bytes are counted but not decoded here.", ok: false });
+    } else if (type === 13 || type === 14){
+      kind = "timestamp";
+      result.identifier = word(message, 4);
+      result.sequence = word(message, 6);
+      if (messageLength >= 20){
+        result.originate = dword(message, 8);
+        result.receive = dword(message, 12);
+        result.transmit = dword(message, 16);
+        result.payloadLength = Math.max(0, messageLength - 20);
+        notes.push({ text: "RFC 792 defines each timestamp as milliseconds since midnight UTC; a device without that clock may use another base.", ok: true });
+      } else {
+        notes.push({ text: "The timestamp fields need 20 bytes; only " + messageLength + " were decoded.", ok: false });
+      }
+    } else if (type === 3 && code === 4){
+      kind = "mtu";
+      result.mtu = word(message, 6);
+      if (result.mtu === 0) notes.push({ text: "A next-hop MTU of zero means the router did not report one; RFC 1191 uses that value for a router that predates path MTU discovery.", ok: false });
+    } else if (type === 5){
+      kind = "redirect";
+      result.gateway = ipv4(message, 4);
+    } else if (type === 9){
+      kind = "router-advertisement";
+      result.numAddrs = message[4];
+      result.entrySize = message[5];
+      result.lifetime = word(message, 6);
+      var stride = result.entrySize * 4;
+      if (stride < 8) notes.push({ text: "The address entry size is " + plural(stride, "byte", "bytes") + "; RFC 1256 defines 8-byte entries (2 words).", ok: false });
+      var at = 8;
+      while (result.routers.length < result.numAddrs && stride >= 8 && at + 8 <= messageLength){
+        var raw = dword(message, at + 4);
+        result.routers.push({
+          address: ipv4(message, at),
+          preference: raw > 0x7fffffff ? raw - 0x100000000 : raw
+        });
+        at += stride;
+      }
+      if (result.routers.length < result.numAddrs) notes.push({ text: "The message advertises " + plural(result.numAddrs, "router", "routers") + " but only " + result.routers.length + " fit in the bytes pasted.", ok: false });
+    } else if (type === 12){
+      kind = "pointer";
+      result.pointer = message[4];
+    } else if (type === 17 || type === 18){
+      kind = "address-mask";
+      result.mask = ipv4(message, 4);
+    } else if (type === 40){
+      kind = "spi";
+      result.spi = dword(message, 4);
+    } else if (type === 10 || type === 4 || type === 11 || type === 19){
+      kind = "unused";
+    }
+
+    if (type === 3 && code !== 4){
+      kind = "unused";
+    }
+
+    rows.push(["Type", result.typeText]);
+    rows.push(["Code", result.codeText]);
+    rows.push(["Checksum", result.checksumText]);
+    if (kind === "echo" || kind === "extended-echo"){
+      rows.push(["Identifier / sequence", wordHex(result.identifier) + " / " + wordHex(result.sequence)]);
+      rows.push(["Bytes after the header", plural(result.payloadLength, "byte", "bytes")]);
+    } else if (kind === "mtu"){
+      rows.push(["Next-hop MTU", result.mtu === 0 ? "0 (not reported)" : result.mtu + " bytes"]);
+      rows.push(["Unused", hexBytes(message, 4, 6)]);
+    } else if (kind === "redirect"){
+      rows.push(["Gateway", result.gateway]);
+    } else if (kind === "pointer"){
+      rows.push(["Pointer", plural(result.pointer, "octet", "octets") + " into the original datagram"]);
+      rows.push(["Unused", hexBytes(message, 5, 8)]);
+    } else if (kind === "timestamp"){
+      rows.push(["Identifier / sequence", wordHex(result.identifier) + " / " + wordHex(result.sequence)]);
+      if (result.originate === null){
+        rows.push(["Timestamps", "not present: the message is shorter than 20 bytes"]);
+      } else {
+        rows.push(["Originate timestamp", msText(result.originate)]);
+        rows.push(["Receive timestamp", msText(result.receive)]);
+        rows.push(["Transmit timestamp", msText(result.transmit)]);
+      }
+    } else if (kind === "address-mask"){
+      rows.push(["Address mask", result.mask]);
+    } else if (kind === "router-advertisement"){
+      rows.push(["Advertised routers", String(result.numAddrs)]);
+      rows.push(["Entry size", plural(result.entrySize, "word", "words") + " (" + plural(result.entrySize * 4, "byte", "bytes") + ")"]);
+      rows.push(["Lifetime", result.lifetime + " s"]);
+    } else if (kind === "spi"){
+      rows.push(["Security parameters index", wordHex(result.spi >>> 16) + " " + wordHex(result.spi & 0xffff)]);
+    } else if (kind === "unused"){
+      rows.push(["Unused", hexBytes(message, 4, 8)]);
+      if (message[4] || message[5] || message[6] || message[7]) notes.push({ text: "The unused field is not zero: " + hexBytes(message, 4, 8) + ". Unused and reserved fields are expected to be zero.", ok: false });
+    } else {
+      rows.push(["Rest of header", hexBytes(message, 4, 8)]);
+    }
+    rows.push(["Message length", plural(messageLength, "byte", "bytes") + (headerOffset ? " after a " + headerOffset + "-byte IPv4 header" : "")]);
+
+    if (QUOTING[type]){
+      result.embedded = parseEmbedded(message, 8, notes);
+      if (result.embedded && result.embedded.truncated === false){
+        var inner = result.embedded;
+        if (inner.totalLength < inner.headerLength) notes.push({ text: "The quoted datagram's total-length field is " + inner.totalLength + " bytes, shorter than its own " + inner.headerLength + "-byte header.", ok: false });
+        if (type === 12 && result.pointer !== null && result.pointer >= inner.headerLength){
+          notes.push({ text: "The pointer is octet " + result.pointer + ", past the " + inner.headerLength + "-byte header of the quoted datagram.", ok: false });
+        }
+      }
+    }
+
+    if (info.name.indexOf("Deprecated") !== -1){
+      notes.push({ text: "RFC 6918 deprecates this message type; it should not be sent.", ok: false });
+    }
+    if (codeName === "Unassigned"){
+      notes.push({ text: "Code " + code + " is not assigned for type " + type + " in the IANA registry.", ok: false });
+    }
+
+    var headline = info.name;
+    if (codeName !== "No Code" && codeName !== "Unassigned" && codeName !== "Not specified") headline += ": " + codeName;
+    headline += " (type " + type + ", code " + code + ")";
+    var subline = plural(messageLength, "byte", "bytes") + " of ICMP" + (headerOffset ? " after a " + headerOffset + "-byte IPv4 header" : "")
+      + ", " + (valid ? "checksum verified" : "checksum mismatch")
+      + (result.payloadLength ? ", " + plural(result.payloadLength, "data byte", "data bytes") : "");
+
+    result.kind = kind;
+    result.headline = headline;
+    result.subline = subline;
+    result.noteText = notes.map(function(note){ return note.text; }).join(" ");
+    return result;
+  }
+
+  return {
+    TYPES: TYPES,
+    RANGES: RANGES,
+    CODES: CODES,
+    MAX_BYTES: MAX_BYTES,
+    DEFAULT_HEX: DEFAULT_HEX,
+    parseBytes: parseBytes,
+    sum16: sum16,
+    checksum: checksum,
+    typeInfo: typeInfo,
+    codeInfo: codeInfo,
+    looksLikeIPv4: looksLikeIPv4,
+    msText: msText,
+    decode: decode
+  };
+})();
+/* icmp-message-core:end */
+(function(){
+  "use strict";
+  var C = ICMPMessageCore;
+  var els = {
+    form: document.getElementById("message-form"),
+    hex: document.getElementById("hex"),
+    err: document.getElementById("err"),
+    out: document.getElementById("out"),
+    fieldsTable: document.getElementById("fields-table"),
+    fields: document.getElementById("fields"),
+    embeddedTable: document.getElementById("embedded-table"),
+    embedded: document.getElementById("embedded"),
+    routerTable: document.getElementById("router-table"),
+    routers: document.getElementById("routers")
+  };
+
+  function line(text, className){
+    var node = document.createElement("div");
+    node.className = className || "sub";
+    node.textContent = text;
+    return node;
+  }
+
+  function placeholder(message){
+    els.out.textContent = "";
+    var node = line(message);
+    node.style.padding = "18px 0 6px";
+    els.out.appendChild(node);
+  }
+
+  function clearTables(){
+    els.fieldsTable.style.display = "none";
+    els.embeddedTable.style.display = "none";
+    els.routerTable.style.display = "none";
+    els.fields.textContent = "";
+    els.embedded.textContent = "";
+    els.routers.textContent = "";
+  }
+
+  function row(label, value){
+    var tr = document.createElement("tr");
+    var th = document.createElement("th");
+    th.setAttribute("scope", "row");
+    th.textContent = label;
+    var td = document.createElement("td");
+    td.textContent = value;
+    tr.appendChild(th);
+    tr.appendChild(td);
+    return tr;
+  }
+
+  function render(result){
+    els.out.textContent = "";
+    els.out.appendChild(line("Decoded message", "label"));
+    els.out.appendChild(line(result.headline, "big"));
+    els.out.appendChild(line(result.subline));
+    if (result.notes.length){
+      var list = document.createElement("ul");
+      list.className = "notes";
+      result.notes.forEach(function(note){
+        var item = document.createElement("li");
+        item.textContent = note.text;
+        if (note.ok) item.className = "ok";
+        list.appendChild(item);
+      });
+      els.out.appendChild(list);
+    }
+
+    els.fields.textContent = "";
+    result.rows.forEach(function(pair){ els.fields.appendChild(row(pair[0], pair[1])); });
+    els.fieldsTable.style.display = "";
+
+    els.embedded.textContent = "";
+    els.embeddedTable.style.display = "none";
+    els.routers.textContent = "";
+    els.routerTable.style.display = "none";
+    var inner = result.embedded;
+    if (inner && inner.truncated === false){
+      var pairs = [
+        ["Original source", inner.source],
+        ["Original destination", inner.destination],
+        ["Protocol", inner.protocol + " (" + inner.protocolName + ")"],
+        ["Header length", inner.headerLength + " bytes"],
+        ["Original total length", inner.totalLength + " bytes"],
+        ["Quoted here", inner.quotedBytes + " bytes, " + inner.dataBytes + " of them after the header"]
+      ];
+      if (inner.sourcePort !== null){
+        pairs.push(["Source / destination port", inner.sourcePort + " / " + inner.destinationPort]);
+      }
+      pairs.forEach(function(pair){ els.embedded.appendChild(row(pair[0], pair[1])); });
+      els.embeddedTable.style.display = "";
+    }
+
+    if (result.routers.length){
+      result.routers.forEach(function(router){
+        var tr = document.createElement("tr");
+        var td = document.createElement("td");
+        td.textContent = router.address;
+        var pref = document.createElement("td");
+        pref.textContent = String(router.preference);
+        tr.appendChild(td);
+        tr.appendChild(pref);
+        els.routers.appendChild(tr);
+      });
+      els.routerTable.style.display = "";
+    }
+  }
+
+  function decode(announce){
+    var raw = els.hex.value;
+    if (!String(raw).trim()){
+      clearTables();
+      els.err.textContent = announce ? "Paste the hex bytes of an ICMP message, such as 08 00 4d 5a 00 01 00 01." : "";
+      placeholder("Paste the hex bytes of an ICMP message to decode it.");
+      return;
+    }
+    var result;
+    try {
+      result = C.decode(raw);
+    } catch (error){
+      clearTables();
+      els.err.textContent = error.message;
+      placeholder("Paste the hex bytes of an ICMP message to decode it.");
+      return;
+    }
+    els.err.textContent = "";
+    render(result);
+  }
+
+  function fit(){
+    els.hex.style.height = "auto";
+    els.hex.style.height = Math.min(340, Math.max(104, els.hex.scrollHeight + 2)) + "px";
+  }
+
+  els.form.addEventListener("submit", function(event){
+    event.preventDefault();
+    fit();
+    decode(true);
+  });
+  els.hex.addEventListener("input", function(){ fit(); decode(false); });
+  els.hex.addEventListener("change", fit);
+
+  els.hex.value = C.DEFAULT_HEX;
+  fit();
+  decode(false);
+})();
+</script>
+</body>
+</html>
