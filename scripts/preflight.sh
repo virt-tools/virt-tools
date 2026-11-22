@@ -455,6 +455,7 @@ node tests/srecord_inspector.test.cjs
 node tests/lamination_layer_calculator.test.cjs
 node tests/hijri_calendar_converter.test.cjs
 node tests/iscsi_name_builder.test.cjs
+node tests/albers_equal_area_conic.test.cjs
 
 python3 -m unittest discover -s tests -p 'test_*.py'
 
