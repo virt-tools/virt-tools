@@ -80,7 +80,7 @@ def second_wave_slugs(available: set[str]) -> list[str]:
 
 
 def write_ledger(tools: list[dict[str, object]]) -> None:
-    payload = json.dumps({"total": len(tools), "tools": tools}, indent=2) + "\n"
+    payload = json.dumps({"total": len(tools), "tools": tools}, indent=2, ensure_ascii=False) + "\n"
     temporary = LEDGER.with_suffix(".json.tmp")
     temporary.write_text(payload, encoding="utf-8")
     temporary.replace(LEDGER)
