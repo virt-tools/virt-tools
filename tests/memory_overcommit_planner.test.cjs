@@ -44,7 +44,7 @@ assert.equal(entry.testCases.filter((test) => test.kind === 'golden').length, 6)
 assert.equal(entry.testCases.filter((test) => test.kind === 'boundary').length, 6);
 assert.equal(entry.testCases.filter((test) => test.kind === 'validation').length, 8);
 assert.ok(!catalog.tools.some((tool) => tool.slug !== slug && tool.name.toLowerCase() === entry.name.toLowerCase()), 'name collision');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'System').length, 53, 'System count');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'System').length, 54, 'System count');
 
 function failure(input) {
   try {

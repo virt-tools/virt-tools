@@ -182,8 +182,8 @@ assert.equal(record.testCases.length, 22, 'the full catalog case set');
 assert.equal(record.testCases.filter((item) => item.kind === 'golden').length, 5);
 assert.equal(record.testCases.filter((item) => item.kind === 'boundary').length, 5);
 assert.equal(record.testCases.filter((item) => item.kind === 'validation').length, 12);
-assert.equal(catalog.tools.length, 2436, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2175, 'public tools');
+assert.equal(catalog.tools.length, 2437, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2176, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Encoding').length, 53, 'Encoding count');
 
 // No other record claims this slug, name, alias or distinctive tag.

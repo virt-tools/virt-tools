@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Shell Exit Status Decoder &mdash; Virtual Tools</title>
+<meta name="description" content="Decode a shell exit code such as 139 or a raw wait status such as 0x008b into the exit code, the fatal signal, the core-dump flag and the $? the shell reports.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+[hidden]{display:none !important}
+label.f{font-size:13px;opacity:.85;display:block;margin-bottom:4px}
+.field{background:var(--bg,#14181f);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px}
+.field:focus-within{border-color:var(--accent,#6ea8fe);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#6ea8fe) 18%,transparent)}
+.field input{box-sizing:border-box;min-width:0;width:100%;min-height:46px;background:transparent;color:var(--text,#e6e6e6);border:none;font-family:ui-monospace,monospace;font-size:17px;padding:2px 0;outline:none}
+.field .unit{font-size:11px;color:var(--text-dim,#9aa3b2);margin-top:4px;line-height:1.45;overflow-wrap:anywhere}
+.mode{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:0 0 12px}
+.mode label{font-size:13px;color:var(--text-dim,#9aa3b2)}
+.mode select{font:inherit;font-size:14px;min-height:44px;width:auto;min-width:14rem;max-width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg,#14181f);color:var(--text,#e6e6e6)}
+.mode select:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.picker{border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:10px 12px;margin:14px 0}
+.picker legend{padding:0 6px;font-size:13px;color:var(--text-dim,#9aa3b2)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 2px}
+.chips button{min-height:44px;font:inherit;font-family:ui-monospace,monospace;font-size:12px;font-weight:600;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg,#14181f);color:var(--text,#e6e6e6);cursor:pointer;padding:6px 10px;text-align:left}
+.chips button span{display:block;font-weight:400;font-size:11px;color:var(--text-dim,#9aa3b2)}
+.chips button:hover{border-color:var(--accent,#6ea8fe)}
+.chips button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:12px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 20px;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);color:var(--text,#e6e6e6);cursor:pointer;min-height:44px}
+.actions button.primary{background:var(--accent,#6ea8fe);border-color:var(--accent,#6ea8fe);color:#0b1017;padding:10px 24px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:14px 0}
+.out:empty{display:none}
+.out .big{font-size:clamp(1.6rem,7vw,2.6rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:4px 0 2px;overflow-wrap:anywhere;color:var(--accent,#6ea8fe)}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45;overflow-wrap:anywhere}
+.out .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:7px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:13.5px}
+.out .row:last-of-type{border-bottom:none}
+.out .row .k{color:var(--text-dim,#9aa3b2);flex:0 0 auto}
+.out .row .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right;overflow-wrap:anywhere;word-break:break-word}
+.out .hint{margin:12px 0 0;padding:10px 12px;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg,#14181f);font-size:13.5px;line-height:1.5}
+.out .hint strong{color:var(--text,#e6e6e6)}
+.out .hint .note{display:block;margin-top:6px;color:var(--text-dim,#9aa3b2);font-size:12.5px}
+.err{color:var(--bad,#f87171);font-size:13px;margin:6px 0;min-height:1.2em;line-height:1.4}
+.status{font-size:13px;color:var(--text-dim,#9aa3b2);margin:6px 0 0;min-height:1.2em}
+.details h2{font-size:1rem;margin:22px 0 8px}
+.sig{display:grid;grid-template-columns:2.6rem minmax(0,6rem) minmax(0,4.8rem) minmax(0,3.6rem) minmax(0,1fr);gap:8px;align-items:baseline;padding:7px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:13px}
+.sig:last-child{border-bottom:none}
+.sig .num{font-family:ui-monospace,monospace;color:var(--text-dim,#9aa3b2);text-align:right}
+.sig .name{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);overflow-wrap:anywhere}
+.sig .act{font-size:12px;color:var(--text-dim,#9aa3b2)}
+.sig .code{font-family:ui-monospace,monospace;color:var(--text,#e6e6e6)}
+.sig .meaning{color:var(--text,#e6e6e6);opacity:.9;line-height:1.45;overflow-wrap:anywhere}
+.sig-head{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim,#9aa3b2)}
+@media (max-width:560px){
+.sig{grid-template-columns:2.2rem minmax(0,1fr) auto auto;row-gap:3px}
+.sig .meaning{grid-column:1 / -1;opacity:.75;font-size:12.5px}
+.out .row{flex-wrap:wrap;row-gap:2px}
+.out .row .v{flex:1 1 100%;text-align:left}
+}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;margin:18px 0 0;line-height:1.55}
+.note code{font-size:.95em}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<h1>Shell Exit Status Decoder</h1>
+<p>Read a shell exit code such as <code>139</code>, or a raw wait status such as <code>0x008b</code>, as the exit code, fatal signal and core-dump flag it holds.</p>
+</div>
+<div class="panel">
+<div class="mode">
+<label for="mode">Value type</label>
+<select id="mode">
+<option value="shell" selected>Shell exit code ($?)</option>
+<option value="raw">Raw wait status (waitpid)</option>
+</select>
+</div>
+<form id="status-form" novalidate>
+<div class="field">
+<label class="f" for="value">Exit status</label>
+<input type="text" id="value" inputmode="numeric" autocomplete="off" spellcheck="false" value="139" aria-describedby="value-help">
+<div class="unit" id="value-help">139 as a shell <code>$?</code>, or 0x008b as the status <code>waitpid</code> returns. Decimal or 0x hexadecimal.</div>
+</div>
+<fieldset class="picker">
+<legend>Common values</legend>
+<div class="chips" aria-label="Common exit codes">
+<button type="button" class="chip" data-mode="shell" data-value="139">139 <span>SIGSEGV</span></button>
+<button type="button" class="chip" data-mode="shell" data-value="134">134 <span>SIGABRT</span></button>
+<button type="button" class="chip" data-mode="shell" data-value="137">137 <span>SIGKILL</span></button>
+<button type="button" class="chip" data-mode="shell" data-value="143">143 <span>SIGTERM</span></button>
+<button type="button" class="chip" data-mode="shell" data-value="127">127 <span>not found</span></button>
+<button type="button" class="chip" data-mode="shell" data-value="126">126 <span>not executable</span></button>
+<button type="button" class="chip" data-mode="raw" data-value="0x008b">0x008b <span>raw, core</span></button>
+</div>
+<div class="actions">
+<button type="submit" class="primary">Decode</button>
+<button type="button" id="reset" class="secondary">Reset</button>
+</div>
+</fieldset>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"></div>
+<p class="status" id="status" role="status" aria-live="polite"></p>
+</div>
+<section class="details" aria-labelledby="sig-title">
+<h2 id="sig-title">Signals 1&ndash;31 and the shell code they become</h2>
+<p class="sig-head" aria-hidden="true">No. &middot; signal &middot; default action &middot; 128 + n &middot; meaning</p>
+<div id="sig-list"></div>
+</section>
+<p class="note"><code>waitpid</code> returns one integer: the exit code sits in the high byte, the signal in the low seven bits, and bit 7 marks a core dump, so a <code>SIGSEGV</code> with a core is <code>0x008b</code>. A shell keeps only eight bits and reports <code>128 + n</code> for a fatal signal, which is why the same 139 reads as &ldquo;died from SIGSEGV&rdquo; or as an ordinary <code>exit(139)</code>. Signals 32 and 33 are reserved by the C library; 34 to 64 are the real-time signals. Everything is decoded in this page: nothing is run, stored or sent anywhere. Only 0x7f and 0xffff are special statuses &mdash; a stopped child and a continued one.</p>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* shell-exit-core:start */
+var ShellExitCore = (function(){
+  "use strict";
+  var SIGNALS = [
+    [1, "HUP", "Terminate", "Hangup: the controlling terminal or session went away."],
+    [2, "INT", "Terminate", "Keyboard interrupt, normally Ctrl-C."],
+    [3, "QUIT", "Core", "Keyboard quit, normally Ctrl-backslash."],
+    [4, "ILL", "Core", "Illegal instruction."],
+    [5, "TRAP", "Core", "Trace or breakpoint trap, as used by debuggers."],
+    [6, "ABRT", "Core", "Abort, from abort(), a failed assertion or a detected heap fault."],
+    [7, "BUS", "Core", "Bus error, such as a misaligned access or a bad memory mapping."],
+    [8, "FPE", "Core", "Arithmetic exception, such as integer division by zero."],
+    [9, "KILL", "Terminate", "Uncatchable kill; the out-of-memory killer also uses it."],
+    [10, "USR1", "Terminate", "User-defined signal 1."],
+    [11, "SEGV", "Core", "Segmentation fault: an invalid memory access."],
+    [12, "USR2", "Terminate", "User-defined signal 2."],
+    [13, "PIPE", "Terminate", "Broken pipe: a write with no reader left."],
+    [14, "ALRM", "Terminate", "Timer set by alarm(2) expired."],
+    [15, "TERM", "Terminate", "Polite termination request, the default of kill."],
+    [16, "STKFLT", "Terminate", "Stack fault on a coprocessor; unused on most machines."],
+    [17, "CHLD", "Ignore", "A child stopped or terminated."],
+    [18, "CONT", "Continue", "Resume a stopped process."],
+    [19, "STOP", "Stop", "Uncatchable stop; only SIGCONT resumes the process."],
+    [20, "TSTP", "Stop", "Keyboard stop, normally Ctrl-Z."],
+    [21, "TTIN", "Stop", "Background process tried to read from its terminal."],
+    [22, "TTOU", "Stop", "Background process tried to write to its terminal."],
+    [23, "URG", "Ignore", "Urgent condition on a socket."],
+    [24, "XCPU", "Core", "CPU time limit exceeded, as set by setrlimit."],
+    [25, "XFSZ", "Core", "File size limit exceeded, as set by setrlimit."],
+    [26, "VTALRM", "Terminate", "Virtual timer expired."],
+    [27, "PROF", "Terminate", "Profiling timer expired."],
+    [28, "WINCH", "Ignore", "Terminal window size changed."],
+    [29, "IO", "Terminate", "Asynchronous I/O is possible; also called SIGPOLL."],
+    [30, "PWR", "Terminate", "Power failure."],
+    [31, "SYS", "Core", "Bad system call."]
+  ];
+  var CAUSES_SHELL = {
+    "0": "The command reported success.",
+    "1": "General failure: the program's own error path, or a test such as grep finding no match.",
+    "2": "The command was used wrongly, or a shell builtin failed.",
+    "126": "The command was found but could not be executed: no execute permission, a directory, or a script whose interpreter line is broken.",
+    "127": "The command was not found; bash also reports 127 when a script names a missing interpreter.",
+    "128": "An ordinary exit code: the 128 + n convention starts at 129.",
+    "255": "Eight bits hold 0 to 255, so exit(-1) arrives as 255."
+  };
+  var CAUSES_SIGNAL = {
+    "1": "The terminal or SSH session closed; nohup makes a process ignore it.",
+    "2": "Ctrl-C at the terminal, or kill -INT.",
+    "3": "Ctrl-backslash at the terminal; the process dumps core by default.",
+    "6": "abort(), a failed assertion, or heap corruption caught by the C library.",
+    "9": "kill -9, or the kernel's out-of-memory killer. It cannot be caught, blocked or ignored.",
+    "11": "A null or wild pointer, a use-after-free, or a stack overflow.",
+    "13": "A write to a pipe or socket whose reader has gone, as when piping into head.",
+    "15": "kill's default signal or a supervisor's stop request; a process can catch it to shut down cleanly.",
+    "19": "Only SIGCONT resumes the process.",
+    "20": "Ctrl-Z at the terminal."
+  };
+  var SHELL_MIN = 0;
+  var SHELL_MAX = 255;
+  var RAW_MAX = 65535;
+  var RTMIN = 34;
+  var RTMAX = 64;
+  var MODES = ["shell", "raw"];
+
+  function fail(message){ throw new Error(message); }
+  function clip(value){
+    var text = String(value);
+    return text.length > 40 ? text.slice(0, 37) + "..." : text;
+  }
+  function hex(value){
+    var text = (value & 0xffff).toString(16);
+    while (text.length < 4) text = "0" + text;
+    return "0x" + text;
+  }
+  function findSignal(number){
+    for (var i = 0; i < SIGNALS.length; i += 1) {
+      if (SIGNALS[i][0] === number) return SIGNALS[i];
+    }
+    return null;
+  }
+  function signalLabel(number){
+    var entry = findSignal(number);
+    if (entry) return "SIG" + entry[1] + " (" + number + ")";
+    if (number === 32 || number === 33) return "signal " + number + " (reserved by the C library)";
+    if (number === RTMAX) return "SIGRTMAX (" + number + ")";
+    if (number >= RTMIN && number < RTMAX) return "SIGRTMIN+" + (number - RTMIN) + " (" + number + ")";
+    return "signal " + number;
+  }
+  function signalMeaning(number){
+    var entry = findSignal(number);
+    if (entry) return entry[3];
+    if (number === 32 || number === 33) return "Reserved for the C library's own use, so it never normally terminates a process.";
+    if (number >= RTMIN) return "A real-time signal, queued and delivered in number order.";
+    return "No Linux signal carries this number.";
+  }
+  function parseValue(text, mode){
+    if (MODES.indexOf(mode) === -1) fail("Choose the shell exit code or the raw wait status.");
+    var original = String(text == null ? "" : text).trim();
+    if (!original) fail("Enter an exit code such as 139, or a raw wait status such as 0x008b.");
+    var body = original
+      .replace(/^\$\?\s*=?\s*/, "")
+      .replace(/^(?:exit\s+(?:status|code)|wait\s+status|status|code)\s*[:=]?\s*/i, "")
+      .trim();
+    if (!body) fail("Enter a number after \"" + clip(original) + "\".");
+    if (body.charAt(0) === "-") {
+      fail("An exit status cannot be negative; a process killed by a signal shows 128 + the signal number.");
+    }
+    var value;
+    if (/^0x[0-9a-f]+$/i.test(body)) {
+      value = parseInt(body.slice(2), 16);
+    } else if (/^[0-9]+$/.test(body)) {
+      value = parseInt(body, 10);
+    } else {
+      fail("\"" + clip(original) + "\" is not a decimal number or a 0x hexadecimal value.");
+    }
+    if (!isFinite(value) || Math.floor(value) !== value) {
+      fail("\"" + clip(original) + "\" is not a whole number.");
+    }
+    if (mode === "shell") {
+      if (value < SHELL_MIN || value > SHELL_MAX) {
+        fail("A shell exit status is eight bits wide: enter 0 to 255, or switch to the raw wait status.");
+      }
+    } else if (value < 0 || value > RAW_MAX) {
+      fail("A wait status is sixteen bits wide: enter 0 to 65535.");
+    }
+    return value;
+  }
+  function exitedResult(code, mode, status){
+    var rawStatus = status == null ? (code & 0xff) << 8 : status;
+    var headline = "Exited with code " + code;
+    if (code === 126) headline = "Exited with code 126 (cannot execute)";
+    if (code === 127) headline = "Exited with code 127 (command not found)";
+    var rows = [
+      ["Kind", "Exited normally"],
+      ["Exit code", String(code)],
+      ["Shell $?", String(code)],
+      ["Signal", "none"],
+      ["Core dump", "no"]
+    ];
+    if (mode === "raw") {
+      rows.push(["Wait status", hex(rawStatus) + " (" + rawStatus + ")"]);
+      rows.push(["wait macros", "WIFEXITED true, WEXITSTATUS " + code]);
+    } else {
+      rows.push(["Wait status", "not kept: $? holds only the exit code"]);
+    }
+    return {
+      mode: mode,
+      kind: "exited",
+      value: mode === "raw" ? rawStatus : code,
+      decimal: mode === "raw" ? rawStatus : code,
+      hex: hex(rawStatus),
+      big: mode === "raw" ? hex(rawStatus) : "$? " + code,
+      headline: headline,
+      sub: mode === "raw"
+        ? "waitpid status " + rawStatus + " (" + hex(rawStatus) + "): the exit code is the high byte"
+        : "Shell exit code " + code + ", the only byte the shell keeps",
+      shellCode: code,
+      exitCode: code,
+      signal: null,
+      signalText: null,
+      signalMeaning: null,
+      coreDumped: false,
+      rawStatus: rawStatus,
+      rows: rows,
+      cause: CAUSES_SHELL[String(code)] || "",
+      note: mode === "raw"
+        ? "WIFEXITED is true because the low seven bits are zero; WEXITSTATUS takes bits 8 to 15."
+        : "The raw wait status would have carried the same code in its high byte: " + hex(rawStatus) + "."
+    };
+  }
+  function signaledResult(number, core, mode, code){
+    var label = signalLabel(number);
+    var shellCode = mode === "raw" ? 128 + number : code;
+    var headline = "Killed by " + label;
+    if (mode === "raw") headline += core ? " with a core dump" : " without a core dump";
+    var rows = [
+      ["Kind", "Killed by a signal"],
+      ["Signal", label],
+      ["Shell $?", String(shellCode)],
+      ["Exit code", "none (the process did not exit)"],
+      ["Core dump", mode === "raw" ? (core ? "yes" : "no") : "not visible in $?"]
+    ];
+    rows.push(["128 + signal", "128 + " + number + " = " + shellCode]);
+    if (mode === "raw") {
+      rows.push(["Wait status", hex(code) + " (" + code + ")"]);
+      rows.push(["wait macros", "WIFSIGNALED true, WTERMSIG " + number + ", WCOREDUMP " + (core ? "true" : "false")]);
+    } else {
+      rows.push(["Wait status", "not recoverable from $?"]);
+    }
+    return {
+      mode: mode,
+      kind: "signaled",
+      value: mode === "raw" ? code : shellCode,
+      decimal: mode === "raw" ? code : shellCode,
+      hex: mode === "raw" ? hex(code) : null,
+      big: mode === "raw" ? hex(code) : "$? " + shellCode,
+      headline: headline,
+      sub: mode === "raw"
+        ? "waitpid status " + code + " (" + hex(code) + "): low bits " + number + (core ? ", core bit set" : ", no core bit")
+        : "Fatal " + label + ", reported by the shell as 128 + " + number,
+      shellCode: shellCode,
+      exitCode: null,
+      signal: number,
+      signalText: label,
+      signalMeaning: signalMeaning(number),
+      coreDumped: mode === "raw" ? core : null,
+      rawStatus: mode === "raw" ? code : null,
+      rows: rows,
+      cause: CAUSES_SIGNAL[String(number)] || "",
+      note: mode === "raw"
+        ? "The low seven bits hold the signal; bit 7 is the core-dump flag. Only WIFSIGNALED makes WCOREDUMP meaningful."
+        : "The shell keeps only eight bits, so the core-dump flag and the high byte are gone, and a program that calls exit(" + shellCode + ") looks exactly the same."
+    };
+  }
+  function stoppedResult(number){
+    var label = signalLabel(number);
+    return {
+      mode: "raw",
+      kind: "stopped",
+      value: (number << 8) | 0x7f,
+      decimal: (number << 8) | 0x7f,
+      hex: hex((number << 8) | 0x7f),
+      big: hex((number << 8) | 0x7f),
+      headline: "Stopped by " + label,
+      sub: "A stopped child is not finished: the stop signal sits in the high byte and 0x7f in the low seven bits",
+      shellCode: null,
+      exitCode: null,
+      signal: number,
+      signalText: label,
+      signalMeaning: signalMeaning(number),
+      coreDumped: false,
+      rawStatus: (number << 8) | 0x7f,
+      rows: [
+        ["Kind", "Stopped by a signal"],
+        ["Stop signal", label],
+        ["Shell $?", "not defined for a stopped child"],
+        ["Exit code", "none (the process can still run)"],
+        ["Core dump", "no"],
+        ["128 + signal", "not applicable while stopped"],
+        ["wait macros", "WIFSTOPPED true, WSTOPSIG " + number]
+      ],
+      cause: CAUSES_SIGNAL[String(number)] || "",
+      note: "Only a waitpid call with WUNTRACED reports a stop; SIGCONT resumes the process and a later wait reports its real ending."
+    };
+  }
+  function continuedResult(){
+    return {
+      mode: "raw",
+      kind: "continued",
+      value: 0xffff,
+      decimal: 0xffff,
+      hex: "0xffff",
+      big: "0xffff",
+      headline: "Continued after a stop",
+      sub: "0xffff is the one status Linux reserves for WIFCONTINUED",
+      shellCode: null,
+      exitCode: null,
+      signal: null,
+      signalText: null,
+      signalMeaning: null,
+      coreDumped: false,
+      rawStatus: 0xffff,
+      rows: [
+        ["Kind", "Continued"],
+        ["Shell $?", "not defined for a continued child"],
+        ["Exit code", "none (the process is running again)"],
+        ["Signal", "none"],
+        ["Core dump", "no"],
+        ["wait macros", "WIFCONTINUED true"]
+      ],
+      cause: "",
+      note: "Only a waitpid call with WCONTINUED reports this status, once after the child receives SIGCONT."
+    };
+  }
+  function fromShell(code){
+    if (code <= 125 || code === 126 || code === 127 || code === 128 || code >= 193) {
+      return exitedResult(code, "shell");
+    }
+    return signaledResult(code - 128, null, "shell", code);
+  }
+  function fromRaw(status){
+    if (status === 0xffff) return continuedResult();
+    var lowByte = status & 0xff;
+    var low = status & 0x7f;
+    if (lowByte === 0x7f) {
+      var stop = (status >> 8) & 0xff;
+      if (stop < 1 || stop > RTMAX) {
+        fail(hex(status) + " marks a stopped process, but its stop signal is " + stop + "; the kernel writes stop signals 1 to 64.");
+      }
+      return stoppedResult(stop);
+    }
+    if (low === 0) return exitedResult((status >> 8) & 0xff, "raw", status);
+    if (low === 0x7f) {
+      fail(hex(status) + " sets the core bit on a stop marker, which waitpid never writes.");
+    }
+    if (low > RTMAX) {
+      fail(hex(status) + " names signal " + low + ", above the 64 Linux signals.");
+    }
+    return signaledResult(low, (status & 0x80) !== 0, "raw", status);
+  }
+  function decode(text, mode){
+    var chosen = mode == null ? "shell" : mode;
+    var value = parseValue(text, chosen);
+    return chosen === "raw" ? fromRaw(value) : fromShell(value);
+  }
+
+  return {
+    SIGNALS: SIGNALS,
+    MODES: MODES,
+    SHELL_MIN: SHELL_MIN,
+    SHELL_MAX: SHELL_MAX,
+    RAW_MAX: RAW_MAX,
+    RTMIN: RTMIN,
+    RTMAX: RTMAX,
+    parseValue: parseValue,
+    decode: decode,
+    fromShell: fromShell,
+    fromRaw: fromRaw,
+    signalLabel: signalLabel,
+    hex: hex
+  };
+})();
+/* shell-exit-core:end */
+(function(){
+  "use strict";
+  var C = ShellExitCore;
+  function $(id){ return document.getElementById(id); }
+  function el(tag, cls, text){
+    var node = document.createElement(tag);
+    if (cls) node.className = cls;
+    if (text != null) node.textContent = text;
+    return node;
+  }
+  var els = {
+    form: $("status-form"),
+    mode: $("mode"),
+    input: $("value"),
+    err: $("err"),
+    out: $("out"),
+    status: $("status"),
+    reset: $("reset"),
+    list: $("sig-list")
+  };
+  var timer = null;
+  var defaults = { value: "139", mode: "shell" };
+
+  function row(key, value){
+    var line = el("div", "row");
+    line.appendChild(el("span", "k", key));
+    line.appendChild(el("span", "v", value));
+    return line;
+  }
+
+  function render(result){
+    var out = els.out;
+    out.textContent = "";
+    out.appendChild(el("div", "big", result.big));
+    out.appendChild(el("p", "sub", result.sub));
+    result.rows.forEach(function(pair){ out.appendChild(row(pair[0], pair[1])); });
+    var hint = el("p", "hint");
+    hint.appendChild(el("strong", "", result.headline));
+    hint.appendChild(document.createTextNode(result.cause ? ". " + result.cause : "."));
+    hint.appendChild(el("span", "note", result.note));
+    out.appendChild(hint);
+  }
+
+  function showError(message){
+    els.err.textContent = message;
+    els.out.textContent = "";
+    els.status.textContent = "The value above could not be decoded.";
+  }
+
+  function run(){
+    try {
+      var result = C.decode(els.input.value, els.mode.value);
+      els.err.textContent = "";
+      render(result);
+      els.status.textContent = "Decoded in the browser: " + result.headline.toLowerCase() + ".";
+    } catch (error) {
+      showError(error.message);
+    }
+  }
+
+  function later(){
+    if (timer) window.clearTimeout(timer);
+    timer = window.setTimeout(run, 120);
+  }
+
+  C.SIGNALS.forEach(function(entry){
+    var line = el("div", "sig");
+    line.appendChild(el("span", "num", String(entry[0])));
+    line.appendChild(el("span", "name", "SIG" + entry[1]));
+    line.appendChild(el("span", "act", entry[2]));
+    line.appendChild(el("span", "code", String(128 + entry[0])));
+    line.appendChild(el("span", "meaning", entry[3]));
+    els.list.appendChild(line);
+  });
+
+  els.input.addEventListener("input", later);
+  els.mode.addEventListener("change", function(){
+    if (timer) window.clearTimeout(timer);
+    run();
+  });
+  els.form.addEventListener("submit", function(event){
+    event.preventDefault();
+    if (timer) window.clearTimeout(timer);
+    run();
+    if (els.err.textContent) els.input.focus();
+  });
+  els.reset.addEventListener("click", function(){
+    els.input.value = defaults.value;
+    els.mode.value = defaults.mode;
+    if (timer) window.clearTimeout(timer);
+    run();
+    els.input.focus();
+  });
+  Array.prototype.forEach.call(document.querySelectorAll(".chip"), function(chip){
+    chip.addEventListener("click", function(){
+      els.input.value = chip.getAttribute("data-value");
+      els.mode.value = chip.getAttribute("data-mode");
+      if (timer) window.clearTimeout(timer);
+      run();
+    });
+  });
+
+  run();
+})();
+</script>
+</body>
+</html>
