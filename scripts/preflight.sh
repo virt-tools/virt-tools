@@ -443,6 +443,7 @@ node tests/motion_blur_length_calculator.test.cjs
 node tests/emergency_shelter_space_calculator.test.cjs
 node tests/account_lockout_policy_calculator.test.cjs
 node tests/icmp_message_decoder.test.cjs
+node tests/pickleball_court_marking_calculator.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"

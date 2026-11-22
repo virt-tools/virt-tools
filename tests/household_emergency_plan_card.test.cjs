@@ -123,8 +123,8 @@ const kinds = (kind) => record.testCases.filter((item) => (item.kind || 'golden'
 assert.equal(kinds('golden'), 2, 'two golden cases');
 assert.equal(kinds('edge'), 2, 'two edge cases');
 assert.equal(kinds('validation'), 6, 'six validation cases');
-assert.equal(catalog.tools.length, 2437, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2176, 'public tools');
+assert.equal(catalog.tools.length, 2438, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2177, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Safety & Emergency').length, 51, 'Safety & Emergency count');
 for (const other of catalog.tools) {
   if (other.slug === slug) continue;

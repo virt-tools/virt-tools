@@ -187,7 +187,7 @@ for (const phrase of ['target', 'transitions', 'average speed', 'no network']) {
 }
 assert.equal(record.sources.length, 3, 'sources are cited');
 assert.ok(record.sources.every((source) => typeof source.title === 'string' && source.title.length > 20));
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Sports & Outdoors').length, 53, 'Sports & Outdoors count');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Sports & Outdoors').length, 54, 'Sports & Outdoors count');
 assert.equal(catalog.tools.filter((tool) => tool.slug === slug).length, 1, 'one record');
 assert.equal(catalog.tools.filter((tool) => tool.name === record.name).length, 1, 'one name');
 assert.equal(catalog.tools.filter((tool) => (tool.tags || []).includes('triathlon')).length, 1, 'one triathlon tool');

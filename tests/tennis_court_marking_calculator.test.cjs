@@ -168,9 +168,9 @@ assert.equal(record.listed, true);
 assert.equal(record.sources.length, 1);
 assert.match(record.sources[0].url, /^https:\/\/www\.itftennis\.com\/media\/7221\//);
 assert.ok(record.method.length > 500, 'the method explains the arithmetic');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Sports & Outdoors').length, 53, 'Sports & Outdoors count');
-assert.equal(catalog.tools.length, 2437, 'catalog total');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2176, 'public total');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Sports & Outdoors').length, 54, 'Sports & Outdoors count');
+assert.equal(catalog.tools.length, 2438, 'catalog total');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2177, 'public total');
 
 const kinds = record.testCases.reduce((acc, item) => {
   acc[item.kind] = (acc[item.kind] || 0) + 1;
