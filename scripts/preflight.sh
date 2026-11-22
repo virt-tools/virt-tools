@@ -446,6 +446,8 @@ node tests/icmp_message_decoder.test.cjs
 node tests/pickleball_court_marking_calculator.test.cjs
 node tests/gitattributes_resolver.test.cjs
 
+node tests/roller_chain_drive_calculator.test.cjs
+
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"

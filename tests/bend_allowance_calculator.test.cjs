@@ -193,7 +193,7 @@ assert.ok(record.tags.includes('mechanical-&-structural-engineering'));
 assert.ok(record.tags.includes('estimation-calculation'));
 assert.ok(record.method.length > 400);
 assert.equal(record.testCases.length, 25);
-assert.equal(catalog.tools.filter((tool) => tool.category === record.category).length, 53, 'Mechanical count');
+assert.equal(catalog.tools.filter((tool) => tool.category === record.category).length, 54, 'Mechanical count');
 
 const names = new Map();
 for (const tool of catalog.tools) {

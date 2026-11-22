@@ -41,8 +41,8 @@ assert.equal(record.testCases.length, 19);
 assert.equal(record.testCases.filter((t) => t.kind === 'golden').length, 5);
 assert.equal(record.testCases.filter((t) => t.kind === 'boundary').length, 6);
 assert.equal(record.testCases.filter((t) => t.kind === 'validation').length, 8);
-assert.equal(catalog.tools.length, 2439, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2178, 'public tools');
+assert.equal(catalog.tools.length, 2440, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2179, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Communications Engineering').length, 53,
   'Communications Engineering count');
 // No other record claims this slug, name, alias or distinctive tag.
