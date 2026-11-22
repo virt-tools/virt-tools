@@ -257,11 +257,13 @@ assert.equal(new Set(entry.tags).size, entry.tags.length, 'tags are internally u
 for (const tag of ['time', 'calendar', 'hijri', 'islamic', 'conversion']) {
   assert.ok(entry.tags.includes(tag), 'new tag present: ' + tag);
 }
-// No other tool already offers a Hijri or Islamic calendar conversion.
+// No other tool already offers a lunar Hijri or Islamic calendar conversion.
+// A Solar Hijri (Persian) tool is a different solar calendar, so that phrase is
+// dropped here and audited by its own suite instead.
 for (const tool of catalog.tools) {
   if (tool.slug === slug) continue;
   const haystack = [tool.slug, tool.name, tool.description, (tool.aliases || []).join(' '), (tool.tags || []).join(' ')]
-    .join(' ').toLowerCase();
+    .join(' ').toLowerCase().replace(/solar[- ]hijri/g, 'solar calendar');
   assert.ok(!/hijri|islamic calendar|muslim calendar/.test(haystack), 'no duplicate: ' + tool.slug);
 }
 

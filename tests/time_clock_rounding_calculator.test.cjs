@@ -230,9 +230,9 @@ const pageDirs = fs.readdirSync(path.join(root, 'frontend', 'tools'), { withFile
   .filter((entry) => entry.isDirectory()).length;
 assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageDirs,
   'every listed tool record has a page');
-assert.equal(catalog.tools.length, 2465, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2204, 'public tools');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Time').length, 54, 'Time count');
+assert.equal(catalog.tools.length, 2466, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2205, 'public tools');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Time').length, 55, 'Time count');
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record missing');
 assert.equal(record.name, 'Time Clock Rounding Calculator');
