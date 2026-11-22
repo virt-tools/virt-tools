@@ -229,9 +229,9 @@ const pageDirs = fs.readdirSync(path.join(root, 'frontend', 'tools'), { withFile
   .filter((entry) => entry.isDirectory()).length;
 assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageDirs,
   'every listed tool record has a page');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2201, 'public tools');
-assert.equal(catalog.tools.length, 2462, 'catalog total');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Converters').length, 54, 'Converters count');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2202, 'public tools');
+assert.equal(catalog.tools.length, 2463, 'catalog total');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Converters').length, 55, 'Converters count');
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record missing');
 assert.equal(record.name, 'Thermal Expansion Coefficient Converter');
