@@ -227,8 +227,8 @@ assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageD
   'every listed tool record has a page');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Developer').length, 55,
   'Developer count');
-assert.equal(catalog.tools.length, 2458, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2197, 'public tools');
+assert.equal(catalog.tools.length, 2459, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2198, 'public tools');
 const names = new Map();
 for (const tool of catalog.tools) {
   if (tool.slug === record.slug) continue;

@@ -265,8 +265,8 @@ assert.equal(new Set(record.tags).size, record.tags.length, 'tags are unique');
 assert.equal(new Set(record.aliases).size, record.aliases.length, 'aliases are unique');
 assert.ok(record.tags.includes('webauthn'));
 assert.ok(record.aliases.includes('Authenticator Data Decoder'));
-assert.equal(catalog.tools.length, 2458, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2197, 'public tools');
+assert.equal(catalog.tools.length, 2459, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2198, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Security').length, 55, 'Security count');
 assert.equal(catalog.tools.filter((tool) => tool.slug === slug).length, 1, 'no rival record');
 for (const tool of catalog.tools) {
