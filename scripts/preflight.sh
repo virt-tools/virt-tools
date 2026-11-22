@@ -449,6 +449,7 @@ node tests/git_bisect_step_planner.test.cjs
 node tests/three_wire_thread_measurement.test.cjs
 node tests/am_modulation_index_power.test.cjs
 node tests/drilling_cost_per_foot_calculator.test.cjs
+node tests/lost_wax_casting_metal_weight_calculator.test.cjs
 
 node tests/roller_chain_drive_calculator.test.cjs
 node tests/branch_line_coupler_designer.test.cjs
