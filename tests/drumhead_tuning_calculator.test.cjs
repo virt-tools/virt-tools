@@ -208,7 +208,7 @@ assert.ok(!/style="[^"]*width:\s*\d{3,}px/.test(html), 'fixed wide inline styles
 
 const publicCount = catalog.tools.filter((tool) => tool.listed).length;
 assert.ok(publicCount >= 2067, 'the catalog keeps growing: ' + publicCount);
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Music').length, 53, 'Music count');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Music').length, 54, 'Music count');
 
 console.log('drumhead-tuning: 22 catalog cases, ' + fixture.vectors.length +
   ' reference vectors, identities and page contracts passed');
