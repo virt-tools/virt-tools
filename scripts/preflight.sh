@@ -471,6 +471,7 @@ node tests/dirty_page_writeback_planner.test.cjs
 node tests/badminton_court_marking_calculator.test.cjs
 node tests/precious_metal_fineness_converter.test.cjs
 node tests/keyboard_layout_converter.test.cjs
+node tests/fresh_pasta_dough_calculator.test.cjs
 
 python3 -m unittest discover -s tests -p 'test_*.py'
 
