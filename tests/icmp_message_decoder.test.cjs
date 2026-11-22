@@ -361,9 +361,9 @@ for (const alias of record.aliases) {
 }
 
 // ---- Counts and the page contract.
-assert.equal(catalog.tools.length, 2453, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2192, 'public tools');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Networking').length, 54, 'Networking count');
+assert.equal(catalog.tools.length, 2454, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2193, 'public tools');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Networking').length, 55, 'Networking count');
 assert.equal(new Set(catalog.tools.map((tool) => tool.slug)).size, catalog.tools.length, 'slugs are unique');
 
 assert.match(html, /<h1>ICMP Message Decoder<\/h1>/);

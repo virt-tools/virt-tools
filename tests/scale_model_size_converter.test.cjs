@@ -40,8 +40,8 @@ assert.equal(record.testCases.length, 21);
 assert.equal(record.testCases.filter((item) => item.kind === 'golden').length, 5);
 assert.equal(record.testCases.filter((item) => item.kind === 'boundary').length, 5);
 assert.equal(record.testCases.filter((item) => item.kind === 'validation').length, 11);
-assert.equal(catalog.tools.length, 2453, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2192, 'public tools');
+assert.equal(catalog.tools.length, 2454, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2193, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Crafts & Hobbies').length, 54,
   'Crafts & Hobbies count');
 

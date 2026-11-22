@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Turn an IPv4 or IPv6 prefix into its reverse DNS zone: the in-addr.arpa or ip6.arpa apex, RFC 2317 classless delegation records and PTR owner names. Runs entirely in your browser.">
+<script src="/assets/theme-init.js"></script>
+<title>Reverse DNS Zone Builder — virt.tools</title>
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.rdns-shell{max-width:900px;margin:0 auto}
+.lead,.hint,.detail{color:var(--text-secondary,#8b949e)}
+.panel{background:var(--surface,#161b22);border:1px solid var(--border,#30363d);border-radius:10px;padding:1rem;margin:1rem 0}
+.grid{display:grid;grid-template-columns:1.1fr 1fr;gap:.9rem 1.1rem}
+.field{display:flex;flex-direction:column;gap:.35rem}
+.field label{font-weight:600}
+.field input{box-sizing:border-box;width:100%;max-width:none;background:var(--background,#0d1117);color:var(--text,#c9d1d9);border:1px solid var(--border,#30363d);border-radius:6px;padding:.62rem;font:inherit;min-height:44px}
+.field input:focus-visible,button:focus-visible,pre:focus-visible{outline:2px solid var(--accent,#58a6ff);outline-offset:2px}
+.actions{display:flex;flex-wrap:wrap;gap:.6rem;margin:.9rem 0 .2rem}
+button{border:1px solid var(--border,#30363d);border-radius:6px;background:var(--surface-raised,#21262d);color:var(--text,#c9d1d9);padding:.58rem .85rem;min-height:44px;font:inherit;font-size:.95rem;cursor:pointer}
+button.primary{border-color:var(--accent,#58a6ff);background:var(--accent-soft,#1e3a5f)}
+.status{min-height:1.4rem;margin:.55rem 0 .3rem}
+.status.ok{color:#3fb950}.status.error{color:#f85149}.status.info{color:var(--text-secondary,#8b949e)}
+.results{margin:.2rem 0 0;display:grid;gap:.7rem}
+.results>div{display:grid;grid-template-columns:11rem 1fr;gap:.3rem 1rem;align-items:baseline}
+.results dt{font-weight:600}
+.results dd{margin:0;overflow-wrap:anywhere}
+.results output{font:600 1rem/1.45 ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--accent,#58a6ff)}
+.results .sub{display:block;font-weight:400;font-size:.82rem;color:var(--text-secondary,#8b949e);margin-top:.15rem}
+pre.zone{margin:.75rem 0 0;background:var(--background,#0d1117);border:1px solid var(--border,#30363d);border-radius:8px;padding:.8rem;font:0.84rem/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--text,#c9d1d9);overflow:auto;max-height:22rem;white-space:pre-wrap;overflow-wrap:anywhere;tab-size:2}
+pre.zone:empty{display:none}
+.copy-row{display:flex;justify-content:flex-end;margin:.5rem 0 0}
+h2{font-size:1.05rem;margin:.2rem 0 .8rem}
+h2 span{font-weight:500;font-size:.85rem;color:var(--text-secondary,#8b949e)}
+.explain p{margin:.5rem 0}
+.explain ul{margin:.4rem 0 0;padding-left:1.2rem}
+.explain li{margin:.3rem 0}
+.explain code{background:var(--surface-raised,#21262d);padding:.05rem .3rem;border-radius:4px;font-size:.88em}
+@media(max-width:600px){.grid{grid-template-columns:1fr}.results>div{grid-template-columns:1fr;gap:.15rem}.panel{padding:.85rem}.actions>*{flex:1 1 9rem}}
+</style>
+</head>
+<body><div id="site-header"></div><main class="tool-container"><div class="rdns-shell">
+<h1>Reverse DNS Zone Builder</h1>
+<p class="lead">Reverse DNS maps an address to a name under <code>in-addr.arpa</code> (IPv4) or <code>ip6.arpa</code> (IPv6). This page turns a prefix into its reverse zone: the zone apex, the RFC 2317 CNAMEs a classless delegation needs, and the PTR owner name for every address in the range. Everything runs locally — no lookups, uploads or accounts.</p>
+
+<form id="rdns-form" novalidate>
+<section class="panel" aria-labelledby="input-title">
+<h2 id="input-title">Prefix</h2>
+<div class="grid">
+<div class="field"><label for="prefix-input">IPv4 or IPv6 prefix</label><input id="prefix-input" type="text" value="192.0.2.0/24" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="prefix-hint"><p class="hint" id="prefix-hint">For example <code>192.0.2.0/24</code>, <code>192.0.2.64/26</code> or <code>2001:db8::/32</code>.</p></div>
+<div class="field"><label for="target-input">PTR target hostname</label><input id="target-input" type="text" value="host.example.com." autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="target-hint"><p class="hint" id="target-hint">The name each record points to. A missing trailing dot is added, so the name is not relative to the zone.</p></div>
+</div>
+<div class="actions"><button id="build" class="primary" type="submit">Build records</button></div>
+<p id="rdns-status" class="status info" role="status" aria-live="polite"></p>
+</section>
+
+<section class="panel" aria-labelledby="result-title">
+<h2 id="result-title">Result <span>reverse zone and records</span></h2>
+<dl class="results">
+<div><dt>Zone apex</dt><dd><output id="zone-out" for="prefix-input">—</output><span class="sub" id="zone-sub"></span></dd></div>
+<div><dt>Delegation</dt><dd><output id="delegation-out" for="prefix-input">—</output></dd></div>
+<div><dt>Names covered</dt><dd><output id="count-out" for="prefix-input">—</output><span class="sub" id="count-sub"></span></dd></div>
+<div><dt>Records in the block</dt><dd><output id="records-out" for="prefix-input target-input">—</output><span class="sub" id="records-sub"></span></dd></div>
+</dl>
+<div class="copy-row"><button id="copy-zone" type="button">Copy records</button></div>
+<pre id="zone-text" class="zone" tabindex="0" aria-label="Generated reverse DNS records"></pre>
+<p class="detail" id="rdns-detail"></p>
+</section>
+</form>
+
+<section class="panel explain" aria-labelledby="how-title">
+<h2 id="how-title">How the reverse zone is built</h2>
+<p>An IPv4 reverse name writes the address octets backwards and adds <code>in-addr.arpa</code>: <code>192.0.2.10</code> becomes <code>10.2.0.192.in-addr.arpa.</code>. Reverse zones are normally delegated on a /24 boundary, so <code>192.0.2.0/24</code> owns <code>2.0.192.in-addr.arpa.</code> and the last octet is the relative owner name inside it.</p>
+<ul>
+<li>A prefix longer than /24 covers only part of that zone. RFC 2317 handles it by delegating the range to its own zone — <code>192.0.2.64/26</code> becomes <code>64-127.2.0.192.in-addr.arpa.</code> — and adding one CNAME in the parent zone for each address, so resolvers follow the delegation.</li>
+<li>A prefix shorter than /24 spans several /24 zones; the page lists the zones it covers instead of inventing a single apex.</li>
+<li>An IPv6 reverse name uses one hex digit per label, written backwards: <code>2001:db8::/32</code> owns <code>8.b.d.0.1.0.0.2.ip6.arpa.</code>. Zones are delegated on nibble boundaries, so a prefix that is not a multiple of 4 is rounded down and the status line says so.</li>
+<li>PTR lines are listed while the block holds at most 256 addresses. Larger blocks show the apex only, because the record set would be far too long to be useful here.</li>
+<li>The page emits no SOA or NS records: those need a primary server, a serial and a contact that only you can choose. It also does no lookup and no DNSSEC signing, so the records are a starting point for your zone file, not a working zone on their own.</li>
+</ul>
+</section>
+</div></main><script src="/assets/tools.js"></script><script src="/assets/app.js"></script>
+<script>
+/* rdns-core:start */
+const ReverseDnsCore=(()=>{'use strict';
+const V4_ZONE='in-addr.arpa.';
+const V6_ZONE='ip6.arpa.';
+const MAX_ZONE_LINES=64;
+const MAX_PTR_LINES=256;
+function parseOctets(text){
+  const parts=text.split('.');
+  if(parts.length!==4)throw Error(`"${text}" is not a four-part dotted-quad IPv4 address.`);
+  const octets=parts.map(part=>{
+    if(!/^\d{1,3}$/.test(part))throw Error(`"${text}" is not a four-part dotted-quad IPv4 address.`);
+    const value=Number(part);
+    if(value>255)throw Error(`"${text}" has an octet above 255.`);
+    return value;
+  });
+  return octets;
+}
+function toHextets(token){
+  if(token==='')throw Error('An empty group is only allowed through "::".');
+  if(token.includes('.')){
+    const octets=parseOctets(token);
+    return [(octets[0]<<8)|octets[1],(octets[2]<<8)|octets[3]];
+  }
+  if(!/^[0-9a-fA-F]{1,4}$/.test(token))throw Error(`"${token}" is not a hex group of 1 to 4 digits.`);
+  return [parseInt(token,16)];
+}
+function parseHexGroups(text){
+  if(text.includes('%'))throw Error('Remove the zone index (% and interface name); a prefix has no zone.');
+  if(text.includes(':::'))throw Error('An IPv6 address may contain "::" only once.');
+  const halves=text.split('::');
+  if(halves.length>2)throw Error('An IPv6 address may contain "::" only once.');
+  const collect=half=>{
+    if(half==='')return [];
+    const out=[];
+    for(const token of half.split(':'))out.push(...toHextets(token));
+    return out;
+  };
+  const head=collect(halves[0]);
+  if(halves.length===1){
+    if(head.length!==8)throw Error(`An IPv6 address without "::" needs eight groups; this one has ${head.length}.`);
+    return head;
+  }
+  const tail=collect(halves[1]);
+  const zeros=8-head.length-tail.length;
+  if(zeros<0)throw Error('Too many groups for an IPv6 address (more than eight).');
+  if(zeros===0)throw Error('"::" must stand for at least one group of zeros.');
+  return head.concat(new Array(zeros).fill(0),tail);
+}
+function hexOf(groups){
+  return groups.map(group=>group.toString(16).padStart(4,'0')).join('');
+}
+function reverseZoneV4(net){
+  return `${(net>>>8)&255}.${(net>>>16)&255}.${(net>>>24)&255}.${V4_ZONE}`;
+}
+function reverseNameV4(net){
+  return `${net&255}.${(net>>>8)&255}.${(net>>>16)&255}.${(net>>>24)&255}.${V4_ZONE}`;
+}
+function reverseV6(hex,nibbleCount){
+  if(nibbleCount===0)return V6_ZONE;
+  const labels=[];
+  for(let i=nibbleCount-1;i>=0;i--)labels.push(hex[i]);
+  return labels.join('.')+'.'+V6_ZONE;
+}
+function groupDigits(value){
+  return String(value).replace(/\B(?=(\d{3})+(?!\d))/g,',');
+}
+function normalizeTarget(text){
+  const source=String(text==null?'':text).trim();
+  if(source==='')throw Error('Enter the hostname each PTR record should point to, for example host.example.com.');
+  if(/\s/.test(source))throw Error('The PTR target cannot contain spaces.');
+  const name=source.endsWith('.')?source:source+'.';
+  if(name.length>254)throw Error('The PTR target is longer than a DNS name may be: 253 characters plus the trailing dot.');
+  for(const label of name.slice(0,-1).split('.')){
+    if(label.length===0)throw Error('The PTR target has an empty label: remove the doubled dot.');
+    if(label.length>63)throw Error(`The label "${label}" is longer than the 63-character DNS limit.`);
+    if(!/^[A-Za-z0-9_](?:[A-Za-z0-9_-]*[A-Za-z0-9_])?$/.test(label))throw Error(`"${label}" is not a valid DNS label: use letters, digits, hyphens and underscores, and do not start or end with a hyphen.`);
+  }
+  return name;
+}
+function parsePrefix(text){
+  const source=String(text==null?'':text).trim();
+  if(source==='')throw Error('Enter a prefix, for example 192.0.2.0/24.');
+  const slash=source.indexOf('/');
+  if(slash<0)throw Error('Add a prefix length, for example 192.0.2.0/24.');
+  const address=source.slice(0,slash).trim();
+  const lengthText=source.slice(slash+1).trim();
+  if(address==='')throw Error('The prefix has no address before the "/".');
+  if(!/^\d{1,3}$/.test(lengthText))throw Error('The prefix length after "/" must be a whole number.');
+  const length=Number(lengthText);
+  const ipv6=address.includes(':');
+  const max=ipv6?128:32;
+  if(length>max)throw Error(`An IPv${ipv6?6:4} prefix length must be between 0 and ${max}; /${length} was given.`);
+  if(!ipv6){
+    const octets=parseOctets(address);
+    const addr=((octets[0]<<24)|(octets[1]<<16)|(octets[2]<<8)|octets[3])>>>0;
+    const mask=length===0?0:((0xFFFFFFFF<<(32-length))>>>0);
+    const net=(addr&mask)>>>0;
+    return {family:4,length,addr,net,mask,cleared:((addr&(~mask>>>0))>>>0)!==0,octets};
+  }
+  const groups=parseHexGroups(address);
+  const effective=Math.floor(length/4)*4;
+  const raw=hexOf(groups);
+  const kept=effective===0?'0'.repeat(32):raw.slice(0,effective/4)+'0'.repeat(32-effective/4);
+  const netGroups=[];
+  for(let i=0;i<8;i++)netGroups.push(parseInt(kept.slice(i*4,i*4+4),16)||0);
+  return {family:6,length,effective,hex:kept,groups:netGroups,rounded:length%4!==0};
+}
+function pow2Text(bits){
+  return groupDigits((1n<<BigInt(bits)).toString());
+}
+function build(prefixText,targetText){
+  const target=normalizeTarget(targetText);
+  const prefix=parsePrefix(prefixText);
+  const label=String(prefixText==null?'':prefixText).trim();
+  const result={family:prefix.family,prefix:label,target,mode:'zone',zone:null,parentZone:null,childZone:null,zones:[],zoneCount:0,addressCount:0,addressCountText:'',ptrCount:0,cnameCount:0,shownCount:0,notes:[],lines:[]};
+  const header='; Reverse DNS records for '+label;
+  if(prefix.family===4){
+    const octetsOf=net=>[(net>>>24)&255,(net>>>16)&255,(net>>>8)&255,net&255].join('.');
+    const bits=32-prefix.length;
+    result.addressCount=2**bits;
+    result.addressCountText=pow2Text(bits);
+    if(prefix.cleared)result.notes.push(`Host bits were cleared: ${prefix.octets.join('.')} is inside ${octetsOf(prefix.net)}/${prefix.length}.`);
+    if(prefix.length<24){
+      const total=2**(24-prefix.length);
+      const base=Math.floor(prefix.net/256);
+      result.mode='zones';
+      result.zoneCount=total;
+      const shown=Math.min(total,MAX_ZONE_LINES);
+      for(let i=0;i<shown;i++)result.zones.push(reverseZoneV4(((base+i)*256)>>>0));
+      result.shownCount=shown;
+      result.zone=result.zones[0];
+      result.lines.push(`; ${label} covers ${groupDigits(total)} reverse zone${total===1?'':'s'}, one per /24`);
+      result.lines=result.lines.concat(result.zones);
+      if(shown<total)result.lines.push(`; ... and ${groupDigits(total-shown)} more`);
+      return result;
+    }
+    if(prefix.length===24){
+      result.zone=reverseZoneV4(prefix.net);
+      result.ptrCount=256;
+      result.shownCount=256;
+      result.lines.push(header,'; One /24 reverse zone','; PTR target: '+target,"; replace the target with each address's own name",'');
+      result.lines.push('$ORIGIN '+result.zone);
+      for(let i=0;i<256;i++)result.lines.push(`${i} IN PTR ${target}`);
+      return result;
+    }
+    if(prefix.length===32){
+      const o=[(prefix.net>>>24)&255,(prefix.net>>>16)&255,(prefix.net>>>8)&255,prefix.net&255];
+      result.mode='single';
+      result.zone=reverseNameV4(prefix.net);
+      result.parentZone=reverseZoneV4((prefix.net&0xFFFFFF00)>>>0);
+      result.ptrCount=1;
+      result.shownCount=1;
+      result.lines.push(header,'; Single address: the full reverse name is the owner','; PTR target: '+target,'');
+      result.lines.push('$ORIGIN '+result.zone,'@ IN PTR '+target);
+      return result;
+    }
+    const count=2**bits;
+    const start=prefix.net&255;
+    const end=start+count-1;
+    result.mode='classless';
+    result.parentZone=reverseZoneV4((prefix.net&0xFFFFFF00)>>>0);
+    result.childZone=`${start}-${end}.${result.parentZone}`;
+    result.zone=result.childZone;
+    result.ptrCount=count;
+    result.cnameCount=count;
+    result.shownCount=count;
+    result.lines.push(header,'; RFC 2317 classless delegation: the parent zone points each owner at the child zone','; PTR target: '+target,'');
+    result.lines.push('$ORIGIN '+result.parentZone);
+    for(let i=start;i<=end;i++)result.lines.push(`${i} CNAME ${i}.${result.childZone}`);
+    result.lines.push('','$ORIGIN '+result.childZone);
+    for(let i=start;i<=end;i++)result.lines.push(`${i} IN PTR ${target}`);
+    return result;
+  }
+  const nibbleCount=prefix.effective/4;
+  const hostBits=128-prefix.effective;
+  result.zone=reverseV6(prefix.hex,nibbleCount);
+  result.addressCount=hostBits<=52?2**hostBits:Infinity;
+  result.addressCountText=pow2Text(hostBits);
+  if(prefix.rounded)result.notes.push(`A prefix must end on a nibble boundary: /${prefix.length} was rounded down to /${prefix.effective}, so the zone covers ${result.addressCountText} addresses.`);
+  result.lines.push(header);
+  if(hostBits<=8){
+    const count=2**hostBits;
+    result.ptrCount=count;
+    result.shownCount=count;
+    result.lines.push('; PTR target: '+target,'');
+    result.lines.push('$ORIGIN '+result.zone);
+    const base=BigInt('0x'+prefix.hex);
+    const remaining=32-nibbleCount;
+    for(let i=0;i<count;i++){
+      const full=(base+BigInt(i)).toString(16).padStart(32,'0');
+      let owner='@';
+      if(remaining>0){
+        const labels=[];
+        for(let j=full.length-1;j>=full.length-remaining;j--)labels.push(full[j]);
+        owner=labels.join('.');
+      }
+      result.lines.push(`${owner} IN PTR ${target}`);
+    }
+  }else{
+    result.lines.push(`; ${result.addressCountText} names in this zone; the PTR records are not listed`,'','$ORIGIN '+result.zone);
+  }
+  return result;
+}
+return{parseOctets,parseHexGroups,normalizeTarget,parsePrefix,reverseZoneV4,reverseNameV4,reverseV6,build,groupDigits};
+})();
+/* rdns-core:end */
+(()=>{'use strict';
+const $=id=>document.getElementById(id);
+const prefixInput=$('prefix-input'),targetInput=$('target-input'),status=$('rdns-status');
+const zoneOut=$('zone-out'),zoneSub=$('zone-sub'),delegationOut=$('delegation-out');
+const countOut=$('count-out'),countSub=$('count-sub'),recordsOut=$('records-out'),recordsSub=$('records-sub');
+const zoneText=$('zone-text'),detail=$('rdns-detail');
+let latest=null;
+function setStatus(message,kind){status.textContent=message;status.className='status '+(kind||'info');}
+function clear(){
+  latest=null;
+  zoneOut.textContent='—';zoneSub.textContent='';delegationOut.textContent='—';
+  countOut.textContent='—';countSub.textContent='';recordsOut.textContent='—';recordsSub.textContent='';
+  zoneText.textContent='';detail.textContent='';
+}
+function render(announce){
+  try{
+    const result=ReverseDnsCore.build(prefixInput.value,targetInput.value);
+    latest=result;
+    zoneOut.textContent=result.zone;
+    if(result.mode==='zones'){
+      zoneSub.textContent=`first of ${ReverseDnsCore.groupDigits(result.zoneCount)} reverse zones`;
+      delegationOut.textContent='One /24 zone per covered network';
+    }else if(result.mode==='classless'){
+      zoneSub.textContent='RFC 2317 child zone · parent '+result.parentZone;
+      delegationOut.textContent=`Child delegation ${result.childZone}`;
+    }else if(result.mode==='single'){
+      zoneSub.textContent='single host name';
+      delegationOut.textContent='No delegation needed: one owner name';
+    }else{
+      zoneSub.textContent=result.family===4?'one /24 reverse zone':'nibble reverse zone';
+      delegationOut.textContent=result.family===4?'Delegated at the /24 boundary':'Delegated at the nibble boundary';
+    }
+    countOut.textContent=result.addressCountText;
+    countSub.textContent=result.mode==='zones'?`addresses across ${ReverseDnsCore.groupDigits(result.zoneCount)} zones`:'addresses (one reverse name each)';
+    const parts=[];
+    parts.push(`${ReverseDnsCore.groupDigits(result.ptrCount)} PTR`);
+    if(result.cnameCount)parts.push(`${ReverseDnsCore.groupDigits(result.cnameCount)} CNAME`);
+    recordsOut.textContent=result.shownCount?parts.join(' + '):'none listed';
+    recordsSub.textContent=result.mode==='zones'?`${ReverseDnsCore.groupDigits(result.shownCount)} zone names shown`:(result.shownCount?`all names in the block`:'the block is too large to list');
+    zoneText.textContent=result.lines.join('\n');
+    detail.textContent=result.notes.concat([`PTR target ${result.target}`]).join(' · ');
+    setStatus(result.zoneCount&&result.zoneCount>result.shownCount?`Built ${ReverseDnsCore.groupDigits(result.zoneCount)} zone names, showing the first ${result.shownCount}.`:`Records built for ${result.prefix}.`,'ok');
+  }catch(error){
+    clear();
+    setStatus(error.message||String(error),'error');
+    if(announce)detail.textContent='';
+  }
+}
+async function copyZone(button){
+  if(!latest)return;
+  const original=button.textContent;
+  try{
+    await navigator.clipboard.writeText(zoneText.textContent);
+    button.textContent='Copied';
+    setTimeout(()=>{button.textContent=original;},1200);
+  }catch(error){
+    setStatus('Clipboard access was denied; select the record block and copy it manually.','error');
+  }
+}
+$('rdns-form').addEventListener('submit',event=>{event.preventDefault();render(true);});
+prefixInput.addEventListener('input',()=>render(false));
+targetInput.addEventListener('input',()=>render(false));
+$('copy-zone').addEventListener('click',()=>copyZone($('copy-zone')));
+render(false);
+})();
+</script></body></html>

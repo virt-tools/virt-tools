@@ -169,7 +169,7 @@ assert.ok(record.testCases.length >= 20, 'the catalog carries the test cases');
 assert.equal(catalog.tools.filter((tool) => tool.slug === slug).length, 1, 'the slug is unique');
 assert.equal(catalog.tools.filter((tool) => tool.name === record.name).length, 1, 'the name is unique');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Food').length, 54, 'Food count');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2192, 'public tools');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2193, 'public tools');
 
 // ---- Replay every case stored in the record.
 for (const item of record.testCases) {

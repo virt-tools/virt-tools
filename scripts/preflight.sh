@@ -460,6 +460,7 @@ node tests/solfege_converter.test.cjs
 node tests/teleprompter_scroll_planner.test.cjs
 node tests/growing_degree_day_accumulator.test.cjs
 node tests/webauthn_authenticator_data.test.cjs
+node tests/reverse_dns_zone_builder.test.cjs
 
 python3 -m unittest discover -s tests -p 'test_*.py'
 
