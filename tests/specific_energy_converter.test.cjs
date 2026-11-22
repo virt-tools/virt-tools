@@ -230,9 +230,9 @@ for (const tool of catalog.tools) {
 for (const key of [record.slug, record.name].concat(record.aliases)) {
   assert.deepEqual(Array.from(keyOwners.get(String(key).toLowerCase())), [slug], 'catalog key is unique: ' + key);
 }
-assert.equal(catalog.tools.length, 2443, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2182, 'public total');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Converters').length, 53, 'Converters count');
+assert.equal(catalog.tools.length, 2444, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2183, 'public total');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Converters').length, 54, 'Converters count');
 
 // ---- Replay every catalog case.
 const pick = (result, key) => {

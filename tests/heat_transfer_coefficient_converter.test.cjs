@@ -274,7 +274,7 @@ for (const tag of ['heat-transfer', 'u-value', 'r-value', 'unit-conversion']) {
 }
 assert.ok(!catalog.tools.some((tool) => tool.slug !== slug && /(?:^|-)(?:heat-transfer|u-value)(?:-|$)/.test(tool.slug)),
   'no other heat transfer slug');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Converters').length, 53, 'Converters count');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Converters').length, 54, 'Converters count');
 
 // ---- Page contract: shared assets, labelled controls, no storage or network.
 const markupIds = new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1]));
