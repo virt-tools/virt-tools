@@ -213,8 +213,8 @@ const pageDirs = fs.readdirSync(path.join(root, 'frontend/tools'), { withFileTyp
   .filter((entry) => entry.isDirectory()).length;
 assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageDirs,
   'every listed tool record has a page');
-assert.equal(catalog.tools.length, 2454, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2193, 'public tools');
+assert.equal(catalog.tools.length, 2455, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2194, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Geography').length, 54, 'Geography count');
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record missing');

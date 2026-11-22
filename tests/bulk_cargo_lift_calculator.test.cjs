@@ -239,8 +239,8 @@ for (const testCase of record.testCases) {
 }
 
 // The catalog keeps growing and this tool is one of its public pages.
-assert.equal(catalog.tools.length, 2454, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2193, 'public tools');
+assert.equal(catalog.tools.length, 2455, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2194, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === record.category).length, 54, 'category count');
 
 console.log('bulk-cargo-lift-calculator: all checks passed (' + record.testCases.length + ' catalog cases, '
