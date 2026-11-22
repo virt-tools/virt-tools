@@ -160,8 +160,8 @@ const pageDirs = fs.readdirSync(path.join(root, 'frontend', 'tools'), { withFile
   .filter((entry) => entry.isDirectory()).length;
 assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageDirs,
   'every listed tool record has a page');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2195, 'public tools');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Sports & Outdoors').length, 54, 'Sports count');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2196, 'public tools');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Sports & Outdoors').length, 55, 'Sports count');
 
 // Every recorded case replays exactly.
 assert.equal(record.testCases.length, 12, 'recorded cases');

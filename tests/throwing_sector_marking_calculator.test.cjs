@@ -236,9 +236,9 @@ assert.equal(new Set(record.tags).size, record.tags.length, 'tags are internally
 for (const tag of ['athletics', 'throws', 'landing-sector', 'field-marking']) {
   assert.ok(record.tags.includes(tag), 'new tag present: ' + tag);
 }
-assert.equal(catalog.tools.length, 2456, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2195, 'public tools');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Sports & Outdoors').length, 54, 'Sports count');
+assert.equal(catalog.tools.length, 2457, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2196, 'public tools');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Sports & Outdoors').length, 55, 'Sports count');
 
 // ---- Page contract: shared assets, labelled controls, no storage or network.
 const markupIds = [...html.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1]);

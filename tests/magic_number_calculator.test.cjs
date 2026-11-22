@@ -281,7 +281,7 @@ assert.equal(new Set(record.tags).size, record.tags.length, 'tags are unique');
 assert.equal(new Set(record.aliases).size, record.aliases.length, 'aliases are unique');
 assert.ok(record.tags.includes('magic-number'));
 assert.ok(record.aliases.includes('Games Behind Calculator'));
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Sports & Outdoors').length, 54, 'Sports & Outdoors count');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Sports & Outdoors').length, 55, 'Sports & Outdoors count');
 assert.equal(catalog.tools.filter((tool) => tool.slug === slug).length, 1, 'no rival record');
 for (const tool of catalog.tools) {
   if (tool.slug === slug) continue;
