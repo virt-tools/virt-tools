@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Git Bisect Step Planner &mdash; Virtual Tools</title>
+<meta name="description" content="Turn a git range into a bisect plan: how many good/bad tests it takes, which commit to test first, how the range halves after each answer and the commands to start and reset the session.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.field{display:flex;flex-direction:column;gap:6px;margin:0}
+input.num,textarea.lines{box-sizing:border-box;width:100%;padding:10px 12px;border-radius:8px;
+  border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);color:var(--text,#e6e6e6);
+  font:inherit;font-size:16px;line-height:1.3;outline:none;max-width:none}
+input.num{min-height:46px;font-family:ui-monospace,monospace}
+textarea.lines{min-height:132px;resize:vertical;font-family:ui-monospace,monospace;font-size:14px;line-height:1.5}
+input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent,#6ea8fe);outline-offset:1px;box-shadow:none}
+input::placeholder,textarea::placeholder{color:var(--text-dim,#9aa3b2)}
+.hint{color:var(--text-dim,#9aa3b2);font-size:12.5px;margin:10px 0 0;line-height:1.45}
+.hint code{font-family:ui-monospace,monospace;font-size:12.5px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 0}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.err{color:var(--bad,#f87171);font-size:13px;margin:10px 0 0;min-height:1.2em}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:16px 0 0}
+.out .label{text-align:center;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-dim,#9aa3b2)}
+.out .big{font-size:clamp(1.2rem,6vw,1.9rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:2px 0 4px;overflow-wrap:anywhere;line-height:1.3}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:6px 0 0;line-height:1.45;overflow-wrap:anywhere}
+.ref{display:table;width:100%;border-collapse:collapse;margin:18px 0 0;font-size:13.5px;table-layout:fixed}
+.ref[hidden]{display:none}
+.ref caption{caption-side:top;text-align:left;color:var(--text-dim,#9aa3b2);font-size:12.5px;padding:0 0 6px}
+.ref th,.ref td{border-bottom:1px solid var(--border,#2a2f3a);padding:7px 8px;text-align:left;vertical-align:top}
+.ref thead th{color:var(--text-dim,#9aa3b2);font-weight:600;font-size:12px;letter-spacing:.03em}
+.ref thead th.num,.ref td.num{text-align:right}
+.ref td.num{font-family:ui-monospace,monospace;white-space:nowrap}
+.ref col.step{width:48px}
+.ref col.edge{width:64px}
+.ref td.pick{overflow-wrap:anywhere}
+.ref td.pick code{font-family:ui-monospace,monospace;font-size:13px}
+.cmd{margin:0;padding:12px 14px;border-radius:8px;border:1px solid var(--border,#2a2f3a);
+  background:var(--bg,#0f1218);color:var(--text,#e6e6e6);overflow-x:auto;
+  font-family:ui-monospace,monospace;font-size:13px;line-height:1.7}
+.note{color:var(--text-dim,#9aa3b2);font-size:12.5px;line-height:1.55;margin:18px 0 0}
+@media (max-width:520px){.ref th,.ref td{padding:6px 4px;font-size:12px}.ref thead th{font-size:11px}
+  .ref col.step{width:34px}.ref col.edge{width:54px}.ref td.pick code{font-size:12px}}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<h1>Git Bisect Step Planner</h1>
+<p>Work out what a <code>git bisect</code> over a range of commits will cost: the maximum number of good/bad tests, the commit to test first and the range left after each answer.</p>
+</div>
+
+<div class="panel">
+<form id="gbp-form" novalidate>
+<h2 style="font-size:1rem;margin:0 0 12px">Range to search</h2>
+<div class="field">
+<label for="count">Commits in the range</label>
+<input class="num" id="count" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" value="100" placeholder="100" aria-describedby="count-hint">
+</div>
+<p class="hint" id="count-hint">The number of candidates, from the first commit after the good revision up to and including the bad one: <code>git rev-list --count good..bad</code>. Used only when the commit list below is empty.</p>
+<div class="field" style="margin-top:14px">
+<label for="commits">Commit list (optional, oldest first)</label>
+<textarea class="lines" id="commits" rows="6" spellcheck="false" autocomplete="off" placeholder="1a2b3c4 Add the cache layer&#10;5d6e7f8 Cache the lookups" aria-describedby="commits-hint"></textarea>
+</div>
+<p class="hint" id="commits-hint">Paste <code>git log --reverse --oneline good..bad</code>, one commit per line. Blank lines and a leading <code>*</code> from <code>git log --graph</code> are ignored. A commit list replaces the count whenever it holds at least one commit.</p>
+<p class="err" id="gbp-err" role="alert" aria-live="polite"></p>
+<div class="actions">
+<button type="submit">Plan the bisect</button>
+</div>
+</form>
+</div>
+
+<div class="out" id="gbp-out" aria-live="polite" aria-atomic="true"></div>
+
+<table class="ref" id="gbp-plan">
+<caption>Worst-case test order, keeping the older half after each bad result</caption>
+<colgroup><col class="step"><col><col class="edge"><col class="edge"></colgroup>
+<thead>
+<tr><th scope="col">Test</th><th scope="col">Commit to test</th><th scope="col" class="num">Left if good</th><th scope="col" class="num">Left if bad</th></tr>
+</thead>
+<tbody id="gbp-plan-body"></tbody>
+</table>
+
+<div class="panel" id="gbp-cmd-panel" style="margin-top:18px">
+<h2 style="font-size:1rem;margin:0 0 10px">Start the session</h2>
+<pre class="cmd" id="gbp-cmd"></pre>
+<p class="hint" id="gbp-cmd-hint">After each test mark the checked-out commit with <code>git bisect good</code> or <code>git bisect bad</code>; git checks out the next candidate, or <code>git bisect reset</code> ends the session.</p>
+</div>
+
+<p class="note">git bisect is a binary search over the commits between a known-good and a known-bad revision, so every test halves the candidates: an N-commit range is narrowed to a single commit in ceil(log2 N) tests, the smallest power of two that covers N. That is 7 tests for 100 commits, 10 for 1,000 and 20 for a million, where testing commit by commit would take up to N &minus; 1. Each test splits the range into a lower and an upper half; a good answer moves the lower bound past the tested commit and a bad answer lowers the upper bound to it, so either way at most half the candidates remain. With an even number of candidates git may test either of the two middle commits; this plan takes the lower one and follows the older half, the branch that uses every test, and the &ldquo;Left if good&rdquo; and &ldquo;Left if bad&rdquo; columns show the candidates left after each answer. A commit skipped with <code>git bisect skip</code> costs an extra test because git has to pick another one, and merged history still bisects correctly although the count covers every commit in the range rather than a straight line. In the commands, <code>&lt;good-rev&gt;</code> is the last revision known to work &mdash; one commit before the oldest commit you listed &mdash; and the session ends with <code>git bisect reset</code> or runs unattended with <code>git bisect run &lt;cmd&gt;</code>, which marks a failing command bad and skips the commit on exit code 125. Everything is worked out in your browser; nothing is sent or stored.</p>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* gbp-core:start */
+var GitBisectCore = (function(){
+  "use strict";
+  var MIN_COMMITS = 1;
+  var MAX_COMMITS = 1000000;
+  var MAX_LINES = 5000;
+  var MAX_LINE_LENGTH = 200;
+  var COUNT_PATTERN = /^[+-]?\d+$/;
+  var HASH_SUBJECT = /^([0-9a-fA-F]{4,40})\s+(\S.*)$/;
+  var HASH_ONLY = /^([0-9a-fA-F]{4,40})$/;
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function parseCount(raw){
+    var text = String(raw == null ? "" : raw).trim().replace(/\u2212/g, "-");
+    if (!text) fail("Enter the number of commits in the range, such as 100.");
+    if (!COUNT_PATTERN.test(text)) fail("Enter the number of commits as a whole number, such as 100.");
+    var value = Number(text);
+    if (!isFinite(value) || Math.floor(value) !== value){
+      fail("Enter the number of commits as a whole number, such as 100.");
+    }
+    if (value < MIN_COMMITS || value > MAX_COMMITS) fail("Enter between 1 and 1,000,000 commits.");
+    return value;
+  }
+
+  function parseList(raw){
+    var text = String(raw == null ? "" : raw);
+    if (!text.trim()) return [];
+    var lines = text.split(/\r?\n/);
+    var commits = [];
+    for (var i = 0; i < lines.length; i++){
+      var line = lines[i].trim().replace(/^\*\s*/, "").trim();
+      if (!line) continue;
+      if (line.length > MAX_LINE_LENGTH){
+        fail("Line " + (i + 1) + " is longer than 200 characters; paste one `git log --oneline` line per commit.");
+      }
+      commits.push(line);
+      if (commits.length > MAX_LINES){
+        fail("Paste at most 5,000 commits, or use the count instead of the list.");
+      }
+    }
+    return commits;
+  }
+
+  function describe(line, index, total){
+    var withSubject = HASH_SUBJECT.exec(line);
+    if (withSubject) return { short: withSubject[1], subject: withSubject[2] };
+    var hashOnly = HASH_ONLY.exec(line);
+    if (hashOnly) return { short: hashOnly[1], subject: "" };
+    return { short: "commit " + (index + 1), subject: line };
+  }
+
+  function worstCaseSteps(count){
+    var steps = 0;
+    var covered = 1;
+    while (covered < count){
+      covered *= 2;
+      steps++;
+    }
+    return steps;
+  }
+
+  function calculate(input){
+    var source = input || {};
+    var commits = parseList(source.commits);
+    var total = commits.length
+      ? commits.length
+      : parseCount(source.count == null ? "100" : source.count);
+
+    var rows = [];
+    var lo = 0;
+    var hi = total - 1;
+    while (lo < hi){
+      var before = hi - lo + 1;
+      var index = lo + Math.floor((before - 1) / 2);
+      var parts = commits.length ? describe(commits[index], index, total)
+        : { short: "commit " + (index + 1) + " of " + total, subject: "" };
+      rows.push({
+        step: rows.length + 1,
+        index: index,
+        before: before,
+        good: hi - index,
+        bad: index - lo + 1,
+        label: commits.length ? commits[index] : "",
+        short: parts.short,
+        subject: parts.subject
+      });
+      hi = index;
+    }
+
+    var steps = rows.length;
+    var linear = total - 1;
+    var summary;
+    if (steps === 0){
+      summary = "The range holds one commit, so it is the first bad commit and nothing has to be tested.";
+    } else if (steps === 1){
+      summary = "One test splits the " + total + " candidates; a commit-by-commit walk would take up to " + linear + ".";
+    } else {
+      summary = "From " + total + " candidates down to one, where a commit-by-commit walk would take up to " + linear + " tests.";
+    }
+
+    return {
+      commits: total,
+      steps: steps,
+      linear: linear,
+      rows: rows,
+      headline: steps === 0 ? "No tests" : steps + (steps === 1 ? " test" : " tests"),
+      summary: summary,
+      basis: commits.length
+        ? "Following the " + total + " commits you pasted, oldest first."
+        : "Counted over " + total + " commits in the range.",
+      commands: [
+        "git bisect start",
+        "git bisect bad <bad-rev>",
+        "git bisect good <good-rev>",
+        "git bisect reset"
+      ]
+    };
+  }
+
+  return {
+    MIN_COMMITS: MIN_COMMITS,
+    MAX_COMMITS: MAX_COMMITS,
+    MAX_LINES: MAX_LINES,
+    MAX_LINE_LENGTH: MAX_LINE_LENGTH,
+    worstCaseSteps: worstCaseSteps,
+    calculate: calculate
+  };
+})();
+/* gbp-core:end */
+(function(){
+  "use strict";
+  var C = GitBisectCore;
+  var els = {
+    form: document.getElementById("gbp-form"),
+    count: document.getElementById("count"),
+    commits: document.getElementById("commits"),
+    err: document.getElementById("gbp-err"),
+    out: document.getElementById("gbp-out"),
+    plan: document.getElementById("gbp-plan"),
+    planBody: document.getElementById("gbp-plan-body"),
+    cmd: document.getElementById("gbp-cmd")
+  };
+
+  function line(text, className){
+    var node = document.createElement("div");
+    node.className = className || "sub";
+    node.textContent = text;
+    return node;
+  }
+
+  function placeholder(message){
+    els.out.textContent = "";
+    var node = line(message);
+    node.style.padding = "18px 0 6px";
+    els.out.appendChild(node);
+    els.planBody.textContent = "";
+    els.plan.hidden = true;
+    els.cmd.textContent = "";
+    els.cmd.parentNode.hidden = true;
+  }
+
+  function commitCell(row){
+    var cell = document.createElement("td");
+    cell.className = "pick";
+    var id = document.createElement("code");
+    id.textContent = row.short;
+    cell.appendChild(id);
+    if (row.subject){
+      cell.appendChild(document.createTextNode(" " + row.subject));
+    }
+    return cell;
+  }
+
+  function render(result){
+    els.out.textContent = "";
+    els.out.appendChild(line("Worst case", "label"));
+    els.out.appendChild(line(result.headline, "big"));
+    els.out.appendChild(line(result.summary));
+    if (result.steps > 0) els.out.appendChild(line(result.basis));
+
+    els.planBody.textContent = "";
+    result.rows.forEach(function(row){
+      var tr = document.createElement("tr");
+      var step = document.createElement("td");
+      step.className = "num";
+      step.textContent = String(row.step);
+      tr.appendChild(step);
+      tr.appendChild(commitCell(row));
+      [row.good, row.bad].forEach(function(value){
+        var cell = document.createElement("td");
+        cell.className = "num";
+        cell.textContent = String(value);
+        tr.appendChild(cell);
+      });
+      els.planBody.appendChild(tr);
+    });
+    els.plan.hidden = result.rows.length === 0;
+
+    els.cmd.textContent = result.commands.join("\n");
+    els.cmd.parentNode.hidden = false;
+  }
+
+  function calculateWith(announce){
+    var result;
+    try {
+      result = C.calculate({
+        count: els.count.value,
+        commits: els.commits.value
+      });
+    } catch (error){
+      els.err.textContent = announce ? error.message : "";
+      placeholder("Enter the range to plan a git bisect over it.");
+      return;
+    }
+    els.err.textContent = "";
+    render(result);
+  }
+
+  els.form.addEventListener("submit", function(event){
+    event.preventDefault();
+    calculateWith(true);
+  });
+  [els.count, els.commits].forEach(function(input){
+    input.addEventListener("input", function(){ calculateWith(false); });
+  });
+
+  calculateWith(false);
+})();
+</script>
+</body>
+</html>

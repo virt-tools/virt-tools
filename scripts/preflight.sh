@@ -445,6 +445,7 @@ node tests/account_lockout_policy_calculator.test.cjs
 node tests/icmp_message_decoder.test.cjs
 node tests/pickleball_court_marking_calculator.test.cjs
 node tests/gitattributes_resolver.test.cjs
+node tests/git_bisect_step_planner.test.cjs
 
 node tests/roller_chain_drive_calculator.test.cjs
 node tests/branch_line_coupler_designer.test.cjs
