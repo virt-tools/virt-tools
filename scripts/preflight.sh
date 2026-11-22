@@ -452,6 +452,7 @@ node tests/mud_weight_adjustment_calculator.test.cjs
 node tests/bandsaw_blade_length_calculator.test.cjs
 node tests/water_hardness_converter.test.cjs
 node tests/srecord_inspector.test.cjs
+node tests/lamination_layer_calculator.test.cjs
 
 python3 -m unittest discover -s tests -p 'test_*.py'
 
