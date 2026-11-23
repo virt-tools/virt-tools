@@ -199,7 +199,7 @@ const pageDirs = fs.readdirSync(path.join(root, 'frontend', 'tools'), { withFile
   .filter((entry) => entry.isDirectory()).length;
 assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageDirs,
   'every listed tool record has a page');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2206, 'public tools');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2207, 'public tools');
 const entry = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(entry, 'the new record is present');
 assert.equal(entry.name, 'ISO 3166 Country Code Converter');
@@ -267,7 +267,7 @@ for (const tag of ['geography', 'country-codes', 'iso-3166', 'alpha-2', 'alpha-3
   assert.ok(entry.tags.includes(tag), 'new tag present: ' + tag);
 }
 const geography = catalog.tools.filter((tool) => tool.category === 'Geography').length;
-assert.equal(geography, 54, 'Geography count');
+assert.equal(geography, 55, 'Geography count');
 
 // ---- Page contract: labelled control, no storage or network, ASCII source.
 const markup = html.replace(/<script(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/gi, '');

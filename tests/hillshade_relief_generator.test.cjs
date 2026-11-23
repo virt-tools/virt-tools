@@ -213,9 +213,9 @@ const pageDirs = fs.readdirSync(path.join(root, 'frontend/tools'), { withFileTyp
   .filter((entry) => entry.isDirectory()).length;
 assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageDirs,
   'every listed tool record has a page');
-assert.equal(catalog.tools.length, 2467, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2206, 'public tools');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Geography').length, 54, 'Geography count');
+assert.equal(catalog.tools.length, 2468, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2207, 'public tools');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Geography').length, 55, 'Geography count');
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record missing');
 assert.equal(record.name, 'Hillshade Relief Generator');
