@@ -121,8 +121,8 @@ assert.equal(failure({ pressureAngle: 17.5 }), 'Choose a normal pressure angle o
 assert.equal(C.PRESSURE_ANGLES.join(','), '14.5,20,25');
 
 // ---- Catalog record: counts, cases and metadata.
-assert.equal(catalog.tools.length, 2466, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2205, 'public tools');
+assert.equal(catalog.tools.length, 2467, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2206, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Mechanical & Structural Engineering').length, 55,
   'Mechanical & Structural Engineering count');
 assert.equal(record.category, 'Mechanical & Structural Engineering');
