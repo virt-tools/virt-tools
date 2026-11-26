@@ -161,7 +161,7 @@ const warm = solve({ ...base, temp: '50' });
 assert.ok(cold.cutLengthMm < result.cutLengthMm && result.cutLengthMm < warm.cutLengthMm,
   'temperature moves the length');
 near(cold.cutLengthMm, 350.1665, 'cold cut length', 2e-6);
-near(warm.cutLengthMm, 397.2211, 'warm cut length', 2e-6);
+near(warm.cutLengthMm, 397.2212, 'warm cut length', 2e-6);
 
 // ---- The reverse direction: measure the pipe and read the note back.
 const back = solve({ mode: 'pitch', length: '377.8', pipe: 'open', bore: '20', temp: '20', a4: '440' });

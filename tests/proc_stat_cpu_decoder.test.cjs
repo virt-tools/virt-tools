@@ -329,8 +329,8 @@ assert.equal(new Set(record.tags).size, record.tags.length, 'tags are internally
 for (const tag of ['system', 'linux', 'cpu', 'procfs', 'utilization']) {
   assert.ok(record.tags.includes(tag), 'new tag present: ' + tag);
 }
-assert.equal(catalog.tools.length, 2472, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2211, 'public tools');
+assert.equal(catalog.tools.length, 2473, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2212, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'System').length, 55, 'System count');
 
 // ---- Page contract: shared assets, labelled controls, no storage or network.
