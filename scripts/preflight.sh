@@ -480,6 +480,7 @@ node tests/speed_ramp_retime_planner.test.cjs
 node tests/tree_watering_calculator.test.cjs
 node tests/wind_profile_calculator.test.cjs
 node tests/permissions_policy_builder.test.cjs
+node tests/ethernet_frame_decoder.test.cjs
 
 python3 -m unittest discover -s tests -p 'test_*.py'
 

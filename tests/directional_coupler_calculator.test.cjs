@@ -103,8 +103,8 @@ assert.ok(run({ p3: -40, p4: -80 }).warnings.some((w) => /above 30 dB/.test(w)))
 assert.equal(run().warnings.length, 0, 'the default measurement is plausible');
 
 // ---- Catalog record: counts, cases and metadata.
-assert.equal(catalog.tools.length, 2473, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2212, 'public tools');
+assert.equal(catalog.tools.length, 2474, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2213, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Communications Engineering').length, 55,
   'Communications Engineering count');
 assert.equal(record.category, 'Communications Engineering');
