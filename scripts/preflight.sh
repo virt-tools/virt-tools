@@ -475,6 +475,7 @@ node tests/fresh_pasta_dough_calculator.test.cjs
 node tests/persian_calendar_converter.test.cjs
 node tests/mpo_polarity_mapper.test.cjs
 node tests/geojson_map_renderer.test.cjs
+node tests/repeat_jump_unfolder.test.cjs
 
 python3 -m unittest discover -s tests -p 'test_*.py'
 

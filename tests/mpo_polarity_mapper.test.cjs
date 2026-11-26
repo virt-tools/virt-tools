@@ -22,8 +22,8 @@ const same = (actual, expected, message) =>
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
 const entry = catalog.tools.find((tool) => tool.slug === 'mpo-polarity-mapper');
 assert.ok(entry, 'catalog entry missing');
-assert.equal(catalog.tools.length, 2468, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2207, 'public tools');
+assert.equal(catalog.tools.length, 2469, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2208, 'public tools');
 assert.ok(entry.testCases.length >= 30, `expected at least 30 cases, found ${entry.testCases.length}`);
 
 // The page describes one 12-position row, six duplex pairs and four parallel lanes.
