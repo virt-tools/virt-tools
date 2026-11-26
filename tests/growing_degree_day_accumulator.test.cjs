@@ -250,8 +250,8 @@ assert.equal(new Set(record.tags).size, record.tags.length, 'tags are unique');
 assert.equal(new Set(record.aliases).size, record.aliases.length, 'aliases are unique');
 assert.ok(record.tags.includes('degree-days'));
 assert.ok(record.aliases.includes('GDD Calculator'));
-assert.equal(catalog.tools.length, 2474, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2213, 'public tools');
+assert.equal(catalog.tools.length, 2475, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2214, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Environment').length, 56, 'Environment count');
 assert.equal(catalog.tools.filter((tool) => tool.slug === slug).length, 1, 'no rival record');
 for (const tool of catalog.tools) {
