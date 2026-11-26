@@ -294,7 +294,7 @@ for (const alias of record.aliases) {
     .some((tool) => tool.name === alias || (tool.aliases || []).includes(alias));
   assert.equal(clash, false, 'alias is unique: ' + alias);
 }
-assert.equal(catalog.tools.filter((tool) => tool.category === record.category).length, 54, 'Video count');
+assert.equal(catalog.tools.filter((tool) => tool.category === record.category).length, 55, 'Video count');
 
 let goldens = 0;
 for (const testCase of record.testCases) {

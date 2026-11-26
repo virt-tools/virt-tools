@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Speed Ramp Retime Planner — Virtual Tools</title>
+<meta name="description" content="Plan a clip whose playback speed ramps from one percentage to another: output length, frame count, average speed and where the ramp lands on the output timeline.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.planner{max-width:940px;margin:0 auto}
+.settings{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,170px),1fr));gap:12px}
+.field{min-width:0}
+.field label{display:block;font-size:.8rem;font-weight:700;margin-bottom:5px}
+.field input,.field select{box-sizing:border-box;width:100%;min-height:44px;padding:9px 10px;border:1px solid var(--border);border-radius:7px;background:var(--bg);color:var(--text);font:inherit}
+.field input:focus,.field select:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.hint{display:block;margin-top:4px;color:var(--text-muted);font-size:.74rem;line-height:1.35}
+button{min-height:44px;padding:8px 13px;border:1px solid var(--border);border-radius:7px;background:var(--bg);color:var(--text);font:inherit;font-weight:700;cursor:pointer}
+button.primary{border-color:var(--accent);background:var(--accent);color:#07111f}
+button:hover:not(:disabled){filter:brightness(1.08)}
+.actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:15px}
+.error{min-height:1.4em;margin:12px 0 0;color:var(--bad,#f87171);font-size:.88rem;line-height:1.4}
+.results{margin-top:18px}
+.summary{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,2fr);gap:14px;align-items:stretch;padding:16px;border:1px solid var(--border);border-radius:10px;background:var(--bg-elev,#171a21)}
+.hero{display:flex;flex-direction:column;justify-content:center;align-items:flex-start;gap:2px;min-width:0}
+.hero strong{font-size:clamp(1.9rem,7vw,2.5rem);line-height:1.05;font-family:ui-monospace,monospace;overflow-wrap:anywhere}
+.hero span{color:var(--text-muted);font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,110px),1fr));gap:10px;min-width:0}
+.metric{display:flex;flex-direction:column;gap:2px;min-width:0}
+.metric strong{font-family:ui-monospace,monospace;font-size:1.12rem;overflow-wrap:anywhere}
+.metric span{color:var(--text-muted);font-size:.74rem;line-height:1.25}
+.rows{margin:14px 0 0}
+.row{display:flex;justify-content:space-between;align-items:baseline;gap:14px;padding:8px 0;border-top:1px solid var(--border);font-size:.9rem}
+.row .k{color:var(--text-muted)}
+.row .v{font-family:ui-monospace,monospace;font-weight:700;text-align:right;overflow-wrap:anywhere}
+.ramp{margin-top:20px}
+.ramp h2{font-size:1.05rem;margin:0 0 8px}
+.checkpoint{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1fr) minmax(0,1.4fr);gap:10px;align-items:baseline;padding:9px 0;border-top:1px solid var(--border);font-size:.86rem}
+.checkpoint:first-child{border-top:none}
+.checkpoint .at{color:var(--text-muted)}
+.checkpoint .speed{font-family:ui-monospace,monospace;font-weight:700}
+.checkpoint .out{font-family:ui-monospace,monospace;text-align:right;overflow-wrap:anywhere}
+.note{margin-top:18px;color:var(--text-muted);font-size:.85rem;line-height:1.55}
+@media (max-width:560px){.summary{grid-template-columns:minmax(0,1fr)}.checkpoint{grid-template-columns:minmax(0,1fr) auto;row-gap:2px}.checkpoint .at{grid-column:1/-1}.checkpoint .out{text-align:left}}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<h1>Speed Ramp Retime Planner</h1>
+<p>Ramp a clip from one playback speed to another and see how long it becomes before you touch the timeline.</p>
+</div>
+<div class="panel planner">
+<form id="ramp-form" novalidate>
+<div class="settings">
+<div class="field"><label for="duration">Source length (seconds)</label><input id="duration" type="text" inputmode="decimal" autocomplete="off" value="4"><span class="hint">0.1 to 3600, decimals allowed</span></div>
+<div class="field"><label for="fps">Project frame rate</label><select id="fps"><option value="23.976">23.976 fps</option><option value="24">24 fps</option><option value="25" selected>25 fps</option><option value="29.97">29.97 fps</option><option value="30">30 fps</option><option value="50">50 fps</option><option value="59.94">59.94 fps</option><option value="60">60 fps</option></select><span class="hint">frames are counted at this rate</span></div>
+<div class="field"><label for="start-speed">Speed at the first frame (%)</label><input id="start-speed" type="text" inputmode="decimal" autocomplete="off" value="100"><span class="hint">5 to 400; 100 plays at normal speed</span></div>
+<div class="field"><label for="end-speed">Speed at the last frame (%)</label><input id="end-speed" type="text" inputmode="decimal" autocomplete="off" value="25"><span class="hint">below the start gives a ramp down</span></div>
+</div>
+<div id="error" class="error" role="alert"></div>
+<div class="actions"><button class="primary" type="submit">Plan the ramp</button><button id="reset" type="button">Load example</button></div>
+</form>
+<section id="results" class="results" aria-label="Ramp result" hidden>
+<div class="summary" aria-live="polite" aria-atomic="true">
+<div class="hero"><strong id="out-duration">—</strong><span>output length</span></div>
+<div class="metrics">
+<div class="metric"><strong id="out-frames">—</strong><span>output frames</span></div>
+<div class="metric"><strong id="frame-delta">—</strong><span>frames vs source</span></div>
+<div class="metric"><strong id="avg-speed">—</strong><span>average speed</span></div>
+</div>
+</div>
+<div class="rows" id="rows"></div>
+<div class="ramp"><h2>Where the ramp lands</h2><div id="checkpoints"></div></div>
+</section>
+<p class="note"><strong>How the ramp is modelled.</strong> Playback speed changes in a straight line from the first source frame to the last, so a 4 s clip that starts at 100% and ends at 25% runs for 7.39 s. Because the clip spends longer at the slow end, the average speed is source length ÷ output length, not the mean of the two percentages. The output length is exact for that curve; a frame-based retime rounds each source frame to whole output frames, so the frame count here is the length × frame rate rounded to the nearest frame and can differ by a frame or two from an editor's own count. A clip whose two speeds are equal becomes an ordinary constant retime. Reverse speeds, multi-segment ramps, pitch handling, frame interpolation and render quality settings are outside this page; the frame rate is used only to count frames.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* speed-ramp-core:start */
+var SpeedRampCore = (function(){
+  "use strict";
+  var FRAME_RATES = [23.976, 24, 25, 29.97, 30, 50, 59.94, 60];
+  var CHECKPOINTS = [0, 0.25, 0.5, 0.75, 1];
+  function fail(message){ throw new Error(message); }
+  function decimal(value, label, min, max, unit){
+    var raw = String(value === undefined || value === null ? "" : value).trim();
+    if (!/^[0-9]+(?:\.[0-9]+)?$/.test(raw)){
+      fail(label + " must be a number from " + min + " to " + max + " " + unit + ".");
+    }
+    var parsed = Number(raw);
+    if (!isFinite(parsed) || parsed < min || parsed > max){
+      fail(label + " must be a number from " + min + " to " + max + " " + unit + ".");
+    }
+    return parsed;
+  }
+  function frameRate(value){
+    var raw = String(value === undefined || value === null ? "" : value).trim();
+    var parsed = Number(raw);
+    if (raw && isFinite(parsed)){
+      for (var index = 0; index < FRAME_RATES.length; index += 1){
+        if (Math.abs(parsed - FRAME_RATES[index]) < 1e-9) return FRAME_RATES[index];
+      }
+    }
+    fail("Choose a project frame rate.");
+  }
+  function calculate(input){
+    var options = input || {};
+    var duration = decimal(options.duration, "Source duration", 0.1, 3600, "seconds");
+    var fps = frameRate(options.fps);
+    var start = decimal(options.startSpeed, "Start speed", 5, 400, "percent") / 100;
+    var end = decimal(options.endSpeed, "End speed", 5, 400, "percent") / 100;
+    var delta = end - start;
+    var outputSeconds;
+    if (Math.abs(delta) < 1e-12){
+      outputSeconds = duration / start;
+    } else {
+      outputSeconds = duration * Math.log1p(delta / start) / delta;
+    }
+    function outputAt(sourceSeconds){
+      if (Math.abs(delta) < 1e-12) return sourceSeconds / start;
+      return Math.log1p(delta * sourceSeconds / (start * duration)) * duration / delta;
+    }
+    var sourceFrames = Math.round(duration * fps);
+    var outputFrames = Math.round(outputSeconds * fps);
+    var slowest = Math.min(start, end);
+    var fastest = Math.max(start, end);
+    var checkpoints = CHECKPOINTS.map(function(fraction){
+      var sourceSeconds = duration * fraction;
+      var speed = start + delta * fraction;
+      var out = outputAt(sourceSeconds);
+      return {
+        fraction: fraction,
+        sourceSeconds: sourceSeconds,
+        speed: speed,
+        outputSeconds: out,
+        outputFrame: Math.round(out * fps)
+      };
+    });
+    var direction = Math.abs(delta) < 1e-12 ? "constant" : (delta > 0 ? "up" : "down");
+    return {
+      sourceSeconds: duration,
+      sourceFrames: sourceFrames,
+      fps: fps,
+      startSpeed: start,
+      endSpeed: end,
+      direction: direction,
+      outputSeconds: outputSeconds,
+      outputFrames: outputFrames,
+      frameDelta: outputFrames - sourceFrames,
+      averageSpeed: duration / outputSeconds,
+      slowestSpeed: slowest,
+      fastestSpeed: fastest,
+      slowestFrames: 1 / slowest,
+      checkpoints: checkpoints
+    };
+  }
+  return {calculate: calculate, FRAME_RATES: FRAME_RATES};
+})();
+/* speed-ramp-core:end */
+(function(){
+  "use strict";
+  var form = document.getElementById("ramp-form");
+  var results = document.getElementById("results");
+  var errorNode = document.getElementById("error");
+  var durationInput = document.getElementById("duration");
+  var fpsSelect = document.getElementById("fps");
+  var startInput = document.getElementById("start-speed");
+  var endInput = document.getElementById("end-speed");
+  function node(tag, className, text){
+    var element = document.createElement(tag);
+    if (className) element.className = className;
+    if (text !== undefined && text !== null) element.textContent = text;
+    return element;
+  }
+  function seconds(value){
+    return value.toFixed(2) + "\u00a0s";
+  }
+  function frames(value){
+    return Number(value).toLocaleString(undefined, {maximumFractionDigits: 0});
+  }
+  function percent(value){
+    var rounded = Math.round(value * 1000) / 10;
+    return (Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)) + "%";
+  }
+  function row(key, value){
+    var item = node("div", "row");
+    item.appendChild(node("span", "k", key));
+    item.appendChild(node("span", "v", value));
+    return item;
+  }
+  function render(plan){
+    document.getElementById("out-duration").textContent = seconds(plan.outputSeconds);
+    document.getElementById("out-frames").textContent = frames(plan.outputFrames);
+    var change = plan.frameDelta;
+    document.getElementById("frame-delta").textContent = (change > 0 ? "+" : "") + frames(change);
+    document.getElementById("avg-speed").textContent = percent(plan.averageSpeed);
+    var rows = document.getElementById("rows");
+    rows.replaceChildren();
+    rows.appendChild(row("Source length", seconds(plan.sourceSeconds) + " · " + frames(plan.sourceFrames) + " frames"));
+    var direction = plan.direction === "constant" ? "constant" : "ramping " + plan.direction;
+    rows.appendChild(row("Speed", percent(plan.startSpeed) + " → " + percent(plan.endSpeed) + " (" + direction + ")"));
+    rows.appendChild(row("One source frame at " + percent(plan.slowestSpeed), plan.slowestFrames.toFixed(2) + " output frames"));
+    rows.appendChild(row("Output at " + plan.fps + " fps", frames(plan.outputFrames) + " frames · " + seconds(plan.outputSeconds)));
+    var list = document.getElementById("checkpoints");
+    list.replaceChildren();
+    plan.checkpoints.forEach(function(point){
+      var item = node("div", "checkpoint");
+      var where = point.fraction === 0 ? "Start" : (point.fraction === 1 ? "End" : Math.round(point.fraction * 100) + "% in");
+      item.appendChild(node("span", "at", where + " · " + seconds(point.sourceSeconds)));
+      item.appendChild(node("span", "speed", percent(point.speed)));
+      item.appendChild(node("span", "out", seconds(point.outputSeconds) + " · frame " + frames(point.outputFrame)));
+      list.appendChild(item);
+    });
+    results.hidden = false;
+  }
+  function calculate(){
+    try {
+      var plan = SpeedRampCore.calculate({
+        duration: durationInput.value,
+        fps: fpsSelect.value,
+        startSpeed: startInput.value,
+        endSpeed: endInput.value
+      });
+      errorNode.textContent = "";
+      render(plan);
+    } catch (error){
+      errorNode.textContent = error.message;
+      results.hidden = true;
+    }
+  }
+  function reset(){
+    durationInput.value = "4";
+    fpsSelect.value = "25";
+    startInput.value = "100";
+    endInput.value = "25";
+    calculate();
+  }
+  document.getElementById("reset").addEventListener("click", reset);
+  form.addEventListener("input", calculate);
+  form.addEventListener("change", calculate);
+  form.addEventListener("submit", function(event){
+    event.preventDefault();
+    calculate();
+  });
+  reset();
+})();
+</script>
+</body>
+</html>
