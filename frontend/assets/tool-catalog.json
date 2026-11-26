@@ -280859,6 +280859,492 @@
         }
       ],
       "listed": true
+    },
+    {
+      "slug": "journald-storage-budget-planner",
+      "name": "journald Storage Budget Planner",
+      "description": "Turn a filesystem size, the free space at start-up and a daily log volume into the [Journal] size limits for systemd-journald: the size limit, the KeepFree reserve, the largest journal file, the number of files the limit needs and the days of logs they hold.",
+      "category": "System",
+      "legacyCategory": null,
+      "subcategory": "Planning",
+      "tags": [
+        "system",
+        "linux",
+        "journald",
+        "log-analysis",
+        "storage",
+        "configuration",
+        "planning",
+        "retention"
+      ],
+      "aliases": [
+        "journald.conf Generator",
+        "Journald Size Calculator",
+        "Journald Retention Planner",
+        "journald.conf Size Planner",
+        "Systemd Journal Storage Planner",
+        "Journal Storage Limit Calculator",
+        "Journal Vacuum Planner",
+        "journald KeepFree Calculator"
+      ],
+      "icon": "🗄️",
+      "added": "2026-11-26T21:20:00Z",
+      "risk": "low",
+      "maturity": "draft",
+      "reviewedAt": null,
+      "guidance": "A sizing aid, not a guarantee: journald deletes only archived files, so a journal can sit above its limit until the active file rotates, and compression (on by default) usually stretches the real retention past this estimate. The drop-in names the [Journal] section only; read the current usage with journalctl --disk-usage before and after the change, and keep the KeepFree reserve so the journal cannot crowd out the filesystem.",
+      "method": "The size limit defaults to 10 % of the filesystem and the KeepFree reserve to 15 %, each capped at 4 GiB; journald honours both and uses the smaller, so the room above the reserve is free space minus the reserve, and the effective limit is the smaller of the size limit and that room. When free space is already inside the reserve the page says so and caps the limit at the free space, because journald raises its limit to what is actually free rather than deleting older entries. The largest journal file defaults to one eighth of the size limit, capped at 128 MiB, and the number of files the limit needs is the size limit divided by that file size, rounded up; above the default SystemMaxFiles=100 the drop-in raises the file count, since 100 files of 128 MiB cannot hold a larger limit. Volatile storage selects the Runtime* settings and measures the /run filesystem instead. Retention is the effective limit divided by the daily volume, printed in hours under one day. Sizes are gibibytes and mebibytes (1024 based), the filesystem size is limited to 0.1 to 100,000 GiB and the daily volume to 0.1 to 100,000 MiB, and the page makes no network request.",
+      "sources": [
+        {
+          "title": "journald.conf(5) - systemd manual: SystemMaxUse and SystemKeepFree default to 10 % and 15 % of the filesystem capped at 4 GiB, journald uses the smaller, SystemMaxFileSize is one eighth capped at 128 MiB and SystemMaxFiles defaults to 100",
+          "url": "https://www.freedesktop.org/software/systemd/man/latest/journald.conf.html"
+        },
+        {
+          "title": "journalctl(1) - systemd manual: --disk-usage reports the space the journal files use, the check to run before and after a size change",
+          "url": "https://man7.org/linux/man-pages/man1/journalctl.1.html"
+        }
+      ],
+      "testCases": [
+        {
+          "name": "default 40 GiB disk, 28 GiB free, 200 MiB per day",
+          "kind": "golden",
+          "input": {
+            "fs": "40",
+            "free": "28",
+            "rate": "200"
+          },
+          "expected": {
+            "maxUseMiB": 4096,
+            "keepFreeMiB": 4096,
+            "limitMiB": 4096,
+            "fileSizeMiB": 128,
+            "filesNeeded": 32,
+            "days": 20.48,
+            "fileCapped": true
+          }
+        },
+        {
+          "name": "small 8 GiB disk, empty, 50 MiB per day",
+          "kind": "golden",
+          "input": {
+            "fs": "8",
+            "free": "8",
+            "rate": "50"
+          },
+          "expected": {
+            "maxUseMiB": 819.2,
+            "keepFreeMiB": 1228.8,
+            "limitMiB": 819.2,
+            "fileSizeMiB": 102.4,
+            "filesNeeded": 8,
+            "days": 16.38
+          }
+        },
+        {
+          "name": "2 TiB disk: the 4 GiB default cap binds",
+          "kind": "golden",
+          "input": {
+            "fs": "2048",
+            "free": "2048",
+            "rate": "200"
+          },
+          "expected": {
+            "maxUseMiB": 4096,
+            "keepFreeMiB": 4096,
+            "limitMiB": 4096,
+            "fileSizeMiB": 128,
+            "filesNeeded": 32,
+            "days": 20.48,
+            "cappedByDefault": true,
+            "fileCapped": true
+          }
+        },
+        {
+          "name": "volatile 4 GiB /run, 3 GiB free, 20 MiB per day",
+          "kind": "golden",
+          "input": {
+            "storage": "runtime",
+            "fs": "4",
+            "free": "3",
+            "rate": "20"
+          },
+          "expected": {
+            "maxUseMiB": 409.6,
+            "keepFreeMiB": 614.4,
+            "limitMiB": 409.6,
+            "fileSizeMiB": 51.2,
+            "filesNeeded": 8,
+            "days": 20.48
+          }
+        },
+        {
+          "name": "explicit 512 MiB limit on a 40 GiB disk",
+          "kind": "golden",
+          "input": {
+            "fs": "40",
+            "free": "28",
+            "rate": "100",
+            "limit": "512"
+          },
+          "expected": {
+            "maxUseMiB": 512,
+            "keepFreeMiB": 4096,
+            "limitMiB": 512,
+            "fileSizeMiB": 64,
+            "filesNeeded": 8,
+            "days": 5.12
+          }
+        },
+        {
+          "name": "explicit 10 GiB limit on a 100 GiB disk",
+          "kind": "golden",
+          "input": {
+            "fs": "100",
+            "free": "60",
+            "rate": "2000",
+            "limit": "10240"
+          },
+          "expected": {
+            "maxUseMiB": 10240,
+            "keepFreeMiB": 4096,
+            "limitMiB": 10240,
+            "fileSizeMiB": 128,
+            "filesNeeded": 80,
+            "days": 5.12,
+            "fileCapped": true
+          }
+        },
+        {
+          "name": "free space cuts the default 2 GiB limit to what the reserve leaves",
+          "kind": "golden",
+          "input": {
+            "fs": "20",
+            "free": "4",
+            "rate": "200"
+          },
+          "expected": {
+            "maxUseMiB": 2048,
+            "keepFreeMiB": 3072,
+            "limitMiB": 1024,
+            "fileSizeMiB": 128,
+            "filesNeeded": 16,
+            "days": 5.12,
+            "fileCapped": true,
+            "keepFreeBinds": true
+          }
+        },
+        {
+          "name": "explicit 20 GiB limit needing more than the default 100 files",
+          "kind": "golden",
+          "input": {
+            "fs": "1024",
+            "free": "900",
+            "rate": "200",
+            "limit": "20480"
+          },
+          "expected": {
+            "maxUseMiB": 20480,
+            "keepFreeMiB": 4096,
+            "limitMiB": 20480,
+            "fileSizeMiB": 128,
+            "filesNeeded": 160,
+            "days": 102.4,
+            "fileCapped": true,
+            "config": [
+              "[Journal]",
+              "Storage=persistent",
+              "SystemMaxUse=20G",
+              "SystemMaxFileSize=128M",
+              "SystemMaxFiles=160"
+            ]
+          }
+        },
+        {
+          "name": "10 % of 40 GiB is exactly the 4 GiB cap",
+          "kind": "boundary",
+          "input": {
+            "fs": "40",
+            "free": "40",
+            "rate": "200"
+          },
+          "expected": {
+            "maxUseMiB": 4096,
+            "keepFreeMiB": 4096,
+            "limitMiB": 4096,
+            "fileSizeMiB": 128,
+            "filesNeeded": 32,
+            "days": 20.48,
+            "fileCapped": true
+          }
+        },
+        {
+          "name": "41 GiB pushes the default into the cap",
+          "kind": "boundary",
+          "input": {
+            "fs": "41",
+            "free": "41",
+            "rate": "200"
+          },
+          "expected": {
+            "maxUseMiB": 4096,
+            "keepFreeMiB": 4096,
+            "limitMiB": 4096,
+            "fileSizeMiB": 128,
+            "filesNeeded": 32,
+            "days": 20.48,
+            "cappedByDefault": true,
+            "fileCapped": true
+          }
+        },
+        {
+          "name": "free space exactly at the reserve",
+          "kind": "boundary",
+          "input": {
+            "fs": "40",
+            "free": "4",
+            "rate": "200"
+          },
+          "expected": {
+            "maxUseMiB": 4096,
+            "keepFreeMiB": 4096,
+            "limitMiB": 4096,
+            "fileSizeMiB": 128,
+            "filesNeeded": 32,
+            "days": 20.48,
+            "fileCapped": true
+          }
+        },
+        {
+          "name": "free space just above the reserve",
+          "kind": "boundary",
+          "input": {
+            "fs": "40",
+            "free": "4.1",
+            "rate": "200"
+          },
+          "expected": {
+            "maxUseMiB": 4096,
+            "keepFreeMiB": 4096,
+            "limitMiB": 102.4,
+            "fileSizeMiB": 128,
+            "filesNeeded": 32,
+            "days": 0.51,
+            "fileCapped": true,
+            "keepFreeBinds": true
+          }
+        },
+        {
+          "name": "exactly one day of logs fits",
+          "kind": "boundary",
+          "input": {
+            "fs": "40",
+            "free": "28",
+            "rate": "200",
+            "limit": "200"
+          },
+          "expected": {
+            "maxUseMiB": 200,
+            "keepFreeMiB": 4096,
+            "limitMiB": 200,
+            "fileSizeMiB": 25,
+            "filesNeeded": 8,
+            "days": 1
+          }
+        },
+        {
+          "name": "just under one day fits",
+          "kind": "boundary",
+          "input": {
+            "fs": "40",
+            "free": "28",
+            "rate": "200",
+            "limit": "199"
+          },
+          "expected": {
+            "maxUseMiB": 199,
+            "keepFreeMiB": 4096,
+            "limitMiB": 199,
+            "fileSizeMiB": 24.88,
+            "filesNeeded": 8,
+            "days": 1
+          }
+        },
+        {
+          "name": "a 1 GiB limit makes exactly 128 MiB files",
+          "kind": "boundary",
+          "input": {
+            "fs": "40",
+            "free": "28",
+            "rate": "100",
+            "limit": "1024"
+          },
+          "expected": {
+            "maxUseMiB": 1024,
+            "keepFreeMiB": 4096,
+            "limitMiB": 1024,
+            "fileSizeMiB": 128,
+            "filesNeeded": 8,
+            "days": 10.24
+          }
+        },
+        {
+          "name": "a 1 GiB plus 1 MiB limit caps the file at 128 MiB",
+          "kind": "boundary",
+          "input": {
+            "fs": "40",
+            "free": "28",
+            "rate": "100",
+            "limit": "1025"
+          },
+          "expected": {
+            "maxUseMiB": 1025,
+            "keepFreeMiB": 4096,
+            "limitMiB": 1025,
+            "fileSizeMiB": 128,
+            "filesNeeded": 9,
+            "days": 10.25,
+            "fileCapped": true
+          }
+        },
+        {
+          "name": "exactly 100 files of 128 MiB need no MaxFiles bump",
+          "kind": "boundary",
+          "input": {
+            "fs": "1024",
+            "free": "900",
+            "rate": "200",
+            "limit": "12800"
+          },
+          "expected": {
+            "maxUseMiB": 12800,
+            "keepFreeMiB": 4096,
+            "limitMiB": 12800,
+            "fileSizeMiB": 128,
+            "filesNeeded": 100,
+            "days": 64,
+            "fileCapped": true
+          }
+        },
+        {
+          "name": "101 files force the MaxFiles bump",
+          "kind": "boundary",
+          "input": {
+            "fs": "1024",
+            "free": "900",
+            "rate": "200",
+            "limit": "12928"
+          },
+          "expected": {
+            "maxUseMiB": 12928,
+            "keepFreeMiB": 4096,
+            "limitMiB": 12928,
+            "fileSizeMiB": 128,
+            "filesNeeded": 101,
+            "days": 64.64,
+            "fileCapped": true,
+            "config": [
+              "[Journal]",
+              "Storage=persistent",
+              "SystemMaxUse=12928M",
+              "SystemMaxFileSize=128M",
+              "SystemMaxFiles=101"
+            ]
+          }
+        },
+        {
+          "name": "blank filesystem size",
+          "kind": "validation",
+          "input": {
+            "fs": "",
+            "free": "28",
+            "rate": "200"
+          },
+          "expectedError": "Enter the filesystem size in GiB, such as 40."
+        },
+        {
+          "name": "unit suffix is refused",
+          "kind": "validation",
+          "input": {
+            "fs": "40g",
+            "free": "28",
+            "rate": "200"
+          },
+          "expectedError": "Enter the filesystem size as a number of GiB, such as 40."
+        },
+        {
+          "name": "filesystem below the range",
+          "kind": "validation",
+          "input": {
+            "fs": "0.05",
+            "free": "0.05",
+            "rate": "200"
+          },
+          "expectedError": "Enter the filesystem size from 0.1 to 100,000 GiB."
+        },
+        {
+          "name": "filesystem above the range",
+          "kind": "validation",
+          "input": {
+            "fs": "100001",
+            "free": "28",
+            "rate": "200"
+          },
+          "expectedError": "Enter the filesystem size from 0.1 to 100,000 GiB."
+        },
+        {
+          "name": "free space above the filesystem",
+          "kind": "validation",
+          "input": {
+            "fs": "40",
+            "free": "50",
+            "rate": "200"
+          },
+          "expectedError": "Free space cannot exceed the 40 GiB filesystem."
+        },
+        {
+          "name": "zero daily volume",
+          "kind": "validation",
+          "input": {
+            "fs": "40",
+            "free": "28",
+            "rate": "0"
+          },
+          "expectedError": "Enter the daily log volume from 0.1 to 100,000 MiB."
+        },
+        {
+          "name": "zero size limit",
+          "kind": "validation",
+          "input": {
+            "fs": "40",
+            "free": "28",
+            "rate": "200",
+            "limit": "0"
+          },
+          "expectedError": "Enter the size limit from 1 to 100,000,000 MiB."
+        },
+        {
+          "name": "unknown storage",
+          "kind": "validation",
+          "input": {
+            "storage": "disk",
+            "fs": "40",
+            "free": "28",
+            "rate": "200"
+          },
+          "expectedError": "Choose persistent or volatile storage."
+        },
+        {
+          "name": "negative free space",
+          "kind": "validation",
+          "input": {
+            "fs": "40",
+            "free": "-1",
+            "rate": "200"
+          },
+          "expectedError": "Enter the free space as a number of GiB, such as 28."
+        }
+      ],
+      "listed": true
     }
   ]
 }

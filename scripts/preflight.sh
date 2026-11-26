@@ -482,6 +482,7 @@ node tests/wind_profile_calculator.test.cjs
 node tests/permissions_policy_builder.test.cjs
 node tests/ethernet_frame_decoder.test.cjs
 node tests/qrd_diffuser_designer.test.cjs
+node tests/journald_storage_budget_planner.test.cjs
 
 python3 -m unittest discover -s tests -p 'test_*.py'
 

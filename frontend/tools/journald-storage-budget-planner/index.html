@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>journald Storage Budget Planner &mdash; Virtual Tools</title>
+<meta name="description" content="Turn a disk budget and a daily log volume into the [Journal] size limits for systemd-journald: the size limit, the KeepFree reserve, the largest file, the number of files and the retention they buy.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,170px),1fr));gap:12px 14px}
+.field{display:flex;flex-direction:column;gap:6px;margin:0;min-width:0}
+.field input,.field select{box-sizing:border-box;width:100%;font:inherit;padding:9px 11px;border-radius:8px;
+  border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);color:var(--text,#e6e6e6);font-size:15px;min-height:44px}
+.field select{width:100%}
+.field input:focus-visible,.field select:focus-visible{outline:2px solid var(--accent,#6ea8fe);outline-offset:1px}
+.hint{color:var(--text-dim,#9aa3b2);font-size:12.5px;margin:12px 0 0;line-height:1.5;max-width:760px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 0}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);
+  background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.err{color:var(--bad,#f87171);font-size:13px;margin:10px 0 0;min-height:1.2em;max-width:760px}
+.warn{color:var(--warn,#fbbf24);font-size:12.5px;line-height:1.5;margin:8px 0 0;max-width:760px}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:16px 0 0}
+.out .label{text-align:center;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-dim,#9aa3b2)}
+.out .big{font-size:clamp(1.5rem,7vw,2.2rem);font-weight:800;font-variant-numeric:tabular-nums;text-align:center;padding:2px 0 4px;line-height:1.25}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:6px 0 0;line-height:1.5;overflow-wrap:anywhere}
+.bar{display:flex;height:10px;border-radius:5px;overflow:hidden;margin:16px 0 0;background:var(--border,#2a2f3a)}
+.bar span{display:block;height:100%}
+.bar .used{background:var(--accent,#6ea8fe)}
+.bar .free{background:color-mix(in srgb,var(--accent,#6ea8fe) 28%,transparent)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin:8px 0 0;font-size:12px;color:var(--text-dim,#9aa3b2)}
+.legend b{font-weight:600;color:var(--text,#e6e6e6)}
+.ref{display:table;width:100%;border-collapse:collapse;margin:18px 0 0;font-size:13.5px}
+.ref th,.ref td{border-bottom:1px solid var(--border,#2a2f3a);padding:7px 8px;text-align:left;vertical-align:top}
+.ref tbody th{font-weight:500;width:44%}
+.ref td{font-family:ui-monospace,monospace;overflow-wrap:anywhere}
+.config{margin:16px 0 0;padding:12px 14px;border:1px solid var(--border,#2a2f3a);border-radius:8px;background:var(--bg,#0f1218)}
+.config .k{display:block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim,#9aa3b2);margin:0 0 6px}
+.config pre{margin:0;font-family:ui-monospace,monospace;font-size:13px;line-height:1.6;overflow-x:auto;color:var(--text,#e6e6e6)}
+details{margin:18px 0 0;border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px 14px;background:var(--bg-elev,#171a21)}
+details summary{cursor:pointer;font-size:13.5px;font-weight:600}
+details summary:focus-visible{outline:2px solid var(--accent,#6ea8fe);outline-offset:2px}
+details .ref{margin-top:10px;font-size:12.5px}
+.note{color:var(--text-dim,#9aa3b2);font-size:12.5px;line-height:1.6;margin:18px 0 0;max-width:820px}
+@media (max-width:560px){
+  .actions button{flex:1 1 auto}
+  .ref th,.ref td{padding:6px 5px;font-size:12.5px}
+}
+@media (max-width:430px){
+  .ref tbody tr{display:grid;gap:1px;padding:8px 0;border-bottom:1px solid var(--border,#2a2f3a)}
+  .ref tbody tr:last-child{border-bottom:none}
+  .ref tbody th,.ref tbody td{display:block;width:auto;border-bottom:none;padding:0}
+  .ref tbody th{font-size:12px;color:var(--text-dim,#9aa3b2)}
+}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<h1>journald Storage Budget Planner</h1>
+<p>Turn a filesystem size, a free-space figure and a daily log volume into the [Journal] size limits for systemd-journald, and see how many days of logs they hold.</p>
+</div>
+<div class="panel">
+<form id="journald-form" novalidate>
+<div class="row">
+<div class="field">
+<label for="storage">Storage</label>
+<select id="storage">
+<option value="system" selected>Persistent</option>
+<option value="runtime">Volatile</option>
+</select>
+</div>
+<div class="field">
+<label for="fs">Filesystem size (GiB)</label>
+<input id="fs" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="40">
+</div>
+<div class="field">
+<label for="free">Free space (GiB)</label>
+<input id="free" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="28">
+</div>
+<div class="field">
+<label for="rate">Log volume (MiB&sol;day)</label>
+<input id="rate" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="200">
+</div>
+<div class="field">
+<label for="limit">Size limit (MiB)</label>
+<input id="limit" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="" placeholder="journald default">
+</div>
+</div>
+<p class="hint">Persistent storage keeps the journal in &sol;var&sol;log&sol;journal, volatile storage in &sol;run&sol;log&sol;journal. Leave the size limit blank to use journald&rsquo;s own default: 10&nbsp;% of the filesystem, capped at 4&nbsp;GiB. For volatile storage the filesystem is the size of &sol;run, usually half of RAM.</p>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions"><button type="submit">Plan the budget</button></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true">
+<div class="label">Logs retained</div>
+<div class="big" id="days-line">&mdash;</div>
+<div class="sub" id="summary">Set the filesystem, the free space and the daily volume above.</div>
+<p class="warn" id="warn"></p>
+</div>
+<div class="bar" id="bar" aria-hidden="true"><span class="used" id="bar-used" style="width:0"></span><span class="free" id="bar-free" style="width:0"></span></div>
+<div class="legend"><span><b id="lg-limit">&mdash;</b> journal limit</span><span><b id="lg-free">&mdash;</b> still free</span><span><b id="lg-keep">&mdash;</b> KeepFree reserve</span></div>
+<table class="ref">
+<caption>The size limits this budget gives, and what they mean</caption>
+<tbody>
+<tr><th scope="row" id="th-limit">SystemMaxUse</th><td id="f-limit"></td></tr>
+<tr><th scope="row" id="th-keep">SystemKeepFree</th><td id="f-keep"></td></tr>
+<tr><th scope="row" id="th-room">Room above the reserve</th><td id="f-room"></td></tr>
+<tr><th scope="row" id="th-file">Largest journal file</th><td id="f-file"></td></tr>
+<tr><th scope="row">Files the limit needs</th><td id="f-files"></td></tr>
+<tr><th scope="row">Retention at this volume</th><td id="f-days"></td></tr>
+</tbody>
+</table>
+<div class="config">
+<span class="k" id="config-label">Drop-in for &sol;etc&sol;systemd&sol;journald.conf.d&sol;10-size.conf</span>
+<pre id="config">&mdash;</pre>
+</div>
+<details>
+<summary>How journald scales RateLimitBurst with available space</summary>
+<table class="ref">
+<tbody>
+<tr><th scope="row">up to 1&nbsp;MB</th><td>&times;1</td></tr>
+<tr><th scope="row">up to 16&nbsp;MB</th><td>&times;2</td></tr>
+<tr><th scope="row">up to 256&nbsp;MB</th><td>&times;3</td></tr>
+<tr><th scope="row">up to 4&nbsp;GB</th><td>&times;4</td></tr>
+<tr><th scope="row">up to 64&nbsp;GB</th><td>&times;5</td></tr>
+<tr><th scope="row">up to 1&nbsp;TB</th><td>&times;6</td></tr>
+</tbody>
+</table>
+</details>
+<p class="note">The defaults are 10&nbsp;% for the size limit and 15&nbsp;% for the KeepFree reserve, each capped at 4&nbsp;GiB; journald honours both and uses the smaller, so a filesystem can be too full for the journal to reach its limit. The largest file defaults to one eighth of the limit, capped at 128&nbsp;MiB, which is why a 4&nbsp;GiB budget is kept in 32 files. Only archived files are deleted when journald vacuums, so a journal can sit above its limit until the active file rotates, and compression is on by default, so the days printed here are a floor rather than a ceiling. Sizes are written to whole MiB. systemd-journald reads this file at start-up, so a change takes effect on a restart of the service. Everything is computed in your browser; nothing is sent anywhere else.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* journald-budget-core:start */
+var JournaldCore = (function(){
+  "use strict";
+  var MIB_PER_GIB = 1024;
+  var USE_SHARE = 0.10;
+  var KEEP_SHARE = 0.15;
+  var DEFAULT_CAP_MIB = 4096;
+  var FILE_DIVISOR = 8;
+  var FILE_CAP_MIB = 128;
+  var FILE_COUNT_DEFAULT = 100;
+  var FS_MIN = 0.1, FS_MAX = 100000;
+  var RATE_MIN = 0.1, RATE_MAX = 100000;
+  var LIMIT_MIN = 1, LIMIT_MAX = 100000000;
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function round(value, places){
+    var factor = Math.pow(10, places);
+    return Math.round(value * factor + (value >= 0 ? 1e-9 : -1e-9)) / factor;
+  }
+
+  function group(value){
+    return String(value).replace(/\B(?=(?:\d{3})+(?!\d))/g, ",");
+  }
+
+  function readNumber(value, label, unit, low, high, example){
+    var text = String(value == null ? "" : value).trim().replace(/\s+/g, "");
+    if (!text) fail("Enter the " + label + " in " + unit + ", such as " + example + ".");
+    if (!/^\d+(?:\.\d+)?$/.test(text)){
+      fail("Enter the " + label + " as a number of " + unit + ", such as " + example + ".");
+    }
+    var number = parseFloat(text);
+    if (!(number >= low && number <= high)){
+      fail("Enter the " + label + " from " + group(low) + " to " + group(high) + " " + unit + ".");
+    }
+    return number;
+  }
+
+  function readLimit(value){
+    var text = String(value == null ? "" : value).trim().replace(/\s+/g, "");
+    if (!text) return null;
+    return readNumber(text, "size limit", "MiB", LIMIT_MIN, LIMIT_MAX, "4096");
+  }
+
+  function plan(input){
+    var opts = input || {};
+    var storage = String(opts.storage == null ? "system" : opts.storage).trim();
+    if (storage !== "system" && storage !== "runtime"){
+      fail("Choose persistent or volatile storage.");
+    }
+    var fsGiB = readNumber(opts.fs, "filesystem size", "GiB", FS_MIN, FS_MAX, "40");
+    var freeGiB = readNumber(opts.free, "free space", "GiB", 0, FS_MAX, "28");
+    var rateMiB = readNumber(opts.rate, "daily log volume", "MiB", RATE_MIN, RATE_MAX, "200");
+    var explicit = readLimit(opts.limit);
+    if (freeGiB > fsGiB){
+      fail("Free space cannot exceed the " + group(round(fsGiB, 2)) + " GiB filesystem.");
+    }
+
+    var prefix = storage === "system" ? "System" : "Runtime";
+    var fsMiB = fsGiB * MIB_PER_GIB;
+    var freeMiB = freeGiB * MIB_PER_GIB;
+    var defaultMaxUseMiB = Math.min(fsMiB * USE_SHARE, DEFAULT_CAP_MIB);
+    var keepFreeMiB = Math.min(fsMiB * KEEP_SHARE, DEFAULT_CAP_MIB);
+    var maxUseMiB = explicit === null ? defaultMaxUseMiB : explicit;
+    var roomMiB = freeMiB - keepFreeMiB;
+    var limitMiB, warnings = [];
+
+    if (roomMiB > 0){
+      limitMiB = Math.min(maxUseMiB, roomMiB);
+    } else {
+      limitMiB = Math.min(maxUseMiB, freeMiB);
+      warnings.push("Free space is at or below the 15 % KeepFree reserve, so journald raises its limit "
+        + "to what is actually free and stops writing instead of deleting older files.");
+    }
+
+    var fileSizeMiB = Math.min(maxUseMiB / FILE_DIVISOR, FILE_CAP_MIB);
+    var filesNeeded = Math.ceil(round(maxUseMiB / fileSizeMiB, 6));
+    var days = limitMiB / rateMiB;
+
+    if (days < 1){
+      warnings.push("Under a day of logs fits at this limit; raise the size limit or lower the daily volume.");
+    }
+    if (explicit !== null && explicit > fsMiB + 1e-9){
+      warnings.push("The size limit is larger than the " + group(round(fsGiB, 2))
+        + " GiB filesystem it lives on.");
+    }
+    if (filesNeeded > FILE_COUNT_DEFAULT){
+      warnings.push("The default " + prefix + "MaxFiles=" + FILE_COUNT_DEFAULT
+        + " caps the journal below this limit, so the drop-in raises it to " + filesNeeded + " files.");
+    }
+
+    var config = ["[Journal]",
+      "Storage=" + (storage === "system" ? "persistent" : "volatile"),
+      prefix + "MaxUse=" + sizeToken(maxUseMiB),
+      prefix + "MaxFileSize=" + sizeToken(fileSizeMiB)];
+    if (filesNeeded > FILE_COUNT_DEFAULT){
+      config.push(prefix + "MaxFiles=" + filesNeeded);
+    }
+
+    return {
+      storage: storage,
+      prefix: prefix,
+      fsMiB: round(fsMiB, 2),
+      freeMiB: round(freeMiB, 2),
+      rateMiB: round(rateMiB, 2),
+      defaultMaxUseMiB: round(defaultMaxUseMiB, 2),
+      maxUseMiB: round(maxUseMiB, 2),
+      keepFreeMiB: round(keepFreeMiB, 2),
+      roomMiB: round(roomMiB, 2),
+      limitMiB: round(limitMiB, 2),
+      fileSizeMiB: round(fileSizeMiB, 2),
+      filesNeeded: filesNeeded,
+      days: round(days, 2),
+      explicit: explicit !== null,
+      cappedByDefault: explicit === null && fsMiB * USE_SHARE > DEFAULT_CAP_MIB,
+      fileCapped: maxUseMiB / FILE_DIVISOR > FILE_CAP_MIB,
+      keepFreeBinds: roomMiB > 0 && roomMiB < maxUseMiB,
+      config: config,
+      warnings: warnings
+    };
+  }
+
+  function sizeToken(mib){
+    var whole = Math.round(mib);
+    if (whole >= 1024 && whole % 1024 === 0) return (whole / 1024) + "G";
+    return whole + "M";
+  }
+
+  return {
+    plan: plan,
+    sizeToken: sizeToken,
+    useShare: USE_SHARE,
+    keepShare: KEEP_SHARE,
+    defaultCapMiB: DEFAULT_CAP_MIB,
+    fileCapMiB: FILE_CAP_MIB,
+    fileCountDefault: FILE_COUNT_DEFAULT,
+    fsRange: [FS_MIN, FS_MAX],
+    rateRange: [RATE_MIN, RATE_MAX],
+    limitRange: [LIMIT_MIN, LIMIT_MAX]
+  };
+})();
+/* journald-budget-core:end */
+(function(){
+  "use strict";
+
+  var ids = ["storage","fs","free","rate","limit","err","warn","days-line","summary","bar-used","bar-free",
+    "lg-limit","lg-free","lg-keep","th-limit","th-keep","th-room","th-file","f-limit","f-keep","f-room",
+    "f-file","f-files","f-days","config","config-label"];
+  var els = {};
+  ids.forEach(function(id){ els[id] = document.getElementById(id); });
+
+  function fmt(value, places){
+    var fixed = Number(value).toFixed(places);
+    var parts = fixed.split(".");
+    parts[0] = parts[0].replace(/\B(?=(?:\d{3})+(?!\d))/g, ",");
+    return parts.join(".");
+  }
+
+  function trim(text){
+    return text.indexOf(".") > -1 ? text.replace(/0+$/, "").replace(/\.$/, "") : text;
+  }
+
+  function size(mib){
+    if (mib >= 1024){
+      return trim(fmt(mib / 1024, 2)) + " GiB";
+    }
+    return trim(fmt(mib, mib >= 100 ? 0 : (mib >= 10 ? 1 : 2))) + " MiB";
+  }
+
+  function days(value){
+    if (value < 1) return trim(fmt(value * 24, 1)) + " hours";
+    if (value >= 100) return fmt(value, 0) + " days";
+    var text = trim(fmt(value, 1));
+    return text + (text === "1" ? " day" : " days");
+  }
+
+  function placeholder(message){
+    els["days-line"].textContent = "\u2014";
+    els.summary.textContent = message;
+    els.warn.textContent = "";
+    ["f-limit","f-keep","f-room","f-file","f-files","f-days","lg-limit","lg-free","lg-keep"].forEach(function(id){
+      els[id].textContent = "\u2014";
+    });
+    els.config.textContent = "\u2014";
+    els["bar-used"].style.width = "0";
+    els["bar-free"].style.width = "0";
+  }
+
+  function render(result){
+    els["days-line"].textContent = days(result.days);
+    els.summary.textContent = "at " + fmt(result.rateMiB, 0) + " MiB per day, within "
+      + size(result.limitMiB) + " of the " + size(result.fsMiB) + " filesystem";
+    els.warn.textContent = result.warnings.join(" ");
+
+    els["th-limit"].textContent = result.prefix + "MaxUse";
+    els["th-keep"].textContent = result.prefix + "KeepFree";
+    els["th-file"].textContent = result.prefix + "MaxFileSize";
+    els["f-limit"].textContent = size(result.maxUseMiB)
+      + (result.explicit
+        ? " (set here)"
+        : (result.cappedByDefault
+          ? " (journald default: 10 % of the filesystem, held at the 4 GiB cap)"
+          : " (journald default: 10 % of the filesystem)"));
+    els["f-keep"].textContent = size(result.keepFreeMiB) + " (15 % of the filesystem, capped at 4 GiB)";
+    els["f-room"].textContent = result.roomMiB > 0
+      ? size(result.roomMiB) + " free minus the reserve"
+      : "none: free space is inside the reserve";
+    els["f-file"].textContent = size(result.fileSizeMiB)
+      + (result.fileCapped ? " (one eighth of the limit, capped at 128 MiB)" : " (one eighth of the limit)");
+    els["f-files"].textContent = result.filesNeeded
+      + (result.filesNeeded > 1 ? " files" : " file")
+      + (result.filesNeeded > result.fileCountDefault ? ", above the default 100" : "");
+    els["f-days"].textContent = days(result.days) + " at " + size(result.rateMiB) + " per day";
+
+    var scale = Math.max(result.fsMiB, 1);
+    var used = Math.max(0, Math.min(result.limitMiB, scale)) / scale * 100;
+    var reserved = Math.max(0, Math.min(result.keepFreeMiB, scale - result.limitMiB)) / scale * 100;
+    els["bar-used"].style.width = used.toFixed(3) + "%";
+    els["bar-free"].style.width = reserved.toFixed(3) + "%";
+    els["lg-limit"].textContent = size(result.limitMiB);
+    els["lg-free"].textContent = size(Math.max(0, result.fsMiB - result.limitMiB - result.keepFreeMiB));
+    els["lg-keep"].textContent = size(result.keepFreeMiB);
+
+    els.config.textContent = result.config.join("\n");
+    els["config-label"].textContent = result.storage === "system"
+      ? "Drop-in for /etc/systemd/journald.conf.d/10-size.conf"
+      : "Runtime limits in /etc/systemd/journald.conf";
+  }
+
+  function calculate(){
+    var result;
+    try {
+      result = JournaldCore.plan({
+        storage: els.storage.value,
+        fs: els.fs.value,
+        free: els.free.value,
+        rate: els.rate.value,
+        limit: els.limit.value
+      });
+    } catch (error) {
+      els.err.textContent = error.message;
+      placeholder("Check the values above.");
+      return;
+    }
+    els.err.textContent = "";
+    render(result);
+  }
+
+  [els.fs, els.free, els.rate, els.limit].forEach(function(input){
+    input.addEventListener("input", calculate);
+  });
+  els.storage.addEventListener("change", calculate);
+  document.getElementById("journald-form").addEventListener("submit", function(event){
+    event.preventDefault();
+    calculate();
+  });
+
+  calculate();
+})();
+</script>
+</body>
+</html>
