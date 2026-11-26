@@ -157,8 +157,8 @@ assert.equal(C.MAX_WEIGHT, 30);
 assert.equal(C.MAX_VOLUME, 100000);
 
 // ---- Catalog record: counts, cases and metadata.
-assert.equal(catalog.tools.length, 2477, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2216, 'public tools');
+assert.equal(catalog.tools.length, 2478, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2217, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Oil, Gas & Marine Engineering').length, 55,
   'Oil, Gas & Marine Engineering count');
 assert.equal(record.category, 'Oil, Gas & Marine Engineering');

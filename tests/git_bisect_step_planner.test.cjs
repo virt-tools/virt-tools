@@ -225,10 +225,10 @@ const pageDirs = fs.readdirSync(path.join(root, 'frontend', 'tools'), { withFile
   .filter((entry) => entry.isDirectory()).length;
 assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageDirs,
   'every listed tool record has a page');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Developer').length, 55,
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Developer').length, 56,
   'Developer count');
-assert.equal(catalog.tools.length, 2477, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2216, 'public tools');
+assert.equal(catalog.tools.length, 2478, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2217, 'public tools');
 const names = new Map();
 for (const tool of catalog.tools) {
   if (tool.slug === record.slug) continue;

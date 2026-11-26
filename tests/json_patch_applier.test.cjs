@@ -47,7 +47,7 @@ const lowerName = entry.name.toLowerCase();
 assert.ok(!catalog.tools.some((tool) => tool.slug !== slug && tool.name.toLowerCase() === lowerName), 'name collision');
 assert.ok(!catalog.tools.some((tool) => tool.slug !== slug
   && tool.aliases.some((alias) => alias.toLowerCase() === lowerName)), 'alias collision');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Developer').length, 55, 'Developer count');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Developer').length, 56, 'Developer count');
 
 function failure(documentText, patchText) {
   try {
