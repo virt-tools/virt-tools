@@ -478,6 +478,7 @@ node tests/geojson_map_renderer.test.cjs
 node tests/repeat_jump_unfolder.test.cjs
 node tests/speed_ramp_retime_planner.test.cjs
 node tests/tree_watering_calculator.test.cjs
+node tests/wind_profile_calculator.test.cjs
 
 python3 -m unittest discover -s tests -p 'test_*.py'
 

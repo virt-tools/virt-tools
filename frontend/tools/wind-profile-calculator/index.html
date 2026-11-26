@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Wind Profile Calculator — Virtual Tools</title>
+<meta name="description" content="Extrapolate a wind speed measured at one height to turbine hub height or any other level, with the power law or the log law, and see the profile and the wind-power ratio.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.calculator{max-width:940px;margin:0 auto}
+.settings{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.field{min-width:0}
+.field.wide{grid-column:1/-1}
+.field label{display:block;font-size:.8rem;font-weight:700;margin-bottom:5px}
+.field input,.field select{box-sizing:border-box;width:100%;max-width:560px;min-height:44px;padding:9px 10px;border:1px solid var(--border);border-radius:7px;background:var(--bg);color:var(--text);font:inherit}
+.field input:focus,.field select:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.hint{display:block;margin-top:4px;color:var(--text-muted);font-size:.74rem;line-height:1.35}
+[hidden]{display:none!important}
+button{min-height:44px;padding:8px 13px;border:1px solid var(--border);border-radius:7px;background:var(--bg);color:var(--text);font:inherit;font-weight:700;cursor:pointer}
+button.primary{border-color:var(--accent);background:var(--accent);color:#07111f}
+button:hover:not(:disabled){filter:brightness(1.08)}
+.actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:15px}
+.error{min-height:1.4em;margin:12px 0 0;color:var(--bad,#f87171);font-size:.88rem;line-height:1.4}
+.results{margin-top:18px}
+.summary{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,2fr);gap:14px;align-items:stretch;padding:16px;border:1px solid var(--border);border-radius:10px;background:var(--bg-elev,#171a21)}
+.hero{display:flex;flex-direction:column;justify-content:center;align-items:flex-start;gap:2px;min-width:0}
+.hero strong{font-size:clamp(1.9rem,7vw,2.5rem);line-height:1.05;font-family:ui-monospace,monospace;overflow-wrap:anywhere}
+.hero span{color:var(--text-muted);font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,110px),1fr));gap:10px;min-width:0}
+.metric{display:flex;flex-direction:column;gap:2px;min-width:0}
+.metric strong{font-family:ui-monospace,monospace;font-size:1.12rem;overflow-wrap:anywhere}
+.metric span{color:var(--text-muted);font-size:.74rem;line-height:1.25}
+.rows{margin:14px 0 0}
+.row{display:flex;justify-content:space-between;align-items:baseline;gap:14px;padding:8px 0;border-top:1px solid var(--border);font-size:.9rem}
+.row .k{color:var(--text-muted)}
+.row .v{font-family:ui-monospace,monospace;font-weight:700;text-align:right;overflow-wrap:anywhere}
+.profile-head{margin:22px 0 0;font-size:.95rem}
+.note{margin-top:18px;color:var(--text-muted);font-size:.85rem;line-height:1.55}
+@media (max-width:560px){.summary{grid-template-columns:minmax(0,1fr)}.settings{grid-template-columns:minmax(0,1fr)}}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<h1>Wind Profile Calculator</h1>
+<p>Take a wind speed from one height and estimate it at another, such as turbine hub height.</p>
+</div>
+<div class="panel calculator">
+<form id="profile-form" novalidate>
+<div class="settings">
+<div class="field"><label for="speed">Wind speed (m/s)</label><input id="speed" type="text" inputmode="decimal" autocomplete="off" value="6.5"><span class="hint">measured or forecast at the height below</span></div>
+<div class="field"><label for="ref-height">Measured at (m)</label><input id="ref-height" type="text" inputmode="decimal" autocomplete="off" value="10"><span class="hint">met masts commonly report at 10 m</span></div>
+<div class="field"><label for="height">Estimate at (m)</label><input id="height" type="text" inputmode="decimal" autocomplete="off" value="90"><span class="hint">hub heights are usually 80 to 120 m</span></div>
+<div class="field"><label for="model">Profile model</label><select id="model"><option value="power" selected>Power law</option><option value="log">Log law</option></select><span class="hint">power law by default; log law when roughness is known</span></div>
+<div class="field wide" id="power-field"><label for="exponent">Power-law exponent</label><input id="exponent" type="text" inputmode="decimal" autocomplete="off" value="0.143"><span class="hint">0.11 over open water, 0.143 over open land, 0.2 to 0.4 over rough ground</span></div>
+<div class="field wide" id="log-field" hidden><label for="roughness">Terrain roughness</label><select id="roughness"><option value="0.0002">Open sea</option><option value="0.005">Mud flats, snow</option><option value="0.03" selected>Open grassland</option><option value="0.1">Low crops</option><option value="0.25">High crops</option><option value="0.5">Parkland, bushes</option><option value="1">Suburb, forest</option><option value="2">City centre</option></select><span class="hint" id="roughness-hint">z0 = 0.03 m for open flat terrain</span></div>
+</div>
+<div id="error" class="error" role="alert"></div>
+<div class="actions"><button class="primary" type="submit">Extrapolate the wind</button><button id="reset" type="button">Load example</button></div>
+</form>
+<section id="results" class="results" aria-label="Wind profile result" hidden>
+<div class="summary" aria-live="polite" aria-atomic="true">
+<div class="hero"><strong id="out-speed">—</strong><span id="out-speed-label">at the target height</span></div>
+<div class="metrics">
+<div class="metric"><strong id="out-ratio">—</strong><span>speed ratio</span></div>
+<div class="metric"><strong id="out-power">—</strong><span>wind power ratio</span></div>
+<div class="metric"><strong id="out-kmh">—</strong><span>target speed, km/h</span></div>
+</div>
+</div>
+<div class="rows" id="rows"></div>
+<h2 class="profile-head">Speed by height</h2>
+<div class="rows" id="profile"></div>
+</section>
+<p class="note" id="method"><strong>How the estimate is worked out.</strong> Both models assume the mean wind rises with height over flat, open ground in neutral weather. The power law multiplies the measured speed by the height ratio raised to the exponent you enter: the ratio is 1 for a neutral atmosphere over open land, 0.143 in decimal form, and about 0.11 over open water. The log law instead reads the profile from the terrain roughness length, multiplying the measured speed by the logarithm of each height over the roughness length; the terrain menu carries published roughness lengths from 0.0002 m for open sea to 2 m for a city centre, and it refuses heights below ten times the roughness length, where the model has no meaning. The wind-power ratio is the cube of the speed ratio, because the power in a moving air stream grows with the cube of its speed; it is not a turbine's output, which also depends on the machine's power curve, air density and losses. Both laws assume flat terrain with a long fetch upwind, so a ridge, a forest edge, a building or a valley can change the answer by more than the difference between the two models, and stable night air or gusty weather is not modelled. Everything is calculated in the browser with no storage, uploads or network access.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* wind-profile-core:start */
+var WindProfileCore = (function(){
+  "use strict";
+  var KMH_PER_MS = 3.6;
+  function fail(message){ throw new Error(message); }
+  function num(value, label, min, max, suffix){
+    suffix = suffix || "";
+    if (typeof value === "number" && isFinite(value)){
+      if (value < min || value > max){
+        fail(label + " must be a number from " + min + " to " + max + suffix + ".");
+      }
+      return value;
+    }
+    var raw = String(value === undefined || value === null ? "" : value).trim();
+    if (!/^[0-9]+(?:\.[0-9]+)?$/.test(raw)){
+      fail(label + " must be a number from " + min + " to " + max + suffix + ".");
+    }
+    var parsed = Number(raw);
+    if (!isFinite(parsed) || parsed < min || parsed > max){
+      fail(label + " must be a number from " + min + " to " + max + suffix + ".");
+    }
+    return parsed;
+  }
+  function modelOf(value){
+    if (value === "power" || value === "log") return value;
+    fail("Choose the power law or the log law.");
+  }
+  function factorAt(height, input){
+    if (input.model === "power"){
+      return Math.pow(height / input.refHeight, input.exponent);
+    }
+    return Math.log(height / input.roughness) / Math.log(input.refHeight / input.roughness);
+  }
+  function calculate(input){
+    var options = input || {};
+    var model = modelOf(options.model);
+    var speed = num(options.speed, "Reference wind speed", 0.1, 60, " m/s");
+    var refHeight = num(options.refHeight, "Measurement height", 1, 200, " m");
+    var height = num(options.height, "Target height", 1, 300, " m");
+    var result = {
+      model: model,
+      speed: speed,
+      refHeight: refHeight,
+      height: height,
+      exponent: null,
+      roughness: null,
+      profile: []
+    };
+    if (model === "power"){
+      result.exponent = num(options.exponent, "Power-law exponent", 0.05, 0.6);
+    } else {
+      result.roughness = num(options.roughness, "Roughness length", 0.0001, 5, " m");
+      if (refHeight < 10 * result.roughness || height < 10 * result.roughness){
+        fail("The log law needs both heights at least ten times the roughness length.");
+      }
+    }
+    result.ratio = factorAt(height, result);
+    result.targetSpeed = speed * result.ratio;
+    result.powerRatio = Math.pow(result.ratio, 3);
+    var candidates = [10, 20, 30, 50, 80, 100, 120, 150, 200, refHeight, height];
+    var seen = {};
+    var low = Math.min(refHeight, height);
+    var high = Math.max(refHeight, height);
+    for (var i = 0; i < candidates.length; i += 1){
+      var h = Math.round(candidates[i] * 1000) / 1000;
+      if (h < low || h > high || seen[h]) continue;
+      seen[h] = true;
+      result.profile.push({height: h, speed: speed * factorAt(h, result), factor: factorAt(h, result)});
+    }
+    result.profile.sort(function(a, b){ return a.height - b.height; });
+    return result;
+  }
+  return {calculate: calculate, KMH_PER_MS: KMH_PER_MS};
+})();
+/* wind-profile-core:end */
+(function(){
+  "use strict";
+  var form = document.getElementById("profile-form");
+  var results = document.getElementById("results");
+  var errorNode = document.getElementById("error");
+  var speedInput = document.getElementById("speed");
+  var refInput = document.getElementById("ref-height");
+  var heightInput = document.getElementById("height");
+  var modelSelect = document.getElementById("model");
+  var exponentInput = document.getElementById("exponent");
+  var roughnessSelect = document.getElementById("roughness");
+  var powerField = document.getElementById("power-field");
+  var logField = document.getElementById("log-field");
+  var roughnessHint = document.getElementById("roughness-hint");
+  function node(tag, className, text){
+    var element = document.createElement(tag);
+    if (className) element.className = className;
+    if (text !== undefined && text !== null) element.textContent = text;
+    return element;
+  }
+  function row(key, value){
+    var item = node("div", "row");
+    item.appendChild(node("span", "k", key));
+    item.appendChild(node("span", "v", value));
+    return item;
+  }
+  function heightLabel(value){
+    var rounded = Math.round(value * 10) / 10;
+    return (Math.abs(rounded - Math.round(rounded)) < 1e-9 ? String(Math.round(rounded)) : rounded.toFixed(1)) + "\u00a0m";
+  }
+  function roughnessLabel(value){
+    var text = value >= 0.001 ? String(Math.round(value * 1000) / 1000) : String(value);
+    return "z0 = " + text + " m";
+  }
+  function paintFields(){
+    var power = modelSelect.value === "power";
+    powerField.hidden = !power;
+    logField.hidden = power;
+    var roughness = Number(roughnessSelect.value);
+    var floor = Math.round(10 * roughness * 1000) / 1000;
+    roughnessHint.textContent = roughnessLabel(roughness) + "; both heights must be at least " + String(floor) + " m";
+  }
+  function render(result){
+    document.getElementById("out-speed").textContent = result.targetSpeed.toFixed(2) + "\u00a0m/s";
+    document.getElementById("out-speed-label").textContent = "at " + heightLabel(result.height).replace("\u00a0", " ");
+    document.getElementById("out-ratio").textContent = "\u00d7" + result.ratio.toFixed(3);
+    document.getElementById("out-power").textContent = "\u00d7" + result.powerRatio.toFixed(2);
+    document.getElementById("out-kmh").textContent = (result.targetSpeed * WindProfileCore.KMH_PER_MS).toFixed(1) + "\u00a0km/h";
+    var rows = document.getElementById("rows");
+    rows.replaceChildren();
+    rows.appendChild(row("Measured", result.speed.toFixed(2) + "\u00a0m/s at " + heightLabel(result.refHeight).replace("\u00a0", " ")));
+    rows.appendChild(row(
+      "Model",
+      result.model === "power"
+        ? "Power law, exponent " + String(result.exponent)
+        : "Log law, roughness " + String(result.roughness) + "\u00a0m"
+    ));
+    rows.appendChild(row("Height ratio", (result.height / result.refHeight).toFixed(2)));
+    var profile = document.getElementById("profile");
+    profile.replaceChildren();
+    for (var i = 0; i < result.profile.length; i += 1){
+      var point = result.profile[i];
+      var marker = "";
+      if (Math.abs(point.height - result.height) < 1e-9) marker = " \u00b7 target";
+      else if (Math.abs(point.height - result.refHeight) < 1e-9) marker = " \u00b7 measured";
+      profile.appendChild(row(
+        heightLabel(point.height).replace("\u00a0", " ") + marker,
+        point.speed.toFixed(2) + "\u00a0m/s \u00b7 \u00d7" + point.factor.toFixed(2)
+      ));
+    }
+    results.hidden = false;
+  }
+  function calculate(){
+    try {
+      var result = WindProfileCore.calculate({
+        model: modelSelect.value,
+        speed: speedInput.value,
+        refHeight: refInput.value,
+        height: heightInput.value,
+        exponent: exponentInput.value,
+        roughness: roughnessSelect.value
+      });
+      errorNode.textContent = "";
+      render(result);
+    } catch (error){
+      errorNode.textContent = error.message;
+      results.hidden = true;
+    }
+  }
+  function reset(){
+    modelSelect.value = "power";
+    speedInput.value = "6.5";
+    refInput.value = "10";
+    heightInput.value = "90";
+    exponentInput.value = "0.143";
+    roughnessSelect.value = "0.03";
+    paintFields();
+    calculate();
+  }
+  modelSelect.addEventListener("change", function(){
+    paintFields();
+    calculate();
+  });
+  roughnessSelect.addEventListener("change", function(){
+    paintFields();
+    calculate();
+  });
+  document.getElementById("reset").addEventListener("click", reset);
+  form.addEventListener("input", calculate);
+  form.addEventListener("submit", function(event){
+    event.preventDefault();
+    calculate();
+  });
+  reset();
+})();
+</script>
+</body>
+</html>
