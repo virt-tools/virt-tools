@@ -145,7 +145,7 @@ assert.ok(record.tags.includes('bouldering'));
 assert.ok(record.sources.some((source) => source.url === 'https://www.mountainproject.com/international-climbing-grades'));
 assert.ok(record.method.length > 900);
 assert.ok(record.testCases.length >= 14);
-assert.equal(catalog.tools.filter((tool) => tool.category === record.category).length, 55, 'Sports & Outdoors count');
+assert.equal(catalog.tools.filter((tool) => tool.category === record.category).length, 56, 'Sports & Outdoors count');
 
 const names = new Map();
 for (const tool of catalog.tools) {
