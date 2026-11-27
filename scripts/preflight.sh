@@ -458,6 +458,7 @@ node tests/drilling_cost_per_foot_calculator.test.cjs
 node tests/lost_wax_casting_metal_weight_calculator.test.cjs
 
 node tests/roller_chain_drive_calculator.test.cjs
+node tests/keyway_size_calculator.test.cjs
 node tests/branch_line_coupler_designer.test.cjs
 node tests/mud_weight_adjustment_calculator.test.cjs
 node tests/dogleg_severity_calculator.test.cjs

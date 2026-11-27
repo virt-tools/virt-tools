@@ -259,8 +259,8 @@ assert.equal(new Set(record.tags).size, record.tags.length, 'tags are internally
 for (const tag of ['sports-&-outdoors', 'estimation-calculation', 'pickleball', 'court-marking', 'line-marking']) {
   assert.ok(record.tags.includes(tag), 'new tag present: ' + tag);
 }
-assert.equal(catalog.tools.length, 2502, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2241, 'public tools');
+assert.equal(catalog.tools.length, 2503, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2242, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Sports & Outdoors').length, 57,
   'Sports & Outdoors count');
 
