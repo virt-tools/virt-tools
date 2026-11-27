@@ -164,8 +164,8 @@ assert.equal(C.UM_PER_INCH, 25400);
 assert.equal(C.MAX_PRINTS, 100000);
 
 // ---- Catalog record: counts, cases and metadata.
-assert.equal(catalog.tools.length, 2507, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2246, 'public tools');
+assert.equal(catalog.tools.length, 2508, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2247, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Crafts & Hobbies').length, 57,
   'Crafts & Hobbies count');
 assert.equal(record.category, 'Crafts & Hobbies');

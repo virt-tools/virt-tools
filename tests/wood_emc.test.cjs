@@ -45,8 +45,8 @@ assert.ok(record.sources[0].title.length > 80, 'source title is specific');
 assert.ok(/equation 4-5/.test(record.sources[0].title) && /table 4-2/i.test(record.sources[0].title),
   'the source names the equation and the table it validates against');
 
-assert.equal(catalog.tools.length, 2507, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2246, 'public tools');
+assert.equal(catalog.tools.length, 2508, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2247, 'public tools');
 assert.equal(
   catalog.tools.filter((tool) => tool.category === 'Crafts & Hobbies').length,
   57,
