@@ -140,8 +140,8 @@ assert.equal(C.MIN_PITCH, 3);
 assert.equal(C.MAX_TEETH, 200);
 
 // ---- Catalog record: counts, cases and metadata.
-assert.equal(catalog.tools.length, 2504, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2243, 'public tools');
+assert.equal(catalog.tools.length, 2505, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2244, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Mechanical & Structural Engineering').length, 57,
   'Mechanical & Structural Engineering count');
 assert.equal(record.category, 'Mechanical & Structural Engineering');
