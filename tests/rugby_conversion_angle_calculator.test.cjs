@@ -177,7 +177,7 @@ const pageDirs = fs.readdirSync(path.join(root, 'frontend', 'tools'), { withFile
   .filter((entry) => entry.isDirectory()).length;
 assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageDirs,
   'every listed tool record has a page');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Sports & Outdoors').length, 56,
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Sports & Outdoors').length, 57,
   'Sports & Outdoors count');
 const names = new Map();
 for (const tool of catalog.tools) {
