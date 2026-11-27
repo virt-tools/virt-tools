@@ -42,7 +42,7 @@ assert.equal(record.testCases.length, 30);
 assert.equal(record.testCases.filter((t) => t.kind === 'golden').length, 9);
 assert.equal(record.testCases.filter((t) => t.kind === 'boundary').length, 5);
 assert.equal(record.testCases.filter((t) => t.kind === 'validation').length, 16);
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2250, 'public tools');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2251, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Mechanical & Structural Engineering').length, 57,
   'Mechanical & Structural Engineering count');
 // No other record claims this slug, name, alias or tag.

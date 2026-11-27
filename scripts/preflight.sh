@@ -519,6 +519,7 @@ node tests/dwdm_cwdm_channel_calculator.test.cjs
 node tests/marching_band_step_timing_calculator.test.cjs
 node tests/trilateration_position_fix.test.cjs
 node tests/color_gamut_converter.test.cjs
+node tests/gas_meter_input_rate_calculator.test.cjs
 
 python3 -m unittest discover -s tests -p 'test_*.py'
 
