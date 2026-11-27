@@ -491,6 +491,7 @@ node tests/journald_storage_budget_planner.test.cjs
 node tests/rugby_conversion_angle_calculator.test.cjs
 node tests/python_version_specifier_checker.test.cjs
 node tests/leak_rate_converter.test.cjs
+node tests/keg_carbonation_pressure_calculator.test.cjs
 
 python3 -m unittest discover -s tests -p 'test_*.py'
 

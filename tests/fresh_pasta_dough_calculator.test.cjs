@@ -175,9 +175,9 @@ for (const other of catalog.tools) {
 }
 
 // ---- The catalog keeps growing and stays balanced.
-assert.equal(catalog.tools.length, 2484, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2223, 'public tools');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Food').length, 55, 'Food count');
+assert.equal(catalog.tools.length, 2485, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2224, 'public tools');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Food').length, 56, 'Food count');
 
 // ---- Page contract.
 assert.match(html, /<html lang="en">/);
