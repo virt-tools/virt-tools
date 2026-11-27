@@ -128,8 +128,8 @@ assert.equal(refusal({ directives: [{}] }), 'A feature name is required.');
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
 const entry = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(entry, 'catalog entry missing');
-assert.equal(catalog.tools.length, 2493, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2232, 'public tools');
+assert.equal(catalog.tools.length, 2494, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2233, 'public tools');
 assert.ok(entry.testCases.length >= 30, `expected at least 30 cases, found ${entry.testCases.length}`);
 
 for (const testCase of entry.testCases) {
@@ -167,7 +167,7 @@ assert.ok(!folded.has(entry.name.toLowerCase()), 'name collides');
 for (const alias of entry.aliases) assert.ok(!folded.has(alias.toLowerCase()), `alias collides: ${alias}`);
 assert.ok(entry.tags.includes('permissions-policy') && entry.tags.includes('header'));
 assert.equal(entry.category, 'Security');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Security').length, 56, 'Security count');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Security').length, 57, 'Security count');
 assert.equal(entry.listed, true);
 assert.equal(entry.risk, 'low');
 assert.equal(entry.maturity, 'draft');
