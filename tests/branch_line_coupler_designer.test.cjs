@@ -165,8 +165,8 @@ assert.equal(C.MIN_RATIO, 0.2);
 assert.equal(C.MAX_RATIO, 1.8);
 
 // ---- Catalog record: counts, cases and metadata.
-assert.equal(catalog.tools.length, 2483, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2222, 'public tools');
+assert.equal(catalog.tools.length, 2484, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2223, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Communications Engineering').length, 56,
   'Communications Engineering count');
 assert.equal(record.category, 'Communications Engineering');
