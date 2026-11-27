@@ -460,6 +460,7 @@ node tests/lost_wax_casting_metal_weight_calculator.test.cjs
 node tests/roller_chain_drive_calculator.test.cjs
 node tests/branch_line_coupler_designer.test.cjs
 node tests/mud_weight_adjustment_calculator.test.cjs
+node tests/dogleg_severity_calculator.test.cjs
 node tests/bandsaw_blade_length_calculator.test.cjs
 node tests/water_hardness_converter.test.cjs
 node tests/srecord_inspector.test.cjs
