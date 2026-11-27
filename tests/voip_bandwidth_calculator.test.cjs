@@ -32,7 +32,7 @@ const pageDirs = fs.readdirSync(path.join(root, 'frontend', 'tools'), { withFile
   .filter((entry) => entry.isDirectory()).length;
 assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageDirs,
   'every listed tool record has a page');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Networking').length, 56, 'Networking count');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Networking').length, 57, 'Networking count');
 
 const slugs = new Set(catalog.tools.map((tool) => tool.slug));
 assert.equal(slugs.size, catalog.tools.length, 'slugs unique');
