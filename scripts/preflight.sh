@@ -497,6 +497,7 @@ node tests/ssd_endurance_calculator.test.cjs
 node tests/magnetic_declination_calculator.test.cjs
 node tests/score_page_layout_planner.test.cjs
 node tests/screenplay_page_breakdown.test.cjs
+node tests/heat_recovery_effectiveness_checker.test.cjs
 
 python3 -m unittest discover -s tests -p 'test_*.py'
 

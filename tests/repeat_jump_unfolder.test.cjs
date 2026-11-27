@@ -22,8 +22,8 @@ const same = (actual, expected, message) =>
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
 const entry = catalog.tools.find((tool) => tool.slug === 'repeat-jump-unfolder');
 assert.ok(entry, 'catalog entry missing');
-assert.equal(catalog.tools.length, 2490, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2229, 'public tools');
+assert.equal(catalog.tools.length, 2491, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2230, 'public tools');
 assert.ok(entry.testCases.length >= 30, `expected at least 30 cases, found ${entry.testCases.length}`);
 
 // Replay every catalog case: refusals by exact message, results by the documented fields.
