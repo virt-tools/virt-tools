@@ -365,8 +365,8 @@ assert.equal(new Set(record.tags).size, record.tags.length, 'tags are internally
 for (const tag of ['networking', 'dns', 'packet-analysis', 'wire-format']) {
   assert.ok(record.tags.includes(tag), 'new tag present: ' + tag);
 }
-assert.equal(catalog.tools.length, 2481, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2220, 'public tools');
+assert.equal(catalog.tools.length, 2482, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2221, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Networking').length, 56, 'networking records');
 
 // ---- Page contract: shared assets, labelled controls, no storage or network.

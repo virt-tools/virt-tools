@@ -45,6 +45,7 @@ node tests/receiver_sensitivity_calculator.test.cjs
 node tests/earth_station_gt_ratio_calculator.test.cjs
 node tests/affinity_law_calculator.test.cjs
 node tests/ship_tonnage_calculator.test.cjs
+node tests/wood_emc.test.cjs
 node tests/fish_weight_calculator.test.cjs
 node tests/shutter_angle_calculator.test.cjs
 node tests/quilt_backing_calculator.test.cjs

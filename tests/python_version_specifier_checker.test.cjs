@@ -147,8 +147,8 @@ assert.equal((html.match(/<script/g) || []).length, 3, 'theme init, app shell an
 assert.equal((html.match(/\/assets\/app\.js/g) || []).length, 1, 'shared shell is loaded once');
 
 // ---- Catalog integrity and the totals every suite pins. ----
-assert.equal(catalog.tools.length, 2481, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2220, 'public tools');
+assert.equal(catalog.tools.length, 2482, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2221, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Developer').length, 56, 'Developer count');
 assert.equal(catalog.tools.filter((tool) => tool.slug === slug).length, 1, 'one record');
 const pageDirs = fs.readdirSync(path.join(root, 'frontend/tools')).filter((entry) =>
