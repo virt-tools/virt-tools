@@ -277,8 +277,8 @@ for (const tag of ['audio', 'acoustics', 'room-acoustics', 'critical-distance', 
   'microphone-placement']) {
   assert.ok(record.tags.includes(tag), 'new tag present: ' + tag);
 }
-assert.equal(catalog.tools.length, 2503, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2242, 'public tools');
+assert.equal(catalog.tools.length, 2504, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2243, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Audio').length, 57, 'audio records');
 
 // ---- Page contract: shared assets, labelled controls, no storage or network.

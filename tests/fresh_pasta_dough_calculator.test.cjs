@@ -175,8 +175,8 @@ for (const other of catalog.tools) {
 }
 
 // ---- The catalog keeps growing and stays balanced.
-assert.equal(catalog.tools.length, 2503, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2242, 'public tools');
+assert.equal(catalog.tools.length, 2504, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2243, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Food').length, 56, 'Food count');
 
 // ---- Page contract.

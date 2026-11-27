@@ -511,6 +511,7 @@ node tests/corsi_fenwick_calculator.test.cjs
 node tests/pll_loop_filter_calculator.test.cjs
 
 node tests/screen_printing_ink_calculator.test.cjs
+node tests/strftime_date_format_builder.test.cjs
 
 python3 -m unittest discover -s tests -p 'test_*.py'
 
