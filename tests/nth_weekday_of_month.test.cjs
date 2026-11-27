@@ -321,7 +321,7 @@ for (const testCase of record.testCases) {
     assert.deepEqual(result[key], expected, testCase.name + ' ' + key);
   }
 }
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2219, 'public tools');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2220, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Time').length, 55, 'Time count');
 
 const keyOwners = new Map();
