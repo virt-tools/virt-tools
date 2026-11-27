@@ -22,8 +22,8 @@ const same = (actual, expected, message) =>
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
 const entry = catalog.tools.find((tool) => tool.slug === 'repeat-jump-unfolder');
 assert.ok(entry, 'catalog entry missing');
-assert.equal(catalog.tools.length, 2508, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2247, 'public tools');
+assert.equal(catalog.tools.length, 2509, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2248, 'public tools');
 assert.ok(entry.testCases.length >= 30, `expected at least 30 cases, found ${entry.testCases.length}`);
 
 // Replay every catalog case: refusals by exact message, results by the documented fields.
@@ -110,7 +110,7 @@ assert.ok(!folded.has(entry.name.toLowerCase()), 'name collides');
 for (const alias of entry.aliases) assert.ok(!folded.has(alias.toLowerCase()), `alias collides: ${alias}`);
 assert.ok(entry.tags.includes('repeat') && entry.tags.includes('coda'));
 assert.equal(entry.category, 'Music');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Music').length, 56, 'Music count');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Music').length, 57, 'Music count');
 assert.equal(entry.listed, true);
 assert.equal(entry.risk, 'low');
 assert.equal(entry.maturity, 'draft');

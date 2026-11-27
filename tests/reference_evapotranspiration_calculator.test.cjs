@@ -22,8 +22,8 @@ const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool
 const slug = 'reference-evapotranspiration-calculator';
 const entry = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(entry, 'catalog entry missing');
-assert.equal(catalog.tools.length, 2508, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2247, 'public tools');
+assert.equal(catalog.tools.length, 2509, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2248, 'public tools');
 assert.equal(entry.category, 'Environment', 'category');
 assert.equal(entry.risk, 'low', 'risk');
 assert.equal(entry.maturity, 'draft', 'maturity');

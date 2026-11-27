@@ -516,6 +516,7 @@ node tests/punched_card_hollerith.test.cjs
 node tests/sheet_metal_gauge_converter.test.cjs
 node tests/draft_beer_line_length_calculator.test.cjs
 node tests/dwdm_cwdm_channel_calculator.test.cjs
+node tests/marching_band_step_timing_calculator.test.cjs
 
 python3 -m unittest discover -s tests -p 'test_*.py'
 

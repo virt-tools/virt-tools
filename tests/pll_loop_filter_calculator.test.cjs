@@ -45,8 +45,8 @@ for (const source of record.sources) {
 assert.ok(record.sources.some((source) => source.url.includes('snaa106c')), 'TI PLL book source');
 assert.ok(record.sources.some((source) => source.url.includes('Phase-locked_loop')), 'PLL topology source');
 
-assert.equal(catalog.tools.length, 2508, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2247, 'public tools');
+assert.equal(catalog.tools.length, 2509, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2248, 'public tools');
 assert.equal(
   catalog.tools.filter((tool) => tool.category === 'Communications Engineering').length,
   57,

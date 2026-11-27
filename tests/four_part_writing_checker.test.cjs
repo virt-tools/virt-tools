@@ -203,7 +203,7 @@ assert.ok(record.tags.includes('music'));
 assert.ok(record.tags.includes('voice-leading'));
 assert.ok(record.method.length > 700);
 assert.ok(record.testCases.length >= 10);
-assert.equal(catalog.tools.filter((tool) => tool.category === record.category).length, 56, 'Music count');
+assert.equal(catalog.tools.filter((tool) => tool.category === record.category).length, 57, 'Music count');
 
 const names = new Map();
 for (const tool of catalog.tools) {

@@ -199,7 +199,7 @@ const pageDirs = fs.readdirSync(path.join(root, 'frontend', 'tools'), { withFile
   .filter((entry) => entry.isDirectory()).length;
 assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageDirs,
   'every listed tool record has a page');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2247, 'public tools');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2248, 'public tools');
 const entry = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(entry, 'the new record is present');
 assert.equal(entry.name, 'ISO 3166 Country Code Converter');
