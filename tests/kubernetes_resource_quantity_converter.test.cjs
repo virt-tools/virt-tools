@@ -247,8 +247,8 @@ for (const testCase of record.testCases) {
 // ---- 6. Record metadata, totals and uniqueness against the whole catalog.
 const pageDirs = fs.readdirSync(path.join(root, 'frontend', 'tools'), { withFileTypes: true })
   .filter((entry) => entry.isDirectory()).length;
-assert.equal(catalog.tools.length, 2497, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2236, 'public tools');
+assert.equal(catalog.tools.length, 2498, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2237, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageDirs,
   'every listed tool record has a page');
 assert.equal(record.name, 'Kubernetes Resource Quantity Converter');
@@ -258,7 +258,7 @@ assert.equal(record.risk, 'low');
 assert.equal(record.maturity, 'draft');
 assert.equal(record.listed, true);
 assert.equal(record.reviewedAt, null);
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Developer').length, 56,
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Developer').length, 57,
   'Developer count');
 assert.equal(record.sources.length, 3, 'three sources');
 assert.ok(record.sources.every((entry) => /^https:\/\//.test(entry.url)), 'every source is https');

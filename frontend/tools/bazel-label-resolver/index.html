@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>Bazel Label Resolver &mdash; Virtual Tools</title>
+<meta name="description" content="Resolve a Bazel label or target pattern against a working directory: the repository, package and inferred target, the :all and :* wildcards, the three readings of a relative path, and the exact validation error.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.row{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:12px 14px}
+.field{display:flex;flex-direction:column;gap:6px;margin:0;min-width:0}
+.field input{box-sizing:border-box;width:100%;font:inherit;padding:9px 11px;border-radius:8px;
+  border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);color:var(--text,#e6e6e6);
+  font-size:15px;min-height:44px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.field input:focus-visible{outline:2px solid var(--accent,#6ea8fe);outline-offset:1px}
+.hint{color:var(--text-dim,#9aa3b2);font-size:12.5px;margin:12px 0 0;line-height:1.55;max-width:780px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 0}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);
+  background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.err{color:var(--bad,#f87171);font-size:13px;margin:10px 0 0;min-height:1.2em;max-width:780px;overflow-wrap:anywhere}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:16px 0 0}
+.out .label{text-align:center;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-dim,#9aa3b2)}
+.out .big{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:clamp(1rem,4.6vw,1.4rem);font-weight:700;
+  text-align:center;padding:8px 0 6px;line-height:1.4;overflow-wrap:anywhere;word-break:break-word}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:6px 0 0;line-height:1.5;overflow-wrap:anywhere}
+.ref{display:table;width:100%;border-collapse:collapse;margin:18px 0 0;font-size:13.5px}
+.ref th,.ref td{border-bottom:1px solid var(--border,#2a2f3a);padding:7px 8px;text-align:left;vertical-align:top}
+.ref tbody th{font-weight:500;width:40%}
+.ref td{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}
+.ref td.plain{font-family:inherit}
+.config{margin:16px 0 0;padding:12px 14px;border:1px solid var(--border,#2a2f3a);border-radius:8px;background:var(--bg,#0f1218)}
+.config .k{display:block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim,#9aa3b2);margin:0 0 6px}
+.config pre{margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;line-height:1.65;
+  white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text,#e6e6e6)}
+.note{color:var(--text-dim,#9aa3b2);font-size:12.5px;line-height:1.65;margin:18px 0 0;max-width:840px}
+.note code{font-size:12px}
+@media (max-width:620px){
+  .row{grid-template-columns:minmax(0,1fr)}
+  .actions button{flex:1 1 auto}
+  .ref th,.ref td{padding:6px 5px;font-size:12.5px}
+}
+@media (max-width:430px){
+  .ref tbody tr{display:grid;gap:1px;padding:8px 0;border-bottom:1px solid var(--border,#2a2f3a)}
+  .ref tbody tr:last-child{border-bottom:none}
+  .ref tbody th,.ref tbody td{display:block;width:auto;border-bottom:none;padding:0}
+  .ref tbody th{font-size:12px;color:var(--text-dim,#9aa3b2)}
+}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<h1>Bazel Label Resolver</h1>
+<p>Type a Bazel label or target pattern the way you would after <code>bazel build</code>, and see the repository, package and target it really names.</p>
+</div>
+<div class="panel">
+<form id="bazel-form" novalidate>
+<div class="row">
+<div class="field">
+<label for="target">Label or target pattern</label>
+<input id="target" type="text" autocomplete="off" spellcheck="false" autocapitalize="off" value="//my/app">
+</div>
+<div class="field">
+<label for="cwd">Working directory</label>
+<input id="cwd" type="text" autocomplete="off" spellcheck="false" autocapitalize="off" value="my/app/main">
+</div>
+</div>
+<p class="hint">Examples: <code>//my/app:app</code>, <code>//my/app/...</code>, <code>:lib</code>, <code>tools/parser</code>, <code>@rules_go//go:def.bzl</code>, <code>-//legacy/...</code>. The working directory only matters for patterns that do not start with <code>//</code> or <code>@</code>.</p>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions"><button type="submit">Resolve the pattern</button></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true">
+<div class="label">Resolves to</div>
+<div class="big" id="canonical">&mdash;</div>
+<div class="sub" id="summary">Enter a label or target pattern above.</div>
+</div>
+<table class="ref">
+<caption>What the label names</caption>
+<tbody>
+<tr><th scope="row">Form</th><td class="plain" id="f-form"></td></tr>
+<tr><th scope="row">Repository</th><td id="f-repo"></td></tr>
+<tr><th scope="row">Package</th><td id="f-package"></td></tr>
+<tr><th scope="row">Target</th><td id="f-target"></td></tr>
+<tr><th scope="row">Matches</th><td class="plain" id="f-matches"></td></tr>
+<tr><th scope="row">Targets tagged manual</th><td class="plain" id="f-manual"></td></tr>
+</tbody>
+</table>
+<div class="config">
+<span class="k" id="cmd-label">Equivalent command</span>
+<pre id="cmd">&mdash;</pre>
+</div>
+<p class="note">A label is read the way Bazel's label documentation defines it. The repository part is optional: <code>@name//</code> is an apparent repository, <code>@@name//</code> a canonical one, and <code>@@//</code> always means the main repository, even from an external one. The package is the path between <code>//</code> and the first colon, and the target is what follows. With no colon the last path segment becomes the target, so <code>//my/app</code> means <code>//my/app:app</code>, never the package <code>my/app</code>; the same shorthand turns <code>//foo/bar/wiz</code> into <code>//foo/bar/wiz:wiz</code> even when no such package exists. A target may contain slashes for files in subdirectories, but its path must be in normal form; package names may not contain a colon or a tilde, a double slash, or <code>.</code> and <code>..</code> segments, and non-ASCII characters are allowed only in target names.</p>
+<p class="note">On a command line, <code>:all</code> matches rule targets while <code>:*</code> and <code>:all-targets</code> also match files and implicit outputs such as <code>_deploy.jar</code>; <code>...</code> matches packages beneath a directory, and <code>//...</code> stops at the main repository's boundary. Targets tagged <code>manual</code> are left out of wildcard builds and tests, but <code>bazel query</code> does not filter them. A leading <code>-</code> subtracts a pattern from the ones before it, needs <code>--</code> before it on the command line, and does not stop a subtracted target being built as a dependency. Relative patterns are resolved against the working directory rather than the workspace root. A relative path with a slash and no colon is genuinely ambiguous &mdash; only the BUILD files decide &mdash; so the page lists the three spellings instead of guessing. Everything is computed in your browser; nothing is sent anywhere else.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* bazel-core:start */
+var BazelCore = (function(){
+  "use strict";
+
+  var TARGET_PUNCT = "!\"#$%&'()*+,-./;<=>?@[]^_`{|}~";
+  var PACKAGE_PUNCT = "!\"#$%&'()*+,-.;<=>?@[]^_`{|}";
+  var EMPTY = "Enter a label or target pattern, such as //foo/bar:wiz.";
+  var TARGET_EMPTY = "Name a target after the colon, or leave the colon off to use the last path segment.";
+  var RECURSIVE_TARGET = "A ... pattern covers whole packages; name :all, :* or :all-targets, or leave the target off.";
+  var DOT_SEGMENT = "Labels cannot contain . or .. path segments; name the package or file directly.";
+
+  function fail(message){ throw new Error(message); }
+
+  function trim(value){
+    return String(value == null ? "" : value).replace(/^\s+|\s+$/g, "");
+  }
+
+  function isAscii(value){
+    for (var i = 0; i < value.length; i++){
+      if (value.charCodeAt(i) > 126) return false;
+    }
+    return true;
+  }
+
+  function inSet(ch, set){
+    if (ch >= "a" && ch <= "z") return true;
+    if (ch >= "A" && ch <= "Z") return true;
+    if (ch >= "0" && ch <= "9") return true;
+    return set.indexOf(ch) > -1;
+  }
+
+  function checkPackage(pkg){
+    if (pkg === "") return;
+    if (!isAscii(pkg))
+      fail("Package names are ASCII; non-ASCII characters belong in target names.");
+    if (pkg.charAt(0) === "/" || pkg.charAt(pkg.length - 1) === "/")
+      fail("Package paths cannot start or end with a slash.");
+    if (pkg.indexOf("//") > -1)
+      fail("Package paths cannot contain a double slash; write one slash between directories.");
+    var parts = pkg.split("/");
+    for (var i = 0; i < parts.length; i++){
+      var part = parts[i];
+      if (part === "." || part === "..")
+        fail(DOT_SEGMENT);
+      for (var j = 0; j < part.length; j++){
+        if (!inSet(part.charAt(j), PACKAGE_PUNCT))
+          fail("Package names use letters, digits and the punctuation Bazel allows; non-ASCII characters belong in target names.");
+      }
+    }
+  }
+
+  function checkFilePath(path){
+    if (path.charAt(0) === "/" || path.charAt(path.length - 1) === "/")
+      fail("A file target's path cannot start or end with a slash.");
+    if (path.indexOf("//") > -1)
+      fail("A file target's path cannot contain a double slash.");
+    var parts = path.split("/");
+    for (var i = 0; i < parts.length; i++){
+      if (parts[i] === "." || parts[i] === "..")
+        fail("A file target's path cannot contain . or .. segments; file targets stay inside their package.");
+    }
+  }
+
+  function checkTarget(target){
+    if (target === "") fail(TARGET_EMPTY);
+    for (var i = 0; i < target.length; i++){
+      var ch = target.charAt(i);
+      var code = target.charCodeAt(i);
+      if (ch === ":") fail("Target names cannot contain a colon.");
+      if (ch === "\\") fail("Target names cannot contain a backslash.");
+      if (code < 32) fail("Target names cannot contain control characters.");
+      if (code > 126) continue;
+      if (ch !== " " && !inSet(ch, TARGET_PUNCT))
+        fail("Target names use letters, digits and the punctuation Bazel allows.");
+    }
+    if (target.indexOf("/") > -1) checkFilePath(target);
+  }
+
+  function splitTarget(body){
+    var colon = body.indexOf(":");
+    if (colon > -1 && body.indexOf(":", colon + 1) > -1)
+      fail("Target names cannot contain a colon.");
+    if (colon > -1) return { pkg: body.slice(0, colon), target: body.slice(colon + 1) };
+    return { pkg: body, target: null };
+  }
+
+  function splitWildcard(pkg){
+    var parts = pkg.split("/");
+    var index = -1;
+    for (var i = 0; i < parts.length; i++){
+      if (parts[i] === "..."){ index = i; break; }
+    }
+    if (index === -1) return { recursive: false, base: pkg };
+    if (index !== parts.length - 1)
+      fail("The ... wildcard must be the last segment of the package path.");
+    return { recursive: true, base: parts.slice(0, index).join("/") };
+  }
+
+  function join(base, extra){
+    if (!base) return extra;
+    if (!extra) return base;
+    return base + "/" + extra;
+  }
+
+  function wildcardKind(target){
+    if (target === "all") return "rules";
+    if (target === "*" || target === "all-targets") return "targets";
+    return "label";
+  }
+
+  function packageText(repository, pkg){
+    return (repository || "") + "//" + pkg;
+  }
+
+  function recursiveText(repository, pkg){
+    return (repository || "") + "//" + (pkg === "" ? "" : pkg + "/") + "...";
+  }
+
+  function canon(repository, pkg, target, recursive, kind){
+    if (recursive) return recursiveText(repository, pkg) + (kind === "targets" ? ":" + target : "");
+    return packageText(repository, pkg) + ":" + target;
+  }
+
+  function describe(repository, pkg, target, recursive, kind){
+    var base = packageText(repository, pkg);
+    if (recursive){
+      var scope = kind === "targets" ? "every target, rules and files, " : "every rule target ";
+      return scope + "in every package beneath " + (pkg === "" ? "the workspace root" : base);
+    }
+    if (kind === "rules") return "every rule target in " + base + " (the :all wildcard, not a target named all)";
+    if (kind === "targets") return "every target in " + base + ", rules and files (the :* wildcard)";
+    return "the single target " + base + ":" + target;
+  }
+
+  function finish(repository, pkg, target, recursive, negative, inferred){
+    checkPackage(pkg);
+    if (recursive){
+      if (target === "") fail(TARGET_EMPTY);
+      if (target !== null && target !== "all" && target !== "*" && target !== "all-targets")
+        fail(RECURSIVE_TARGET);
+    } else if (target === null){
+      if (pkg === "")
+        fail("Name a target after //, such as //:app, or name a package such as //my/app.");
+      target = pkg.slice(pkg.lastIndexOf("/") + 1);
+      inferred = true;
+    }
+    if (target !== null) checkTarget(target);
+
+    var kind = recursive
+      ? (target === "*" || target === "all-targets" ? "targets" : "rules")
+      : wildcardKind(target);
+    var canonical = canon(repository, pkg, target, recursive, kind);
+    var expanded = recursive ? recursiveText(repository, pkg) + ":" + (target || "all") : canonical;
+
+    return {
+      kind: kind,
+      recursive: recursive,
+      negative: negative,
+      inferred: inferred,
+      repository: repository,
+      packageName: pkg,
+      targetName: target,
+      canonical: canonical,
+      expanded: expanded,
+      matches: describe(repository, pkg, target, recursive, kind),
+      manual: kind === "label" ? null : "skipped"
+    };
+  }
+
+  function resolveAbsolute(repository, body, negative){
+    var split = splitTarget(body);
+    var wildcard = splitWildcard(split.pkg);
+    return finish(repository, wildcard.base, split.target, wildcard.recursive, negative, false);
+  }
+
+  function resolveRelative(wd, body, negative){
+    var split = splitTarget(body);
+    if (split.pkg.charAt(0) === "/")
+      fail("A relative pattern cannot start with a slash; write // for an absolute package.");
+    var wildcard = splitWildcard(split.pkg);
+    var relative = wildcard.base;
+    var recursive = wildcard.recursive;
+
+    if (relative !== ""){
+      if (relative.charAt(0) === "/" || relative.charAt(relative.length - 1) === "/")
+        fail("Package paths cannot start or end with a slash.");
+      if (relative.indexOf("//") > -1)
+        fail("Package paths cannot contain a double slash; write one slash between directories.");
+      var parts = relative.split("/");
+      for (var i = 0; i < parts.length; i++){
+        if (parts[i] === "." || parts[i] === "..") fail(DOT_SEGMENT);
+      }
+    }
+
+    if (!recursive && split.target === null && relative.indexOf("/") > -1){
+      var segments = relative.split("/");
+      var last = segments[segments.length - 1];
+      var parentPath = segments.slice(0, -1).join("/");
+      var fullPath = join(wd, relative);
+      var parent = join(wd, parentPath);
+      checkPackage(fullPath);
+      checkPackage(parent);
+      checkPackage(wd);
+      checkTarget(last);
+      checkTarget(relative);
+      var candidates = [
+        { canonical: "//" + fullPath + ":" + last, when: "if " + fullPath + " is a package" },
+        { canonical: "//" + parent + ":" + last, when: "else if " + parent + " is a package" },
+        { canonical: "//" + wd + ":" + relative, when: "otherwise, as a file under " + (wd === "" ? "the root package" : "//" + wd) }
+      ];
+      return {
+        kind: "ambiguous",
+        recursive: false,
+        negative: negative,
+        inferred: false,
+        repository: null,
+        packageName: null,
+        targetName: null,
+        canonical: null,
+        expanded: null,
+        matches: "one of three labels, depending on which directories hold a BUILD file",
+        manual: null,
+        candidates: candidates
+      };
+    }
+
+    if (recursive){
+      return finish(null, join(wd, relative), split.target, true, negative, false);
+    }
+    if (split.target === null){
+      if (relative === "")
+        fail("Name a target, such as :app or //my/app:app.");
+      return finish(null, wd, relative, false, negative, false);
+    }
+    return finish(null, join(wd, relative), split.target, false, negative, false);
+  }
+
+  function resolve(input){
+    var opts = input || {};
+    var raw = trim(opts.target);
+    var wd = trim(opts.cwd);
+    if (!raw) fail(EMPTY);
+
+    var negative = false;
+    if (raw.charAt(0) === "-"){
+      negative = true;
+      raw = raw.slice(1);
+      if (!raw) fail("A negative pattern needs a pattern after the minus sign.");
+    }
+
+    if (wd.slice(0, 2) === "//") wd = wd.slice(2);
+    if (wd.indexOf(":") > -1)
+      fail("Enter the working directory as a package path, such as my/app, with no target after a colon.");
+    if (splitWildcard(wd).recursive)
+      fail("Enter the working directory as a package path, without a ... wildcard.");
+    checkPackage(wd);
+
+    if (raw.charAt(0) === "@"){
+      var cut = raw.indexOf("//");
+      if (cut < 0)
+        fail("A repository-qualified pattern needs // before the package, such as @rules_go//go:def.bzl.");
+      var repository = raw.slice(0, cut);
+      var name = repository.replace(/^@@?/, "");
+      if (!name){
+        if (repository !== "@@")
+          fail("Name the repository after @, or write @@// to mean the main repository.");
+      } else if (/[\s\/\\:@]/.test(name)){
+        fail("Repository names cannot contain spaces, slashes, colons or @.");
+      }
+      return resolveAbsolute(repository, raw.slice(cut + 2), negative);
+    }
+    if (raw.slice(0, 2) === "//") return resolveAbsolute(null, raw.slice(2), negative);
+    if (raw.charAt(0) === "/")
+      fail("Write // before an absolute package, or drop the slash for a target in the working directory.");
+    return resolveRelative(wd, raw, negative);
+  }
+
+  return {
+    resolve: resolve
+  };
+})();
+/* bazel-core:end */
+(function(){
+  "use strict";
+
+  var els = {};
+  ["target","cwd","err","canonical","summary","f-form","f-repo","f-package","f-target","f-matches",
+    "f-manual","cmd","cmd-label"].forEach(function(id){ els[id] = document.getElementById(id); });
+
+  function placeholder(message){
+    els.canonical.textContent = "\u2014";
+    els.summary.textContent = message;
+    ["f-form","f-repo","f-package","f-target","f-matches","f-manual"].forEach(function(id){
+      els[id].textContent = "\u2014";
+    });
+    els.cmd.textContent = "\u2014";
+    els["cmd-label"].textContent = "Equivalent command";
+  }
+
+  function formText(result){
+    var form;
+    if (result.kind === "rules") form = result.recursive ? "Recursive pattern over packages (:all)" : "Package pattern (:all)";
+    else if (result.kind === "targets") form = result.recursive ? "Recursive pattern over packages (:*)" : "Package pattern (:*)";
+    else if (result.inferred) form = "Single label, target inferred from the last path segment";
+    else form = "Single label";
+    return result.negative ? "Negative pattern: " + form.charAt(0).toLowerCase() + form.slice(1) : form;
+  }
+
+  function repoText(result){
+    if (result.kind === "ambiguous") return "current repository";
+    if (result.repository === "@@") return "@@ (the main repository, even from an external one)";
+    if (result.repository) return result.repository + " (" + (result.repository.charAt(1) === "@" ? "canonical" : "apparent") + " repository)";
+    return "current repository (no repository part)";
+  }
+
+  function render(result){
+    var shown = (result.negative ? "-" : "") + result.canonical;
+    els.canonical.textContent = shown;
+    els.summary.textContent = result.matches
+      + (result.expanded !== result.canonical ? "; the same as " + result.expanded : "");
+
+    els["f-form"].textContent = formText(result);
+    els["f-repo"].textContent = repoText(result);
+    els["f-package"].textContent = result.packageName === "" ? "(root package)" : result.packageName;
+    els["f-target"].textContent = result.targetName === null ? "(implicit :all)"
+      : (result.kind === "rules" ? "all (every rule target)"
+      : (result.kind === "targets" ? result.targetName + " (every target)" : result.targetName));
+    els["f-matches"].textContent = result.matches;
+    els["f-manual"].textContent = result.manual === null
+      ? "not applicable: a single target is built whether or not it is tagged manual"
+      : "skipped by build and test wildcards; bazel query does not filter them";
+
+    els.cmd.textContent = result.negative ? "bazel build -- " + shown : "bazel build " + shown;
+    els["cmd-label"].textContent = result.negative ? "Negative pattern on a command line" : "Equivalent command";
+  }
+
+  function renderAmbiguous(result){
+    var shown = (result.negative ? "-" : "");
+    els.canonical.textContent = "3 possible labels";
+    els.summary.textContent = "A relative path without a colon depends on which directories hold a BUILD file, so all three readings are possible.";
+    els["f-form"].textContent = shown ? "Negative pattern, relative path, resolved three ways" : "Relative path without a colon, resolved three ways";
+    els["f-repo"].textContent = "current repository (no repository part)";
+    els["f-package"].textContent = "depends on the BUILD files";
+    els["f-target"].textContent = "depends on the BUILD files";
+    els["f-matches"].textContent = result.matches;
+    els["f-manual"].textContent = "not applicable until one spelling is chosen";
+    els.cmd.textContent = result.candidates.map(function(candidate){
+      return "# " + candidate.when + "\nbazel build " + shown + candidate.canonical;
+    }).join("\n\n");
+    els["cmd-label"].textContent = "The three possible commands";
+  }
+
+  function calculate(){
+    var result;
+    try {
+      result = BazelCore.resolve({ target: els.target.value, cwd: els.cwd.value });
+    } catch (error) {
+      els.err.textContent = error.message;
+      placeholder("Check the pattern above.");
+      return;
+    }
+    els.err.textContent = "";
+    if (result.kind === "ambiguous") renderAmbiguous(result);
+    else render(result);
+  }
+
+  [els.target, els.cwd].forEach(function(input){
+    input.addEventListener("input", calculate);
+  });
+  document.getElementById("bazel-form").addEventListener("submit", function(event){
+    event.preventDefault();
+    calculate();
+  });
+
+  calculate();
+})();
+</script>
+</body>
+</html>
