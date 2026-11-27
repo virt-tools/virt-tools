@@ -183,8 +183,8 @@ assert.equal(record.maturity, 'draft');
 assert.equal(record.listed, true);
 assert.equal(record.sources.length, 4);
 for (const source of record.sources) assert.match(source.url, /^https:\/\//);
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Audio').length, 56, 'Audio count');
-assert.equal(catalog.tools.length, 2494, 'catalog total');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Audio').length, 57, 'Audio count');
+assert.equal(catalog.tools.length, 2495, 'catalog total');
 
 const kinds = record.testCases.reduce((acc, item) => {
   acc[item.kind] = (acc[item.kind] || 0) + 1;

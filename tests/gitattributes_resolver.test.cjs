@@ -171,8 +171,8 @@ assert.equal(new Set(record.tags).size, record.tags.length, 'tags are internally
 for (const tag of ['developer', 'git', 'gitattributes', 'attributes', 'pattern', 'analysis-validation']) {
   assert.ok(record.tags.includes(tag), 'new tag present: ' + tag);
 }
-assert.equal(catalog.tools.length, 2494, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2233, 'public tools');
+assert.equal(catalog.tools.length, 2495, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2234, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Developer').length, 56,
   'Developer count');
 assert.ok(!catalog.tools.some((tool) => /gitattributes/.test([tool.slug, tool.name].concat(tool.aliases || []).join(' ').toLowerCase())

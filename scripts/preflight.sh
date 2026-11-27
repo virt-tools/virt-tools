@@ -501,6 +501,7 @@ node tests/heat_recovery_effectiveness_checker.test.cjs
 node tests/soil_texture_classifier.test.cjs
 node tests/reference_evapotranspiration_calculator.test.cjs
 node tests/csp_violation_report_analyzer.test.cjs
+node tests/compressor_gain_reduction_calculator.test.cjs
 
 python3 -m unittest discover -s tests -p 'test_*.py'
 
