@@ -49,8 +49,8 @@ assert.match(record.sources[0].url, /rfc8785/, 'the RFC is cited');
 assert.ok(/Appendix B/.test(record.sources[0].title), 'the number table is named');
 assert.match(record.sources[1].url, /json-canonicalization/, 'the reference test data is cited');
 
-assert.equal(catalog.tools.length, 2491, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2230, 'public tools');
+assert.equal(catalog.tools.length, 2492, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2231, 'public tools');
 assert.equal(
   catalog.tools.filter((tool) => tool.category === 'Encoding').length,
   56,

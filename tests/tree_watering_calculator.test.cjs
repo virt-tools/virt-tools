@@ -19,8 +19,8 @@ const C = sandbox.module.exports;
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
 const entry = catalog.tools.find((tool) => tool.slug === 'tree-watering-calculator');
 assert.ok(entry, 'catalog entry missing');
-assert.equal(catalog.tools.length, 2491, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2230, 'public tools');
+assert.equal(catalog.tools.length, 2492, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2231, 'public tools');
 assert.ok(entry.testCases.length >= 24, `expected at least 24 cases, found ${entry.testCases.length}`);
 
 const close = (actual, expected, message) => {
@@ -101,7 +101,7 @@ assert.ok(!folded.has(entry.name.toLowerCase()), 'name collides');
 for (const alias of entry.aliases) assert.ok(!folded.has(alias.toLowerCase()), `alias collides: ${alias}`);
 assert.ok(entry.tags.includes('tree') && entry.tags.includes('watering'));
 assert.equal(entry.category, 'Home & Garden');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Home & Garden').length, 56, 'Home & Garden count');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Home & Garden').length, 57, 'Home & Garden count');
 assert.equal(entry.listed, true);
 assert.equal(entry.risk, 'low');
 assert.equal(entry.maturity, 'draft');
