@@ -290242,6 +290242,393 @@
         }
       ],
       "listed": true
+    },
+    {
+      "slug": "zram-swap-planner",
+      "name": "ZRAM Swap Planner",
+      "description": "Size a zram swap device from RAM, a device share and an expected compression ratio: the compressed footprint, the RAM freed at full use, and how a mem_limit caps the usable swap space.",
+      "category": "System",
+      "legacyCategory": null,
+      "subcategory": "Planning",
+      "tags": [
+        "system",
+        "linux",
+        "memory",
+        "swap",
+        "zram",
+        "compression",
+        "capacity-planning"
+      ],
+      "aliases": [
+        "zram Size Calculator",
+        "zram Swap Calculator",
+        "Compressed Swap Planner",
+        "zramctl Setup Planner",
+        "zram disksize Calculator",
+        "zram mem_limit Planner",
+        "RAM Swap Compression Calculator",
+        "zram Memory Savings Calculator"
+      ],
+      "icon": "🗜️",
+      "added": "2026-11-27T13:15:00Z",
+      "risk": "low",
+      "maturity": "draft",
+      "reviewedAt": null,
+      "guidance": "A plan, not a measurement: the real ratio depends on the workload, so compare compr_data_size with orig_data_size in /sys/block/zram0/mm_stat on a running device before trusting the saving. zram trades CPU for RAM and cannot help incompressible data; keep a disk-backed swap as a fallback, and treat the memory limit as a hard cap rather than a target.",
+      "method": "The device size is RAM multiplied by the device share, and it is the uncompressed size written to zram's disksize attribute, so a 16 GiB machine at 50 % gets 8 GiB of swap. The metadata table is taken at 0.1 % of the device size, the figure the kernel documentation gives for an idle zram device; it is allocated for the whole device whether or not the swap fills. A memory limit of 0 leaves mem_limit unset, and any other value is a percentage of RAM; because mem_limit caps the memory zram may use for compressed data and its metadata, the room left for compressed pages is the limit minus the metadata table. The ratio the device would need to fill that room is the device size divided by the room, and the pages that can actually be stored are the smaller of the device size and the room multiplied by the compression ratio. Compressed data is the stored pages divided by the ratio, RAM used is that compressed data plus the metadata table, and RAM freed is the stored pages minus RAM used; the freed share is that saving over the stored pages, so a 1:1 ratio stores pages as they are and the metadata makes the device a net cost. The page warns when the ratio is below 1.5:1, when the device exceeds twice RAM (the kernel notes there is little point above that at the expected 2:1), and when the memory limit caps the usable swap space. Sizes are mebibytes with a 1024-based GiB display, RAM is 256 to 4,194,304 MiB, the device share 10 to 400 %, the ratio 1.0 to 20.0 and the memory limit 0 to 400 %; the arithmetic rounds half up to two decimals of a mebibyte, the ratio to two decimals and the share to one. This is a planning model of a workload the reader describes, not a reading of the host: it assumes one constant ratio for every page, does not model the compressor's per-page allocator overhead or same-page merging, and does not cover zswap, which caches compressed pages in front of a disk-backed swap instead of replacing it. Everything runs in the browser and nothing is sent anywhere.",
+      "sources": [
+        {
+          "title": "zram: Compressed RAM-based block devices — the kernel documentation: disksize is the uncompressed device size, mem_limit caps the memory used for compressed data, 0.1 % of the disk is used while idle, and mm_stat reports orig_data_size against compr_data_size",
+          "url": "https://docs.kernel.org/admin-guide/blockdev/zram.html"
+        },
+        {
+          "title": "zramctl(8) — util-linux manual: --size sets the uncompressed device size and --algorithm selects the compressor, the two settings the example setup writes",
+          "url": "https://man7.org/linux/man-pages/man8/zramctl.8.html"
+        }
+      ],
+      "testCases": [
+        {
+          "name": "16 GiB RAM, 50 % device at 2:1, no limit",
+          "kind": "golden",
+          "input": {
+            "ram": "16384",
+            "size": "50",
+            "ratio": "2.0",
+            "mem": "0"
+          },
+          "expected": {
+            "swapMiB": 8192.0,
+            "metadataMiB": 8.19,
+            "usableMiB": 8192.0,
+            "compressedMiB": 4096.0,
+            "footprintMiB": 4104.19,
+            "freedMiB": 4087.81,
+            "freedShare": 49.9,
+            "ratioToFill": null,
+            "capped": false
+          }
+        },
+        {
+          "name": "8 GiB RAM, 100 % device at 3:1",
+          "kind": "golden",
+          "input": {
+            "ram": "8192",
+            "size": "100",
+            "ratio": "3",
+            "mem": "0"
+          },
+          "expected": {
+            "swapMiB": 8192.0,
+            "metadataMiB": 8.19,
+            "usableMiB": 8192.0,
+            "compressedMiB": 2730.67,
+            "footprintMiB": 2738.86,
+            "freedMiB": 5453.14,
+            "freedShare": 66.6,
+            "ratioToFill": null,
+            "capped": false
+          }
+        },
+        {
+          "name": "1 GiB RAM, 25 % device at 2.5:1",
+          "kind": "golden",
+          "input": {
+            "ram": "1024",
+            "size": "25",
+            "ratio": "2.5",
+            "mem": "0"
+          },
+          "expected": {
+            "swapMiB": 256.0,
+            "metadataMiB": 0.26,
+            "usableMiB": 256.0,
+            "compressedMiB": 102.4,
+            "footprintMiB": 102.66,
+            "freedMiB": 153.34,
+            "freedShare": 59.9,
+            "ratioToFill": null,
+            "capped": false
+          }
+        },
+        {
+          "name": "16 GiB RAM, 100 % device at 2:1 with a 25 % memory limit",
+          "kind": "golden",
+          "input": {
+            "ram": "16384",
+            "size": "100",
+            "ratio": "2",
+            "mem": "25"
+          },
+          "expected": {
+            "swapMiB": 16384.0,
+            "metadataMiB": 16.38,
+            "usableMiB": 8159.23,
+            "compressedMiB": 4079.62,
+            "footprintMiB": 4096.0,
+            "freedMiB": 4063.23,
+            "freedShare": 49.8,
+            "ratioToFill": 4.02,
+            "capped": true
+          }
+        },
+        {
+          "name": "16 GiB RAM, 50 % device at 4:1 with a 40 % limit that does not bind",
+          "kind": "golden",
+          "input": {
+            "ram": "16384",
+            "size": "50",
+            "ratio": "4",
+            "mem": "40"
+          },
+          "expected": {
+            "swapMiB": 8192.0,
+            "metadataMiB": 8.19,
+            "usableMiB": 8192.0,
+            "compressedMiB": 2048.0,
+            "footprintMiB": 2056.19,
+            "freedMiB": 6135.81,
+            "freedShare": 74.9,
+            "ratioToFill": 1.25,
+            "capped": false
+          }
+        },
+        {
+          "name": "2 GiB RAM, 200 % device at 2:1, exactly twice RAM",
+          "kind": "golden",
+          "input": {
+            "ram": "2048",
+            "size": "200",
+            "ratio": "2",
+            "mem": "0"
+          },
+          "expected": {
+            "swapMiB": 4096.0,
+            "metadataMiB": 4.1,
+            "usableMiB": 4096.0,
+            "compressedMiB": 2048.0,
+            "footprintMiB": 2052.1,
+            "freedMiB": 2043.9,
+            "freedShare": 49.9,
+            "ratioToFill": null,
+            "capped": false
+          }
+        },
+        {
+          "name": "4 GiB RAM, 50 % device at 1:1, incompressible pages",
+          "kind": "golden",
+          "input": {
+            "ram": "4096",
+            "size": "50",
+            "ratio": "1",
+            "mem": "0"
+          },
+          "expected": {
+            "swapMiB": 2048.0,
+            "metadataMiB": 2.05,
+            "usableMiB": 2048.0,
+            "compressedMiB": 2048.0,
+            "footprintMiB": 2050.05,
+            "freedMiB": -2.05,
+            "freedShare": -0.1,
+            "ratioToFill": null,
+            "capped": false
+          }
+        },
+        {
+          "name": "512 MiB RAM, 50 % device at 2.2:1",
+          "kind": "golden",
+          "input": {
+            "ram": "512",
+            "size": "50",
+            "ratio": "2.2",
+            "mem": "0"
+          },
+          "expected": {
+            "swapMiB": 256.0,
+            "metadataMiB": 0.26,
+            "usableMiB": 256.0,
+            "compressedMiB": 116.36,
+            "footprintMiB": 116.62,
+            "freedMiB": 139.38,
+            "freedShare": 54.4,
+            "ratioToFill": null,
+            "capped": false
+          }
+        },
+        {
+          "name": "minimum RAM, 10 % device at 1.5:1",
+          "kind": "boundary",
+          "input": {
+            "ram": "256",
+            "size": "10",
+            "ratio": "1.5",
+            "mem": "0"
+          },
+          "expected": {
+            "swapMiB": 25.6,
+            "metadataMiB": 0.03,
+            "usableMiB": 25.6,
+            "compressedMiB": 17.07,
+            "footprintMiB": 17.09,
+            "freedMiB": 8.51,
+            "freedShare": 33.2,
+            "ratioToFill": null,
+            "capped": false
+          }
+        },
+        {
+          "name": "maximum RAM, 400 % device at 20:1",
+          "kind": "boundary",
+          "input": {
+            "ram": "4194304",
+            "size": "400",
+            "ratio": "20",
+            "mem": "0"
+          },
+          "expected": {
+            "swapMiB": 16777216.0,
+            "metadataMiB": 16777.22,
+            "usableMiB": 16777216.0,
+            "compressedMiB": 838860.8,
+            "footprintMiB": 855638.02,
+            "freedMiB": 15921577.98,
+            "freedShare": 94.9,
+            "ratioToFill": null,
+            "capped": false
+          }
+        },
+        {
+          "name": "256 MiB RAM, 400 % device at 20:1 with a 1 % limit",
+          "kind": "boundary",
+          "input": {
+            "ram": "256",
+            "size": "400",
+            "ratio": "20",
+            "mem": "1"
+          },
+          "expected": {
+            "swapMiB": 1024.0,
+            "metadataMiB": 1.02,
+            "usableMiB": 30.72,
+            "compressedMiB": 1.54,
+            "footprintMiB": 2.56,
+            "freedMiB": 28.16,
+            "freedShare": 91.7,
+            "ratioToFill": 666.67,
+            "capped": true
+          }
+        },
+        {
+          "name": "400 % device at 2:1 with a 400 % limit that just admits it",
+          "kind": "boundary",
+          "input": {
+            "ram": "4194304",
+            "size": "400",
+            "ratio": "2",
+            "mem": "400"
+          },
+          "expected": {
+            "swapMiB": 16777216.0,
+            "metadataMiB": 16777.22,
+            "usableMiB": 16777216.0,
+            "compressedMiB": 8388608.0,
+            "footprintMiB": 8405385.22,
+            "freedMiB": 8371830.78,
+            "freedShare": 49.9,
+            "ratioToFill": 1.0,
+            "capped": false
+          }
+        },
+        {
+          "name": "RAM left blank",
+          "kind": "validation",
+          "input": {
+            "ram": "",
+            "size": "50",
+            "ratio": "2.0",
+            "mem": "0"
+          },
+          "expectedError": "Enter the RAM size in MiB, such as 16384."
+        },
+        {
+          "name": "RAM with a unit suffix",
+          "kind": "validation",
+          "input": {
+            "ram": "16g",
+            "size": "50",
+            "ratio": "2.0",
+            "mem": "0"
+          },
+          "expectedError": "Enter the RAM size as a whole number of MiB, such as 16384."
+        },
+        {
+          "name": "RAM below the minimum",
+          "kind": "validation",
+          "input": {
+            "ram": "128",
+            "size": "50",
+            "ratio": "2.0",
+            "mem": "0"
+          },
+          "expectedError": "Enter the RAM size from 256 to 4,194,304 MiB."
+        },
+        {
+          "name": "device size of zero",
+          "kind": "validation",
+          "input": {
+            "ram": "16384",
+            "size": "0",
+            "ratio": "2.0",
+            "mem": "0"
+          },
+          "expectedError": "Enter the device size from 10 to 400 % of RAM."
+        },
+        {
+          "name": "fractional device size",
+          "kind": "validation",
+          "input": {
+            "ram": "16384",
+            "size": "50.5",
+            "ratio": "2.0",
+            "mem": "0"
+          },
+          "expectedError": "Enter the device size as a whole percentage of RAM, such as 50."
+        },
+        {
+          "name": "ratio below one",
+          "kind": "validation",
+          "input": {
+            "ram": "16384",
+            "size": "50",
+            "ratio": "0.5",
+            "mem": "0"
+          },
+          "expectedError": "Enter the compression ratio from 1.0 to 20.0."
+        },
+        {
+          "name": "ratio that is not a number",
+          "kind": "validation",
+          "input": {
+            "ram": "16384",
+            "size": "50",
+            "ratio": "two",
+            "mem": "0"
+          },
+          "expectedError": "Enter the compression ratio as a number, such as 2.0."
+        },
+        {
+          "name": "memory limit above the maximum",
+          "kind": "validation",
+          "input": {
+            "ram": "16384",
+            "size": "50",
+            "ratio": "2.0",
+            "mem": "401"
+          },
+          "expectedError": "Enter the memory limit from 0 to 400 % of RAM, where 0 means no limit."
+        }
+      ],
+      "listed": true
     }
   ]
 }

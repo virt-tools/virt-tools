@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>ZRAM Swap Planner &mdash; Virtual Tools</title>
+<meta name="description" content="Size a zram swap device from RAM, a device share and an expected compression ratio: the compressed footprint, the RAM actually freed, and what mem_limit does to the usable swap space.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,170px),1fr));gap:12px 14px}
+.field{display:flex;flex-direction:column;gap:6px;margin:0;min-width:0}
+.field input{box-sizing:border-box;width:100%;font:inherit;padding:9px 11px;border-radius:8px;
+  border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);color:var(--text,#e6e6e6);font-size:15px;min-height:44px}
+.field input:focus-visible{outline:2px solid var(--accent,#6ea8fe);outline-offset:1px}
+.hint{color:var(--text-dim,#9aa3b2);font-size:12.5px;margin:12px 0 0;line-height:1.5;max-width:760px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 0}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);
+  background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.err{color:var(--bad,#f87171);font-size:13px;margin:10px 0 0;min-height:1.2em;max-width:760px}
+.warn{color:var(--warn,#fbbf24);font-size:12.5px;line-height:1.5;margin:8px 0 0;max-width:760px}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:16px 0 0}
+.out .label{text-align:center;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-dim,#9aa3b2)}
+.out .big{font-size:clamp(1.5rem,7vw,2.2rem);font-weight:800;font-variant-numeric:tabular-nums;text-align:center;padding:2px 0 4px;line-height:1.25}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:6px 0 0;line-height:1.5;overflow-wrap:anywhere}
+.bar{display:flex;height:10px;border-radius:5px;overflow:hidden;margin:16px 0 0;background:var(--border,#2a2f3a)}
+.bar span{display:block;height:100%}
+.bar .used{background:var(--accent,#6ea8fe)}
+.bar .free{background:color-mix(in srgb,var(--accent,#6ea8fe) 28%,transparent)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin:8px 0 0;font-size:12px;color:var(--text-dim,#9aa3b2)}
+.legend b{font-weight:600;color:var(--text,#e6e6e6)}
+.ref{display:table;width:100%;border-collapse:collapse;margin:18px 0 0;font-size:13.5px}
+.ref th,.ref td{border-bottom:1px solid var(--border,#2a2f3a);padding:7px 8px;text-align:left;vertical-align:top}
+.ref tbody th{font-weight:500;width:46%}
+.ref td{font-family:ui-monospace,monospace;overflow-wrap:anywhere}
+.config{margin:16px 0 0;padding:12px 14px;border:1px solid var(--border,#2a2f3a);border-radius:8px;background:var(--bg,#0f1218)}
+.config .k{display:block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim,#9aa3b2);margin:0 0 6px}
+.config pre{margin:0;font-family:ui-monospace,monospace;font-size:13px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text,#e6e6e6)}
+.note{color:var(--text-dim,#9aa3b2);font-size:12.5px;line-height:1.6;margin:18px 0 0;max-width:820px}
+@media (max-width:560px){
+  .actions button{flex:1 1 auto}
+  .ref th,.ref td{padding:6px 5px;font-size:12.5px}
+}
+@media (max-width:430px){
+  .ref tbody tr{display:grid;gap:1px;padding:8px 0;border-bottom:1px solid var(--border,#2a2f3a)}
+  .ref tbody tr:last-child{border-bottom:none}
+  .ref tbody th,.ref tbody td{display:block;width:auto;border-bottom:none;padding:0}
+  .ref tbody th{font-size:12px;color:var(--text-dim,#9aa3b2)}
+}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<h1>ZRAM Swap Planner</h1>
+<p>Size a zram swap device from RAM, a device share and an expected compression ratio, and see how much RAM the swap really returns.</p>
+</div>
+<div class="panel">
+<form id="zram-form" novalidate>
+<div class="row">
+<div class="field">
+<label for="ram">RAM (MiB)</label>
+<input id="ram" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" value="16384">
+</div>
+<div class="field">
+<label for="size">Device size (% of RAM)</label>
+<input id="size" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" value="50">
+</div>
+<div class="field">
+<label for="ratio">Compression ratio</label>
+<input id="ratio" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="2.0">
+</div>
+<div class="field">
+<label for="mem">Memory limit (% of RAM)</label>
+<input id="mem" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" value="0">
+</div>
+</div>
+<p class="hint">The device size is the uncompressed swap space (the kernel writes it to <code>disksize</code>). The memory limit caps the RAM zram may use for compressed data; 0 leaves <code>mem_limit</code> unset. Distros commonly size the device at 50&nbsp;% or 100&nbsp;% of RAM.</p>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions"><button type="submit">Size the swap</button></div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true">
+<div class="label">RAM freed</div>
+<div class="big" id="freed-line">&mdash;</div>
+<div class="sub" id="summary">Set the RAM, the device size and the compression ratio above.</div>
+<p class="warn" id="warn"></p>
+</div>
+<div class="bar" id="bar" aria-hidden="true"><span class="used" id="bar-used" style="width:0"></span><span class="free" id="bar-free" style="width:0"></span></div>
+<div class="legend"><span><b id="lg-used">&mdash;</b> RAM used</span><span><b id="lg-free">&mdash;</b> freed</span></div>
+<table class="ref">
+<caption>What this setting puts in RAM</caption>
+<tbody>
+<tr><th scope="row">Swap device (disksize)</th><td id="f-device"></td></tr>
+<tr><th scope="row">Pages stored</th><td id="f-stored"></td></tr>
+<tr><th scope="row">Compressed data</th><td id="f-compressed"></td></tr>
+<tr><th scope="row">Metadata (about 0.1&nbsp;% of the device)</th><td id="f-meta"></td></tr>
+<tr><th scope="row">RAM used</th><td id="f-used"></td></tr>
+<tr><th scope="row">RAM freed</th><td id="f-freed"></td></tr>
+<tr><th scope="row">Memory limit (mem_limit)</th><td id="f-limit"></td></tr>
+<tr><th scope="row">Ratio to fill the device</th><td id="f-ratio"></td></tr>
+</tbody>
+</table>
+<div class="config">
+<span class="k" id="config-label">Example setup</span>
+<pre id="config">&mdash;</pre>
+</div>
+<p class="note">zram keeps swapped pages compressed in RAM instead of writing them to a disk: a page swapped out frees its uncompressed size and costs its compressed size plus a small metadata table, so the ratio decides whether the device is a saving at all. The kernel notes there is little point sizing a device above twice RAM at the expected 2:1, because the metadata is allocated for the whole device whether or not it fills. Incompressible data compresses at about 1:1 and gains nothing; check <code>mm_stat</code> (<code>compr_data_size</code> against <code>orig_data_size</code>) on a running system to see the real ratio. zswap, which keeps a compressed cache in front of a disk-backed swap, is a different mechanism and is not modelled here. Everything is computed in your browser; nothing is sent anywhere else.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* zram-core:start */
+var ZramCore = (function(){
+  "use strict";
+  var MIB_PER_GIB = 1024;
+  var METADATA_SHARE = 0.001;
+  var RAM_MIN = 256, RAM_MAX = 4194304;
+  var SIZE_MIN = 10, SIZE_MAX = 400;
+  var RATIO_MIN = 1, RATIO_MAX = 20;
+  var MEM_MIN = 0, MEM_MAX = 400;
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function round(value, places){
+    var factor = Math.pow(10, places);
+    return Math.round(value * factor + (value >= 0 ? 1e-9 : -1e-9)) / factor;
+  }
+
+  function group(value){
+    return String(value).replace(/\B(?=(?:\d{3})+(?!\d))/g, ",");
+  }
+
+  function text(value){
+    return String(value == null ? "" : value).trim().replace(/\s+/g, "");
+  }
+
+  function readWhole(value, messages, low, high){
+    var raw = text(value);
+    if (!raw) fail(messages.empty);
+    if (!/^\d+$/.test(raw)) fail(messages.shape);
+    var number = parseInt(raw, 10);
+    if (!(number >= low && number <= high)) fail(messages.range);
+    return number;
+  }
+
+  function readRatio(value){
+    var raw = text(value).replace(",", ".");
+    if (!raw) fail("Enter the compression ratio, such as 2.0.");
+    if (!/^\d+(?:\.\d+)?$/.test(raw)) fail("Enter the compression ratio as a number, such as 2.0.");
+    var number = parseFloat(raw);
+    if (!(number >= RATIO_MIN && number <= RATIO_MAX)) fail("Enter the compression ratio from 1.0 to 20.0.");
+    return number;
+  }
+
+  function plan(input){
+    var opts = input || {};
+    var ramMiB = readWhole(opts.ram, {
+      empty: "Enter the RAM size in MiB, such as 16384.",
+      shape: "Enter the RAM size as a whole number of MiB, such as 16384.",
+      range: "Enter the RAM size from " + group(RAM_MIN) + " to " + group(RAM_MAX) + " MiB."
+    }, RAM_MIN, RAM_MAX);
+    var sizePct = readWhole(opts.size, {
+      empty: "Enter the device size as a percentage of RAM, such as 50.",
+      shape: "Enter the device size as a whole percentage of RAM, such as 50.",
+      range: "Enter the device size from " + SIZE_MIN + " to " + SIZE_MAX + " % of RAM."
+    }, SIZE_MIN, SIZE_MAX);
+    var ratio = readRatio(opts.ratio);
+    var memPct = readWhole(opts.mem, {
+      empty: "Enter the memory limit as a percentage of RAM, such as 25, or 0 for no limit.",
+      shape: "Enter the memory limit as a whole percentage of RAM, such as 25, or 0 for no limit.",
+      range: "Enter the memory limit from " + MEM_MIN + " to " + MEM_MAX + " % of RAM, where 0 means no limit."
+    }, MEM_MIN, MEM_MAX);
+
+    var swapMiB = ramMiB * sizePct / 100;
+    var metadataMiB = swapMiB * METADATA_SHARE;
+    var limitMiB = memPct > 0 ? ramMiB * memPct / 100 : null;
+    var usableMiB = swapMiB;
+    var ratioToFill = null;
+    var capped = false;
+    var warnings = [];
+
+    if (limitMiB !== null){
+      var roomMiB = limitMiB - metadataMiB;
+      if (roomMiB <= 0){
+        usableMiB = 0;
+        ratioToFill = Infinity;
+        capped = true;
+        warnings.push("The memory limit (" + show(limitMiB) + ") is no larger than the metadata table ("
+          + show(metadataMiB) + "), so zram can store no pages at all; raise the limit or shrink the device.");
+      } else {
+        ratioToFill = swapMiB / roomMiB;
+        usableMiB = Math.min(swapMiB, roomMiB * ratio);
+        capped = usableMiB < swapMiB - 1e-9;
+        if (capped){
+          warnings.push("The memory limit holds only " + show(usableMiB) + " of the " + show(swapMiB)
+            + " device, so the rest of the swap space is never reached; a ratio of "
+            + ratioText(ratioToFill) + " would fill it.");
+        }
+      }
+    }
+    if (swapMiB > 2 * ramMiB + 1e-9){
+      warnings.push("The device is larger than twice RAM (" + show(2 * ramMiB)
+        + "); at the expected 2:1 there is little point, and the metadata is allocated for the whole device.");
+    }
+    if (ratio < 1.5){
+      warnings.push("Below 1.5:1 little RAM is saved: at " + ratioText(ratio)
+        + " the swapped pages keep most of their size in memory.");
+    }
+
+    var compressedMiB = usableMiB / ratio;
+    var footprintMiB = compressedMiB + metadataMiB;
+    var freedMiB = usableMiB - footprintMiB;
+    var freedShare = usableMiB > 0 ? freedMiB / usableMiB * 100 : 0;
+
+    return {
+      ramMiB: round(ramMiB, 2),
+      sizePct: sizePct,
+      ratio: round(ratio, 2),
+      memPct: memPct,
+      swapMiB: round(swapMiB, 2),
+      metadataMiB: round(metadataMiB, 2),
+      limitMiB: limitMiB === null ? null : round(limitMiB, 2),
+      usableMiB: round(usableMiB, 2),
+      compressedMiB: round(compressedMiB, 2),
+      footprintMiB: round(footprintMiB, 2),
+      freedMiB: round(freedMiB, 2),
+      freedShare: round(freedShare, 1),
+      ratioToFill: ratioToFill === null ? null : round(ratioToFill, 2),
+      capped: capped,
+      overTwice: swapMiB > 2 * ramMiB + 1e-9,
+      sizeToken: sizeToken(swapMiB),
+      memToken: limitMiB === null ? null : sizeToken(limitMiB),
+      warnings: warnings
+    };
+  }
+
+  function show(mib){
+    var whole = Math.round(mib);
+    if (whole >= MIB_PER_GIB && whole % MIB_PER_GIB === 0) return (whole / MIB_PER_GIB) + " GiB";
+    if (mib >= MIB_PER_GIB) return trim((mib / MIB_PER_GIB).toFixed(2)) + " GiB";
+    return trim(mib.toFixed(mib >= 100 ? 0 : 1)) + " MiB";
+  }
+
+  function trim(textValue){
+    return textValue.indexOf(".") > -1 ? textValue.replace(/0+$/, "").replace(/\.$/, "") : textValue;
+  }
+
+  function ratioText(value){
+    return (Math.round(value * 100 + 1e-9) / 100) + ":1";
+  }
+
+  function sizeToken(mib){
+    var whole = Math.round(mib);
+    if (whole >= MIB_PER_GIB && whole % MIB_PER_GIB === 0) return (whole / MIB_PER_GIB) + "G";
+    return Math.max(1, Math.floor(mib)) + "M";
+  }
+
+  return {
+    plan: plan,
+    sizeToken: sizeToken,
+    metadataShare: METADATA_SHARE,
+    ramRange: [RAM_MIN, RAM_MAX],
+    sizeRange: [SIZE_MIN, SIZE_MAX],
+    ratioRange: [RATIO_MIN, RATIO_MAX],
+    memRange: [MEM_MIN, MEM_MAX]
+  };
+})();
+/* zram-core:end */
+(function(){
+  "use strict";
+
+  var ids = ["ram","size","ratio","mem","err","warn","freed-line","summary","bar-used","bar-free",
+    "lg-used","lg-free","f-device","f-stored","f-compressed","f-meta","f-used","f-freed","f-limit","f-ratio",
+    "config","config-label"];
+  var els = {};
+  ids.forEach(function(id){ els[id] = document.getElementById(id); });
+
+  function fmt(value, places){
+    var fixed = Number(value).toFixed(places);
+    var parts = fixed.split(".");
+    parts[0] = parts[0].replace(/\B(?=(?:\d{3})+(?!\d))/g, ",");
+    return parts.join(".");
+  }
+
+  function trim(value){
+    return value.indexOf(".") > -1 ? value.replace(/0+$/, "").replace(/\.$/, "") : value;
+  }
+
+  function size(mib){
+    if (mib >= 1024){
+      return trim(fmt(mib / 1024, 2)) + " GiB";
+    }
+    return trim(fmt(mib, mib >= 100 ? 0 : (mib >= 10 ? 1 : 2))) + " MiB";
+  }
+
+  function ratio(value){
+    return trim(fmt(value, 2)) + ":1";
+  }
+
+  function placeholder(message){
+    els["freed-line"].textContent = "\u2014";
+    els.summary.textContent = message;
+    els.warn.textContent = "";
+    ["f-device","f-stored","f-compressed","f-meta","f-used","f-freed","f-limit","f-ratio","lg-used","lg-free"]
+      .forEach(function(id){ els[id].textContent = "\u2014"; });
+    els.config.textContent = "\u2014";
+    els["bar-used"].style.width = "0";
+    els["bar-free"].style.width = "0";
+  }
+
+  function render(result){
+    var disk = " Swap written to a disk-backed device of the same size would use " + size(result.swapMiB) + " of disk.";
+    els["freed-line"].textContent = size(result.freedMiB);
+    els.summary.textContent = formatSummary(result) + disk;
+    els.warn.textContent = result.warnings.join(" ");
+
+    els["f-device"].textContent = size(result.swapMiB) + " (" + result.sizePct + " % of " + size(result.ramMiB) + " RAM)";
+    els["f-stored"].textContent = size(result.usableMiB) + " of uncompressed pages";
+    els["f-compressed"].textContent = size(result.compressedMiB) + " at " + ratio(result.ratio);
+    els["f-meta"].textContent = size(result.metadataMiB);
+    els["f-used"].textContent = size(result.footprintMiB);
+    els["f-freed"].textContent = size(result.freedMiB) + " (" + fmt(result.freedShare, 1) + " % of the pages stored)";
+    els["f-limit"].textContent = result.limitMiB === null
+      ? "unset: the device may use as much RAM as it compresses into"
+      : size(result.limitMiB) + " (" + result.memPct + " % of RAM)";
+    els["f-ratio"].textContent = result.ratioToFill === null
+      ? "not applicable without a memory limit"
+      : (result.capped
+        ? ratio(result.ratioToFill) + " needed; " + ratio(result.ratio) + " set, so the limit binds"
+        : ratio(result.ratioToFill) + " needed; " + ratio(result.ratio) + " set, so it fills");
+
+    var scale = Math.max(result.usableMiB, 0);
+    var used = scale > 0 ? Math.max(0, Math.min(result.footprintMiB, scale)) / scale * 100 : 0;
+    els["bar-used"].style.width = used.toFixed(3) + "%";
+    els["bar-free"].style.width = (scale > 0 ? Math.max(0, 100 - used) : 0).toFixed(3) + "%";
+    els["lg-used"].textContent = size(Math.max(0, Math.min(result.footprintMiB, scale)));
+    els["lg-free"].textContent = size(Math.max(0, scale - result.footprintMiB));
+
+    var lines = ["zramctl --find --size " + result.sizeToken + " --algorithm lz4"];
+    if (result.memToken) lines.push("echo " + result.memToken + " > /sys/block/zram0/mem_limit");
+    lines.push("mkswap /dev/zram0", "swapon /dev/zram0");
+    els.config.textContent = lines.join("\n");
+    els["config-label"].textContent = "Example setup for a " + size(result.swapMiB) + " device";
+  }
+
+  function formatSummary(result){
+    if (result.usableMiB <= 0){
+      return "no swap can be stored, so no RAM is freed.";
+    }
+    return size(result.usableMiB) + " of swap held in " + size(result.footprintMiB)
+      + " of RAM at " + ratio(result.ratio) + ".";
+  }
+
+  function calculate(){
+    var result;
+    try {
+      result = ZramCore.plan({
+        ram: els.ram.value,
+        size: els.size.value,
+        ratio: els.ratio.value,
+        mem: els.mem.value
+      });
+    } catch (error) {
+      els.err.textContent = error.message;
+      placeholder("Check the values above.");
+      return;
+    }
+    els.err.textContent = "";
+    render(result);
+  }
+
+  [els.ram, els.size, els.ratio, els.mem].forEach(function(input){
+    input.addEventListener("input", calculate);
+  });
+  document.getElementById("zram-form").addEventListener("submit", function(event){
+    event.preventDefault();
+    calculate();
+  });
+
+  calculate();
+})();
+</script>
+</body>
+</html>

@@ -374,7 +374,7 @@ const pageDirs = fs.readdirSync(path.join(root, 'frontend', 'tools'), { withFile
   .filter((entry) => entry.isDirectory()).length;
 assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageDirs,
   'every listed tool record has a page');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'System').length, 56, 'System count');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'System').length, 57, 'System count');
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'record missing');
 assert.equal(record.name, 'POSIX ACL Effective Rights');
