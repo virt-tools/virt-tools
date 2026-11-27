@@ -496,6 +496,7 @@ node tests/japanese_era_date_converter.test.cjs
 node tests/ssd_endurance_calculator.test.cjs
 node tests/magnetic_declination_calculator.test.cjs
 node tests/score_page_layout_planner.test.cjs
+node tests/screenplay_page_breakdown.test.cjs
 
 python3 -m unittest discover -s tests -p 'test_*.py'
 

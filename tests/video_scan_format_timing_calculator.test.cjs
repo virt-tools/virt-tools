@@ -195,7 +195,7 @@ const pageDirs = fs.readdirSync(path.join(root, 'frontend', 'tools'), { withFile
   .filter((entry) => entry.isDirectory()).length;
 assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageDirs,
   'every listed tool record has a page');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2228, 'public tools');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2229, 'public tools');
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record missing');
 assert.equal(record.name, 'Video Scan Format Timing Calculator');
@@ -220,7 +220,7 @@ assert.equal(record.testCases.length, 16, 'catalog cases');
 assert.equal(record.testCases.filter((testCase) => testCase.kind === 'validation').length, 5,
   'validation cases');
 assert.equal(catalog.tools.filter((tool) => tool.slug === slug).length, 1, 'slug unique');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Video').length, 55, 'Video count');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Video').length, 56, 'Video count');
 for (const other of catalog.tools) {
   if (other.slug === slug) continue;
   assert.ok(!record.aliases.map((alias) => alias.toLowerCase()).includes(other.name.toLowerCase()),
