@@ -165,8 +165,8 @@ assert.equal(run({ metal: 'sterling', metalSg: 'not a number' }).metalSg, 10.36)
 assert.equal(run({ metalSg: '12' }).metalSg, 10.36, 'the custom density only applies to the custom alloy');
 
 // ---- Catalog record: counts, cases and metadata.
-assert.equal(catalog.tools.length, 2479, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2218, 'public tools');
+assert.equal(catalog.tools.length, 2480, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2219, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Crafts & Hobbies').length, 55,
   'Crafts & Hobbies count');
 assert.equal(record.category, 'Crafts & Hobbies');
