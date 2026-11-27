@@ -43,9 +43,9 @@ for (const source of record.sources) {
 assert.ok(record.sources.some((source) => source.url === 'https://en.wikipedia.org/wiki/Amplitude_modulation'), 'amplitude modulation source');
 assert.ok(record.sources.some((source) => source.url === 'https://en.wikipedia.org/wiki/Peak_envelope_power'), 'peak envelope power source');
 
-assert.equal(catalog.tools.length, 2499, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2238, 'public tools');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Communications Engineering').length, 56, 'Communications Engineering count');
+assert.equal(catalog.tools.length, 2500, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2239, 'public tools');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Communications Engineering').length, 57, 'Communications Engineering count');
 
 // The slug, name, aliases and tags must not be shared with another record.
 for (const tool of catalog.tools) {

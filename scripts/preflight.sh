@@ -506,6 +506,7 @@ node tests/compressor_gain_reduction_calculator.test.cjs
 node tests/zram_swap_planner.test.cjs
 node tests/bazel_label_resolver.test.cjs
 node tests/corsi_fenwick_calculator.test.cjs
+node tests/pll_loop_filter_calculator.test.cjs
 
 python3 -m unittest discover -s tests -p 'test_*.py'
 

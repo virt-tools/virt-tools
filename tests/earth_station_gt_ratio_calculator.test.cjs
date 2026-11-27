@@ -45,11 +45,11 @@ for (const source of record.sources) {
 assert.ok(record.sources.some((source) => source.url.includes('R-REC-S.733-2')), 'ITU-R S.733-2 source');
 assert.ok(record.sources.some((source) => source.url.includes('Noise_figure')), 'noise figure source');
 
-assert.equal(catalog.tools.length, 2499, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2238, 'public tools');
+assert.equal(catalog.tools.length, 2500, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2239, 'public tools');
 assert.equal(
   catalog.tools.filter((tool) => tool.category === 'Communications Engineering').length,
-  56,
+  57,
   'Communications Engineering count'
 );
 
