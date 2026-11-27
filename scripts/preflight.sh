@@ -514,6 +514,7 @@ node tests/screen_printing_ink_calculator.test.cjs
 node tests/strftime_date_format_builder.test.cjs
 node tests/punched_card_hollerith.test.cjs
 node tests/sheet_metal_gauge_converter.test.cjs
+node tests/draft_beer_line_length_calculator.test.cjs
 
 python3 -m unittest discover -s tests -p 'test_*.py'
 
