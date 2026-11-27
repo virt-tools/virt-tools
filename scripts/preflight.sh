@@ -499,6 +499,7 @@ node tests/score_page_layout_planner.test.cjs
 node tests/screenplay_page_breakdown.test.cjs
 node tests/heat_recovery_effectiveness_checker.test.cjs
 node tests/soil_texture_classifier.test.cjs
+node tests/reference_evapotranspiration_calculator.test.cjs
 
 python3 -m unittest discover -s tests -p 'test_*.py'
 

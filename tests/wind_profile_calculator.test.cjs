@@ -19,8 +19,8 @@ const C = sandbox.module.exports;
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
 const entry = catalog.tools.find((tool) => tool.slug === 'wind-profile-calculator');
 assert.ok(entry, 'catalog entry missing');
-assert.equal(catalog.tools.length, 2492, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2231, 'public tools');
+assert.equal(catalog.tools.length, 2493, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2232, 'public tools');
 assert.ok(entry.testCases.length >= 20, `expected at least 20 cases, found ${entry.testCases.length}`);
 
 const close = (actual, expected, message) => {
@@ -118,7 +118,7 @@ assert.ok(!folded.has(entry.name.toLowerCase()), 'name collides');
 for (const alias of entry.aliases) assert.ok(!folded.has(alias.toLowerCase()), `alias collides: ${alias}`);
 assert.ok(entry.tags.includes('wind') && entry.tags.includes('hub-height'));
 assert.equal(entry.category, 'Environment');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Environment').length, 56, 'Environment count');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Environment').length, 57, 'Environment count');
 assert.equal(entry.listed, true);
 assert.equal(entry.risk, 'low');
 assert.equal(entry.maturity, 'draft');
