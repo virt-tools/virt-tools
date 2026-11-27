@@ -40,9 +40,9 @@ assert.equal(record.testCases.length, 21);
 assert.equal(record.testCases.filter((item) => item.kind === 'golden').length, 5);
 assert.equal(record.testCases.filter((item) => item.kind === 'boundary').length, 5);
 assert.equal(record.testCases.filter((item) => item.kind === 'validation').length, 11);
-assert.equal(catalog.tools.length, 2501, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2240, 'public tools');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Crafts & Hobbies').length, 56,
+assert.equal(catalog.tools.length, 2502, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2241, 'public tools');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Crafts & Hobbies').length, 57,
   'Crafts & Hobbies count');
 
 // No other record claims this slug, name, alias or distinctive tag.

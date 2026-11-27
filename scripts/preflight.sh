@@ -509,6 +509,8 @@ node tests/bazel_label_resolver.test.cjs
 node tests/corsi_fenwick_calculator.test.cjs
 node tests/pll_loop_filter_calculator.test.cjs
 
+node tests/screen_printing_ink_calculator.test.cjs
+
 python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "preflight: all checks passed"

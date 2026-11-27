@@ -44,8 +44,8 @@ for (const source of record.sources) {
 assert.ok(record.sources.some((source) => source.url === 'https://www.engineersedge.com/mechanical,045tolerances/measuring_pitch_diameters_14259.htm'), 'Engineers Edge source');
 assert.ok(record.sources.some((source) => source.url === 'https://littlemachineshop.com/instructions/threewiremethod.pdf'), 'LittleMachineShop source');
 
-assert.equal(catalog.tools.length, 2501, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2240, 'public tools');
+assert.equal(catalog.tools.length, 2502, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2241, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Mechanical & Structural Engineering').length, 56, 'Mechanical & Structural Engineering count');
 
 // The slug, name, aliases and tags must not be shared with another record.
