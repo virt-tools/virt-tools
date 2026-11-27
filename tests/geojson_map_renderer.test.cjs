@@ -24,8 +24,8 @@ const near = (actual, expected, message, tolerance = 1e-9) =>
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
 const entry = catalog.tools.find((tool) => tool.slug === 'geojson-map-renderer');
 assert.ok(entry, 'catalog entry missing');
-assert.equal(catalog.tools.length, 2487, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2226, 'public tools');
+assert.equal(catalog.tools.length, 2488, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2227, 'public tools');
 assert.ok(entry.testCases.length >= 30, `expected at least 30 cases, found ${entry.testCases.length}`);
 
 // The projection constants and the published Mercator ordinate at 45 degrees.
@@ -183,7 +183,7 @@ assert.ok(!folded.has(entry.name.toLowerCase()), 'name collides');
 for (const alias of entry.aliases) assert.ok(!folded.has(alias.toLowerCase()), `alias collides: ${alias}`);
 assert.ok(entry.tags.includes('geojson') && entry.tags.includes('svg'));
 assert.equal(entry.category, 'Geography');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Geography').length, 55, 'Geography count');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Geography').length, 56, 'Geography count');
 assert.equal(entry.listed, true);
 assert.equal(entry.risk, 'low');
 assert.ok(entry.sources.length >= 2);

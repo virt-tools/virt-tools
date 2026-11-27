@@ -48,8 +48,8 @@ assert.ok(record.sources.some((source) => source.url.includes('engineeringtoolbo
   'Engineering ToolBox affinity-law source');
 assert.ok(record.sources.some((source) => source.url.includes('Affinity_laws')), 'Wikipedia affinity-law source');
 
-assert.equal(catalog.tools.length, 2487, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2226, 'public tools');
+assert.equal(catalog.tools.length, 2488, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2227, 'public tools');
 assert.equal(
   catalog.tools.filter((tool) => tool.category === 'Mechanical & Structural Engineering').length,
   56,

@@ -494,6 +494,7 @@ node tests/leak_rate_converter.test.cjs
 node tests/keg_carbonation_pressure_calculator.test.cjs
 node tests/japanese_era_date_converter.test.cjs
 node tests/ssd_endurance_calculator.test.cjs
+node tests/magnetic_declination_calculator.test.cjs
 
 python3 -m unittest discover -s tests -p 'test_*.py'
 
