@@ -525,6 +525,7 @@ node tests/air_cleaner_cadr_calculator.test.cjs
 node tests/sbir_calculator.test.cjs
 node tests/auditd_rule_builder.test.cjs
 node tests/netflow_export_sizing_calculator.test.cjs
+node tests/oauth_redirect_uri_checker.test.cjs
 
 python3 -m unittest discover -s tests -p 'test_*.py'
 

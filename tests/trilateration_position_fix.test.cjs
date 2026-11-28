@@ -173,8 +173,8 @@ assert.throws(() => C.analyze(Object.assign({}, base, { lon1: '1e2' })), /expone
 assert.throws(() => C.analyze(Object.assign({}, base, { d2: '' })), /Enter the station 2 distance/);
 
 // ---- Catalog growth, category balance and uniqueness.
-assert.equal(catalog.tools.length, 2517, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2256, 'public tools');
+assert.equal(catalog.tools.length, 2518, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2257, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Geography').length, 57, 'Geography count');
 assert.equal(entry.category, 'Geography');
 assert.equal(entry.risk, 'low');

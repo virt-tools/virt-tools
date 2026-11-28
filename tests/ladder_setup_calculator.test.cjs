@@ -179,7 +179,7 @@ assert.ok(/@media \(max-width:360px\)/.test(html), 'small-screen rule missing');
 assert.ok(!/style="[^"]*width:\s*\d{3,}px/.test(html), 'fixed wide inline styles');
 
 const publicCount = catalog.tools.filter((tool) => tool.listed).length;
-assert.equal(publicCount, 2256, 'the catalog keeps growing: ' + publicCount);
+assert.equal(publicCount, 2257, 'the catalog keeps growing: ' + publicCount);
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Safety & Emergency').length, 51,
   'Safety & Emergency count');
 

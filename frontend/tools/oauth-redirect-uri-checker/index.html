@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>OAuth Redirect URI Checker — Virtual Tools</title>
+<meta name="description" content="Compare a redirect_uri against the URIs a client registered and see why an authorization server answers redirect_uri_mismatch: exact string comparison, the loopback port exception, or a varying query. Runs locally in your browser.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+[hidden]{display:none!important}
+.pairs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:10px 0}
+@media (max-width:560px){.pairs{grid-template-columns:minmax(0,1fr)}}
+label.f{font-size:13px;opacity:.85;display:block;margin-bottom:4px}
+.field{background:var(--bg,#14181f);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px;min-width:0}
+.field:focus-within{border-color:var(--accent,#6ea8fe);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#6ea8fe) 18%,transparent)}
+.field input,.field textarea,.field select{box-sizing:border-box;width:100%;min-width:0;background:transparent;color:var(--text,#e6e6e6);border:none;font-size:16px;padding:2px 0;outline:none;min-height:28px;font-family:inherit}
+.field textarea{font-family:ui-monospace,monospace;font-size:13px;line-height:1.5;resize:vertical;min-height:66px}
+.field input{font-family:ui-monospace,monospace;font-size:14px}
+.field select{font-size:15px}
+.unit{font-size:11px;color:var(--text-dim,#9aa3b2);margin-top:4px;line-height:1.4}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:14px 0}
+.out .big{font-size:clamp(1.5rem,6vw,2rem);font-weight:800;text-align:center;padding:4px 0 2px;color:var(--accent,#6ea8fe);overflow-wrap:anywhere}
+.out .big.no{color:var(--bad,#f87171)}
+.out .label{text-align:center;color:var(--text-dim,#9aa3b2);font-size:12px;letter-spacing:.08em;text-transform:uppercase;margin:0 0 6px}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45;overflow-wrap:anywhere}
+.facts{margin:4px 0 0}
+.facts .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:14px}
+.facts .row:last-child{border-bottom:none}
+.facts .k{color:var(--text-dim,#9aa3b2);flex:0 0 auto}
+.facts .v{font-family:ui-monospace,monospace;font-weight:600;text-align:right;overflow-wrap:anywhere;word-break:break-word;min-width:0}
+.hint{font-size:13px;line-height:1.5;margin:10px 0 0;color:var(--text-dim,#9aa3b2)}
+.entries{list-style:none;padding:0;margin:10px 0 0}
+.entries li{display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 10px;padding:9px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:13px}
+.entries li:last-child{border-bottom:none}
+.entries .n{font-family:ui-monospace,monospace;color:var(--text-dim,#9aa3b2);font-size:12px;padding-top:2px}
+.entries .uri{font-family:ui-monospace,monospace;overflow-wrap:anywhere;word-break:break-word}
+.entries .state{grid-column:2;font-size:12px;color:var(--text-dim,#9aa3b2)}
+.entries .state.ok{color:var(--good,#4ade80)}
+.entries .state.no{color:var(--bad,#f87171)}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 4px}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:46px}
+.actions button.secondary{background:transparent;color:var(--accent,#6ea8fe)}
+.actions button:hover{filter:brightness(1.08)}
+.actions button:focus-visible{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.warn{font-size:13px;margin:8px 0;padding:9px 11px;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg,#14181f);line-height:1.45}
+.err{color:var(--bad,#f87171);font-size:13px;margin:6px 0;min-height:1.2em}
+.copy-status{font-size:12px;color:var(--text-dim,#9aa3b2);margin-left:2px}
+.note{color:var(--text-dim,#9aa3b2);font-size:.85rem;margin:10px 0 0;line-height:1.5}
+@media (max-width:360px){.facts .row{display:block}.facts .v{display:block;text-align:left;margin-top:2px}}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<h1>OAuth Redirect URI Checker</h1>
+<p>Compare the redirect_uri a client sends with the URIs it registered, and see which rule accepts or rejects it.</p>
+</div>
+<div class="panel">
+<form id="redirect-form" novalidate>
+<div class="field">
+<label class="f" for="in-registered">Registered redirect URIs</label>
+<textarea id="in-registered" rows="3" autocomplete="off" spellcheck="false" aria-describedby="registered-help">https://app.example.com/oauth/callback</textarea>
+<div class="unit" id="registered-help">one per line, exactly as the provider console stores them</div>
+</div>
+<div class="field" style="margin-top:12px">
+<label class="f" for="in-requested">redirect_uri in the authorization request</label>
+<input type="text" id="in-requested" value="https://app.example.com/oauth/callback" autocomplete="off" spellcheck="false" aria-describedby="requested-help">
+<div class="unit" id="requested-help">the value the client sends, query string included</div>
+</div>
+<div class="pairs">
+<div class="field"><label class="f" for="in-mode">Registration</label><select id="in-mode"><option value="full" selected>Full URI is registered</option><option value="components">Scheme, authority and path</option></select><div class="unit">what the client registered with the provider</div></div>
+<div class="field"><label class="f" for="in-platform">Client</label><select id="in-platform"><option value="web" selected>Web application</option><option value="native">Native application</option></select><div class="unit">a private-use scheme only works for native apps</div></div>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions">
+<button class="primary" type="submit">Check URI</button>
+<button type="button" class="secondary" id="reset">Reset</button>
+</div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"><span style="color:var(--text-dim,#9aa3b2)">Press Check URI to compare the values.</span></div>
+<p class="warn" id="warn" hidden></p>
+<div class="actions">
+<button type="button" class="secondary" id="copy">Copy summary</button>
+<span class="copy-status" id="copy-status" aria-live="polite"></span>
+</div>
+<p class="note">The check models the comparison an authorization server is told to make. With a fully registered URI it applies simple string comparison, so case, percent-encoding and a trailing slash all count (RFC 6749 section 3.1.2.3 via RFC 3986 section 6.2.1). When only the scheme, authority and path are registered, the query may vary. A loopback IP redirect on http may use any port (RFC 8252 section 7.3). Providers can be stricter or more forgiving than this, and registration consoles sometimes normalise a value on save, so treat a rejection here as the first thing to check, not as the provider's final answer. Nothing is sent, stored or uploaded.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* redirect-uri-core:start */
+var RedirectUriCore = (function(){
+  "use strict";
+  var DEFAULTS = {
+    registered: "https://app.example.com/oauth/callback",
+    requested: "https://app.example.com/oauth/callback",
+    mode: "full",
+    platform: "web"
+  };
+  var URI_RE = /^([A-Za-z][A-Za-z0-9+.\-]*):(?:\/\/([^\/?#]*))?([^?#]*)(?:\?([^#]*))?(?:#(.*))?$/;
+  var CTRL_RE = /[\u0000-\u0020\u007f]/;
+  var CONTROL_RE = /[\u0000-\u001f\u007f]/;
+  var PORT_RE = /^[0-9]+$/;
+
+  function fail(message){ throw new Error(message); }
+  function trimmed(value){ return String(value === null || value === undefined ? "" : value).trim(); }
+
+  function parse(text){
+    var m = URI_RE.exec(text);
+    if (!m) return null;
+    var authority = m[2] === undefined ? null : m[2];
+    var parsed = {
+      text: text,
+      scheme: m[1],
+      authority: authority,
+      path: m[3],
+      query: m[4] === undefined ? null : m[4],
+      fragment: m[5] === undefined ? null : m[5],
+      host: null,
+      port: null,
+      userinfo: null
+    };
+    if (authority !== null){
+      var at = authority.lastIndexOf("@");
+      parsed.userinfo = at >= 0 ? authority.slice(0, at) : null;
+      var hostport = at >= 0 ? authority.slice(at + 1) : authority;
+      if (hostport.charAt(0) === "["){
+        var close = hostport.indexOf("]");
+        if (close < 0) return null;
+        parsed.host = hostport.slice(0, close + 1);
+        var rest = hostport.slice(close + 1);
+        if (rest){
+          if (rest.charAt(0) !== ":") return null;
+          parsed.port = rest.slice(1);
+        }
+      } else {
+        var colon = hostport.lastIndexOf(":");
+        if (colon >= 0){
+          parsed.host = hostport.slice(0, colon);
+          parsed.port = hostport.slice(colon + 1);
+        } else {
+          parsed.host = hostport;
+        }
+      }
+    }
+    return parsed;
+  }
+
+  function isLoopback(parsed){
+    return parsed.scheme === "http" && (parsed.host === "127.0.0.1" || parsed.host === "[::1]");
+  }
+
+  function loopbackPortAllowed(entry, requested){
+    return isLoopback(entry) && isLoopback(requested) &&
+      entry.host === requested.host &&
+      entry.userinfo === requested.userinfo &&
+      entry.path === requested.path &&
+      entry.query === requested.query &&
+      entry.port !== requested.port;
+  }
+
+  function entryProblem(raw){
+    if (CTRL_RE.test(raw)) return "contains a space or control character";
+    var parsed = parse(raw);
+    if (!parsed) return "is not an absolute URI with a scheme";
+    if (parsed.fragment !== null) return "contains a fragment";
+    if (parsed.port !== null && !PORT_RE.test(parsed.port)) return "has a port that is not a number";
+    if (parsed.host === "" && parsed.path === "") return "has no host or path";
+    return "";
+  }
+
+  function match(entry, requested, mode){
+    if (mode === "full"){
+      if (entry.text === requested.text) return "exact";
+      if (loopbackPortAllowed(entry, requested)) return "loopback";
+      return "";
+    }
+    if (entry.scheme !== requested.scheme) return "";
+    if (entry.authority !== requested.authority && !loopbackPortAllowed(entry, requested)) return "";
+    if (entry.path !== requested.path) return "";
+    if (entry.query !== null && entry.query !== requested.query) return "";
+    if (entry.text === requested.text) return "exact";
+    if (entry.authority !== requested.authority) return "loopback";
+    return "query";
+  }
+
+  function diffs(entry, requested){
+    var found = [];
+    if (entry.scheme !== requested.scheme) found.push("scheme");
+    if ((entry.host === null ? "" : entry.host) !== (requested.host === null ? "" : requested.host)) found.push("host");
+    if ((entry.port === null ? "" : entry.port) !== (requested.port === null ? "" : requested.port)) found.push("port");
+    if (entry.path !== requested.path) found.push("path");
+    if ((entry.query === null ? null : entry.query) !== (requested.query === null ? null : requested.query)) found.push("query");
+    if (!found.length && entry.text !== requested.text) found.push("text");
+    return found;
+  }
+
+  function component(parsed, name){
+    if (name === "scheme") return parsed.scheme;
+    if (name === "host") return parsed.host === null ? "(none)" : parsed.host;
+    if (name === "port") return parsed.port === null ? "(none)" : parsed.port;
+    if (name === "path") return parsed.path === "" ? "(none)" : parsed.path;
+    if (name === "query") return parsed.query === null ? "(none)" : parsed.query;
+    return parsed.text;
+  }
+
+  function run(input){
+    var options = input || {};
+    var mode = trimmed(options.mode || "full");
+    if (mode !== "full" && mode !== "components"){
+      fail("Choose the registration mode: the full URI, or the scheme, authority and path.");
+    }
+    var platform = trimmed(options.platform || "web");
+    if (platform !== "web" && platform !== "native"){
+      fail("Choose the client platform: web or native.");
+    }
+
+    var requestedText = trimmed(options.requested);
+    if (!requestedText) fail("Enter the redirect_uri the client would send.");
+    if (requestedText.length > 4096) fail("The redirect_uri is longer than 4,096 characters.");
+    if (CONTROL_RE.test(requestedText)) fail("The redirect_uri must not contain control characters.");
+    if (requestedText.indexOf(" ") >= 0) fail("The redirect_uri must not contain a space; a space has to be percent-encoded as %20.");
+    var requested = parse(requestedText);
+    if (!requested){
+      fail("The redirect_uri must be an absolute URI with a scheme, such as https://app.example.com/callback (RFC 6749 section 3.1.2).");
+    }
+    if (requested.fragment !== null){
+      fail("A redirect URI must not include a fragment; RFC 6749 section 3.1.2 forbids it.");
+    }
+    if (requested.host === "" && requested.path === ""){
+      fail("The redirect_uri needs a host or a path after its scheme.");
+    }
+    if (requested.port !== null && !PORT_RE.test(requested.port)){
+      fail("The redirect_uri has a port that is not a number.");
+    }
+
+    var lines = String(options.registered === null || options.registered === undefined ? "" : options.registered).split(/\r?\n/);
+    var entries = [];
+    for (var i = 0; i < lines.length; i += 1){
+      var raw = lines[i].trim();
+      if (!raw) continue;
+      entries.push({ raw: raw, parsed: parse(raw), problem: entryProblem(raw) });
+    }
+    if (!entries.length) fail("Enter at least one registered redirect URI, one per line.");
+    if (entries.length > 50) fail("List at most 50 registered redirect URIs.");
+
+    var rows = [];
+    var validCount = 0;
+    var invalidCount = 0;
+    var matchedIndex = 0;
+    var rule = "";
+
+    for (var j = 0; j < entries.length; j += 1){
+      var entry = entries[j];
+      if (entry.problem){
+        invalidCount += 1;
+        rows.push({ index: j + 1, text: entry.raw, status: "invalid", rule: "", problem: entry.problem });
+        continue;
+      }
+      validCount += 1;
+      var outcome = match(entry.parsed, requested, mode);
+      rows.push({ index: j + 1, text: entry.raw, status: outcome ? "match" : "miss", rule: outcome, problem: "" });
+      if (outcome && !matchedIndex){ matchedIndex = j + 1; rule = outcome; }
+    }
+
+    var closestIndex = 0;
+    var closestDiff = "";
+    if (!matchedIndex){
+      var fewest = 0;
+      for (var k = 0; k < rows.length; k += 1){
+        if (rows[k].status !== "miss") continue;
+        var diff = diffs(entries[k].parsed, requested);
+        if (!fewest || diff.length < fewest){
+          fewest = diff.length; closestIndex = k + 1; closestDiff = diff[0];
+        }
+      }
+    }
+
+    var warnings = [];
+    if (requested.scheme === "http" && !isLoopback(requested)){
+      warnings.push("The redirect_uri uses plain http. RFC 6749 section 3.1.2.1 says the redirection endpoint SHOULD require TLS; only a loopback IP redirect is a documented exception.");
+    }
+    if (requested.userinfo !== null){
+      warnings.push("The redirect_uri carries credentials before the host. They are compared as part of the string and are not a substitute for a registered host.");
+    }
+    for (var a = 0; a < entries.length; a += 1){
+      if (entries[a].problem) continue;
+      var n = a + 1;
+      var parsedEntry = entries[a].parsed;
+      if (parsedEntry.scheme === "http" && !isLoopback(parsedEntry)){
+        warnings.push("Registered entry " + n + " uses plain http; the authorization code or token can be read in transit.");
+      }
+      if (entries[a].raw.indexOf("*") >= 0){
+        warnings.push("Registered entry " + n + " contains an asterisk. Under simple string comparison it matches only a literal asterisk, so it cannot match a real redirect URI.");
+      }
+      if (platform === "web" && parsedEntry.scheme !== "http" && parsedEntry.scheme !== "https"){
+        warnings.push("Registered entry " + n + " uses the private-use scheme \u201c" + parsedEntry.scheme + "\u201d, which a web client cannot receive; RFC 8252 section 7.1 reserves those for native apps.");
+      }
+    }
+    for (var b = 0; b < entries.length; b += 1){
+      if (entries[b].problem) continue;
+      for (var c = b + 1; c < entries.length; c += 1){
+        if (entries[c].problem) continue;
+        if (entries[b].raw === entries[c].raw){
+          warnings.push("Registered entries " + (b + 1) + " and " + (c + 1) + " are identical; keep one so the console cannot drift.");
+        }
+      }
+    }
+
+    var allowed = matchedIndex > 0;
+    return {
+      allowed: allowed,
+      matchedIndex: matchedIndex,
+      rule: rule,
+      registeredCount: entries.length,
+      validCount: validCount,
+      invalidCount: invalidCount,
+      mode: mode,
+      platform: platform,
+      requestedText: requestedText,
+      requestedScheme: component(requested, "scheme"),
+      requestedHost: component(requested, "host"),
+      requestedPort: component(requested, "port"),
+      requestedPath: component(requested, "path"),
+      requestedQuery: component(requested, "query"),
+      closestIndex: allowed ? 0 : closestIndex,
+      difference: allowed ? "" : closestDiff,
+      differenceRegistered: allowed || !closestIndex ? "" : component(entries[closestIndex - 1].parsed, closestDiff),
+      differenceRequested: allowed || !closestIndex ? "" : component(requested, closestDiff),
+      rows: rows,
+      warningCount: warnings.length,
+      warnings: warnings
+    };
+  }
+
+  return { run: run, DEFAULTS: DEFAULTS };
+})();
+/* redirect-uri-core:end */
+(function(){
+"use strict";
+var els = {
+  form: document.getElementById("redirect-form"),
+  registered: document.getElementById("in-registered"),
+  requested: document.getElementById("in-requested"),
+  mode: document.getElementById("in-mode"),
+  platform: document.getElementById("in-platform"),
+  err: document.getElementById("err"),
+  out: document.getElementById("out"),
+  warn: document.getElementById("warn"),
+  copy: document.getElementById("copy"),
+  copyStatus: document.getElementById("copy-status"),
+  reset: document.getElementById("reset")
+};
+var current = "";
+function clear(node){ while (node.firstChild) node.removeChild(node.firstChild); }
+function addFact(parent, label, value){
+  var row = document.createElement("div"); row.className = "row";
+  var key = document.createElement("span"); key.className = "k"; key.textContent = label;
+  var val = document.createElement("span"); val.className = "v"; val.textContent = value;
+  row.appendChild(key); row.appendChild(val); parent.appendChild(row);
+}
+function placeholder(message){
+  var span = document.createElement("span");
+  span.style.color = "var(--text-dim,#9aa3b2)"; span.textContent = message;
+  els.out.appendChild(span);
+}
+function ruleLabel(rule){
+  if (rule === "exact") return "exact string match";
+  if (rule === "loopback") return "loopback port may vary";
+  if (rule === "query") return "query may vary";
+  return "";
+}
+function stateLabel(row){
+  if (row.status === "invalid") return "skipped \u2014 " + row.problem;
+  if (row.status === "match") return "matches \u2014 " + ruleLabel(row.rule);
+  return "no match";
+}
+function differenceHint(result){
+  if (result.difference === "scheme") return "Schemes are compared as written: http and https are different strings.";
+  if (result.difference === "host") return "Hosts are compared as written. DNS is not case-sensitive, but simple string comparison is, so App.Example.com and app.example.com are different values.";
+  if (result.difference === "port") return "A registered port has to match. Only a loopback IP redirect on http may use any port (RFC 8252 section 7.3).";
+  if (result.difference === "path") return "Paths are compared as written: a trailing slash is part of the path, and /callback and /callback/ are different registrations.";
+  if (result.difference === "query") return "The requested query differs from the query pinned by the registered entry.";
+  if (result.difference === "text") return "Every component agrees but the strings differ, so a provider using simple string comparison still rejects the value.";
+  return "";
+}
+function summary(result){
+  var lines = ["OAuth redirect URI check", "Verdict: " + (result.allowed ? "accepted" : "rejected")];
+  if (result.allowed){
+    lines.push("Matched: entry " + result.matchedIndex + " (" + ruleLabel(result.rule) + ")");
+  } else if (result.closestIndex){
+    lines.push("Closest: entry " + result.closestIndex + ", " + result.difference + " differs");
+    lines.push("Registered value: " + result.differenceRegistered);
+    lines.push("Requested value: " + result.differenceRequested);
+  }
+  lines.push("Requested: " + result.requestedText);
+  lines.push("Registration: " + (result.mode === "full" ? "full URI" : "scheme, authority and path"));
+  lines.push("Client: " + (result.platform === "web" ? "web" : "native"));
+  lines.push("Registered entries: " + result.validCount + " valid, " + result.invalidCount + " skipped");
+  for (var i = 0; i < result.rows.length; i += 1){
+    lines.push("#" + result.rows[i].index + " " + result.rows[i].text + " \u2014 " + stateLabel(result.rows[i]));
+  }
+  if (result.warnings.length) lines.push("Notes: " + result.warnings.join(" "));
+  return lines.join("\n");
+}
+function render(result){
+  clear(els.out);
+  var caption = document.createElement("div"); caption.className = "label";
+  var big = document.createElement("div"); big.className = "big" + (result.allowed ? "" : " no");
+  var sub = document.createElement("div"); sub.className = "sub";
+  caption.textContent = "Verdict";
+  big.textContent = result.allowed ? "Accepted" : "Rejected";
+  if (result.allowed){
+    sub.textContent = "registered entry " + result.matchedIndex + " satisfies the comparison \u2014 " + ruleLabel(result.rule);
+  } else {
+    sub.textContent = "none of the " + result.registeredCount + " registered URIs satisfies this comparison";
+  }
+  els.out.appendChild(caption); els.out.appendChild(big); els.out.appendChild(sub);
+
+  var facts = document.createElement("div"); facts.className = "facts";
+  addFact(facts, "Registration", result.mode === "full" ? "full URI" : "scheme, authority and path");
+  addFact(facts, "Client", result.platform === "web" ? "web application" : "native application");
+  addFact(facts, "Scheme", result.requestedScheme);
+  addFact(facts, "Host", result.requestedHost);
+  addFact(facts, "Port", result.requestedPort);
+  addFact(facts, "Path", result.requestedPath);
+  addFact(facts, "Query", result.requestedQuery);
+  addFact(facts, "Registered", result.validCount + " valid, " + result.invalidCount + " skipped");
+  if (!result.allowed && result.closestIndex){
+    addFact(facts, "Closest entry", String(result.closestIndex));
+    addFact(facts, "Differs in", result.difference);
+    addFact(facts, "Registered value", result.differenceRegistered);
+    addFact(facts, "Requested value", result.differenceRequested);
+  }
+  els.out.appendChild(facts);
+
+  if (!result.allowed && result.closestIndex){
+    var hint = document.createElement("p"); hint.className = "hint";
+    hint.textContent = differenceHint(result);
+    els.out.appendChild(hint);
+  }
+
+  var list = document.createElement("ul"); list.className = "entries";
+  for (var i = 0; i < result.rows.length; i += 1){
+    var row = result.rows[i];
+    var li = document.createElement("li");
+    var num = document.createElement("span"); num.className = "n"; num.textContent = "#" + row.index;
+    var uri = document.createElement("span"); uri.className = "uri"; uri.textContent = row.text;
+    var state = document.createElement("span");
+    state.className = "state " + (row.status === "match" ? "ok" : "no");
+    state.textContent = stateLabel(row);
+    li.appendChild(num); li.appendChild(uri); li.appendChild(state);
+    list.appendChild(li);
+  }
+  els.out.appendChild(list);
+
+  if (result.warnings.length){
+    els.warn.hidden = false; els.warn.textContent = result.warnings.join(" ");
+  } else {
+    els.warn.hidden = true; els.warn.textContent = "";
+  }
+  current = summary(result);
+}
+function run(){
+  var result;
+  try {
+    result = RedirectUriCore.run({
+      registered: els.registered.value,
+      requested: els.requested.value,
+      mode: els.mode.value,
+      platform: els.platform.value
+    });
+  } catch (error){
+    current = "";
+    els.err.textContent = error.message; els.warn.hidden = true; clear(els.out);
+    placeholder("Check the values above."); return;
+  }
+  els.err.textContent = ""; els.copyStatus.textContent = "";
+  render(result);
+}
+function copySummary(){
+  if (!current) return;
+  var done = function(){ els.copyStatus.textContent = "Copied"; };
+  var failed = function(){ els.copyStatus.textContent = "Copy failed \u2014 select the result above"; };
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(current).then(done, failed);
+    } else { failed(); }
+  } catch (error){ failed(); }
+}
+function reset(){
+  var defaults = RedirectUriCore.DEFAULTS;
+  els.registered.value = defaults.registered;
+  els.requested.value = defaults.requested;
+  els.mode.value = defaults.mode;
+  els.platform.value = defaults.platform;
+  run(); els.requested.focus();
+}
+els.form.addEventListener("submit", function(event){ event.preventDefault(); run(); });
+els.reset.addEventListener("click", reset);
+els.copy.addEventListener("click", copySummary);
+run();
+})();
+</script>
+</body>
+</html>

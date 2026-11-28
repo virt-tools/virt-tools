@@ -361,8 +361,8 @@ for (const alias of record.aliases) {
 }
 
 // ---- Counts and the page contract.
-assert.equal(catalog.tools.length, 2517, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2256, 'public tools');
+assert.equal(catalog.tools.length, 2518, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2257, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Networking').length, 58, 'Networking count');
 assert.equal(new Set(catalog.tools.map((tool) => tool.slug)).size, catalog.tools.length, 'slugs are unique');
 
