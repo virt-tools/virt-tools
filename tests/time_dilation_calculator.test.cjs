@@ -138,8 +138,8 @@ assert.deepEqual(base.rows.map((row) => row.v), [
 
 // ---- Catalog: totals, the record and every case replayed.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2529, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2268, 'public tools');
+assert.equal(catalog.tools.length, 2530, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2269, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Time').length, 58, 'Time count');
 const record = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(record, 'catalog record missing');

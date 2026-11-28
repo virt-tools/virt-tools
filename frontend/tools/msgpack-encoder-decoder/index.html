@@ -1,0 +1,1218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/theme-init.js"></script>
+<title>MessagePack Encoder &amp; Decoder &mdash; Virtual Tools</title>
+<meta name="description" content="Decode MessagePack bytes from hex or base64 into a JSON view with byte offsets and timestamps, or encode JSON into compact MessagePack. Runs in your browser.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.field{display:flex;flex-direction:column;gap:6px;margin:0}
+.field[hidden]{display:none}
+.field label{font-size:13px;color:var(--text-dim,#9aa3b2)}
+select#mode,input#format,textarea#input{box-sizing:border-box;width:100%;max-width:none;min-height:46px;
+  padding:10px 12px;border-radius:8px;border:1px solid var(--border,#2a2f3a);background:var(--bg-elev,#171a21);color:var(--text,#e6e6e6);
+  font:inherit;font-size:16px;line-height:1.3;outline:none}
+select#mode,input#format{font-family:inherit}
+textarea#input{min-height:150px;font-family:ui-monospace,monospace;resize:vertical}
+select#mode:focus,input#format:focus,textarea#input:focus{outline:2px solid var(--accent,#6ea8fe);outline-offset:1px;box-shadow:none}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:12px 0 0}
+.actions button{font:inherit;font-weight:600;padding:10px 22px;border-radius:8px;border:1px solid var(--accent,#6ea8fe);background:var(--accent,#6ea8fe);color:#0b1017;cursor:pointer;min-height:44px}
+.actions button:hover:not(:disabled){filter:brightness(1.08)}
+.actions button:disabled{opacity:.55;cursor:default}
+.actions button:focus{outline:3px solid var(--accent,#6ea8fe);outline-offset:2px}
+.actions button.ghost{background:transparent;color:var(--accent,#6ea8fe)}
+.err{color:var(--bad,#f87171);font-size:13px;margin:10px 0 0;min-height:1.2em}
+.out{background:var(--bg-elev,#171a21);border:1px solid var(--border,#2a2f3a);border-radius:10px;padding:16px;margin:16px 0 0}
+.out .label{text-align:center;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-dim,#9aa3b2)}
+.out .big{font-size:clamp(1.35rem,6vw,1.9rem);font-weight:800;font-family:ui-monospace,monospace;text-align:center;padding:2px 0 4px;overflow-wrap:anywhere;line-height:1.25}
+.out .sub{text-align:center;color:var(--text-dim,#9aa3b2);font-size:13px;margin:0 0 12px;line-height:1.45;overflow-wrap:anywhere}
+.out .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:7px 0;border-bottom:1px solid var(--border,#2a2f3a);font-size:14px}
+.out .row:last-child{border-bottom:none}
+.out .row .k{color:var(--text-dim,#9aa3b2);flex:1 1 auto;min-width:0}
+.out .row .v{font-family:ui-monospace,monospace;font-weight:700;color:var(--accent,#6ea8fe);text-align:right;white-space:nowrap}
+.out h2{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-dim,#9aa3b2);margin:16px 0 8px}
+pre.view{margin:0;padding:12px;border:1px solid var(--border,#2a2f3a);border-radius:8px;background:var(--bg,#0f1218);
+  font-family:ui-monospace,monospace;font-size:13px;line-height:1.5;overflow:auto;max-height:360px;white-space:pre;tab-size:2}
+.table-wrap{overflow:auto;max-height:420px;border:1px solid var(--border,#2a2f3a);border-radius:8px}
+table{border-collapse:collapse;width:100%;min-width:520px;font-size:13px}
+th,td{padding:7px 9px;border-bottom:1px solid var(--border,#2a2f3a);text-align:left;vertical-align:top}
+th{position:sticky;top:0;background:var(--bg-elev,#171a21);font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--text-dim,#9aa3b2)}
+td.num{font-family:ui-monospace,monospace;white-space:nowrap}
+td.val{font-family:ui-monospace,monospace;overflow-wrap:anywhere;min-width:150px}
+td.note{color:var(--text-dim,#9aa3b2)}
+.status{color:var(--good,#4ade80);font-size:13px;min-height:1.2em}
+@media (max-width:560px){
+  .grid{grid-template-columns:minmax(0,1fr)}
+  .actions button{flex:1 1 auto}
+  .out .row{flex-direction:column;align-items:flex-start;gap:2px}
+  .out .row .v{text-align:left;white-space:normal;overflow-wrap:anywhere}
+}
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<main>
+<div class="tool-header">
+<h1>MessagePack Encoder &amp; Decoder</h1>
+<p>Read MessagePack bytes as a value tree with byte offsets, extension types and timestamps, or turn JSON into the shortest MessagePack encoding &mdash; useful for payloads from Redis, Fluentd, RPC and log pipelines.</p>
+</div>
+<div class="panel">
+<form id="msgpack-form" novalidate>
+<div class="grid">
+<div class="field">
+<label for="mode">Direction</label>
+<select id="mode">
+<option value="decode" selected>Decode bytes to values</option>
+<option value="encode">Encode JSON to bytes</option>
+</select>
+</div>
+<div class="field" id="format-field">
+<label for="format">Input encoding</label>
+<select id="format">
+<option value="hex" selected>Hexadecimal</option>
+<option value="base64">Base64</option>
+</select>
+</div>
+</div>
+<div class="field" style="margin-top:12px">
+<label for="input" id="input-label">MessagePack bytes (hex)</label>
+<textarea id="input" spellcheck="false" autocomplete="off" placeholder="82a7636f6d70616374c3a6736368656d6100"></textarea>
+</div>
+<div class="err" id="err" role="alert" aria-live="polite"></div>
+<div class="actions">
+<button type="submit" id="run">Decode</button>
+<button type="button" class="ghost" id="example">Load example</button>
+<button type="button" class="ghost" id="reset">Reset</button>
+</div>
+</form>
+<div class="out" id="out" aria-live="polite" aria-atomic="true"></div>
+<div class="actions">
+<button type="button" class="ghost" id="copy" disabled>Copy output</button>
+<span class="status" id="status" role="status" aria-live="polite"></span>
+</div>
+<p class="note">MessagePack is a compact binary serialization format that mirrors JSON&rsquo;s types. Small integers, short strings, short arrays and short maps each fit in a single header byte, so a typical payload is smaller than the same value written as JSON. Decoding reads one top-level value, rejects trailing bytes, validates UTF-8 in strings, and reports every item&rsquo;s byte offset, encoded length, format name and value. Extension values are shown with their type number; the built-in timestamp type (-1) is also rendered as an ISO 8601 instant from its 4-, 8- or 12-byte payload. Integers wider than JavaScript&rsquo;s safe range appear as exact decimal strings so no digits are rounded, and encodings that use more bytes than the shortest form are flagged rather than hidden. Encoding takes a JSON value and writes the shortest MessagePack form, with markers for data that JSON cannot express: <code>{"$bin":"0102ff"}</code>, <code>{"$ext":{"type":2,"data":"0102"}}</code>, <code>{"$float":"NaN"}</code>, <code>{"$bigint":"18446744073709551615"}</code>, <code>{"$map":[[1,"a"]]}</code> and <code>{"$timestamp":{"seconds":1700000000,"nanoseconds":0}}</code>. Inputs are limited to 4,096 bytes, 2,000 values and 32 levels of nesting. Everything runs in your browser; nothing is sent or stored.</p>
+</div>
+</main>
+<script src="/assets/app.js"></script>
+<script>
+/* msgpack-core:start */
+var MsgpackCore = (function(){
+  "use strict";
+  var MAX_BYTES = 4096;
+  var MAX_ITEMS = 2000;
+  var MAX_DEPTH = 32;
+  var MAX_SAFE = 9007199254740991;
+  var MAX_SAFE_BIG = BigInt(MAX_SAFE);
+  var MIN_SAFE_BIG = BigInt(-MAX_SAFE);
+  var UINT64_MAX = BigInt("18446744073709551615");
+  var INT64_MIN = BigInt("-9223372036854775808");
+  var TWO_32 = BigInt(4294967296);
+  var TWO_34_MINUS_ONE = BigInt(17179869183);
+  var EIGHT = BigInt(8);
+  var ZERO = BigInt(0);
+  var MARKERS = ["$bin", "$ext", "$float", "$bigint", "$map", "$timestamp"];
+
+  function fail(message){
+    throw new Error(message);
+  }
+
+  function toHex(bytes){
+    var out = "";
+    for (var index = 0; index < bytes.length; index += 1){
+      var part = bytes[index].toString(16);
+      out += part.length === 1 ? "0" + part : part;
+    }
+    return out;
+  }
+
+  function bytesFromHex(text){
+    var raw = String(text == null ? "" : text).trim();
+    if (!raw) fail("Enter hexadecimal bytes to decode.");
+    raw = raw.replace(/^0x/i, "");
+    if (!/^[0-9a-fA-F\s]*$/.test(raw)) fail("Only hexadecimal digits and spaces are allowed in hex input.");
+    var compact = raw.replace(/\s+/g, "");
+    if (!compact) fail("Enter hexadecimal bytes to decode.");
+    if (compact.length % 2 !== 0) fail("Hexadecimal input needs two digits per byte, but " + compact.length + " digit" + (compact.length === 1 ? " was" : "s were") + " given.");
+    if (compact.length / 2 > MAX_BYTES) fail("Input is limited to " + MAX_BYTES + " bytes.");
+    var bytes = [];
+    for (var index = 0; index < compact.length; index += 2){
+      bytes.push(parseInt(compact.slice(index, index + 2), 16));
+    }
+    return bytes;
+  }
+
+  function markerBytes(text, name){
+    var raw = String(text == null ? "" : text).replace(/\s+/g, "").replace(/^0x/i, "");
+    if (!/^[0-9a-fA-F]*$/.test(raw)) fail(name + " needs hexadecimal digits only.");
+    if (raw.length % 2 !== 0) fail(name + " needs two digits per byte, but " + raw.length + " digit" + (raw.length === 1 ? " was" : "s were") + " given.");
+    var bytes = [];
+    for (var index = 0; index < raw.length; index += 2){
+      bytes.push(parseInt(raw.slice(index, index + 2), 16));
+    }
+    return bytes;
+  }
+
+  function bytesFromBase64(text){
+    var raw = String(text == null ? "" : text).replace(/\s+/g, "").replace(/-/g, "+").replace(/_/g, "/");
+    if (!raw) fail("Enter base64 data to decode.");
+    raw = raw.replace(/=+$/, "");
+    if (!/^[A-Za-z0-9+/]*$/.test(raw)) fail("Only base64 characters are allowed.");
+    if (raw.length % 4 === 1) fail("Base64 input has an impossible length after removing padding.");
+    if (raw.length / 4 * 3 > MAX_BYTES) fail("Input is limited to " + MAX_BYTES + " bytes.");
+    var alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    var bytes = [];
+    for (var index = 0; index < raw.length; index += 4){
+      var chunk = raw.slice(index, index + 4);
+      var a = alphabet.indexOf(chunk.charAt(0));
+      var b = alphabet.indexOf(chunk.charAt(1));
+      var c = chunk.length > 2 ? alphabet.indexOf(chunk.charAt(2)) : -1;
+      var d = chunk.length > 3 ? alphabet.indexOf(chunk.charAt(3)) : -1;
+      bytes.push((a << 2) | (b >> 4));
+      if (c >= 0){
+        if (chunk.length === 2 && (b & 15) !== 0) fail("Base64 input has non-zero bits after the final byte.");
+        bytes.push(((b & 15) << 4) | (c >> 2));
+      }
+      if (d >= 0){
+        if (chunk.length === 3 && (c & 3) !== 0) fail("Base64 input has non-zero bits after the final byte.");
+        bytes.push(((c & 3) << 6) | d);
+      }
+    }
+    return bytes;
+  }
+
+  function utf8Decode(bytes, start, end){
+    var out = "";
+    var index = start;
+    while (index < end){
+      var first = bytes[index];
+      var code;
+      if (first < 0x80){
+        out += String.fromCharCode(first);
+        index += 1;
+        continue;
+      }
+      var needed, minimum, value;
+      if (first >= 0xc2 && first <= 0xdf){ needed = 1; minimum = 0x80; value = first & 0x1f; }
+      else if (first >= 0xe0 && first <= 0xef){ needed = 2; minimum = 0x800; value = first & 0x0f; }
+      else if (first >= 0xf0 && first <= 0xf4){ needed = 3; minimum = 0x10000; value = first & 0x07; }
+      else fail("Invalid UTF-8 at byte " + index + ": 0x" + toHex([first]) + " cannot start a character.");
+      for (var step = 1; step <= needed; step += 1){
+        if (index + step >= end) fail("Invalid UTF-8 at byte " + index + ": the character is cut off.");
+        var next = bytes[index + step];
+        if ((next & 0xc0) !== 0x80) fail("Invalid UTF-8 at byte " + (index + step) + ": expected a continuation byte.");
+        value = (value << 6) | (next & 0x3f);
+      }
+      if (value < minimum) fail("Invalid UTF-8 at byte " + index + ": overlong encoding.");
+      if (value > 0x10ffff) fail("Invalid UTF-8 at byte " + index + ": code point above U+10FFFF.");
+      if (value >= 0xd800 && value <= 0xdfff) fail("Invalid UTF-8 at byte " + index + ": surrogate code point.");
+      if (value > 0xffff){
+        value -= 0x10000;
+        out += String.fromCharCode(0xd800 + (value >> 10), 0xdc00 + (value & 0x3ff));
+      } else {
+        out += String.fromCharCode(value);
+      }
+      index += needed + 1;
+    }
+    return out;
+  }
+
+  function utf8Encode(text){
+    var bytes = [];
+    for (var index = 0; index < text.length; index += 1){
+      var code = text.charCodeAt(index);
+      if (code >= 0xd800 && code <= 0xdbff){
+        var low = text.charCodeAt(index + 1);
+        if (!(low >= 0xdc00 && low <= 0xdfff)) fail("Text contains an unpaired surrogate and cannot be encoded as UTF-8.");
+        code = 0x10000 + ((code - 0xd800) << 10) + (low - 0xdc00);
+        index += 1;
+      } else if (code >= 0xdc00 && code <= 0xdfff){
+        fail("Text contains an unpaired surrogate and cannot be encoded as UTF-8.");
+      }
+      if (code < 0x80) bytes.push(code);
+      else if (code < 0x800) bytes.push(0xc0 | (code >> 6), 0x80 | (code & 0x3f));
+      else if (code < 0x10000) bytes.push(0xe0 | (code >> 12), 0x80 | ((code >> 6) & 0x3f), 0x80 | (code & 0x3f));
+      else bytes.push(0xf0 | (code >> 18), 0x80 | ((code >> 12) & 0x3f), 0x80 | ((code >> 6) & 0x3f), 0x80 | (code & 0x3f));
+    }
+    return bytes;
+  }
+
+  function readFloat(bytes, offset, width){
+    var view = new DataView(new ArrayBuffer(width));
+    for (var index = 0; index < width; index += 1) view.setUint8(index, bytes[offset + index]);
+    return width === 4 ? view.getFloat32(0, false) : view.getFloat64(0, false);
+  }
+
+  function floatValue(value){
+    if (value !== value) return { "$float": "NaN" };
+    if (value === Infinity) return { "$float": "Infinity" };
+    if (value === -Infinity) return { "$float": "-Infinity" };
+    return value;
+  }
+
+  function floatText(value){
+    if (value !== value) return "NaN";
+    if (value === Infinity) return "Infinity";
+    if (value === -Infinity) return "-Infinity";
+    return String(value);
+  }
+
+  function bigValue(value){
+    if (value <= MAX_SAFE_BIG && value >= MIN_SAFE_BIG) return Number(value);
+    return { "$bigint": value.toString() };
+  }
+
+  function preview(text){
+    if (text.length > 32) return JSON.stringify(text.slice(0, 32)) + "\u2026";
+    return JSON.stringify(text);
+  }
+
+  function timestampParts(data){
+    if (data.length === 4){
+      var seconds32 = (data[0] * 16777216) + (data[1] << 16) + (data[2] << 8) + data[3];
+      return { width: 32, seconds: BigInt(seconds32), nanos: 0 };
+    }
+    if (data.length === 8){
+      var packed = ZERO;
+      for (var index = 0; index < 8; index += 1) packed = (packed << EIGHT) | BigInt(data[index]);
+      return { width: 64, seconds: packed & BigInt("17179869183"), nanos: Number(packed >> BigInt(34)) };
+    }
+    if (data.length === 12){
+      var nanos = (data[0] * 16777216) + (data[1] << 16) + (data[2] << 8) + data[3];
+      var raw = ZERO;
+      for (var part = 4; part < 12; part += 1) raw = (raw << EIGHT) | BigInt(data[part]);
+      if (raw >= BigInt("9223372036854775808")) raw -= BigInt("18446744073709551616");
+      return { width: 96, seconds: raw, nanos: nanos };
+    }
+    return null;
+  }
+
+  function isoFromParts(seconds, nanos){
+    if (seconds < BigInt("-62135596800") || seconds > BigInt("253402300799")) return null;
+    var date = new Date(Number(seconds) * 1000);
+    if (isNaN(date.getTime())) return null;
+    var base = date.toISOString();
+    if (base.charAt(0) === "-" || base.length < 24) return null;
+    var head = base.slice(0, 19);
+    if (nanos > 0) return head + "." + String(nanos).padStart(9, "0") + "Z";
+    return head + "Z";
+  }
+
+  function Reader(bytes){
+    this.bytes = bytes;
+    this.pos = 0;
+    this.items = 0;
+    this.depth = 1;
+    this.records = [];
+    this.nonMinimal = 0;
+    this.extensions = 0;
+  }
+
+  Reader.prototype.need = function(count){
+    if (this.pos + count > this.bytes.length){
+      var missing = this.pos + count - this.bytes.length;
+      fail("Unexpected end of input at byte " + this.pos + ": " + missing + " more byte" + (missing === 1 ? " was" : "s were") + " expected.");
+    }
+  };
+
+  Reader.prototype.u8 = function(){
+    this.need(1);
+    var value = this.bytes[this.pos];
+    this.pos += 1;
+    return value;
+  };
+
+  Reader.prototype.uint = function(width){
+    this.need(width);
+    var value = ZERO;
+    for (var index = 0; index < width; index += 1){
+      value = (value << EIGHT) | BigInt(this.bytes[this.pos + index]);
+    }
+    this.pos += width;
+    return value;
+  };
+
+  Reader.prototype.sint = function(width){
+    var raw = this.uint(width);
+    var limit = BigInt(1) << BigInt(width * 8 - 1);
+    return raw >= limit ? raw - (limit << BigInt(1)) : raw;
+  };
+
+  Reader.prototype.shorter = function(record, note){
+    record.notes.push(note);
+    this.nonMinimal += 1;
+  };
+
+  Reader.prototype.readText = function(length, record){
+    this.need(length);
+    var value = utf8Decode(this.bytes, this.pos, this.pos + length);
+    this.pos += length;
+    record.text = preview(value);
+    return value;
+  };
+
+  Reader.prototype.readArray = function(length, depth, record){
+    var values = [];
+    for (var index = 0; index < length; index += 1) values.push(this.read(depth + 1));
+    if (depth > this.depth) this.depth = depth;
+    record.text = "[" + length + " item" + (length === 1 ? "" : "s") + "]";
+    return values;
+  };
+
+  Reader.prototype.readMap = function(length, depth, record){
+    var pairs = [];
+    var keys = Object.create(null);
+    var allText = true;
+    var repeated = false;
+    for (var index = 0; index < length; index += 1){
+      var key = this.read(depth + 1);
+      var value = this.read(depth + 1);
+      pairs.push([key, value]);
+      if (typeof key !== "string"){
+        allText = false;
+      } else {
+        if (keys[key] === true) repeated = true;
+        keys[key] = true;
+      }
+    }
+    if (depth > this.depth) this.depth = depth;
+    record.text = "{" + length + " pair" + (length === 1 ? "" : "s") + "}";
+    if (allText && !repeated){
+      var object = {};
+      for (var pair = 0; pair < pairs.length; pair += 1){
+        Object.defineProperty(object, pairs[pair][0], {
+          value: pairs[pair][1], enumerable: true, writable: true, configurable: true
+        });
+      }
+      return object;
+    }
+    if (repeated) record.notes.push("Repeated map key; pairs kept in wire order.");
+    else record.notes.push("Non-string map key; pairs shown in wire order.");
+    return { "$map": pairs };
+  };
+
+  Reader.prototype.readExt = function(length, record){
+    var typeByte = this.u8();
+    var type = typeByte >= 128 ? typeByte - 256 : typeByte;
+    this.need(length);
+    var data = this.bytes.slice(this.pos, this.pos + length);
+    this.pos += length;
+    this.extensions += 1;
+    var marker = { "$ext": { "type": type, "data": toHex(data) } };
+    record.text = "type " + type + ", " + length + " byte" + (length === 1 ? "" : "s");
+    if (type === -1){
+      var stamp = timestampParts(data);
+      if (stamp){
+        record.notes.push("Timestamp " + stamp.width + " (type -1)");
+        if (stamp.nanos > 999999999){
+          record.notes.push("Nanoseconds exceed 999,999,999.");
+        } else {
+          var iso = isoFromParts(stamp.seconds, stamp.nanos);
+          if (iso) marker["$ext"]["timestamp"] = iso;
+          else record.notes.push("Outside the ISO 8601 range.");
+        }
+      } else {
+        record.notes.push("Type -1 with " + length + " bytes is not a timestamp.");
+      }
+    }
+    return marker;
+  };
+
+  Reader.prototype.read = function(depth){
+    if (depth > MAX_DEPTH) fail("Input nests deeper than " + MAX_DEPTH + " levels.");
+    if (this.items >= MAX_ITEMS) fail("Input contains more than " + MAX_ITEMS + " values.");
+    this.items += 1;
+    if (depth > this.depth) this.depth = depth;
+    var start = this.pos;
+    var record = { offset: start, length: 0, type: "", text: "", notes: [] };
+    this.records.push(record);
+    var first = this.u8();
+    var value;
+
+    if (first <= 0x7f){
+      record.type = "Positive fixint";
+      record.text = String(first);
+      value = first;
+    } else if (first >= 0xe0){
+      record.type = "Negative fixint";
+      record.text = String(first - 256);
+      value = first - 256;
+    } else if (first <= 0x8f){
+      record.type = "Fixmap";
+      value = this.readMap(first & 0x0f, depth, record);
+    } else if (first <= 0x9f){
+      record.type = "Fixarray";
+      value = this.readArray(first & 0x0f, depth, record);
+    } else if (first <= 0xbf){
+      record.type = "Fixstr";
+      value = this.readText(first & 0x1f, record);
+    } else {
+      switch (first){
+        case 0xc0:
+          record.type = "Nil";
+          record.text = "null";
+          value = null;
+          break;
+        case 0xc1:
+          fail("The byte 0xc1 at byte " + start + " is reserved and never used by MessagePack.");
+          break;
+        case 0xc2:
+          record.type = "Boolean";
+          record.text = "false";
+          value = false;
+          break;
+        case 0xc3:
+          record.type = "Boolean";
+          record.text = "true";
+          value = true;
+          break;
+        case 0xc4: {
+          var bin8 = Number(this.uint(1));
+          this.need(bin8);
+          var bin8Data = this.bytes.slice(this.pos, this.pos + bin8);
+          this.pos += bin8;
+          record.type = "bin 8";
+          record.text = bin8 + " byte" + (bin8 === 1 ? "" : "s");
+          value = { "$bin": toHex(bin8Data) };
+          break;
+        }
+        case 0xc5: {
+          var bin16 = Number(this.uint(2));
+          this.need(bin16);
+          var bin16Data = this.bytes.slice(this.pos, this.pos + bin16);
+          this.pos += bin16;
+          record.type = "bin 16";
+          record.text = bin16 + " byte" + (bin16 === 1 ? "" : "s");
+          value = { "$bin": toHex(bin16Data) };
+          if (bin16 <= 255) this.shorter(record, "bin 8 would be shorter.");
+          break;
+        }
+        case 0xc6: {
+          var bin32 = Number(this.uint(4));
+          this.need(bin32);
+          var bin32Data = this.bytes.slice(this.pos, this.pos + bin32);
+          this.pos += bin32;
+          record.type = "bin 32";
+          record.text = bin32 + " byte" + (bin32 === 1 ? "" : "s");
+          value = { "$bin": toHex(bin32Data) };
+          if (bin32 <= 65535) this.shorter(record, "bin 16 would be shorter.");
+          break;
+        }
+        case 0xc7: {
+          var ext8 = Number(this.uint(1));
+          record.type = "ext 8";
+          value = this.readExt(ext8, record);
+          if (ext8 === 1 || ext8 === 2 || ext8 === 4 || ext8 === 8 || ext8 === 16) this.shorter(record, "A fixext format would be shorter.");
+          break;
+        }
+        case 0xc8: {
+          var ext16 = Number(this.uint(2));
+          record.type = "ext 16";
+          value = this.readExt(ext16, record);
+          if (ext16 <= 255) this.shorter(record, "ext 8 would be shorter.");
+          break;
+        }
+        case 0xc9: {
+          var ext32 = Number(this.uint(4));
+          record.type = "ext 32";
+          value = this.readExt(ext32, record);
+          if (ext32 <= 65535) this.shorter(record, "ext 16 would be shorter.");
+          break;
+        }
+        case 0xca: {
+          this.need(4);
+          var raw32 = readFloat(this.bytes, this.pos, 4);
+          this.pos += 4;
+          record.type = "float 32";
+          record.text = floatText(raw32);
+          record.notes.push("Single precision.");
+          value = floatValue(raw32);
+          break;
+        }
+        case 0xcb: {
+          this.need(8);
+          var raw64 = readFloat(this.bytes, this.pos, 8);
+          this.pos += 8;
+          record.type = "float 64";
+          record.text = floatText(raw64);
+          value = floatValue(raw64);
+          break;
+        }
+        case 0xcc: {
+          var uint8 = Number(this.uint(1));
+          record.type = "uint 8";
+          record.text = String(uint8);
+          value = uint8;
+          if (uint8 <= 0x7f) this.shorter(record, "Positive fixint would be shorter.");
+          break;
+        }
+        case 0xcd: {
+          var uint16 = Number(this.uint(2));
+          record.type = "uint 16";
+          record.text = String(uint16);
+          value = uint16;
+          if (uint16 <= 255) this.shorter(record, "uint 8 would be shorter.");
+          break;
+        }
+        case 0xce: {
+          var uint32 = Number(this.uint(4));
+          record.type = "uint 32";
+          record.text = String(uint32);
+          value = uint32;
+          if (uint32 <= 65535) this.shorter(record, "uint 16 would be shorter.");
+          break;
+        }
+        case 0xcf: {
+          var uint64 = this.uint(8);
+          record.type = "uint 64";
+          record.text = uint64.toString();
+          value = bigValue(uint64);
+          if (uint64 <= BigInt(4294967295)) this.shorter(record, "uint 32 would be shorter.");
+          break;
+        }
+        case 0xd0: {
+          var int8 = Number(this.sint(1));
+          record.type = "int 8";
+          record.text = String(int8);
+          value = int8;
+          if (int8 >= -32 && int8 < 0) this.shorter(record, "Negative fixint would be shorter.");
+          else if (int8 >= 0 && int8 <= 127) this.shorter(record, "Positive fixint would be shorter.");
+          break;
+        }
+        case 0xd1: {
+          var int16 = Number(this.sint(2));
+          record.type = "int 16";
+          record.text = String(int16);
+          value = int16;
+          if (int16 >= -128 && int16 <= 127) this.shorter(record, "int 8 would be shorter.");
+          break;
+        }
+        case 0xd2: {
+          var int32 = Number(this.sint(4));
+          record.type = "int 32";
+          record.text = String(int32);
+          value = int32;
+          if (int32 >= -32768 && int32 <= 32767) this.shorter(record, "int 16 would be shorter.");
+          break;
+        }
+        case 0xd3: {
+          var int64 = this.sint(8);
+          record.type = "int 64";
+          record.text = int64.toString();
+          value = bigValue(int64);
+          if (int64 >= BigInt(-2147483648) && int64 <= BigInt(2147483647)) this.shorter(record, "int 32 would be shorter.");
+          break;
+        }
+        case 0xd4: {
+          record.type = "fixext 1";
+          value = this.readExt(1, record);
+          break;
+        }
+        case 0xd5: {
+          record.type = "fixext 2";
+          value = this.readExt(2, record);
+          break;
+        }
+        case 0xd6: {
+          record.type = "fixext 4";
+          value = this.readExt(4, record);
+          break;
+        }
+        case 0xd7: {
+          record.type = "fixext 8";
+          value = this.readExt(8, record);
+          break;
+        }
+        case 0xd8: {
+          record.type = "fixext 16";
+          value = this.readExt(16, record);
+          break;
+        }
+        case 0xd9: {
+          var str8 = Number(this.uint(1));
+          record.type = "str 8";
+          value = this.readText(str8, record);
+          if (str8 <= 31) this.shorter(record, "fixstr would be shorter.");
+          break;
+        }
+        case 0xda: {
+          var str16 = Number(this.uint(2));
+          record.type = "str 16";
+          value = this.readText(str16, record);
+          if (str16 <= 255) this.shorter(record, "str 8 would be shorter.");
+          break;
+        }
+        case 0xdb: {
+          var str32 = Number(this.uint(4));
+          record.type = "str 32";
+          value = this.readText(str32, record);
+          if (str32 <= 65535) this.shorter(record, "str 16 would be shorter.");
+          break;
+        }
+        case 0xdc: {
+          var array16 = Number(this.uint(2));
+          record.type = "array 16";
+          value = this.readArray(array16, depth, record);
+          if (array16 <= 15) this.shorter(record, "fixarray would be shorter.");
+          break;
+        }
+        case 0xdd: {
+          var array32 = Number(this.uint(4));
+          record.type = "array 32";
+          value = this.readArray(array32, depth, record);
+          if (array32 <= 65535) this.shorter(record, "array 16 would be shorter.");
+          break;
+        }
+        case 0xde: {
+          var map16 = Number(this.uint(2));
+          record.type = "map 16";
+          value = this.readMap(map16, depth, record);
+          if (map16 <= 15) this.shorter(record, "fixmap would be shorter.");
+          break;
+        }
+        case 0xdf: {
+          var map32 = Number(this.uint(4));
+          record.type = "map 32";
+          value = this.readMap(map32, depth, record);
+          if (map32 <= 65535) this.shorter(record, "map 16 would be shorter.");
+          break;
+        }
+        default:
+          fail("The byte 0x" + toHex([first]) + " at byte " + start + " is not a MessagePack format.");
+      }
+    }
+    record.length = this.pos - start;
+    return value;
+  };
+
+  function Encoder(){
+    this.bytes = [];
+    this.items = 0;
+    this.depth = 1;
+    this.extensions = 0;
+  }
+
+  Encoder.prototype.uint = function(value, width){
+    for (var index = width - 1; index >= 0; index -= 1){
+      this.bytes.push(Number((value >> BigInt(index * 8)) & BigInt(255)));
+    }
+  };
+
+  Encoder.prototype.integer = function(value){
+    var bytes = this.bytes;
+    if (value >= ZERO){
+      if (value <= BigInt(127)) bytes.push(Number(value));
+      else if (value <= BigInt(255)){ bytes.push(0xcc); this.uint(value, 1); }
+      else if (value <= BigInt(65535)){ bytes.push(0xcd); this.uint(value, 2); }
+      else if (value <= BigInt(4294967295)){ bytes.push(0xce); this.uint(value, 4); }
+      else if (value <= UINT64_MAX){ bytes.push(0xcf); this.uint(value, 8); }
+      else fail("$bigint is above the largest unsigned 64-bit integer.");
+      return;
+    }
+    if (value >= BigInt(-32)) bytes.push(Number(value) + 256);
+    else if (value >= BigInt(-128)){ bytes.push(0xd0); this.uint(value & BigInt(255), 1); }
+    else if (value >= BigInt(-32768)){ bytes.push(0xd1); this.uint(value & BigInt(65535), 2); }
+    else if (value >= BigInt(-2147483648)){ bytes.push(0xd2); this.uint(value & BigInt(4294967295), 4); }
+    else if (value >= INT64_MIN){ bytes.push(0xd3); this.uint(value & UINT64_MAX, 8); }
+    else fail("$bigint is below the smallest signed 64-bit integer.");
+  };
+
+  Encoder.prototype.text = function(value){
+    if (value.length > MAX_BYTES) fail("Encoded output would exceed " + MAX_BYTES + " bytes.");
+    var bytes = utf8Encode(value);
+    var length = bytes.length;
+    if (length <= 31) this.bytes.push(0xa0 | length);
+    else if (length <= 255) this.bytes.push(0xd9, length);
+    else if (length <= 65535){ this.bytes.push(0xda); this.uint(BigInt(length), 2); }
+    else { this.bytes.push(0xdb); this.uint(BigInt(length), 4); }
+    for (var index = 0; index < length; index += 1) this.bytes.push(bytes[index]);
+  };
+
+  Encoder.prototype.binary = function(data){
+    var length = data.length;
+    if (length <= 255){ this.bytes.push(0xc4, length); }
+    else if (length <= 65535){ this.bytes.push(0xc5); this.uint(BigInt(length), 2); }
+    else { this.bytes.push(0xc6); this.uint(BigInt(length), 4); }
+    for (var index = 0; index < length; index += 1) this.bytes.push(data[index]);
+  };
+
+  Encoder.prototype.ext = function(type, data){
+    var length = data.length;
+    if (length === 1) this.bytes.push(0xd4);
+    else if (length === 2) this.bytes.push(0xd5);
+    else if (length === 4) this.bytes.push(0xd6);
+    else if (length === 8) this.bytes.push(0xd7);
+    else if (length === 16) this.bytes.push(0xd8);
+    else if (length <= 255) this.bytes.push(0xc7, length);
+    else if (length <= 65535){ this.bytes.push(0xc8); this.uint(BigInt(length), 2); }
+    else { this.bytes.push(0xc9); this.uint(BigInt(length), 4); }
+    this.bytes.push(type & 0xff);
+    for (var index = 0; index < length; index += 1) this.bytes.push(data[index]);
+    this.extensions += 1;
+  };
+
+  Encoder.prototype.array = function(values, depth){
+    var length = values.length;
+    if (length <= 15) this.bytes.push(0x90 | length);
+    else if (length <= 65535){ this.bytes.push(0xdc); this.uint(BigInt(length), 2); }
+    else { this.bytes.push(0xdd); this.uint(BigInt(length), 4); }
+    for (var index = 0; index < length; index += 1) this.value(values[index], depth + 1);
+  };
+
+  Encoder.prototype.map = function(pairs, depth){
+    var length = pairs.length;
+    if (length <= 15) this.bytes.push(0x80 | length);
+    else if (length <= 65535){ this.bytes.push(0xde); this.uint(BigInt(length), 2); }
+    else { this.bytes.push(0xdf); this.uint(BigInt(length), 4); }
+    for (var index = 0; index < length; index += 1){
+      this.value(pairs[index][0], depth + 1);
+      this.value(pairs[index][1], depth + 1);
+    }
+  };
+
+  Encoder.prototype.marker = function(name, payload, depth){
+    if (name === "$bin"){
+      if (typeof payload !== "string") fail("$bin must be a hexadecimal string.");
+      this.binary(markerBytes(payload, "$bin"));
+      return;
+    }
+    if (name === "$ext"){
+      if (payload === null || typeof payload !== "object" || Array.isArray(payload)) fail("$ext must be an object with a type and data.");
+      var type = payload.type;
+      if (typeof type !== "number" || !Number.isInteger(type) || type < -128 || type > 127) fail("$ext type must be a whole number from -128 to 127.");
+      if (typeof payload.data !== "string") fail("$ext data must be a hexadecimal string.");
+      this.ext(type, markerBytes(payload.data, "$ext data"));
+      return;
+    }
+    if (name === "$float"){
+      if (payload === "NaN" || payload === "Infinity" || payload === "-Infinity"){
+        var view = new DataView(new ArrayBuffer(8));
+        view.setFloat64(0, payload === "NaN" ? NaN : payload === "Infinity" ? Infinity : -Infinity, false);
+        this.bytes.push(0xcb);
+        for (var index = 0; index < 8; index += 1) this.bytes.push(view.getUint8(index));
+        return;
+      }
+      fail("$float must be \"NaN\", \"Infinity\" or \"-Infinity\".");
+    }
+    if (name === "$bigint"){
+      if (typeof payload !== "string" || !/^-?[0-9]+$/.test(payload.trim())) fail("$bigint must be a whole number written in decimal.");
+      this.integer(BigInt(payload.trim()));
+      return;
+    }
+    if (name === "$map"){
+      if (!Array.isArray(payload) || payload.some(function(pair){ return !Array.isArray(pair) || pair.length !== 2; })){
+        fail("$map must be an array of two-item key and value arrays.");
+      }
+      this.map(payload, depth);
+      return;
+    }
+    if (name === "$timestamp"){
+      if (payload === null || typeof payload !== "object" || Array.isArray(payload)) fail("$timestamp must be an object with seconds and optional nanoseconds.");
+      var rawSeconds = payload.seconds;
+      if (typeof rawSeconds !== "number" && typeof rawSeconds !== "string") fail("$timestamp seconds must be an integer.");
+      var seconds;
+      try {
+        seconds = BigInt(rawSeconds);
+      } catch (error){
+        fail("$timestamp seconds must be an integer.");
+      }
+      var nanos = payload.nanoseconds == null ? 0 : payload.nanoseconds;
+      if (typeof nanos !== "number" || !Number.isInteger(nanos) || nanos < 0 || nanos > 999999999) fail("$timestamp nanoseconds must be a whole number from 0 to 999999999.");
+      if (seconds > BigInt("9223372036854775807") || seconds < INT64_MIN) fail("$timestamp seconds must fit in a signed 64-bit integer.");
+      var data;
+      if (nanos === 0 && seconds >= ZERO && seconds <= BigInt(4294967295)){
+        data = [];
+        for (var part = 3; part >= 0; part -= 1) data.push(Number((seconds >> BigInt(part * 8)) & BigInt(255)));
+      } else if (seconds >= ZERO && seconds <= TWO_34_MINUS_ONE){
+        var packed = (BigInt(nanos) << BigInt(34)) | seconds;
+        data = [];
+        for (var slot = 7; slot >= 0; slot -= 1) data.push(Number((packed >> BigInt(slot * 8)) & BigInt(255)));
+      } else {
+        data = [];
+        for (var nanoPart = 3; nanoPart >= 0; nanoPart -= 1) data.push(Number((BigInt(nanos) >> BigInt(nanoPart * 8)) & BigInt(255)));
+        var shifted = seconds & UINT64_MAX;
+        for (var secPart = 7; secPart >= 0; secPart -= 1) data.push(Number((shifted >> BigInt(secPart * 8)) & BigInt(255)));
+      }
+      this.ext(-1, data);
+      return;
+    }
+    fail("Unknown marker " + name + ".");
+  };
+
+  Encoder.prototype.object = function(value, depth){
+    var keys = Object.keys(value);
+    if (keys.length === 1 && MARKERS.indexOf(keys[0]) >= 0){
+      this.marker(keys[0], value[keys[0]], depth);
+      return;
+    }
+    var length = keys.length;
+    if (length <= 15) this.bytes.push(0x80 | length);
+    else if (length <= 65535){ this.bytes.push(0xde); this.uint(BigInt(length), 2); }
+    else { this.bytes.push(0xdf); this.uint(BigInt(length), 4); }
+    for (var index = 0; index < length; index += 1){
+      this.value(keys[index], depth + 1);
+      this.value(value[keys[index]], depth + 1);
+    }
+  };
+
+  Encoder.prototype.number = function(value){
+    if (value !== value || value === Infinity || value === -Infinity) fail("Use the $float marker for NaN or Infinity.");
+    if (Number.isInteger(value) && Math.abs(value) <= MAX_SAFE){
+      this.integer(BigInt(value));
+      return;
+    }
+    var view = new DataView(new ArrayBuffer(8));
+    view.setFloat64(0, value, false);
+    this.bytes.push(0xcb);
+    for (var index = 0; index < 8; index += 1) this.bytes.push(view.getUint8(index));
+  };
+
+  Encoder.prototype.value = function(value, depth){
+    if (depth > MAX_DEPTH) fail("Value nests deeper than " + MAX_DEPTH + " levels.");
+    this.items += 1;
+    if (this.items > MAX_ITEMS) fail("Input contains more than " + MAX_ITEMS + " values.");
+    if (depth > this.depth) this.depth = depth;
+    if (value === null){ this.bytes.push(0xc0); return; }
+    if (value === true){ this.bytes.push(0xc3); return; }
+    if (value === false){ this.bytes.push(0xc2); return; }
+    if (typeof value === "number"){ this.number(value); return; }
+    if (typeof value === "string"){ this.text(value); return; }
+    if (Array.isArray(value)){ this.array(value, depth); return; }
+    if (typeof value === "object"){ this.object(value, depth); return; }
+    fail("JSON contains a value that cannot be encoded.");
+  };
+
+  function typeLabel(value){
+    if (value === null) return "Nil";
+    if (Array.isArray(value)) return "Array";
+    if (typeof value === "object"){
+      if (Object.prototype.hasOwnProperty.call(value, "$map")) return "Map";
+      if (Object.prototype.hasOwnProperty.call(value, "$bin")) return "Binary";
+      if (Object.prototype.hasOwnProperty.call(value, "$ext")) return "Extension";
+      if (Object.prototype.hasOwnProperty.call(value, "$bigint")) return "Integer";
+      if (Object.prototype.hasOwnProperty.call(value, "$float")) return "Float";
+      return "Map";
+    }
+    if (typeof value === "string") return "String";
+    if (typeof value === "boolean") return "Boolean";
+    if (typeof value === "number") return Number.isInteger(value) ? "Integer" : "Float";
+    return "Value";
+  }
+
+  function decode(bytes){
+    if (!bytes.length) fail("Enter bytes to decode.");
+    if (bytes.length > MAX_BYTES) fail("Input is limited to " + MAX_BYTES + " bytes.");
+    var reader = new Reader(bytes);
+    var value = reader.read(1);
+    if (reader.pos < bytes.length){
+      var extra = bytes.length - reader.pos;
+      fail(extra + " byte" + (extra === 1 ? "" : "s") + " after the first value at byte " + reader.pos + " " + (extra === 1 ? "is" : "are") + " not part of it.");
+    }
+    var jsonText = JSON.stringify(value, null, 2);
+    if (jsonText == null) jsonText = "null";
+    return {
+      mode: "decode",
+      bytes: bytes.length,
+      items: reader.items,
+      depth: reader.depth,
+      extensions: reader.extensions,
+      nonMinimal: reader.nonMinimal,
+      json: value,
+      jsonText: jsonText,
+      table: reader.records,
+      topType: typeLabel(value),
+      headline: bytes.length + " byte" + (bytes.length === 1 ? "" : "s"),
+      subText: reader.items + " value" + (reader.items === 1 ? "" : "s") + " decoded in wire order",
+      rows: [
+        { k: "Bytes", v: String(bytes.length) },
+        { k: "Values", v: String(reader.items) },
+        { k: "Top-level type", v: typeLabel(value) },
+        { k: "Deepest nesting", v: String(reader.depth) },
+        { k: "Extension values", v: String(reader.extensions) },
+        { k: "Non-minimal items", v: reader.nonMinimal ? String(reader.nonMinimal) : "None" }
+      ]
+    };
+  }
+
+  function decodeHex(text){
+    return decode(bytesFromHex(text));
+  }
+
+  function decodeBase64(text){
+    return decode(bytesFromBase64(text));
+  }
+
+  function encodeJson(text){
+    var raw = String(text == null ? "" : text);
+    if (!raw.trim()) fail("Enter JSON to encode.");
+    var value;
+    try {
+      value = JSON.parse(raw);
+    } catch (error){
+      fail("That is not valid JSON. Check the syntax and try again.");
+    }
+    var encoded = new Encoder();
+    encoded.value(value, 1);
+    if (encoded.bytes.length > MAX_BYTES) fail("Encoded output would exceed " + MAX_BYTES + " bytes.");
+    return {
+      mode: "encode",
+      bytes: encoded.bytes.length,
+      hex: toHex(encoded.bytes),
+      items: encoded.items,
+      depth: encoded.depth,
+      extensions: encoded.extensions,
+      topType: typeLabel(value),
+      headline: encoded.bytes.length + " byte" + (encoded.bytes.length === 1 ? "" : "s"),
+      subText: "Shortest MessagePack form for the parsed JSON value",
+      rows: [
+        { k: "Bytes", v: String(encoded.bytes.length) },
+        { k: "Values encoded", v: String(encoded.items) },
+        { k: "Top-level type", v: typeLabel(value) },
+        { k: "Deepest nesting", v: String(encoded.depth) },
+        { k: "Extension values", v: String(encoded.extensions) }
+      ]
+    };
+  }
+
+  function run(input){
+    var options = input || {};
+    if (options.mode === "encode") return encodeJson(options.json == null ? "" : options.json);
+    return options.format === "base64" ? decodeBase64(options.data) : decodeHex(options.data);
+  }
+
+  return {
+    MAX_BYTES: MAX_BYTES,
+    MAX_ITEMS: MAX_ITEMS,
+    MAX_DEPTH: MAX_DEPTH,
+    MAX_SAFE: MAX_SAFE,
+    toHex: toHex,
+    bytesFromHex: bytesFromHex,
+    bytesFromBase64: bytesFromBase64,
+    utf8Decode: utf8Decode,
+    utf8Encode: utf8Encode,
+    decode: decode,
+    decodeHex: decodeHex,
+    decodeBase64: decodeBase64,
+    encodeJson: encodeJson,
+    typeLabel: typeLabel,
+    run: run
+  };
+})();
+/* msgpack-core:end */
+(function(){
+  "use strict";
+  var C = MsgpackCore;
+  var els = {
+    form: document.getElementById("msgpack-form"),
+    mode: document.getElementById("mode"),
+    format: document.getElementById("format"),
+    formatField: document.getElementById("format-field"),
+    input: document.getElementById("input"),
+    inputLabel: document.getElementById("input-label"),
+    run: document.getElementById("run"),
+    example: document.getElementById("example"),
+    reset: document.getElementById("reset"),
+    copy: document.getElementById("copy"),
+    status: document.getElementById("status"),
+    err: document.getElementById("err"),
+    out: document.getElementById("out")
+  };
+  var current = null;
+  var EXAMPLES = {
+    decode: "82a7636f6d70616374c3a6736368656d6100",
+    encode: "{\"id\": 42, \"ok\": true, \"tags\": [\"fast\", \"small\"], \"blob\": {\"$bin\": \"0102ff\"}}"
+  };
+
+  function addRow(key, value){
+    var row = document.createElement("div");
+    row.className = "row";
+    var k = document.createElement("span");
+    k.className = "k";
+    k.textContent = key;
+    var v = document.createElement("span");
+    v.className = "v";
+    v.textContent = value;
+    row.appendChild(k);
+    row.appendChild(v);
+    els.out.appendChild(row);
+  }
+
+  function addHeader(text){
+    var heading = document.createElement("h2");
+    heading.textContent = text;
+    els.out.appendChild(heading);
+  }
+
+  function addView(text, label){
+    addHeader(label);
+    var pre = document.createElement("pre");
+    pre.className = "view";
+    pre.tabIndex = 0;
+    pre.textContent = text;
+    els.out.appendChild(pre);
+  }
+
+  function addTable(rows){
+    addHeader("Items in byte order");
+    var wrap = document.createElement("div");
+    wrap.className = "table-wrap";
+    var table = document.createElement("table");
+    var head = document.createElement("thead");
+    var headRow = document.createElement("tr");
+    ["Byte", "Length", "Format", "Value", "Notes"].forEach(function(label){
+      var th = document.createElement("th");
+      th.scope = "col";
+      th.textContent = label;
+      headRow.appendChild(th);
+    });
+    head.appendChild(headRow);
+    table.appendChild(head);
+    var body = document.createElement("tbody");
+    var limit = Math.min(rows.length, 200);
+    for (var index = 0; index < limit; index += 1){
+      var row = rows[index];
+      var tr = document.createElement("tr");
+      var cells = [
+        { text: String(row.offset), className: "num" },
+        { text: String(row.length), className: "num" },
+        { text: row.type, className: "" },
+        { text: row.text || "-", className: "val" },
+        { text: row.notes.length ? row.notes.join(" ") : "-", className: "note" }
+      ];
+      for (var cell = 0; cell < cells.length; cell += 1){
+        var td = document.createElement("td");
+        if (cells[cell].className) td.className = cells[cell].className;
+        td.textContent = cells[cell].text;
+        tr.appendChild(td);
+      }
+      body.appendChild(tr);
+    }
+    table.appendChild(body);
+    wrap.appendChild(table);
+    els.out.appendChild(wrap);
+    if (rows.length > limit) addView("Showing the first " + limit + " of " + rows.length + " items.", "Note");
+  }
+
+  function placeholder(message){
+    els.out.textContent = "";
+    var span = document.createElement("div");
+    span.className = "sub";
+    span.style.padding = "18px 0 6px";
+    span.textContent = message;
+    els.out.appendChild(span);
+  }
+
+  function render(result){
+    els.out.textContent = "";
+    var label = document.createElement("div");
+    label.className = "label";
+    label.textContent = result.mode === "decode" ? "Decoded MessagePack" : "Encoded MessagePack";
+    var big = document.createElement("div");
+    big.className = "big";
+    big.textContent = result.headline;
+    var sub = document.createElement("div");
+    sub.className = "sub";
+    sub.textContent = result.subText;
+    els.out.appendChild(label);
+    els.out.appendChild(big);
+    els.out.appendChild(sub);
+    for (var index = 0; index < result.rows.length; index += 1) addRow(result.rows[index].k, result.rows[index].v);
+    if (result.mode === "decode"){
+      addView(result.jsonText, "JSON view");
+      addTable(result.table);
+    } else {
+      addView(result.hex, "MessagePack hex");
+    }
+  }
+
+  function syncMode(){
+    var decoding = els.mode.value === "decode";
+    els.formatField.hidden = !decoding;
+    els.format.disabled = !decoding;
+    els.inputLabel.textContent = decoding ? "MessagePack bytes (" + (els.format.value === "base64" ? "base64" : "hex") + ")" : "JSON value";
+    els.input.placeholder = decoding ? EXAMPLES.decode : EXAMPLES.encode;
+    els.run.textContent = decoding ? "Decode" : "Encode";
+  }
+
+  function run(){
+    var result;
+    try {
+      result = els.mode.value === "decode"
+        ? (els.format.value === "base64" ? C.decodeBase64(els.input.value) : C.decodeHex(els.input.value))
+        : C.encodeJson(els.input.value);
+    } catch (error){
+      current = null;
+      els.copy.disabled = true;
+      els.err.textContent = error.message;
+      els.status.textContent = "";
+      placeholder(els.mode.value === "decode" ? "Decode bytes to see the value tree." : "Encode JSON to see the MessagePack bytes.");
+      return;
+    }
+    els.err.textContent = "";
+    els.copy.disabled = false;
+    els.status.textContent = "";
+    current = result;
+    render(result);
+  }
+
+  function copyResult(){
+    if (!current) return;
+    var text = current.mode === "decode" ? current.jsonText : current.hex;
+    if (!navigator.clipboard || !navigator.clipboard.writeText){
+      els.status.textContent = "Copy is unavailable here; select the output above.";
+      return;
+    }
+    navigator.clipboard.writeText(text).then(function(){
+      els.status.textContent = current.mode === "decode" ? "Copied the JSON view." : "Copied the MessagePack hex.";
+    }, function(){
+      els.status.textContent = "Copy was refused; select the output above.";
+    });
+  }
+
+  els.form.addEventListener("submit", function(event){
+    event.preventDefault();
+    run();
+  });
+  els.input.addEventListener("keydown", function(event){
+    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)){
+      event.preventDefault();
+      run();
+    }
+  });
+  els.mode.addEventListener("change", function(){
+    syncMode();
+    els.input.value = "";
+    current = null;
+    els.copy.disabled = true;
+    els.err.textContent = "";
+    els.status.textContent = "";
+    placeholder(els.mode.value === "decode" ? "Decode bytes to see the value tree." : "Encode JSON to see the MessagePack bytes.");
+    els.input.focus();
+  });
+  els.format.addEventListener("change", syncMode);
+  els.copy.addEventListener("click", copyResult);
+  els.example.addEventListener("click", function(){
+    els.input.value = EXAMPLES[els.mode.value];
+    run();
+  });
+  els.reset.addEventListener("click", function(){
+    els.mode.value = "decode";
+    els.format.value = "hex";
+    els.input.value = "";
+    current = null;
+    els.copy.disabled = true;
+    els.err.textContent = "";
+    els.status.textContent = "Reset complete.";
+    syncMode();
+    placeholder("Decode bytes to see the value tree.");
+    els.input.focus();
+  });
+
+  syncMode();
+  placeholder("Decode bytes to see the value tree.");
+})();
+</script>
+</body>
+</html>

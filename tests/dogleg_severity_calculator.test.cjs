@@ -180,8 +180,8 @@ assert.equal(C.FT_PER_M, 0.3048);
 assert.equal(C.MIN_INTERVAL, 0.1);
 
 // ---- Catalog record: counts, cases and metadata.
-assert.equal(catalog.tools.length, 2529, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2268, 'public tools');
+assert.equal(catalog.tools.length, 2530, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2269, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Oil, Gas & Marine Engineering').length, 58,
   'Oil, Gas & Marine Engineering count');
 assert.equal(record.category, 'Oil, Gas & Marine Engineering');
