@@ -265,7 +265,7 @@ assert.equal(new Set(record.tags).size, record.tags.length, 'tags are unique');
 assert.equal(new Set(record.aliases).size, record.aliases.length, 'aliases are unique');
 assert.ok(record.tags.includes('shelter'));
 assert.ok(record.aliases.includes('Shelter Capacity Calculator'));
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Safety & Emergency').length, 51,
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Safety & Emergency').length, 52,
   'Safety & Emergency count');
 
 assert.equal(record.testCases.length, 30, 'catalog case count');

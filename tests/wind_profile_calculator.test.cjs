@@ -19,8 +19,8 @@ const C = sandbox.module.exports;
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
 const entry = catalog.tools.find((tool) => tool.slug === 'wind-profile-calculator');
 assert.ok(entry, 'catalog entry missing');
-assert.equal(catalog.tools.length, 2521, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2260, 'public tools');
+assert.equal(catalog.tools.length, 2522, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2261, 'public tools');
 assert.ok(entry.testCases.length >= 20, `expected at least 20 cases, found ${entry.testCases.length}`);
 
 const close = (actual, expected, message) => {

@@ -529,6 +529,7 @@ node tests/oauth_redirect_uri_checker.test.cjs
 node tests/social_jetlag_calculator.test.cjs
 node tests/weekly_activity_met_calculator.test.cjs
 node tests/hand_arm_vibration_exposure_calculator.test.cjs
+node tests/emergency_call_tree_planner.test.cjs
 
 python3 -m unittest discover -s tests -p 'test_*.py'
 

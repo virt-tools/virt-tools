@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Turn a roster into an emergency telephone tree: the number of calls, the tiers, the people each caller reaches and the minutes until the last person hears the message.">
+<script src="/assets/theme-init.js"></script>
+<title>Emergency Call Tree Planner &mdash; virt.tools</title><link rel="stylesheet" href="/assets/style.css">
+<style>
+.ct-shell{max-width:960px;margin:0 auto}.lead,.hint{color:var(--text-secondary,#8b949e)}
+.panel,.result{background:var(--surface,#161b22);border:1px solid var(--border,#30363d);border-radius:10px;padding:1rem;margin:1rem 0}
+.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem 1rem;margin-top:.8rem}
+.field{display:flex;flex-direction:column;gap:.3rem}.field label{font-size:.85rem;color:var(--text-secondary,#8b949e)}
+textarea,input[type=number]{box-sizing:border-box;width:100%;background:var(--background,#0d1117);color:var(--text,#c9d1d9);border:1px solid var(--border,#30363d);border-radius:6px;padding:.55rem .6rem;font:inherit;font-size:1rem}
+textarea{min-height:11rem;resize:vertical;line-height:1.45}
+input[type=number]{min-height:44px}
+.actions{display:flex;flex-wrap:wrap;gap:.6rem;margin-top:1rem}
+button{border:1px solid var(--border,#30363d);border-radius:6px;background:var(--surface-raised,#21262d);color:var(--text,#c9d1d9);padding:.58rem .85rem;min-height:44px;font:inherit;font-size:1rem;cursor:pointer}
+.primary{border-color:var(--accent,#58a6ff);background:var(--accent-soft,#1e3a5f)}
+button:focus-visible,textarea:focus-visible,input:focus-visible{outline:2px solid var(--accent,#58a6ff);outline-offset:2px}
+.status{min-height:1.4rem;margin:.6rem 0}.error{color:#f85149}
+#error[hidden]{display:none}
+.rows{margin:.8rem 0 0;display:grid;gap:.45rem}
+.row{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:.8rem;align-items:baseline;border-bottom:1px solid var(--border,#30363d);padding:.38rem 0}
+.row dt{font-weight:600;min-width:15rem}.row dd{margin:0;display:flex;flex-wrap:wrap;gap:.2rem .8rem;align-items:baseline}
+.row .value{font:600 1rem ui-monospace,SFMono-Regular,Consolas,monospace}
+.row .meaning{font-size:.85rem;color:var(--text-secondary,#8b949e)}
+.table-wrap{overflow-x:auto;margin-top:.9rem}.table-wrap[hidden]{display:none}
+table{border-collapse:collapse;width:100%;font-size:.95rem}
+th,td{text-align:left;padding:.45rem .5rem;border-bottom:1px solid var(--border,#30363d);vertical-align:top}
+th{font-size:.82rem;color:var(--text-secondary,#8b949e);font-weight:600;white-space:nowrap}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+tbody tr:last-child td{border-bottom:0}
+ul{margin:.5rem 0 0;padding-left:1.2rem}#warnings:empty{display:none}
+.explain li,.limits li{margin:.2rem 0}
+.tree-table td:first-child{font-weight:600;white-space:nowrap}
+@media(max-width:720px){.fields{grid-template-columns:1fr}.actions>*{flex:1 1 10rem}.panel,.result{padding:.85rem}.row{grid-template-columns:1fr}.row dt{min-width:0}table{font-size:.85rem}th,td{padding:.4rem .35rem}th{white-space:normal}.tree-table td:first-child{white-space:normal}}
+</style></head>
+<body><div id="site-header"></div><main class="tool-container"><div class="ct-shell">
+<h1>Emergency Call Tree Planner</h1>
+<p class="lead">Turn a list of names into a telephone tree for emergency notifications: who calls whom, how many calls it takes, how deep the tree is and how long the last person waits. The first name is the coordinator who starts the chain. Everything is calculated in your browser; no phone numbers are collected, nothing is uploaded and nothing is stored.</p>
+
+<form id="ct-form" novalidate>
+<section class="panel" aria-labelledby="input-title">
+<h2 id="input-title">Your list</h2>
+<p class="hint" id="roster-hint">One person per line, at most 60. The first line is the coordinator; the rest are handed out level by level, so the tree stays balanced.</p>
+<div class="field">
+<label for="in-roster">People to notify</label>
+<textarea id="in-roster" rows="8" spellcheck="false" aria-describedby="roster-hint"></textarea>
+</div>
+<div class="fields">
+<div class="field"><label for="in-minutes">Minutes per call</label>
+<input id="in-minutes" type="number" inputmode="numeric" min="1" max="60" step="1" value="2"></div>
+<div class="field"><label for="in-branch">People each caller phones</label>
+<input id="in-branch" type="number" inputmode="numeric" min="1" max="8" step="1" value="2"></div>
+</div>
+<div class="actions">
+<button id="calculate" class="primary" type="submit">Build the call tree</button>
+<button id="example" type="button">Load example roster</button>
+<button id="reset" type="button">Reset</button>
+</div>
+</section>
+</form>
+
+<section class="result" aria-labelledby="result-title">
+<h2 id="result-title">Notification plan</h2>
+<p id="status" class="status" role="status" aria-live="polite"></p>
+<p id="error" class="status error" role="alert" hidden></p>
+<p id="summary"></p>
+<dl class="rows">
+<div class="row"><dt>People on the list</dt><dd><span id="out-people" class="value">not computed</span><span class="meaning">including the coordinator</span></dd></div>
+<div class="row"><dt>Calls needed</dt><dd><span id="out-calls" class="value">not computed</span><span class="meaning">everyone is called exactly once</span></dd></div>
+<div class="row"><dt>Depth of the tree</dt><dd><span id="out-tiers" class="value">not computed</span><span id="out-tiers-note" class="meaning"></span></dd></div>
+<div class="row"><dt>Time to the last person</dt><dd><span id="out-time" class="value">not computed</span><span id="out-time-note" class="meaning"></span></dd></div>
+<div class="row"><dt>Busiest tier</dt><dd><span id="out-busiest" class="value">not computed</span><span id="out-busiest-note" class="meaning"></span></dd></div>
+<div class="row"><dt>Coordinator calls</dt><dd><span id="out-first" class="value">not computed</span><span id="out-first-note" class="meaning"></span></dd></div>
+</dl>
+<div id="table-wrap" class="table-wrap" hidden>
+<table>
+<caption class="hint" style="caption-side:top;text-align:left;padding:.2rem 0 .5rem">Each tier's calls happen at the same time, so one call length passes per tier.</caption>
+<thead><tr><th scope="col">Tier</th><th scope="col" class="num">Calls</th><th scope="col" class="num">Reached by then</th><th scope="col" class="num">Elapsed</th></tr></thead>
+<tbody id="tier-rows"></tbody>
+</table>
+</div>
+<h3>Who calls whom</h3>
+<div id="tree-wrap" class="table-wrap" hidden>
+<table class="tree-table">
+<thead><tr><th scope="col">Caller</th><th scope="col">Phones</th></tr></thead>
+<tbody id="tree-rows"></tbody>
+</table>
+</div>
+<ul id="warnings"></ul>
+<h3>How this is computed</h3>
+<ul id="explanation" class="explain"><li>Build the tree to see the arithmetic.</li></ul>
+<h3>What this does not do</h3>
+<ul id="limits" class="limits">
+<li>It plans the calling order only. No calls are made, no phone numbers are used and no message is sent.</li>
+<li>Timing assumes every call in a tier starts together and reaches the person after the entered call length. One unanswered call delays that whole branch, so a real plan needs a fallback for each caller.</li>
+<li>People without a phone, or who also have to call the emergency services, need a separate arrangement; the tree does not model them.</li>
+<li>Nothing is saved and no account is needed: reloading the page clears the box.</li>
+</ul>
+</section>
+</div></main><script src="/assets/tools.js"></script><script src="/assets/app.js"></script>
+<script>
+/* emergency-call-tree-core:start */
+const EmergencyCallTreeCore=(()=>{'use strict';
+const MAX_PEOPLE=60,MAX_NAME=40,MIN_MINUTES=1,MAX_MINUTES=60,MIN_BRANCH=1,MAX_BRANCH=8;
+const DEFAULTS={
+  roster:'Alex Rivera\nBea Chen\nCarlos Mendes\nDana Whitfield\nEli Nakamura\nFarah Haddad\nGus Lindqvist\nHana Petrov',
+  minutes:'2',branch:'2'
+};
+function clip(text){return text.length>16?text.slice(0,16)+'...':text;}
+function fmtInt(value){return String(Math.round(value)).replace(/\B(?=(?:\d{3})+(?!\d))/g,',');}
+function timeText(minutes){
+  const whole=Math.round(minutes);
+  if(whole<60)return whole+' min';
+  const hours=Math.floor(whole/60),rest=whole%60;
+  return rest===0?hours+' h':hours+' h '+rest+' min';
+}
+function blank(raw){return String(raw===undefined||raw===null?'':raw).trim()==='';}
+function parseRoster(raw){
+  const names=[],seen=new Set();
+  for(const line of String(raw===undefined||raw===null?'':raw).split(/\r?\n/)){
+    const name=line.replace(/\s+/g,' ').trim();
+    if(name==='')continue;
+    if(name.length>MAX_NAME)throw Error('The name "'+clip(name)+'" is longer than 40 characters; shorten it or use initials.');
+    const key=name.toLowerCase();
+    if(seen.has(key))throw Error('The name "'+clip(name)+'" appears twice; list each person once.');
+    seen.add(key);names.push(name);
+  }
+  if(names.length<2)throw Error('Enter at least two names, one per line; the first name is the coordinator.');
+  if(names.length>MAX_PEOPLE)throw Error('The list has '+names.length+' names; this planner takes at most 60.');
+  return names;
+}
+function parseMinutes(raw){
+  const text=String(raw===undefined||raw===null?'':raw).trim();
+  const bad=Error('Call length must be a whole number of minutes from 1 to 60; got "'+clip(text)+'".');
+  if(typeof raw!=='number'&&!/^\d+$/.test(text))throw bad;
+  const value=Number(text);
+  if(!Number.isInteger(value)||value<MIN_MINUTES||value>MAX_MINUTES)throw bad;
+  return value;
+}
+function parseBranch(raw){
+  const text=String(raw===undefined||raw===null?'':raw).trim();
+  const bad=Error('Calls per person must be a whole number from 1 to 8; got "'+clip(text)+'".');
+  if(typeof raw!=='number'&&!/^\d+$/.test(text))throw bad;
+  const value=Number(text);
+  if(!Number.isInteger(value)||value<MIN_BRANCH||value>MAX_BRANCH)throw bad;
+  return value;
+}
+function build(raw){
+  const state=Object.assign({},DEFAULTS,raw||{});
+  const names=parseRoster(state.roster);
+  const minutes=parseMinutes(state.minutes);
+  const branch=parseBranch(state.branch);
+  const people=names.length;
+  const parentOf=new Array(people).fill(-1);
+  const levels=[[0]];
+  let assigned=1;
+  while(assigned<people){
+    const previous=levels[levels.length-1],next=[];
+    for(const parent of previous){
+      for(let slot=0;slot<branch&&assigned<people;slot+=1){
+        parentOf[assigned]=parent;next.push(assigned);assigned+=1;
+      }
+      if(assigned>=people)break;
+    }
+    levels.push(next);
+  }
+  const tiers=levels.length-1;
+  const totalMinutes=tiers*minutes;
+  const hasChild=new Array(people).fill(false);
+  for(let index=1;index<people;index+=1)hasChild[parentOf[index]]=true;
+  const tierRows=[];
+  let reached=1;
+  for(let tier=1;tier<=tiers;tier+=1){
+    const callers=levels[tier-1].filter(index=>hasChild[index]).length;
+    const calls=levels[tier].length;
+    reached+=calls;
+    tierRows.push({tier,callers,calls,reached,elapsed:tier*minutes,elapsedText:timeText(tier*minutes)});
+  }
+  const tree=[];
+  for(let index=0;index<people;index+=1){
+    if(!hasChild[index])continue;
+    const children=[];
+    for(let other=1;other<people;other+=1)if(parentOf[other]===index)children.push(names[other]);
+    tree.push({caller:names[index],calls:children});
+  }
+  let busiestCalls=0,busiestTier=0;
+  for(const row of tierRows)if(row.calls>busiestCalls){busiestCalls=row.calls;busiestTier=row.tier;}
+  const coordinatorCalls=levels[1].length;
+  let capacity=0;
+  for(let tier=0;tier<=tiers;tier+=1)capacity+=Math.pow(branch,tier);
+  const summary=names[0]+' starts and the tree reaches all '+fmtInt(people)+' people in '+tiers+' tier'+(tiers===1?'':'s')+'. The last person hears the message '+timeText(totalMinutes)+' after the first call, assuming every call in a tier starts together and lasts '+minutes+' minute'+(minutes===1?'':'s')+'.';
+  const statusText=fmtInt(people)+' people, '+fmtInt(people-1)+' calls, '+tiers+' tier'+(tiers===1?'':'s')+': '+timeText(totalMinutes)+' to the last person.';
+  const explanation=[
+    names[0]+' is the coordinator and phones '+coordinatorCalls+' '+(coordinatorCalls===1?'person':'people')+'. Each person in turn phones up to '+branch+', so the tiers reach '+levels.slice(1).map(level=>level.length).join(', ')+' people.',
+    'The roster is handed out level by level: the coordinator takes the first '+coordinatorCalls+' names after their own, then those callers take the next names, and so on. Because every call in a tier is made at the same time, the elapsed time grows by one call length per tier: '+tiers+' × '+minutes+' = '+totalMinutes+' minutes.',
+    branch===1
+      ? 'With one call per person each tier adds exactly one person, so '+tiers+' tiers reach '+capacity+' people in a chain.'
+      : 'Each tier can reach up to '+branch+' times as many people as the tier before it, so '+tiers+' tiers hold '+capacity+' places in total, which is enough for '+people+' people.',
+    'Every person except the coordinator is called exactly once, so the tree needs '+fmtInt(people-1)+' calls in total.',
+    'The busiest tier is tier '+busiestTier+' with '+busiestCalls+' call'+(busiestCalls===1?'':'s')+' at once. A caller with fewer names to phone simply makes fewer calls and finishes early.',
+    'Names are trimmed and matched without regard to case; duplicates and names over 40 characters are refused. Nothing is uploaded, stored or sent.'
+  ];
+  const warnings=[];
+  if(branch===1)warnings.push('With one call per person the tree is a chain: everyone waits for the person before them, so the message takes one call length for every person after the coordinator.');
+  if(branch>1&&people>4&&tiers>1&&busiestCalls<4)warnings.push('The widest tier has only '+busiestCalls+' calls. Raising the calls per person shortens the tree but asks more of each caller.');
+  return {
+    people,calls:people-1,tiers,minutes,branch,totalMinutes,totalText:timeText(totalMinutes),
+    coordinatorCalls,busiestCalls,busiestTier,capacity,tierRows,tree,names,
+    summary,statusText,explanation,warnings
+  };
+}
+return{MAX_PEOPLE,MAX_NAME,MIN_MINUTES,MAX_MINUTES,MIN_BRANCH,MAX_BRANCH,DEFAULTS,fmtInt,timeText,parseRoster,parseMinutes,parseBranch,build};
+})();
+/* emergency-call-tree-core:end */
+(()=>{'use strict';
+const $=id=>document.getElementById(id);
+const OUTPUTS=['out-people','out-calls','out-tiers','out-time','out-busiest','out-first'];
+function setStatus(message){$('status').textContent=message;}
+function setError(message){
+  const node=$('error');
+  if(message){node.textContent=message;node.hidden=false;return;}
+  node.textContent='';node.hidden=true;
+}
+function readForm(){return{roster:$('in-roster').value,minutes:$('in-minutes').value,branch:$('in-branch').value};}
+function writeForm(state){$('in-roster').value=state.roster;$('in-minutes').value=String(state.minutes);$('in-branch').value=String(state.branch);}
+function clearResult(){
+  for(const id of OUTPUTS)$(id).textContent='not computed';
+  for(const id of ['out-tiers-note','out-time-note','out-busiest-note','out-first-note'])$(id).textContent='';
+  $('summary').textContent='';
+  $('explanation').replaceChildren();
+  $('warnings').replaceChildren();
+  $('tier-rows').replaceChildren();
+  $('tree-rows').replaceChildren();
+  $('table-wrap').hidden=true;
+  $('tree-wrap').hidden=true;
+}
+function cell(text,className){
+  const node=document.createElement('td');
+  node.textContent=text;
+  if(className)node.className=className;
+  return node;
+}
+function render(state){
+  let result;
+  try{result=EmergencyCallTreeCore.build(state);}catch(error){
+    setStatus('');setError(error.message);clearResult();
+    return false;
+  }
+  setError('');
+  setStatus(result.statusText);
+  $('summary').textContent=result.summary;
+  $('out-people').textContent=EmergencyCallTreeCore.fmtInt(result.people);
+  $('out-calls').textContent=EmergencyCallTreeCore.fmtInt(result.calls);
+  $('out-tiers').textContent=String(result.tiers);
+  $('out-tiers-note').textContent=result.tiers===1?'one round of calls':'rounds of simultaneous calls';
+  $('out-time').textContent=result.totalText;
+  $('out-time-note').textContent=result.tiers+' × '+result.minutes+' min';
+  $('out-busiest').textContent=EmergencyCallTreeCore.fmtInt(result.busiestCalls)+' call'+(result.busiestCalls===1?'':'s');
+  $('out-busiest-note').textContent='in tier '+result.busiestTier;
+  $('out-first').textContent=EmergencyCallTreeCore.fmtInt(result.coordinatorCalls);
+  $('out-first-note').textContent=result.names[0]+' starts the tree';
+  const tierBody=$('tier-rows');
+  tierBody.replaceChildren();
+  for(const row of result.tierRows){
+    const tr=document.createElement('tr');
+    tr.appendChild(cell(String(row.tier)));
+    tr.appendChild(cell(String(row.calls),'num'));
+    tr.appendChild(cell(String(row.reached),'num'));
+    tr.appendChild(cell(row.elapsedText,'num'));
+    tierBody.appendChild(tr);
+  }
+  $('table-wrap').hidden=false;
+  const treeBody=$('tree-rows');
+  treeBody.replaceChildren();
+  for(const node of result.tree){
+    const tr=document.createElement('tr');
+    tr.appendChild(cell(node.caller));
+    tr.appendChild(cell(node.calls.join(', ')));
+    treeBody.appendChild(tr);
+  }
+  $('tree-wrap').hidden=false;
+  const notes=$('warnings');
+  notes.replaceChildren();
+  for(const line of result.warnings){const item=document.createElement('li');item.textContent=line;notes.appendChild(item);}
+  const explain=$('explanation');
+  explain.replaceChildren();
+  for(const line of result.explanation){const item=document.createElement('li');item.textContent=line;explain.appendChild(item);}
+  return true;
+}
+$('ct-form').addEventListener('submit',event=>{event.preventDefault();render(readForm());});
+$('reset').addEventListener('click',()=>{writeForm(EmergencyCallTreeCore.DEFAULTS);setError('');render(readForm());$('in-roster').focus();});
+$('example').addEventListener('click',()=>{writeForm({
+  roster:'Priya Raman\nJonas Berg\nMaeve O\'Connor\nTomas Ruiz\nAda Nwosu\nKenji Sato\nLena Fischer\nMarco Bianchi\nNadia Haddad\nOwen Price',
+  minutes:'2',branch:'3'
+});setError('');render(readForm());$('in-roster').focus();});
+writeForm(EmergencyCallTreeCore.DEFAULTS);
+render(readForm());
+})();
+</script></body></html>
