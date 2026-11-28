@@ -213,8 +213,8 @@ assert.equal(goldens, 11, 'golden cases');
 assert.equal(refusals, 10, 'refusal cases');
 
 // ---- Catalog totals pinned site-wide.
-assert.equal(catalog.tools.length, 2525, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2264, 'public tools');
+assert.equal(catalog.tools.length, 2526, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2265, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Communications Engineering').length, 58,
   'Communications Engineering count');
 
