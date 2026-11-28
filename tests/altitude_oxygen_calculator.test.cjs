@@ -246,7 +246,7 @@ assert.equal(new Set(record.tags).size, record.tags.length, 'tags are unique');
 assert.equal(new Set(record.aliases).size, record.aliases.length, 'aliases are unique');
 assert.ok(record.tags.includes('altitude'));
 assert.ok(record.aliases.includes('Oxygen Availability Calculator'));
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Health').length, 44, 'Health count');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Health').length, 45, 'Health count');
 assert.equal(catalog.tools.filter((tool) => tool.slug === slug).length, 1, 'one record');
 assert.equal(catalog.tools.filter((tool) => tool.name === record.name).length, 1, 'one name');
 

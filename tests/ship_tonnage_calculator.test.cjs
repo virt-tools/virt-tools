@@ -48,8 +48,8 @@ assert.ok(record.sources.some((source) => source.url.includes('treaties.un.org')
 assert.ok(record.sources.some((source) => source.url.includes('TM.5-Circ.6')), 'rounded-down interpretation source');
 assert.ok(record.sources.some((source) => source.url.includes('steamshipmutual.com')), 'plain-notation source');
 
-assert.equal(catalog.tools.length, 2520, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2259, 'public tools');
+assert.equal(catalog.tools.length, 2521, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2260, 'public tools');
 assert.equal(
   catalog.tools.filter((tool) => tool.category === 'Oil, Gas & Marine Engineering').length,
   57,

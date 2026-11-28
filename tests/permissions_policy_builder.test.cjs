@@ -128,8 +128,8 @@ assert.equal(refusal({ directives: [{}] }), 'A feature name is required.');
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
 const entry = catalog.tools.find((tool) => tool.slug === slug);
 assert.ok(entry, 'catalog entry missing');
-assert.equal(catalog.tools.length, 2520, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2259, 'public tools');
+assert.equal(catalog.tools.length, 2521, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2260, 'public tools');
 assert.ok(entry.testCases.length >= 30, `expected at least 30 cases, found ${entry.testCases.length}`);
 
 for (const testCase of entry.testCases) {
