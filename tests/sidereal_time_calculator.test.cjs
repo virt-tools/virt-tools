@@ -288,7 +288,7 @@ for (const tag of ['astronomy', 'sidereal', 'time']) {
   assert.ok(record.tags.includes(tag), 'new tag present: ' + tag);
 }
 assert.ok(!catalog.tools.some((tool) => tool.slug !== slug && /sidereal/.test(tool.slug)), 'no other sidereal slug');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Time').length, 57, 'Time count');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Time').length, 58, 'Time count');
 
 // ---- Page contract: shared assets, labelled controls, no storage or network.
 const markupIds = new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1]));
