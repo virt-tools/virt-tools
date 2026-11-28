@@ -203,8 +203,8 @@ assert.equal(record.listed, true);
 assert.equal(record.sources.length, 2);
 for (const source of record.sources) assert.match(source.url, /^https:\/\/man7\.org\//);
 assert.equal(catalog.tools.filter((tool) => tool.category === 'System').length, 58, 'System count');
-assert.equal(catalog.tools.length, 2519, 'catalog total');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2258, 'public total');
+assert.equal(catalog.tools.length, 2520, 'catalog total');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2259, 'public total');
 
 const kinds = record.testCases.reduce((acc, item) => {
   acc[item.kind] = (acc[item.kind] || 0) + 1;
