@@ -533,6 +533,7 @@ node tests/emergency_call_tree_planner.test.cjs
 node tests/lc_lowpass_filter_designer.test.cjs
 node tests/bike_trail_calculator.test.cjs
 node tests/fabric_prewash_shrinkage_calculator.test.cjs
+node tests/mechanical_specific_energy_calculator.test.cjs
 
 python3 -m unittest discover -s tests -p 'test_*.py'
 

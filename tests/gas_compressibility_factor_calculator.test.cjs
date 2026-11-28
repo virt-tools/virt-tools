@@ -42,9 +42,9 @@ assert.equal(record.testCases.length, 19);
 assert.equal(record.testCases.filter((item) => item.kind === 'golden').length, 5);
 assert.equal(record.testCases.filter((item) => item.kind === 'boundary').length, 6);
 assert.equal(record.testCases.filter((item) => item.kind === 'validation').length, 8);
-assert.equal(catalog.tools.length, 2526, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2265, 'public tools');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Oil, Gas & Marine Engineering').length, 57,
+assert.equal(catalog.tools.length, 2527, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2266, 'public tools');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Oil, Gas & Marine Engineering').length, 58,
   'Oil, Gas & Marine Engineering count');
 // No other record claims this slug, name, alias or distinctive tag.
 for (const other of catalog.tools) {

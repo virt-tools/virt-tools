@@ -137,8 +137,8 @@ const comma = run({ length: '455,5' });
 assert.ok(near(comma.length, 455.5));
 
 // ---- Catalog record: counts, cases and metadata.
-assert.equal(catalog.tools.length, 2526, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2265, 'public tools');
+assert.equal(catalog.tools.length, 2527, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2266, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Crafts & Hobbies').length, 58,
   'Crafts & Hobbies count');
 assert.equal(record.category, 'Crafts & Hobbies');
