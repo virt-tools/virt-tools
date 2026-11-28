@@ -34,7 +34,7 @@ const pageDirs = fs.readdirSync(path.join(root, 'frontend', 'tools'), { withFile
   .filter((entry) => entry.isDirectory()).length;
 assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageDirs,
   'every listed tool record has a page');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Mechanical & Structural Engineering').length, 57,
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Mechanical & Structural Engineering').length, 58,
   'Mechanical & Structural Engineering count');
 
 const slugs = new Set(catalog.tools.map((tool) => tool.slug));
