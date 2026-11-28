@@ -269,8 +269,8 @@ refuses('2001:db8::1', '2001:db8:122:1::/48', 'The NAT64 prefix has bits set aft
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
 const pageDirs = fs.readdirSync(path.join(root, 'frontend', 'tools'), { withFileTypes: true })
   .filter((entry) => entry.isDirectory()).length;
-assert.equal(catalog.tools.length, 2516, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2255, 'public tools');
+assert.equal(catalog.tools.length, 2517, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2256, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageDirs,
   'every listed tool record has a page');
 const record = catalog.tools.find((tool) => tool.slug === slug);
@@ -298,7 +298,7 @@ assert.equal(record.testCases.filter((testCase) => testCase.kind === 'golden').l
 assert.equal(record.testCases.filter((testCase) => testCase.kind === 'boundary').length, 6, 'boundary cases');
 assert.equal(record.testCases.filter((testCase) => testCase.kind === 'validation').length, 6, 'validation cases');
 assert.equal(catalog.tools.filter((tool) => tool.slug === slug).length, 1, 'slug unique');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Networking').length, 57, 'Networking count');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Networking').length, 58, 'Networking count');
 for (const other of catalog.tools) {
   if (other.slug === slug) continue;
   assert.notEqual(other.name, record.name, `name collides with ${other.slug}`);

@@ -336,8 +336,8 @@ const pageDirs = fs.readdirSync(path.join(root, 'frontend', 'tools'), { withFile
   .filter((entry) => entry.isDirectory()).length;
 assert.equal(catalog.tools.filter((tool) => tool.listed !== false).length, pageDirs,
   'every listed tool record has a page');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2255, 'public tools');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'Networking').length, 57, 'Networking count');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2256, 'public tools');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'Networking').length, 58, 'Networking count');
 assert.equal(catalog.tools.filter((tool) => tool.slug === slug).length, 1, 'slug is unique');
 const names = new Set();
 const aliases = new Set();

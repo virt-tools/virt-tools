@@ -24,8 +24,8 @@ const near = (actual, expected, message, tolerance = 1e-9) =>
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
 const entry = catalog.tools.find((tool) => tool.slug === 'geojson-map-renderer');
 assert.ok(entry, 'catalog entry missing');
-assert.equal(catalog.tools.length, 2516, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2255, 'public tools');
+assert.equal(catalog.tools.length, 2517, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2256, 'public tools');
 assert.ok(entry.testCases.length >= 30, `expected at least 30 cases, found ${entry.testCases.length}`);
 
 // The projection constants and the published Mercator ordinate at 45 degrees.
