@@ -522,6 +522,7 @@ node tests/color_gamut_converter.test.cjs
 node tests/gas_meter_input_rate_calculator.test.cjs
 node tests/lawn_mowing_height_calculator.test.cjs
 node tests/air_cleaner_cadr_calculator.test.cjs
+node tests/sbir_calculator.test.cjs
 
 python3 -m unittest discover -s tests -p 'test_*.py'
 
