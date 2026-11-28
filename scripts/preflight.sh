@@ -530,6 +530,8 @@ node tests/social_jetlag_calculator.test.cjs
 node tests/weekly_activity_met_calculator.test.cjs
 node tests/hand_arm_vibration_exposure_calculator.test.cjs
 node tests/emergency_call_tree_planner.test.cjs
+node tests/lc_lowpass_filter_designer.test.cjs
+node tests/bike_trail_calculator.test.cjs
 
 python3 -m unittest discover -s tests -p 'test_*.py'
 
