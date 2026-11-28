@@ -181,8 +181,8 @@ assert.equal(C.MIN_EPOCH, -62135596800);
 assert.equal(C.MAX_EPOCH, 253402300799);
 
 // ---- Catalog record: totals, cases and metadata.
-assert.equal(catalog.tools.length, 2523, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2262, 'public tools');
+assert.equal(catalog.tools.length, 2524, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2263, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Time').length, 57, 'Time count');
 assert.equal(record.category, 'Time');
 assert.equal(record.subcategory, 'Generation');
