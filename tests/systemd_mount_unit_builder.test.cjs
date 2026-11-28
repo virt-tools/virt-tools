@@ -37,8 +37,8 @@ assert.equal(record.testCases.length, 25);
 assert.equal(record.testCases.filter((t) => t.kind === 'golden').length, 7);
 assert.equal(record.testCases.filter((t) => t.kind === 'boundary').length, 3);
 assert.equal(record.testCases.filter((t) => t.kind === 'validation').length, 15);
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2254, 'public tools');
-assert.equal(catalog.tools.filter((tool) => tool.category === 'System').length, 57, 'System count');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2255, 'public tools');
+assert.equal(catalog.tools.filter((tool) => tool.category === 'System').length, 58, 'System count');
 
 function failure(input) {
   try { C.build(input); } catch (error) { return error.message; }

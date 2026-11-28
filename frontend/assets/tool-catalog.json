@@ -299145,6 +299145,871 @@
         }
       ],
       "listed": true
+    },
+    {
+      "slug": "auditd-rule-builder",
+      "name": "auditd Rule Builder",
+      "description": "Compose one Linux kernel audit rule in the syscall form: watch a file or a directory tree with the access types you choose, or filter named system calls by login uid, uid, gid, pid, executable, exit success or errno. Shows the exact audit.rules line for each ABI, plus the auditctl command to load it and the ausearch command to find its events.",
+      "category": "System",
+      "legacyCategory": null,
+      "subcategory": "Generation",
+      "tags": [
+        "linux",
+        "auditd",
+        "audit",
+        "auditctl",
+        "audit-rules",
+        "logging",
+        "security",
+        "syscall"
+      ],
+      "aliases": [
+        "auditd Rule Builder",
+        "auditd rule builder",
+        "auditctl Rule Builder",
+        "auditctl rule builder",
+        "Linux Audit Rule Generator",
+        "audit.rules Generator",
+        "Audit Rule Builder",
+        "Syscall Audit Rule Builder",
+        "File Watch Audit Rule"
+      ],
+      "icon": "📑",
+      "added": "2026-11-28T01:54:09Z",
+      "risk": "moderate",
+      "maturity": "draft",
+      "reviewedAt": null,
+      "guidance": "A rule-composition aid, not a compliance guarantee: auditd evaluates the loaded set in order, so an earlier never rule or a missing arch field changes what is recorded. Check the machine's own loaded rules with auditctl -l after adding one.",
+      "method": "Every rule is composed in the syscall form, which audit.rules(7) recommends over the deprecated -w watch: -a always,exit, then the arch field, then either -F path= or -F dir= with -F perm=, or -S with the chosen calls and one -F field comparison, then -k. The action and list are fixed at always and exit because file watches and syscall filters are both evaluated on the exit list. The architecture choice writes one line for b64 or b32, two lines (b64 then b32) for both, because syscall numbers differ between the ABIs, and no arch field for none, which auditctl then applies to every system call. Access types are read, write, execute and attribute change, emitted in the order rwxa after duplicates are dropped; a directory watch uses dir= and follows the subtree to the bottom, stopping at mount points. A path must be absolute, cannot be / and cannot contain whitespace, quotes or backslashes. System call names are lowercase letters, digits and underscores, separated by commas or spaces and deduplicated in the order given; any well-formed name is accepted because the valid set is kernel and architecture specific. Filter fields are the login uid, uid, euid, gid, pid, ppid, executable path, exit success and exit errno; exe, success and exit accept only = and !=, success only 0 or 1, exit an errno name such as -EACCES or a number, id fields take up to ten digits and at most 4294967295, and auid alone also takes unset or -1, both of which print as unset. With the unset option on, an auid comparison gains -F auid!=unset, the idiom audit.rules(7) uses to leave out processes without a login session. Keys are optional, at most 31 characters, and limited here to letters, digits, dots, underscores and hyphens so the rule stays one shell-safe line. The result reports each rule line, the field count including arch, the character count, and warnings for a missing key, a missing arch field, -S all and an unchecked unset exclusion.",
+      "sources": [
+        {
+          "title": "auditctl(8) — -a list,action, -F field/op/value, -S syscall names, arch before -S, and -k keys of up to 31 bytes",
+          "url": "https://man7.org/linux/man-pages/man8/auditctl.8.html"
+        },
+        {
+          "title": "audit.rules(7) — file and directory watches with path= and dir=, perm r/w/x/a, the auid>=1000 with auid!=unset idiom, and separate b32/b64 rules",
+          "url": "https://man7.org/linux/man-pages/man7/audit.rules.7.html"
+        }
+      ],
+      "testCases": [
+        {
+          "name": "Default file watch on /etc/passwd",
+          "kind": "golden",
+          "input": {
+            "mode": "watch",
+            "target": "file",
+            "path": "/etc/passwd",
+            "perms": [
+              "w",
+              "a"
+            ],
+            "arch": "b64",
+            "key": "identity"
+          },
+          "expected": {
+            "rule": "-a always,exit -F arch=b64 -F path=/etc/passwd -F perm=wa -k identity",
+            "lineCount": 1,
+            "arch": "b64",
+            "fieldCount": 3,
+            "filter": "perm=wa",
+            "key": "identity",
+            "warningCount": 0,
+            "charCount": 69
+          }
+        },
+        {
+          "name": "Directory tree watched on both ABIs",
+          "kind": "golden",
+          "input": {
+            "mode": "watch",
+            "target": "dir",
+            "path": "/etc",
+            "perms": [
+              "a"
+            ],
+            "arch": "both",
+            "key": "etc-attrs"
+          },
+          "expected": {
+            "rule": "-a always,exit -F arch=b64 -F dir=/etc -F perm=a -k etc-attrs\n-a always,exit -F arch=b32 -F dir=/etc -F perm=a -k etc-attrs",
+            "lines": [
+              "-a always,exit -F arch=b64 -F dir=/etc -F perm=a -k etc-attrs",
+              "-a always,exit -F arch=b32 -F dir=/etc -F perm=a -k etc-attrs"
+            ],
+            "lineCount": 2,
+            "arch": "b64+b32",
+            "fieldCount": 3,
+            "filter": "perm=a",
+            "key": "etc-attrs",
+            "warningCount": 0,
+            "charCount": 123
+          }
+        },
+        {
+          "name": "Watch without a key warns about searching",
+          "kind": "golden",
+          "input": {
+            "mode": "watch",
+            "target": "file",
+            "path": "/etc/shadow",
+            "perms": [
+              "w",
+              "a"
+            ],
+            "arch": "b64",
+            "key": ""
+          },
+          "expected": {
+            "rule": "-a always,exit -F arch=b64 -F path=/etc/shadow -F perm=wa",
+            "lineCount": 1,
+            "fieldCount": 3,
+            "key": null,
+            "warningCount": 1,
+            "charCount": 57
+          }
+        },
+        {
+          "name": "Login uid filter with the unset exclusion",
+          "kind": "golden",
+          "input": {
+            "mode": "syscall",
+            "arch": "b64",
+            "syscalls": "openat,open",
+            "field": "auid",
+            "op": ">=",
+            "value": "1000",
+            "excludeUnset": true,
+            "key": "files"
+          },
+          "expected": {
+            "rule": "-a always,exit -F arch=b64 -S openat,open -F auid>=1000 -F auid!=unset -k files",
+            "lineCount": 1,
+            "fieldCount": 3,
+            "filter": "auid>=1000 and auid!=unset",
+            "key": "files",
+            "warningCount": 0,
+            "charCount": 79
+          }
+        },
+        {
+          "name": "Executable run by the root uid",
+          "kind": "golden",
+          "input": {
+            "mode": "syscall",
+            "arch": "b64",
+            "syscalls": "execve",
+            "field": "uid",
+            "op": "=",
+            "value": "0",
+            "excludeUnset": true,
+            "key": "root-exec"
+          },
+          "expected": {
+            "rule": "-a always,exit -F arch=b64 -S execve -F uid=0 -k root-exec",
+            "lineCount": 1,
+            "fieldCount": 2,
+            "filter": "uid=0",
+            "warningCount": 0,
+            "charCount": 58
+          }
+        },
+        {
+          "name": "Exact executable path filter",
+          "kind": "golden",
+          "input": {
+            "mode": "syscall",
+            "arch": "b64",
+            "syscalls": "execve",
+            "field": "exe",
+            "op": "=",
+            "value": "/usr/bin/sudo",
+            "excludeUnset": false,
+            "key": "sudo"
+          },
+          "expected": {
+            "rule": "-a always,exit -F arch=b64 -S execve -F exe=/usr/bin/sudo -k sudo",
+            "lineCount": 1,
+            "fieldCount": 2,
+            "filter": "exe=/usr/bin/sudo",
+            "warningCount": 0,
+            "charCount": 65
+          }
+        },
+        {
+          "name": "Every system call with a failed exit, no arch field",
+          "kind": "golden",
+          "input": {
+            "mode": "syscall",
+            "arch": "none",
+            "syscalls": "all",
+            "field": "success",
+            "op": "=",
+            "value": "0",
+            "excludeUnset": true,
+            "key": "fails"
+          },
+          "expected": {
+            "rule": "-a always,exit -S all -F success=0 -k fails",
+            "lineCount": 1,
+            "fieldCount": 1,
+            "arch": "none",
+            "filter": "success=0",
+            "warningCount": 2,
+            "charCount": 43
+          }
+        },
+        {
+          "name": "Repeated system call names collapse to one list",
+          "kind": "golden",
+          "input": {
+            "mode": "syscall",
+            "arch": "b64",
+            "syscalls": "openat, open,openat",
+            "field": "pid",
+            "op": "=",
+            "value": "4242",
+            "excludeUnset": true,
+            "key": "pidwatch"
+          },
+          "expected": {
+            "rule": "-a always,exit -F arch=b64 -S openat,open -F pid=4242 -k pidwatch",
+            "lineCount": 1,
+            "fieldCount": 2,
+            "filter": "pid=4242",
+            "warningCount": 0,
+            "charCount": 65
+          }
+        },
+        {
+          "name": "Unset loginuid selected explicitly",
+          "kind": "golden",
+          "input": {
+            "mode": "syscall",
+            "arch": "b64",
+            "syscalls": "connect",
+            "field": "auid",
+            "op": "=",
+            "value": "unset",
+            "excludeUnset": true,
+            "key": "nologin"
+          },
+          "expected": {
+            "rule": "-a always,exit -F arch=b64 -S connect -F auid=unset -k nologin",
+            "lineCount": 1,
+            "fieldCount": 2,
+            "filter": "auid=unset",
+            "warningCount": 0,
+            "charCount": 62
+          }
+        },
+        {
+          "name": "Minus one is the same unset loginuid",
+          "kind": "golden",
+          "input": {
+            "mode": "syscall",
+            "arch": "b64",
+            "syscalls": "connect",
+            "field": "auid",
+            "op": "=",
+            "value": "-1",
+            "excludeUnset": true,
+            "key": "nologin"
+          },
+          "expected": {
+            "rule": "-a always,exit -F arch=b64 -S connect -F auid=unset -k nologin",
+            "lineCount": 1,
+            "fieldCount": 2,
+            "filter": "auid=unset",
+            "value": "unset",
+            "warningCount": 0,
+            "charCount": 62
+          }
+        },
+        {
+          "name": "Access types are ordered and deduplicated",
+          "kind": "golden",
+          "input": {
+            "mode": "watch",
+            "target": "file",
+            "path": "/etc/hosts",
+            "perms": [
+              "a",
+              "r",
+              "a"
+            ],
+            "arch": "b32",
+            "key": "hosts"
+          },
+          "expected": {
+            "rule": "-a always,exit -F arch=b32 -F path=/etc/hosts -F perm=ra -k hosts",
+            "lineCount": 1,
+            "fieldCount": 3,
+            "arch": "b32",
+            "filter": "perm=ra",
+            "warningCount": 0,
+            "charCount": 65
+          }
+        },
+        {
+          "name": "A key of exactly 31 characters is accepted",
+          "kind": "golden",
+          "input": {
+            "mode": "watch",
+            "target": "file",
+            "path": "/etc/sudoers",
+            "perms": [
+              "r"
+            ],
+            "arch": "b64",
+            "key": "abcdefghijklmnopqrstuvwxyz01234"
+          },
+          "expected": {
+            "rule": "-a always,exit -F arch=b64 -F path=/etc/sudoers -F perm=r -k abcdefghijklmnopqrstuvwxyz01234",
+            "lineCount": 1,
+            "fieldCount": 3,
+            "key": "abcdefghijklmnopqrstuvwxyz01234",
+            "warningCount": 0,
+            "charCount": 92
+          }
+        },
+        {
+          "name": "A trailing slash is kept on a directory watch",
+          "kind": "golden",
+          "input": {
+            "mode": "watch",
+            "target": "dir",
+            "path": "/var/log/",
+            "perms": [
+              "w"
+            ],
+            "arch": "b64",
+            "key": "logs"
+          },
+          "expected": {
+            "rule": "-a always,exit -F arch=b64 -F dir=/var/log/ -F perm=w -k logs",
+            "lineCount": 1,
+            "fieldCount": 3,
+            "filter": "perm=w",
+            "warningCount": 0,
+            "charCount": 61
+          }
+        },
+        {
+          "name": "Parent pid filter on both ABIs",
+          "kind": "golden",
+          "input": {
+            "mode": "syscall",
+            "arch": "both",
+            "syscalls": "ptrace",
+            "field": "ppid",
+            "op": ">=",
+            "value": "100",
+            "excludeUnset": true,
+            "key": "ptrace"
+          },
+          "expected": {
+            "rule": "-a always,exit -F arch=b64 -S ptrace -F ppid>=100 -k ptrace\n-a always,exit -F arch=b32 -S ptrace -F ppid>=100 -k ptrace",
+            "lines": [
+              "-a always,exit -F arch=b64 -S ptrace -F ppid>=100 -k ptrace",
+              "-a always,exit -F arch=b32 -S ptrace -F ppid>=100 -k ptrace"
+            ],
+            "lineCount": 2,
+            "fieldCount": 2,
+            "arch": "b64+b32",
+            "filter": "ppid>=100",
+            "warningCount": 0,
+            "charCount": 119
+          }
+        },
+        {
+          "name": "Blank watch path",
+          "kind": "validation",
+          "input": {
+            "mode": "watch",
+            "target": "file",
+            "path": "",
+            "perms": [
+              "w",
+              "a"
+            ],
+            "arch": "b64",
+            "key": "identity"
+          },
+          "expected": {
+            "error": "Enter the absolute path to watch, such as /etc/passwd."
+          }
+        },
+        {
+          "name": "Relative watch path",
+          "kind": "validation",
+          "input": {
+            "mode": "watch",
+            "target": "file",
+            "path": "etc/passwd",
+            "perms": [
+              "w",
+              "a"
+            ],
+            "arch": "b64",
+            "key": "identity"
+          },
+          "expected": {
+            "error": "A watch path must start with /, such as /etc/passwd."
+          }
+        },
+        {
+          "name": "Top-level directory watch",
+          "kind": "validation",
+          "input": {
+            "mode": "watch",
+            "target": "file",
+            "path": "/",
+            "perms": [
+              "w",
+              "a"
+            ],
+            "arch": "b64",
+            "key": "identity"
+          },
+          "expected": {
+            "error": "The top-level directory / cannot be watched."
+          }
+        },
+        {
+          "name": "Watch path with a space",
+          "kind": "validation",
+          "input": {
+            "mode": "watch",
+            "target": "file",
+            "path": "/etc/my file",
+            "perms": [
+              "w",
+              "a"
+            ],
+            "arch": "b64",
+            "key": "identity"
+          },
+          "expected": {
+            "error": "A watch path cannot contain spaces."
+          }
+        },
+        {
+          "name": "Watch path with a quote",
+          "kind": "validation",
+          "input": {
+            "mode": "watch",
+            "target": "file",
+            "path": "/etc/pa\"sswd",
+            "perms": [
+              "w",
+              "a"
+            ],
+            "arch": "b64",
+            "key": "identity"
+          },
+          "expected": {
+            "error": "A watch path cannot contain quotes or backslashes."
+          }
+        },
+        {
+          "name": "No access type selected",
+          "kind": "validation",
+          "input": {
+            "mode": "watch",
+            "target": "file",
+            "path": "/etc/passwd",
+            "perms": [],
+            "arch": "b64",
+            "key": "identity"
+          },
+          "expected": {
+            "error": "Select at least one access type: read, write, execute or attribute."
+          }
+        },
+        {
+          "name": "Unknown access letter",
+          "kind": "validation",
+          "input": {
+            "mode": "watch",
+            "target": "file",
+            "path": "/etc/passwd",
+            "perms": [
+              "z"
+            ],
+            "arch": "b64",
+            "key": "identity"
+          },
+          "expected": {
+            "error": "Access types are r, w, x and a for read, write, execute and attribute change."
+          }
+        },
+        {
+          "name": "Unknown architecture",
+          "kind": "validation",
+          "input": {
+            "mode": "watch",
+            "target": "file",
+            "path": "/etc/passwd",
+            "perms": [
+              "w",
+              "a"
+            ],
+            "arch": "amd64",
+            "key": "identity"
+          },
+          "expected": {
+            "error": "Choose b64, b32, both or none for the arch field."
+          }
+        },
+        {
+          "name": "Unknown rule type",
+          "kind": "validation",
+          "input": {
+            "mode": "entry",
+            "target": "file",
+            "path": "/etc/passwd",
+            "perms": [
+              "w",
+              "a"
+            ],
+            "arch": "b64",
+            "key": "identity"
+          },
+          "expected": {
+            "error": "Choose a file watch or a system call filter."
+          }
+        },
+        {
+          "name": "Unknown watch target",
+          "kind": "validation",
+          "input": {
+            "mode": "watch",
+            "target": "subtree",
+            "path": "/etc/passwd",
+            "perms": [
+              "w",
+              "a"
+            ],
+            "arch": "b64",
+            "key": "identity"
+          },
+          "expected": {
+            "error": "Choose whether to watch a file or a directory tree."
+          }
+        },
+        {
+          "name": "No system call named",
+          "kind": "validation",
+          "input": {
+            "mode": "syscall",
+            "arch": "b64",
+            "syscalls": "",
+            "field": "auid",
+            "op": ">=",
+            "value": "1000",
+            "excludeUnset": true,
+            "key": "files"
+          },
+          "expected": {
+            "error": "Enter at least one system call name, such as openat, or all."
+          }
+        },
+        {
+          "name": "Capitalised system call",
+          "kind": "validation",
+          "input": {
+            "mode": "syscall",
+            "arch": "b64",
+            "syscalls": "Openat",
+            "field": "auid",
+            "op": ">=",
+            "value": "1000",
+            "excludeUnset": true,
+            "key": "files"
+          },
+          "expected": {
+            "error": "System call names are lowercase letters, digits and underscores, such as openat."
+          }
+        },
+        {
+          "name": "System call with a hyphen",
+          "kind": "validation",
+          "input": {
+            "mode": "syscall",
+            "arch": "b64",
+            "syscalls": "open-at",
+            "field": "auid",
+            "op": ">=",
+            "value": "1000",
+            "excludeUnset": true,
+            "key": "files"
+          },
+          "expected": {
+            "error": "System call names are lowercase letters, digits and underscores, such as openat."
+          }
+        },
+        {
+          "name": "Unknown filter field",
+          "kind": "validation",
+          "input": {
+            "mode": "syscall",
+            "arch": "b64",
+            "syscalls": "openat,open",
+            "field": "loginuid",
+            "op": ">=",
+            "value": "1000",
+            "excludeUnset": true,
+            "key": "files"
+          },
+          "expected": {
+            "error": "Choose an audit field to filter on."
+          }
+        },
+        {
+          "name": "Unknown comparison",
+          "kind": "validation",
+          "input": {
+            "mode": "syscall",
+            "arch": "b64",
+            "syscalls": "openat,open",
+            "field": "auid",
+            "op": "==",
+            "value": "1000",
+            "excludeUnset": true,
+            "key": "files"
+          },
+          "expected": {
+            "error": "Choose =, !=, >= or <= for the comparison."
+          }
+        },
+        {
+          "name": "Range comparison on exe",
+          "kind": "validation",
+          "input": {
+            "mode": "syscall",
+            "arch": "b64",
+            "syscalls": "openat,open",
+            "field": "exe",
+            "op": ">=",
+            "value": "/usr/bin/sudo",
+            "excludeUnset": true,
+            "key": "files"
+          },
+          "expected": {
+            "error": "The exe filter accepts only = and !=."
+          }
+        },
+        {
+          "name": "Relative exe path",
+          "kind": "validation",
+          "input": {
+            "mode": "syscall",
+            "arch": "b64",
+            "syscalls": "openat,open",
+            "field": "exe",
+            "op": "=",
+            "value": "bin/sudo",
+            "excludeUnset": true,
+            "key": "files"
+          },
+          "expected": {
+            "error": "The exe filter takes an absolute path, such as /usr/bin/sudo."
+          }
+        },
+        {
+          "name": "Range comparison on success",
+          "kind": "validation",
+          "input": {
+            "mode": "syscall",
+            "arch": "b64",
+            "syscalls": "openat,open",
+            "field": "success",
+            "op": ">=",
+            "value": "0",
+            "excludeUnset": true,
+            "key": "files"
+          },
+          "expected": {
+            "error": "The success filter accepts only = and !=."
+          }
+        },
+        {
+          "name": "Success value other than 0 or 1",
+          "kind": "validation",
+          "input": {
+            "mode": "syscall",
+            "arch": "b64",
+            "syscalls": "openat,open",
+            "field": "success",
+            "op": "=",
+            "value": "2",
+            "excludeUnset": true,
+            "key": "files"
+          },
+          "expected": {
+            "error": "The success filter takes 0 for a failed call or 1 for a successful one."
+          }
+        },
+        {
+          "name": "Word given for uid",
+          "kind": "validation",
+          "input": {
+            "mode": "syscall",
+            "arch": "b64",
+            "syscalls": "openat,open",
+            "field": "uid",
+            "op": "=",
+            "value": "abc",
+            "excludeUnset": true,
+            "key": "files"
+          },
+          "expected": {
+            "error": "The uid filter takes a numeric id."
+          }
+        },
+        {
+          "name": "Unset loginuid used on uid",
+          "kind": "validation",
+          "input": {
+            "mode": "syscall",
+            "arch": "b64",
+            "syscalls": "openat,open",
+            "field": "uid",
+            "op": "=",
+            "value": "unset",
+            "excludeUnset": true,
+            "key": "files"
+          },
+          "expected": {
+            "error": "The uid filter takes a numeric id."
+          }
+        },
+        {
+          "name": "Unset loginuid with a range",
+          "kind": "validation",
+          "input": {
+            "mode": "syscall",
+            "arch": "b64",
+            "syscalls": "openat,open",
+            "field": "auid",
+            "op": ">=",
+            "value": "unset",
+            "excludeUnset": true,
+            "key": "files"
+          },
+          "expected": {
+            "error": "The unset loginuid can only be compared with = or !=."
+          }
+        },
+        {
+          "name": "Id above the unsigned limit",
+          "kind": "validation",
+          "input": {
+            "mode": "syscall",
+            "arch": "b64",
+            "syscalls": "openat,open",
+            "field": "uid",
+            "op": "=",
+            "value": "4294967296",
+            "excludeUnset": true,
+            "key": "files"
+          },
+          "expected": {
+            "error": "A numeric id is at most 4294967295."
+          }
+        },
+        {
+          "name": "Key over 31 characters",
+          "kind": "validation",
+          "input": {
+            "mode": "watch",
+            "target": "file",
+            "path": "/etc/passwd",
+            "perms": [
+              "w",
+              "a"
+            ],
+            "arch": "b64",
+            "key": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          },
+          "expected": {
+            "error": "A key is at most 31 characters."
+          }
+        },
+        {
+          "name": "Key with a space",
+          "kind": "validation",
+          "input": {
+            "mode": "watch",
+            "target": "file",
+            "path": "/etc/passwd",
+            "perms": [
+              "w",
+              "a"
+            ],
+            "arch": "b64",
+            "key": "my key"
+          },
+          "expected": {
+            "error": "A key is letters, digits, dots, underscores and hyphens, with no spaces."
+          }
+        },
+        {
+          "name": "Failed opens of one errno",
+          "kind": "golden",
+          "input": {
+            "mode": "syscall",
+            "arch": "b64",
+            "syscalls": "open,openat,openat2",
+            "field": "exit",
+            "op": "=",
+            "value": "-EACCES",
+            "excludeUnset": false,
+            "key": "access"
+          },
+          "expected": {
+            "rule": "-a always,exit -F arch=b64 -S open,openat,openat2 -F exit=-EACCES -k access",
+            "lines": [
+              "-a always,exit -F arch=b64 -S open,openat,openat2 -F exit=-EACCES -k access"
+            ],
+            "charCount": 75,
+            "lineCount": 1,
+            "fieldCount": 2,
+            "filter": "exit=-EACCES",
+            "key": "access",
+            "warningCount": 0
+          }
+        },
+        {
+          "name": "Exit errno without the sign",
+          "kind": "validation",
+          "input": {
+            "mode": "syscall",
+            "syscalls": "openat",
+            "field": "exit",
+            "op": "=",
+            "value": "EPERM"
+          },
+          "expected": {
+            "error": "The exit filter takes an errno such as -EACCES, or a number."
+          }
+        },
+        {
+          "name": "Range comparison on exit",
+          "kind": "validation",
+          "input": {
+            "mode": "syscall",
+            "syscalls": "openat",
+            "field": "exit",
+            "op": ">=",
+            "value": "-EACCES"
+          },
+          "expected": {
+            "error": "The exit filter accepts only = and !=."
+          }
+        }
+      ],
+      "listed": true
     }
   ]
 }
