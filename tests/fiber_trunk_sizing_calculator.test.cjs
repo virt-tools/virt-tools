@@ -165,7 +165,7 @@ for (const tool of catalog.tools) {
   assert.notEqual(tool.name.toLowerCase(), record.name.toLowerCase(), 'the name is not taken');
 }
 assert.equal(catalog.tools.filter((tool) => tool.category === 'IT & Networking').length, 57, 'IT & Networking count');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2252, 'public tools');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2253, 'public tools');
 
 // ---- Replay every case stored in the record.
 for (const item of record.testCases) {

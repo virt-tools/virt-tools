@@ -200,8 +200,8 @@ assert.match(C.hintFor('made-up-src'), /No built-in hint/);
 
 // ---- Catalog contract.
 const catalog = JSON.parse(fs.readFileSync(path.join(root, 'frontend/assets/tool-catalog.json'), 'utf8'));
-assert.equal(catalog.tools.length, 2513, 'catalog records');
-assert.equal(catalog.tools.filter(function(tool){ return tool.listed; }).length, 2252, 'public tools');
+assert.equal(catalog.tools.length, 2514, 'catalog records');
+assert.equal(catalog.tools.filter(function(tool){ return tool.listed; }).length, 2253, 'public tools');
 assert.equal(catalog.tools.filter(function(tool){ return tool.category === 'Security'; }).length, 57, 'Security count');
 const record = catalog.tools.find(function(tool){ return tool.slug === slug; });
 assert.ok(record, 'catalog record exists');
