@@ -195,8 +195,8 @@ C.CODES.forEach((entry) => {
 });
 
 // ---- Catalog record: counts, cases and metadata.
-assert.equal(catalog.tools.length, 2512, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2251, 'public tools');
+assert.equal(catalog.tools.length, 2513, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2252, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Encoding').length, 57, 'Encoding count');
 assert.equal(record.category, 'Encoding');
 assert.equal(record.subcategory, 'Reference');
