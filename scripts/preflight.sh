@@ -537,6 +537,7 @@ node tests/mechanical_specific_energy_calculator.test.cjs
 node tests/screw_conveyor_capacity_calculator.test.cjs
 node tests/time_dilation_calculator.test.cjs
 node tests/msgpack_encoder_decoder.test.cjs
+node tests/centrifuge_rcf_rpm_converter.test.cjs
 
 python3 -m unittest discover -s tests -p 'test_*.py'
 

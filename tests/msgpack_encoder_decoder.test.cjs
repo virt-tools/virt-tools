@@ -240,8 +240,8 @@ assert.equal(new Set(record.tags).size, record.tags.length, 'tags are internally
 const pageDirs = fs.readdirSync(path.join(root, 'frontend/tools'), { withFileTypes: true })
   .filter((entry) => entry.isDirectory() && fs.existsSync(path.join(root, 'frontend/tools', entry.name, 'index.html')))
   .length;
-assert.equal(catalog.tools.length, 2530, 'catalog records');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2269, 'public tools');
+assert.equal(catalog.tools.length, 2531, 'catalog records');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2270, 'public tools');
 assert.equal(catalog.tools.filter((tool) => tool.listed).length, pageDirs, 'listed records and page directories agree');
 assert.equal(catalog.tools.filter((tool) => tool.category === 'Encoding').length, 58, 'Encoding count');
 
