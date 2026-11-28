@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Work out whether a conditional HTTP request succeeds, revalidates with 304 or fails with 412: compare If-Match, If-None-Match, If-Modified-Since and If-Unmodified-Since in the RFC 9110 order.">
+<script src="/assets/theme-init.js"></script>
+<title>HTTP Precondition Evaluator &mdash; virt.tools</title><link rel="stylesheet" href="/assets/style.css">
+<style>
+.pc-shell{max-width:960px;margin:0 auto}.lead,.hint{color:var(--text-secondary,#8b949e)}
+.panel,.result{background:var(--surface,#161b22);border:1px solid var(--border,#30363d);border-radius:10px;padding:1rem;margin:1rem 0}
+.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem 1rem;margin-top:.8rem}
+.field{display:flex;flex-direction:column;gap:.3rem}.field label{font-size:.85rem;color:var(--text-secondary,#8b949e)}
+.field .hint{font-size:.78rem;margin:0}
+input[type=text],select{box-sizing:border-box;width:100%;min-height:44px;background:var(--background,#0d1117);color:var(--text,#c9d1d9);border:1px solid var(--border,#30363d);border-radius:6px;padding:.5rem .6rem;font:inherit;font-size:1rem}
+input[type=text]{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.95rem}
+.check{display:flex;gap:.55rem;align-items:center;margin-top:.9rem;font-size:.92rem}
+.check input{width:1.05rem;height:1.05rem;accent-color:var(--accent,#58a6ff)}
+.actions{display:flex;flex-wrap:wrap;gap:.6rem;margin-top:1rem}
+button{border:1px solid var(--border,#30363d);border-radius:6px;background:var(--surface-raised,#21262d);color:var(--text,#c9d1d9);padding:.58rem .85rem;min-height:44px;font:inherit;font-size:1rem;cursor:pointer}
+.primary{border-color:var(--accent,#58a6ff);background:var(--accent-soft,#1e3a5f)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent,#58a6ff);outline-offset:2px}
+.status{min-height:1.4rem;margin:.6rem 0}.error{color:#f85149}
+#error[hidden]{display:none}
+.verdict{font-size:1.35rem;font-weight:700;margin:.2rem 0 .1rem}
+.verdict .code{font-variant-numeric:tabular-nums}
+.rows{margin:.8rem 0 0;display:grid;gap:.45rem}
+.row{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:.8rem;align-items:baseline;border-bottom:1px solid var(--border,#30363d);padding:.38rem 0}
+.row dt{font-weight:600;min-width:12rem}.row dd{margin:0}
+.row .value{font:600 1rem ui-monospace,SFMono-Regular,Consolas,monospace}
+.table-wrap{overflow-x:auto;margin-top:.9rem}
+table{border-collapse:collapse;width:100%;font-size:.92rem}
+th,td{text-align:left;padding:.45rem .5rem;border-bottom:1px solid var(--border,#30363d);vertical-align:top}
+th{font-size:.82rem;color:var(--text-secondary,#8b949e);font-weight:600;white-space:nowrap}
+tbody tr:last-child td{border-bottom:0}
+td code{font-size:.9em}
+ul{margin:.5rem 0 0;padding-left:1.2rem}#warnings:empty{display:none}
+.explain li,.limits li{margin:.2rem 0}
+@media(max-width:720px){.fields{grid-template-columns:1fr}.actions>*{flex:1 1 10rem}.panel,.result{padding:.85rem}.row{grid-template-columns:1fr}.row dt{min-width:0}table{font-size:.85rem}th,td{padding:.4rem .35rem}th{white-space:normal}}
+</style></head>
+<body><div id="site-header"></div><main class="tool-container"><div class="pc-shell">
+<h1>HTTP Precondition Evaluator</h1>
+<p class="lead">Paste the validators a resource currently has and the conditional headers a request sends, and see whether the request proceeds, is answered <strong>304 Not Modified</strong>, or fails with <strong>412 Precondition Failed</strong> &mdash; evaluated in the order RFC 9110 gives, with every ignored header explained. Everything runs in your browser; no request is made and nothing is stored.</p>
+
+<form id="pc-form" novalidate>
+<section class="panel" aria-labelledby="input-title">
+<h2 id="input-title">Request and resource</h2>
+<p class="hint">The evaluator models an origin server that is receiving the request for one target resource. Leave a conditional header empty to leave it out of the request.</p>
+<div class="fields">
+<div class="field"><label for="in-method">Request method</label>
+<select id="in-method">
+<option value="GET" selected>GET</option>
+<option value="HEAD">HEAD</option>
+<option value="PUT">PUT</option>
+<option value="POST">POST</option>
+<option value="PATCH">PATCH</option>
+<option value="DELETE">DELETE</option>
+</select></div>
+<div class="field"><label for="in-etag">Current ETag</label>
+<input id="in-etag" type="text" spellcheck="false" autocomplete="off" placeholder="&quot;8f4d1c&quot; or W/&quot;8f4d1c&quot;"></div>
+<div class="field"><label for="in-modified">Current Last-Modified</label>
+<input id="in-modified" type="text" spellcheck="false" autocomplete="off" placeholder="Fri, 27 Nov 2026 09:15:00 GMT"></div>
+</div>
+<label class="check"><input id="in-exists" type="checkbox" checked> The resource has a current representation</label>
+<div class="fields">
+<div class="field"><label for="in-if-match">If-Match</label>
+<input id="in-if-match" type="text" spellcheck="false" autocomplete="off" placeholder="&quot;8f4d1c&quot;, &quot;77ac02&quot; or *"></div>
+<div class="field"><label for="in-if-none-match">If-None-Match</label>
+<input id="in-if-none-match" type="text" spellcheck="false" autocomplete="off" placeholder="W/&quot;8f4d1c&quot; or *"></div>
+<div class="field"><label for="in-if-modified-since">If-Modified-Since</label>
+<input id="in-if-modified-since" type="text" spellcheck="false" autocomplete="off" placeholder="Wed, 25 Nov 2026 12:00:00 GMT"></div>
+<div class="field"><label for="in-if-unmodified-since">If-Unmodified-Since</label>
+<input id="in-if-unmodified-since" type="text" spellcheck="false" autocomplete="off" placeholder="Wed, 25 Nov 2026 12:00:00 GMT"></div>
+</div>
+<div class="actions">
+<button id="calculate" class="primary" type="submit">Evaluate request</button>
+<button id="example" type="button">Load example</button>
+<button id="reset" type="button">Reset</button>
+</div>
+</section>
+</form>
+
+<section class="result" aria-labelledby="result-title">
+<h2 id="result-title">Response decision</h2>
+<p id="status" class="status" role="status" aria-live="polite"></p>
+<p id="error" class="status error" role="alert" hidden></p>
+<p id="verdict" class="verdict">&nbsp;</p>
+<p id="summary"></p>
+<dl class="rows">
+<div class="row"><dt>Decided by</dt><dd><span id="out-deciding" class="value">not computed</span></dd></div>
+<div class="row"><dt>Representation state</dt><dd><span id="out-state">not computed</span></dd></div>
+<div class="row"><dt>Body in the response</dt><dd><span id="out-body">not computed</span></dd></div>
+</dl>
+<div class="table-wrap" id="table-wrap" hidden>
+<table>
+<thead><tr><th scope="col">Precondition</th><th scope="col">Status</th><th scope="col">Comparison</th><th scope="col">Result</th></tr></thead>
+<tbody id="step-rows"></tbody>
+</table>
+</div>
+<ul id="warnings"></ul>
+<h3>How this is evaluated</h3>
+<ul id="explanation" class="explain"><li>Evaluate a request to see the reasoning.</li></ul>
+<h3>What this does not do</h3>
+<ul id="limits" class="limits">
+<li>It models one origin server evaluating the four preconditions from RFC 9110 sections 13.1.1 to 13.1.4 on one target resource. It does not send a request, follow redirects, or show what the method itself would return.</li>
+<li>Only the IMF-fixdate form (<code>Sun, 06 Nov 1994 08:49:37 GMT</code>) and the asctime form (<code>Sun Nov  6 08:49:37 1994</code>) are read; the obsolete RFC 850 two-digit-year form is refused rather than guessed.</li>
+<li>Range requests and <code>If-Range</code> are not evaluated, so the 206 outcome of a partial request is out of scope.</li>
+<li>Nothing is saved and no account is needed: reloading the page clears the fields.</li>
+</ul>
+</section>
+</div></main><script src="/assets/tools.js"></script><script src="/assets/app.js"></script>
+<script>
+/* http-precondition-core:start */
+const HttpPreconditionCore=(()=>{'use strict';
+const METHODS=['GET','HEAD','PUT','POST','PATCH','DELETE'];
+const MONTHS={Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+const MONTH_NAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const LONG_DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+const SHORT_DAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const DEFAULTS={
+  method:'GET',etag:'"8f4d1c"',modified:'Fri, 27 Nov 2026 09:15:00 GMT',exists:'true',
+  ifMatch:'',ifNoneMatch:'W/"8f4d1c"',ifModifiedSince:'',ifUnmodifiedSince:''
+};
+function clip(text){return text.length>24?text.slice(0,24)+'...':text;}
+function show(text){return text.length>40?text.slice(0,40)+'...':text;}
+function blank(raw){return String(raw===undefined||raw===null?'':raw).trim()==='';}
+function daysInMonth(year,month){
+  if(month===1)return (year%4===0&&(year%100!==0||year%400===0))?29:28;
+  return [31,28,31,30,31,30,31,31,30,31,30,31][month];
+}
+function pad(value){return String(value).padStart(2,'0');}
+function dateText(seconds){
+  const date=new Date(seconds*1000);
+  return SHORT_DAYS[(date.getUTCDay()+6)%7]+', '+pad(date.getUTCDate())+' '+
+    MONTH_NAMES[date.getUTCMonth()]+' '+date.getUTCFullYear()+' '+
+    pad(date.getUTCHours())+':'+pad(date.getUTCMinutes())+':'+pad(date.getUTCSeconds())+' GMT';
+}
+function parseHttpDate(raw,label){
+  if(blank(raw))return null;
+  const text=String(raw).trim();
+  let day=null,month=null,year=null,hour=null,minute=null,second=null,weekday=null;
+  let match=/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), (\d{2}) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (\d{4}) (\d{2}):(\d{2}):(\d{2}) GMT$/.exec(text);
+  if(match){
+    weekday=match[1];day=Number(match[2]);month=MONTHS[match[3]];year=Number(match[4]);
+    hour=Number(match[5]);minute=Number(match[6]);second=Number(match[7]);
+  }else{
+    match=/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) ([ \d]\d) (\d{2}):(\d{2}):(\d{2}) (\d{4})$/.exec(text);
+    if(match){
+      weekday=match[1];month=MONTHS[match[2]];day=Number(match[3].trim());year=Number(match[7]);
+      hour=Number(match[4]);minute=Number(match[5]);second=Number(match[6]);
+    }
+  }
+  const bad=Error(label+' must be an IMF-fixdate such as "Sun, 06 Nov 1994 08:49:37 GMT"; got "'+show(text)+'".');
+  if(month===null)throw bad;
+  if(!(day>=1&&day<=daysInMonth(year,month)))throw bad;
+  if(!(hour<=23&&minute<=59&&second<=60))throw bad;
+  const seconds=Date.UTC(year,month,day,hour,minute,Math.min(second,59))/1000;
+  const expected=SHORT_DAYS[(new Date(seconds*1000).getUTCDay()+6)%7];
+  if(expected!==weekday)throw Error(label+' names '+weekday+' but that calendar date is a '+expected+'; got "'+show(text)+'".');
+  return seconds;
+}
+function parseTagList(raw,label){
+  if(blank(raw))return null;
+  const text=String(raw).trim();
+  if(text==='*')return {star:true,tags:[],text:text};
+  const tags=[],parts=text.split(',');
+  for(const part of parts){
+    const piece=part.trim();
+    if(piece==='')continue;
+    if(piece==='*')throw Error(label+' cannot mix "*" with entity tags; use either "*" or a list of quoted tags.');
+    const match=/^(W\/)?("[!#-~]*")$/.exec(piece);
+    if(!match)throw Error(label+' must be "*" or a comma-separated list of quoted entity tags such as "8f4d1c"; got "'+clip(piece)+'".');
+    tags.push({weak:match[1]==='W/',opaque:match[2].slice(1,-1)});
+  }
+  if(tags.length===0)throw Error(label+' has no entity tag; enter "*" or at least one quoted tag.');
+  return {star:false,tags:tags,text:text};
+}
+function parseCurrentTag(raw){
+  const list=parseTagList(raw,'The current ETag');
+  if(!list)return null;
+  if(list.star)throw Error('The current ETag must be one entity tag such as "8f4d1c" or W/"8f4d1c", not "*".');
+  if(list.tags.length>1)throw Error('The current ETag must be one entity tag; got '+list.tags.length+' tags instead.');
+  return list.tags[0];
+}
+function parseMethod(raw){
+  const text=String(raw===undefined||raw===null?'':raw).trim().toUpperCase();
+  if(!METHODS.includes(text))throw Error('Pick a request method from the list; got "'+clip(String(raw))+'".');
+  return text;
+}
+function parseExists(raw){
+  if(raw===true||raw==='true'||raw==='on')return true;
+  if(raw===false||raw==='false')return false;
+  throw Error('Say whether the resource has a current representation.');
+}
+function strongMatch(a,b){return !!a&&!!b&&!a.weak&&!b.weak&&a.opaque===b.opaque;}
+function weakMatch(a,b){return !!a&&!!b&&a.opaque===b.opaque;}
+function describe(tag){return (tag.weak?'W/':'')+'"'+tag.opaque+'"';}
+function anyMatch(current,list,compare){
+  if(!current||!list)return false;
+  return list.tags.some(tag=>compare(current,tag));
+}
+function statusLabel(status){
+  if(status==='304')return {code:'304',reason:'Not Modified'};
+  if(status==='412')return {code:'412',reason:'Precondition Failed'};
+  return {code:'2xx',reason:'the method proceeds'};
+}
+function evaluate(raw){
+  const state=Object.assign({},DEFAULTS,raw||{});
+  const method=parseMethod(state.method);
+  const exists=parseExists(state.exists);
+  const current=exists?parseCurrentTag(state.etag):null;
+  const lastModified=exists?parseHttpDate(state.modified,'The current Last-Modified'):null;
+  const ifMatch=parseTagList(state.ifMatch,'If-Match');
+  const ifNoneMatch=parseTagList(state.ifNoneMatch,'If-None-Match');
+  const ifModifiedSince=parseHttpDate(state.ifModifiedSince,'If-Modified-Since');
+  const ifUnmodifiedSince=parseHttpDate(state.ifUnmodifiedSince,'If-Unmodified-Since');
+  if(!ifMatch&&!ifNoneMatch&&ifModifiedSince===null&&ifUnmodifiedSince===null)
+    throw Error('Enter at least one conditional header: If-Match, If-None-Match, If-Modified-Since or If-Unmodified-Since.');
+  const steps=[],warnings=[],explanation=[];
+  let status='proceed',deciding=null;
+  const done=()=>status!=='proceed';
+  function step(header,present,applied,comparison,result,note){
+    steps.push({header:header,present:present,applied:applied,comparison:comparison,result:result,note:note||''});
+  }
+  // 1. If-Match, strong comparison, origin server only.
+  if(!ifMatch){
+    step('If-Match',false,false,'strong comparison','not sent','No lost-update guard from an entity tag.');
+  }else if(done()){
+    step('If-Match',true,false,'strong comparison','not reached','An earlier check already decided the response.');
+  }else{
+    const hit=ifMatch.star?exists:anyMatch(current,ifMatch,strongMatch);
+    const comparison=ifMatch.star?(exists?'the resource has a representation':'no current representation'):
+      (anyMatch(current,ifMatch,strongMatch)?'a listed tag matches the current ETag':'no listed tag matches the current ETag');
+    if(hit){
+      step('If-Match',true,true,comparison,'true',ifMatch.star?'The method may proceed.':'The representation is unchanged since the client read it.');
+    }else{
+      status='412';deciding='If-Match';
+      step('If-Match',true,true,comparison,'false',ifMatch.star?'The resource has no current representation, so the precondition fails.':'Strong comparison failed, so the method is not applied.');
+      if(!ifMatch.star&&current&&current.weak)warnings.push('The current ETag is weak ('+describe(current)+'), and a weak validator can never satisfy If-Match: strong comparison rejects it before any tag is compared.');
+      if(!ifMatch.star&&ifMatch.tags.some(tag=>tag.weak))warnings.push('If-Match lists a weak tag, but the list is compared with strong comparison, so a W/ entry can never match.');
+    }
+  }
+  // 2. If-Unmodified-Since, only without If-Match.
+  if(ifUnmodifiedSince===null){
+    step('If-Unmodified-Since',false,false,'date comparison','not sent','');
+  }else if(ifMatch){
+    step('If-Unmodified-Since',true,false,'date comparison','ignored','RFC 9110 requires recipients to ignore this header when If-Match is present.');
+  }else if(done()){
+    step('If-Unmodified-Since',true,false,'date comparison','not reached','An earlier check already decided the response.');
+  }else if(lastModified===null){
+    step('If-Unmodified-Since',true,false,'date comparison','ignored','The resource has no Last-Modified date to compare against.');
+    warnings.push('If-Unmodified-Since was ignored because the resource has no Last-Modified date; the request carries no working lost-update guard.');
+  }else{
+    const passed=lastModified<=ifUnmodifiedSince;
+    const comparison='Last-Modified '+dateText(lastModified)+' '+(passed?'is not later than':'is later than')+' the header date';
+    if(passed){
+      step('If-Unmodified-Since',true,true,comparison,'true','The representation has not changed since that date.');
+    }else{
+      status='412';deciding='If-Unmodified-Since';
+      step('If-Unmodified-Since',true,true,comparison,'false','The representation changed after the date, so the method is not applied.');
+      warnings.push('If-Unmodified-Since failed: the resource was modified at '+dateText(lastModified)+', after the '+dateText(ifUnmodifiedSince)+' the client sent.');
+    }
+  }
+  // 3. If-None-Match, weak comparison.
+  if(!ifNoneMatch){
+    step('If-None-Match',false,false,'weak comparison','not sent','No cache revalidation or create-only guard.');
+  }else if(done()){
+    step('If-None-Match',true,false,'weak comparison','not reached','An earlier check already decided the response.');
+  }else{
+    const matched=ifNoneMatch.star?exists:anyMatch(current,ifNoneMatch,weakMatch);
+    const comparison=ifNoneMatch.star?(exists?'the resource has a representation':'no current representation'):
+      (matched?'a listed tag matches the current ETag (weak comparison)':'no listed tag matches the current ETag');
+    if(!matched){
+      step('If-None-Match',true,true,comparison,'true','No stored version matches, so the request proceeds.');
+      if(exists&&current)explanation.push('If-None-Match did not match '+describe(current)+' under weak comparison.');
+    }else if(method==='GET'||method==='HEAD'){
+      status='304';deciding='If-None-Match';
+      step('If-None-Match',true,true,comparison,'false','The stored response is still current, so the server answers 304 with no body.');
+      explanation.push('The client already holds '+describe(current)+', so a GET or HEAD is answered with 304 Not Modified and the stored response is reused.');
+    }else{
+      status='412';deciding='If-None-Match';
+      step('If-None-Match',true,true,comparison,'false','The representation exists, so a state-changing method fails instead of overwriting it.');
+      explanation.push('A '+method+' with a matching If-None-Match fails with 412, which is how create-only requests avoid overwriting an existing representation.');
+    }
+    if(!ifNoneMatch.star&&ifNoneMatch.tags.some(tag=>tag.weak))explanation.push('Weak comparison ignores the W/ prefix, so W/"x" and "x" count as the same tag here.');
+  }
+  // 4. If-Modified-Since, GET and HEAD only, without If-None-Match.
+  if(ifModifiedSince===null){
+    step('If-Modified-Since',false,false,'date comparison','not sent','');
+  }else if(ifNoneMatch){
+    step('If-Modified-Since',true,false,'date comparison','ignored','RFC 9110 requires recipients to ignore this header when If-None-Match is present.');
+  }else if(method!=='GET'&&method!=='HEAD'){
+    step('If-Modified-Since',true,false,'date comparison','ignored','The header only applies to GET and HEAD requests.');
+    warnings.push('If-Modified-Since was ignored because '+method+' is not a GET or HEAD request, so it cannot produce a 304.');
+  }else if(done()){
+    step('If-Modified-Since',true,false,'date comparison','not reached','An earlier check already decided the response.');
+  }else if(lastModified===null){
+    step('If-Modified-Since',true,false,'date comparison','ignored','The resource has no Last-Modified date to compare against.');
+    warnings.push('If-Modified-Since was ignored because the resource has no Last-Modified date.');
+  }else{
+    const unmodified=lastModified<=ifModifiedSince;
+    const comparison='Last-Modified '+dateText(lastModified)+' is '+(unmodified?'not later than':'later than')+' the header date';
+    if(unmodified){
+      status='304';deciding='If-Modified-Since';
+      step('If-Modified-Since',true,true,comparison,'false','The representation is no later than the date sent, so the server answers 304.');
+      explanation.push('The resource was last modified at '+dateText(lastModified)+'.');
+    }else{
+      step('If-Modified-Since',true,true,comparison,'true','The representation changed after the date sent, so a full response is returned.');
+    }
+  }
+  const label=statusLabel(status);
+  const verdict=status==='proceed'?'Proceed with the method':label.code+' '+label.reason;
+  const summary=status==='proceed'
+    ? 'Every conditional header that applies passes, so the server runs the '+method+' method and returns its normal success response.'
+    : status==='304'
+      ? 'The request is answered with 304 Not Modified and no representation body. '+deciding+' decided it.'
+      : 'The request is answered with 412 Precondition Failed and the method is not applied. '+deciding+' decided it.';
+  explanation.unshift('RFC 9110 evaluates the preconditions in a fixed order: If-Match, then If-Unmodified-Since, then If-None-Match, then If-Modified-Since. The first one that fails decides the response, and the checks after it are skipped.');
+  explanation.push('If-Match and If-Unmodified-Since guard against lost updates and use strong or date comparison; If-None-Match and If-Modified-Since are cache validators and use weak or date comparison.');
+  if(!exists)explanation.push('The resource has no current representation, so the ETag and Last-Modified fields are treated as absent.');
+  return {
+    method:method,status:status,code:label.code,reason:label.reason,deciding:deciding,
+    verdict:verdict,summary:summary,steps:steps,warnings:warnings,explanation:explanation,
+    exists:exists,current:current?describe(current):null
+  };
+}
+return {METHODS,DEFAULTS,evaluate,parseHttpDate,parseTagList,parseCurrentTag,parseMethod,parseExists,strongMatch,weakMatch,dateText,describe};
+})();
+/* http-precondition-core:end */
+(()=>{'use strict';
+const $=id=>document.getElementById(id);
+function setStatus(message){$('status').textContent=message;}
+function setError(message){
+  const node=$('error');
+  if(message){node.textContent=message;node.hidden=false;return;}
+  node.textContent='';node.hidden=true;
+}
+function readForm(){
+  return{method:$('in-method').value,etag:$('in-etag').value,modified:$('in-modified').value,
+    exists:$('in-exists').checked,ifMatch:$('in-if-match').value,
+    ifNoneMatch:$('in-if-none-match').value,ifModifiedSince:$('in-if-modified-since').value,
+    ifUnmodifiedSince:$('in-if-unmodified-since').value};
+}
+function writeForm(state){
+  $('in-method').value=state.method;$('in-etag').value=state.etag;$('in-modified').value=state.modified;
+  $('in-exists').checked=state.exists==='true';
+  $('in-if-match').value=state.ifMatch;$('in-if-none-match').value=state.ifNoneMatch;
+  $('in-if-modified-since').value=state.ifModifiedSince;$('in-if-unmodified-since').value=state.ifUnmodifiedSince;
+}
+function cell(text,className){
+  const node=document.createElement('td');
+  node.textContent=text;
+  if(className)node.className=className;
+  return node;
+}
+function clearResult(){
+  $('verdict').textContent='';
+  $('summary').textContent='';
+  for(const id of ['out-deciding','out-state','out-body'])$(id).textContent='not computed';
+  $('step-rows').replaceChildren();
+  $('warnings').replaceChildren();
+  $('explanation').replaceChildren();
+  $('table-wrap').hidden=true;
+}
+function render(state){
+  let result;
+  try{result=HttpPreconditionCore.evaluate(state);}catch(error){
+    setStatus('');setError(error.message);clearResult();
+    return false;
+  }
+  setError('');
+  setStatus(result.method+' checked against four preconditions.');
+  $('verdict').textContent=result.status==='proceed'?'Proceed with the method':result.code+' '+result.reason;
+  $('summary').textContent=result.summary;
+  $('out-deciding').textContent=result.deciding||'no precondition failed';
+  $('out-state').textContent=result.exists
+    ? 'present'+(result.current?', ETag '+result.current:' without an ETag')
+    : 'no current representation';
+  $('out-body').textContent=result.status==='304'?'none: 304 carries no representation'
+    :result.status==='412'?'the error body for 412':result.method==='HEAD'?'headers only':'the normal response body';
+  const body=$('step-rows');
+  body.replaceChildren();
+  for(const step of result.steps){
+    const tr=document.createElement('tr');
+    tr.appendChild(cell(step.header));
+    tr.appendChild(cell(step.present?(step.applied?'evaluated':'skipped'):'absent'));
+    tr.appendChild(cell(step.comparison));
+    const outcome=cell(step.result+(step.note?' — '+step.note:''));
+    tr.appendChild(outcome);
+    body.appendChild(tr);
+  }
+  $('table-wrap').hidden=false;
+  const notes=$('warnings');
+  notes.replaceChildren();
+  for(const line of result.warnings){const item=document.createElement('li');item.textContent=line;notes.appendChild(item);}
+  const explain=$('explanation');
+  explain.replaceChildren();
+  for(const line of result.explanation){const item=document.createElement('li');item.textContent=line;explain.appendChild(item);}
+  return true;
+}
+$('pc-form').addEventListener('submit',event=>{event.preventDefault();render(readForm());});
+$('reset').addEventListener('click',()=>{writeForm(HttpPreconditionCore.DEFAULTS);setError('');render(readForm());$('in-if-match').focus();});
+$('example').addEventListener('click',()=>{
+  writeForm({method:'PUT',etag:'"8f4d1c"',modified:'Fri, 27 Nov 2026 09:15:00 GMT',exists:'true',
+    ifMatch:'"77ac02"',ifNoneMatch:'',ifModifiedSince:'',ifUnmodifiedSince:'Fri, 27 Nov 2026 09:15:00 GMT'});
+  setError('');render(readForm());$('in-if-match').focus();
+});
+writeForm(HttpPreconditionCore.DEFAULTS);
+render(readForm());
+})();
+</script></body></html>

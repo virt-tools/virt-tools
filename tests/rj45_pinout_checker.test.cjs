@@ -180,7 +180,7 @@ assert.equal(new Set(record.tags).size, record.tags.length, 'tags unique');
 assert.ok(record.description.length > 80, 'description present');
 assert.ok(record.testCases.length >= 8, `expected at least 8 cases, found ${record.testCases.length}`);
 assert.equal(catalog.tools.filter((tool) => tool.slug === slug).length, 1, 'slug unique');
-assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2261, 'public tools');
+assert.equal(catalog.tools.filter((tool) => tool.listed).length, 2262, 'public tools');
 
 for (const testCase of record.testCases) {
   const label = testCase.name;
